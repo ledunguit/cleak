@@ -1,0 +1,49 @@
+# macOS
+.DS_Store
+
+# Workspace-local envs and caches
+.env
+.env.*
+!.env.example
+.venv/
+venv/
+node_modules/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Editors
+.idea/
+.vscode/
+
+# Top-level office and paper artifacts
+/*.pdf
+/*.doc
+/*.docx
+/*.ppt
+/*.pptx
+
+# Logs and temp artifacts
+*.log
+tmp/
+temp/
+
+# Analysis outputs that should stay local
+/output/
+/results/
+/coverage/
+/MCP-Vul/frontend/dist/
+/MCP-Vul/frontend/node_modules/
+
+# User-provided scan targets
+/targets/*
+!/targets/.gitkeep
+
+# Generated demo corpus build artifacts
+/demo/**/compilation.json
+/demo/**/compile_commands.json
+/demo/**/build/
+/demo/**/simple_leak
+/demo/**/simple_leak_asan

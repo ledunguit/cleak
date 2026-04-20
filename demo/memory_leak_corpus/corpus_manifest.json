@@ -1,0 +1,20 @@
+{
+  "schema_version": "memory-leak-corpus/v1",
+  "name": "thesis-demo-memory-leak-corpus",
+  "cases": [
+    {
+      "id": "simple_leak",
+      "repo_path": "simple_leak",
+      "build_command": "make CC=clang",
+      "expected_leak_count": 1,
+      "notes": "A simple interprocedural leak where make_buffer returns allocated memory and main exits without freeing it."
+    },
+    {
+      "id": "complex_leak_lab",
+      "repo_path": "complex_leak_lab",
+      "build_command": "make CC=clang",
+      "expected_leak_count": 8,
+      "notes": "A multi-file lab with several leak patterns: early return after allocation, overwritten ownership, loop-based partial leaks, and buggy linked-list cleanup."
+    }
+  ]
+}

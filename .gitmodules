@@ -1,0 +1,15 @@
+[submodule "MCP-Vul"]
+	path = MCP-Vul
+	url = git@zed:ledunguit/mcp-based-vul-detection.git
+[submodule "leak_guard_tool"]
+	path = leak_guard_tool
+	url = https://gitee.com/yin-luming/leak_guard_tool.git
+[submodule "mcp-dynamic-analysis-server"]
+	path = mcp-dynamic-analysis-server
+	url = git@zed:ledunguit/mcp-dynamic-analysis-server.git
+[submodule "mcp-memory-common"]
+	path = mcp-memory-common
+	url = /Users/zed/Documents/Master/Thesis/mcp-memory-common
+[submodule "mcp-memory-static-analysis-server"]
+	path = mcp-memory-static-analysis-server
+	url = /Users/zed/Documents/Master/Thesis/mcp-memory-static-analysis-server
