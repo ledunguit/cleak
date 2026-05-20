@@ -47,3 +47,5 @@ temp/
 /demo/**/build/
 /demo/**/simple_leak
 /demo/**/simple_leak_asan
+
+.antigravitycli

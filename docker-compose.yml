@@ -15,8 +15,8 @@ services:
       MEMORY_LEAK_APP_WORKSPACE_ROOTS: ${MEMORY_LEAK_APP_WORKSPACE_ROOTS:-/workspace/demo/memory_leak_corpus:/workspace/targets}
       MEMORY_LEAK_APP_ARTIFACT_DIR: /workspace/results/app_scans
       MEMORY_LEAK_APP_DB_PATH: ${MEMORY_LEAK_APP_DB_PATH:-/workspace/results/app_scans/memory_leak_app.sqlite3}
-      MCP_STATIC_SERVER_URL: ${MCP_STATIC_SERVER_URL:-http://host.docker.internal:8081/mcp}
-      MCP_DYNAMIC_SERVER_URL: ${MCP_DYNAMIC_SERVER_URL:-http://host.docker.internal:8080/mcp}
+      MCP_STATIC_SERVER_URL: ${MCP_STATIC_SERVER_URL:-http://memory-static-analysis:8081/mcp}
+      MCP_DYNAMIC_SERVER_URL: ${MCP_DYNAMIC_SERVER_URL:-http://dynamic-analysis:8080/mcp}
       MEMORY_LEAK_JUDGE_MODE: ${MEMORY_LEAK_JUDGE_MODE:-heuristic}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
@@ -85,7 +85,7 @@ services:
       MCP_TRANSPORT: http
       MCP_HTTP_HOST: 0.0.0.0
       MCP_HTTP_PORT: 8080
-      WORKSPACE_ROOT: /workspace/dynamic
+      WORKSPACE_ROOT: /workspace
       RUNS_DIR: /workspace/dynamic/runs
       ARTIFACTS_DIR: /workspace/dynamic/artifacts
       VALGRIND_BIN: valgrind
