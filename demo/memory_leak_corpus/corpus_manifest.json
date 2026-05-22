@@ -15,6 +15,13 @@
       "build_command": "make CC=clang",
       "expected_leak_count": 8,
       "notes": "A multi-file lab with several leak patterns: early return after allocation, overwritten ownership, loop-based partial leaks, and buggy linked-list cleanup."
+    },
+    {
+      "id": "ownership_maze",
+      "repo_path": "ownership_maze",
+      "build_command": "make CC=clang",
+      "expected_leak_count": 9,
+      "notes": "A harder multi-file case with ownership overwrite, rejected callback registration, saturated queue enqueue, fan-out clone loss, partial batch-construction failure, and buggy teardown that drops request context."
     }
   ]
 }
