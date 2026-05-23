@@ -1,104 +1,108 @@
-name: thesis-memory-leak-demo
-
-networks:
-  thesis-mcp:
-    name: thesis-mcp
-
 services:
-  memory-app:
+  postgres:
+    image: postgres:16-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: mcpvul
+      POSTGRES_PASSWORD: mcpvul
+      POSTGRES_DB: mcpvul
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mcpvul"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - mcpvul-net
+
+  control-plane:
     build:
       context: .
-      dockerfile: MCP-Vul/Dockerfile
-    environment:
-      MEMORY_LEAK_APP_HOST: 0.0.0.0
-      MEMORY_LEAK_APP_PORT: 8090
-      MEMORY_LEAK_APP_WORKSPACE_ROOTS: ${MEMORY_LEAK_APP_WORKSPACE_ROOTS:-/workspace/demo/memory_leak_corpus:/workspace/targets}
-      MEMORY_LEAK_APP_ARTIFACT_DIR: /workspace/results/app_scans
-      MEMORY_LEAK_APP_DB_PATH: ${MEMORY_LEAK_APP_DB_PATH:-/workspace/results/app_scans/memory_leak_app.sqlite3}
-      MCP_STATIC_SERVER_URL: ${MCP_STATIC_SERVER_URL:-http://memory-static-analysis:8081/mcp}
-      MCP_DYNAMIC_SERVER_URL: ${MCP_DYNAMIC_SERVER_URL:-http://dynamic-analysis:8080/mcp}
-      MEMORY_LEAK_JUDGE_MODE: ${MEMORY_LEAK_JUDGE_MODE:-heuristic}
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
-      LLM_PROVIDER: ${LLM_PROVIDER:-local}
-      LOCAL_LLM_BASE_URL: ${LOCAL_LLM_BASE_URL:-http://host.docker.internal:20128/v1}
-      LOCAL_LLM_MODEL: ${LOCAL_LLM_MODEL:-gh/gpt-5-mini}
-      LOCAL_LLM_API_KEY: ${LOCAL_LLM_API_KEY:-not-needed}
-      MCP_HTTP_TIMEOUT_SECONDS: ${MCP_HTTP_TIMEOUT_SECONDS:-30}
-      MCP_LONG_RUNNING_HTTP_TIMEOUT_SECONDS: ${MCP_LONG_RUNNING_HTTP_TIMEOUT_SECONDS:-1800}
-    volumes:
-      - ./demo:/workspace/demo
-      - ${THESIS_TARGETS_HOST_DIR:-./targets}:/workspace/targets
-      - ./results:/workspace/results
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+      dockerfile: apps/control-plane/Dockerfile
     ports:
       - "8090:8090"
-    depends_on:
-      - memory-static-analysis
-      - dynamic-analysis
-    networks:
-      - thesis-mcp
-
-  memory-static-analysis:
-    build:
-      context: ./mcp-memory-static-analysis-server
-    working_dir: /app
     environment:
-      MCP_TRANSPORT: http
-      MCP_HTTP_HOST: 0.0.0.0
-      MCP_HTTP_PORT: 8081
-      LEAKGUARD_REPO_ROOT: /workspace/leak_guard_tool
-      LEAKGUARD_DOCKER_IMAGE: ${LEAKGUARD_DOCKER_IMAGE:-leakguard-tool:dev}
-      LEAKGUARD_DOCKER_PLATFORM: ${LEAKGUARD_DOCKER_PLATFORM:-linux/amd64}
+      PORT: 8090
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: mcpvul
+      POSTGRES_PASSWORD: mcpvul
+      POSTGRES_DB: mcpvul
+      STATIC_ANALYZER_URL: static-analyzer:50051
+      DYNAMIC_ANALYZER_URL: dynamic-analyzer:50052
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
+      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
+      GITHUB_REDIRECT_URI: ${GITHUB_REDIRECT_URI:-http://localhost:8090/api/github/callback}
+      GITHUB_CLONE_ROOT: /clones
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5173}
     volumes:
-      - ./mcp-memory-static-analysis-server:/app
-      - ./leak_guard_tool:/workspace/leak_guard_tool
+      - clones:/clones
       - ./demo:/workspace/demo
-      - ${THESIS_TARGETS_HOST_DIR:-./targets}:/workspace/targets
-      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - mcpvul-net
+    restart: unless-stopped
+
+  static-analyzer:
+    build:
+      context: .
+      dockerfile: apps/static-analyzer/Dockerfile
     ports:
-      - "8081:8081"
+      - "50051:50051"
+    environment:
+      GRPC_URL: 0.0.0.0:50051
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./demo:/workspace/demo
     depends_on:
       - leakguard-runtime
     networks:
-      - thesis-mcp
+      - mcpvul-net
+    restart: unless-stopped
 
-  leakguard-runtime:
-    build:
-      context: ./leak_guard_tool
-    image: ${LEAKGUARD_DOCKER_IMAGE:-leakguard-tool:dev}
-    platform: ${LEAKGUARD_DOCKER_PLATFORM:-linux/amd64}
-    working_dir: /project/Goshawk
-    command: ["sleep", "infinity"]
-    volumes:
-      - ./leak_guard_tool:/project/Goshawk
-    networks:
-      - thesis-mcp
-
-  dynamic-analysis:
+  dynamic-analyzer:
     build:
       context: .
-      dockerfile: mcp-dynamic-analysis-server/Dockerfile.thesis
-    working_dir: /app
-    environment:
-      MCP_TRANSPORT: http
-      MCP_HTTP_HOST: 0.0.0.0
-      MCP_HTTP_PORT: 8080
-      WORKSPACE_ROOT: /workspace
-      RUNS_DIR: /workspace/dynamic/runs
-      ARTIFACTS_DIR: /workspace/dynamic/artifacts
-      VALGRIND_BIN: valgrind
-      LOG_LEVEL: INFO
-    volumes:
-      - ./mcp-dynamic-analysis-server:/app
-      - ./demo:/workspace/demo
-      - ${THESIS_TARGETS_HOST_DIR:-./targets}:/workspace/targets
-      - dynamic-runs:/workspace/dynamic
+      dockerfile: apps/dynamic-analyzer/Dockerfile
     ports:
-      - "8080:8080"
+      - "50052:50052"
+    environment:
+      GRPC_URL: 0.0.0.0:50052
+      RUNS_DIR: /runs
+    volumes:
+      - runs:/runs
+      - ./demo:/workspace/demo
     networks:
-      - thesis-mcp
+      - mcpvul-net
+    restart: unless-stopped
+
+  leakguard-runtime:
+    image: leakguard-tool:dev
+    build:
+      context: ./tools/leak_guard_tool
+    networks:
+      - mcpvul-net
+
+  leak-inspector-ui:
+    build:
+      context: .
+      dockerfile: apps/leak-inspector-ui/Dockerfile
+    ports:
+      - "5173:80"
+    depends_on:
+      - control-plane
+    networks:
+      - mcpvul-net
 
 volumes:
-  dynamic-runs:
+  pgdata:
+  clones:
+  runs:
+
+networks:
+  mcpvul-net:
+    driver: bridge

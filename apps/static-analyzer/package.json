@@ -1,0 +1,17 @@
+{
+  "name": "static-analyzer",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "build": "cd ../.. && nest build static-analyzer",
+    "dev": "cd ../.. && nest start static-analyzer --watch",
+    "start": "cd ../.. && nest start static-analyzer",
+    "start:prod": "node dist/main",
+    "lint": "echo 'lint ok'",
+    "test": "echo 'no tests'"
+  },
+  "dependencies": {
+    "@mcpvul/common": "workspace:*",
+    "dotenv": "^16.4.7"
+  }
+}

@@ -4,92 +4,86 @@ Root workspace for a Master's thesis on LLM-orchestrated memory leak
 investigation for C/C++ repositories.
 
 This repository is an umbrella workspace, not a single implementation repo. It
-keeps the thesis components together at one top level:
+keeps the thesis components together at one top level.
 
-- `MCP-Vul`: control plane, orchestration, and future judge/explanation layer
-- `mcp-memory-static-analysis-server`: static MCP server for leak investigation
-- `mcp-dynamic-analysis-server`: dynamic MCP server for runtime evidence
-- `mcp-memory-common`: shared leak-centric schemas
-- `leak_guard_tool`: existing analyzer codebase for future MCP integration
+## Components
 
-The intended system shape is:
+### `apps/control-plane` — Control Plane (NestJS)
+- NestJS microservice, HTTP API gateway at port 8090
+- Scan orchestration, judging, reporting, GitHub OAuth
+- PostgreSQL persistence via TypeORM
 
-1. static and dynamic analyzers expose MCP tools
-2. `MCP-Vul` coordinates investigation across a target C/C++ repo
-3. findings are normalized into shared leak bundles
-4. the system returns leak verdicts, explanations, and repair guidance
+### `apps/static-analyzer` — Static Analysis (NestJS/gRPC)
+- gRPC service at port 50051
+- Tree-sitter AST, lexical scan, call graph, LeakGuard adapter
 
-For the detailed workspace-level architecture, see
-[THESIS_WORKSPACE_OVERVIEW.md](THESIS_WORKSPACE_OVERVIEW.md).
+### `apps/dynamic-analyzer` — Dynamic Analysis (NestJS/gRPC)
+- gRPC service at port 50052
+- Valgrind Memcheck, AddressSanitizer, LeakSanitizer
 
-## Demo Slice
+### `apps/leak-inspector-ui` — Frontend (React + Vite)
+- React 19 + TypeScript SPA with Ant Design 5
+- Zustand 5 state management, React Router 7 routing
+- Real-time scan progress via SSE
+- @xyflow/react workflow graph visualization
 
-This workspace now includes a small repeatable demo corpus, separate MCP server
-compose files, and a full demo compose file for the web application:
+### `packages/common` — Shared Types
+- TypeScript types, DTOs, entities, Zod validation schemas
+- Shared across all NestJS apps via `@mcpvul/common`
 
-- `demo/memory_leak_corpus/simple_leak`
-- `docker-compose.thesis-demo.yml`
-- `scripts/run_memory_leak_demo.sh`
-- `scripts/run_memory_leak_app.sh`
-- `scripts/run_memory_leak_full_demo.sh`
+### `tools/leak_guard_tool` — Clang Static Analyzer (submodule)
+- Third-party leak detection tool
+- Integrated via static-analyzer's LeakGuardAdapter
+- Runs in `leakguard-runtime` Docker container
 
-Typical flow:
+### `proto/` — gRPC service definitions
+- Shared .proto files for inter-service communication
+- `static-analyzer.proto` and `dynamic-analyzer.proto`
 
-```bash
-docker compose -f docker-compose.thesis-demo.yml up --build
-```
+## System Flow
 
-This starts the web app, static MCP server, and dynamic MCP server. Open
-`http://127.0.0.1:8090` to use the workspace picker, progress stream, and report
-viewer.
+1. Static and dynamic analyzers expose gRPC services
+2. Control plane coordinates investigation across a target C/C++ repo
+3. Findings are normalized into shared leak bundles
+4. The system returns leak verdicts, explanations, and repair guidance
 
-To scan your own repository from the UI, place or bind-mount it under
-`./targets`. That directory is mounted into the stack as `/workspace/targets`,
-and the UI is configured to list both:
+## Demo Corpus
 
-- `/workspace/demo/memory_leak_corpus`
-- `/workspace/targets`
+- `demo/memory_leak_corpus/` — test cases for evaluation
+- Multiple cases: `simple_leak`, `complex_leak_lab`, `early_return_leak`, etc.
+- Each case compilable with `make CC=clang`
 
-Example:
-
-```bash
-mkdir -p targets
-ln -s /absolute/path/to/my-c-project targets/my-c-project
-scripts/run_memory_leak_full_demo.sh
-```
-
-Then choose `my-c-project` from the UI workspace list.
-
-For the CLI scan flow, start only the MCP servers you need using their own
-compose files or the full demo compose above. Then run:
+## Quick Start (Full Docker Stack)
 
 ```bash
-scripts/run_memory_leak_demo.sh
+docker compose up --build
 ```
 
-The demo writes JSON, Markdown, HTML, and snapshot outputs under `results/demo/`.
+Access the web UI at http://localhost:5173 (dev) or http://localhost:8090 (production).
 
-For corpus-style evaluation:
+## Frontend Dev
 
 ```bash
-scripts/run_memory_leak_corpus.sh
+cd apps/leak-inspector-ui
+bun install
+bun run dev
 ```
 
-The corpus runner reads `demo/memory_leak_corpus/corpus_manifest.json` and writes
-per-case reports plus `summary.json` under `results/corpus/`.
-
-For the local web UI:
+## Backend Dev
 
 ```bash
-scripts/run_memory_leak_app.sh
+cd apps/control-plane
+bun install
+bun run dev
 ```
 
-Then open `http://127.0.0.1:8090`. The UI lets you choose an allowed workspace,
-start a scan, watch progress/tool logs, and view JSON/Markdown/HTML/snapshot
-reports.
-
-To run the full Docker demo with one command:
+## Build All (Turbo)
 
 ```bash
-scripts/run_memory_leak_full_demo.sh
+bun run build
 ```
+
+## Architecture Docs
+
+See [ARCHITECTURE.md](ARCHITECTURE.md) for detailed system architecture.
+See [THESIS_WORKSPACE_OVERVIEW.md](THESIS_WORKSPACE_OVERVIEW.md) for workspace overview.

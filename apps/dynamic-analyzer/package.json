@@ -1,0 +1,17 @@
+{
+  "name": "dynamic-analyzer",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "build": "cd ../.. && nest build dynamic-analyzer",
+    "dev": "cd ../.. && nest start dynamic-analyzer --watch",
+    "start": "cd ../.. && nest start dynamic-analyzer",
+    "start:prod": "node dist/main",
+    "lint": "echo 'lint ok'",
+    "test": "echo 'no tests'"
+  },
+  "dependencies": {
+    "@mcpvul/common": "workspace:*",
+    "dotenv": "^16.4.7"
+  }
+}

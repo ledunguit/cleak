@@ -22,6 +22,48 @@
       "build_command": "make CC=clang",
       "expected_leak_count": 9,
       "notes": "A harder multi-file case with ownership overwrite, rejected callback registration, saturated queue enqueue, fan-out clone loss, partial batch-construction failure, and buggy teardown that drops request context."
+    },
+    {
+      "id": "early_return_leak",
+      "repo_path": "early_return_leak",
+      "build_command": "make CC=clang",
+      "expected_leak_count": 2,
+      "notes": "Two leaks via early return paths: flag < 0 guard skips free of data; build_label allocation in caller never freed."
+    },
+    {
+      "id": "realloc_lose_pointer",
+      "repo_path": "realloc_lose_pointer",
+      "build_command": "make CC=clang",
+      "expected_leak_count": 1,
+      "notes": "Direct reassign of realloc result without a temp variable — if realloc fails, the original pointer is lost."
+    },
+    {
+      "id": "loop_accumulate",
+      "repo_path": "loop_accumulate",
+      "build_command": "make CC=clang",
+      "expected_leak_count": 5,
+      "notes": "Each loop iteration overwrites the pointer without freeing the previous allocation. 5 iterations = 5 leaks."
+    },
+    {
+      "id": "struct_partial_free",
+      "repo_path": "struct_partial_free",
+      "build_command": "make CC=clang",
+      "expected_leak_count": 2,
+      "notes": "Buggy record_free frees name and description but skips tag field and the struct itself. The sibling allocation s is properly freed."
+    },
+    {
+      "id": "ownership_transfer",
+      "repo_path": "ownership_transfer",
+      "build_command": "make CC=clang",
+      "expected_leak_count": 2,
+      "notes": "Functions transfer ownership via return value, but callers omit free on two of three allocations."
+    },
+    {
+      "id": "list_cleanup_partial",
+      "repo_path": "list_cleanup_partial",
+      "build_command": "make CC=clang",
+      "expected_leak_count": 1,
+      "notes": "Linked list destroy frees only the head node. Two tail nodes survive, but the manifest counts this as 1 leak pattern (partial cleanup function)."
     }
   ]
 }

@@ -1,0 +1,145 @@
+syntax = "proto3";
+
+package dynamic_analyzer;
+
+service DynamicAnalyzer {
+  rpc BuildTarget(BuildTargetRequest) returns (BuildTargetResponse);
+  rpc ValgrindMemcheck(ValgrindMemcheckRequest) returns (ValgrindMemcheckResponse);
+  rpc ValgrindGetReport(ValgrindGetReportRequest) returns (ValgrindGetReportResponse);
+  rpc ValgrindListFindings(ValgrindListFindingsRequest) returns (ValgrindListFindingsResponse);
+  rpc ValgrindCompareRuns(ValgrindCompareRunsRequest) returns (ValgrindCompareRunsResponse);
+  rpc AsanRun(AsanRunRequest) returns (AsanRunResponse);
+  rpc LsanRun(LsanRunRequest) returns (LsanRunResponse);
+  rpc RunBinary(RunBinaryRequest) returns (RunBinaryResponse);
+  rpc ListRuns(ListRunsRequest) returns (ListRunsResponse);
+}
+
+message BuildTargetRequest {
+  string project_path = 1;
+  string build_command = 2;
+  optional int32 timeout_sec = 3;
+}
+
+message BuildTargetResponse {
+  bool success = 1;
+  string binary_path = 2;
+  string build_log = 3;
+  repeated string errors = 4;
+}
+
+message ValgrindMemcheckRequest {
+  string binary_path = 1;
+  repeated string args = 2;
+  optional string run_id = 3;
+  optional int32 timeout_sec = 4;
+}
+
+message ValgrindMemcheckResponse {
+  bool success = 1;
+  string run_id = 2;
+  repeated LeakFinding findings = 3;
+  string summary = 4;
+}
+
+message ValgrindGetReportRequest {
+  string run_id = 1;
+}
+
+message ValgrindGetReportResponse {
+  string raw_output = 1;
+  repeated LeakFinding findings = 2;
+  string summary = 3;
+}
+
+message ValgrindListFindingsRequest {
+  string run_id = 1;
+  optional string severity = 2;
+  optional string function_name = 3;
+}
+
+message ValgrindListFindingsResponse {
+  repeated LeakFinding findings = 1;
+}
+
+message ValgrindCompareRunsRequest {
+  string run_id_a = 1;
+  string run_id_b = 2;
+}
+
+message ValgrindCompareRunsResponse {
+  repeated LeakFinding new_findings = 1;
+  repeated LeakFinding fixed_findings = 2;
+  repeated LeakFinding unchanged = 3;
+}
+
+message AsanRunRequest {
+  string binary_path = 1;
+  repeated string args = 2;
+  optional int32 timeout_sec = 3;
+}
+
+message AsanRunResponse {
+  bool success = 1;
+  string run_id = 2;
+  repeated LeakFinding findings = 3;
+  string raw_output = 4;
+}
+
+message LsanRunRequest {
+  string binary_path = 1;
+  repeated string args = 2;
+  optional int32 timeout_sec = 3;
+}
+
+message LsanRunResponse {
+  bool success = 1;
+  string run_id = 2;
+  repeated LeakFinding findings = 3;
+  string raw_output = 4;
+}
+
+message RunBinaryRequest {
+  string binary_path = 1;
+  repeated string args = 2;
+  optional int32 timeout_sec = 3;
+}
+
+message RunBinaryResponse {
+  bool success = 1;
+  string stdout = 2;
+  string stderr = 3;
+  int32 exit_code = 4;
+}
+
+message ListRunsRequest {
+  optional string tool = 1;
+  optional int32 limit = 2;
+}
+
+message ListRunsResponse {
+  repeated RunInfo runs = 1;
+}
+
+// Shared types
+message LeakFinding {
+  string id = 1;
+  string tool = 2;
+  string run_id = 3;
+  string function_name = 4;
+  string file_path = 5;
+  int32 line_number = 6;
+  int64 bytes_lost = 7;
+  int32 blocks_lost = 8;
+  string severity = 9;
+  string stack_trace = 10;
+  string allocation_type = 11;
+  string status = 12;
+}
+
+message RunInfo {
+  string run_id = 1;
+  string tool = 2;
+  string binary_path = 3;
+  string created_at = 4;
+  bool success = 5;
+}

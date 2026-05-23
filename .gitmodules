@@ -1,8 +1,5 @@
-[submodule "MCP-Vul"]
-	path = MCP-Vul
-	url = git@zed:ledunguit/mcp-based-vul-detection.git
 [submodule "leak_guard_tool"]
-	path = leak_guard_tool
+	path = tools/leak_guard_tool
 	url = https://gitee.com/yin-luming/leak_guard_tool.git
 [submodule "mcp-dynamic-analysis-server"]
 	path = mcp-dynamic-analysis-server

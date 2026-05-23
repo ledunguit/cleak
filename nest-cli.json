@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json.schemastore.org/nest-cli",
+  "collection": "@nestjs/schematics",
+  "sourceRoot": "apps/control-plane/src",
+  "compilerOptions": {
+    "deleteOutDir": true,
+    "webpack": true,
+    "tsConfigPath": "apps/control-plane/tsconfig.app.json"
+  },
+  "monorepo": true,
+  "root": "apps/control-plane",
+  "projects": {
+    "control-plane": {
+      "type": "application",
+      "root": "apps/control-plane",
+      "entryFile": "main",
+      "sourceRoot": "apps/control-plane/src",
+      "compilerOptions": {
+        "tsConfigPath": "apps/control-plane/tsconfig.app.json"
+      }
+    },
+    "static-analyzer": {
+      "type": "application",
+      "root": "apps/static-analyzer",
+      "entryFile": "main",
+      "sourceRoot": "apps/static-analyzer/src",
+      "compilerOptions": {
+        "tsConfigPath": "apps/static-analyzer/tsconfig.app.json"
+      }
+    },
+    "dynamic-analyzer": {
+      "type": "application",
+      "root": "apps/dynamic-analyzer",
+      "entryFile": "main",
+      "sourceRoot": "apps/dynamic-analyzer/src",
+      "compilerOptions": {
+        "tsConfigPath": "apps/dynamic-analyzer/tsconfig.app.json"
+      }
+    },
+    "common": {
+      "type": "library",
+      "root": "packages/common",
+      "entryFile": "index",
+      "sourceRoot": "packages/common/src",
+      "compilerOptions": {
+        "tsConfigPath": "packages/common/tsconfig.lib.json"
+      }
+    }
+  }
+}
