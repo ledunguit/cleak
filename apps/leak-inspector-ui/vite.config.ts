@@ -7,6 +7,9 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, 'src'),
+      // Shared scan-flow contract — deep-import only (the package index pulls
+      // typeorm entities which must not enter the browser bundle).
+      '@mcpvul/common': path.resolve(__dirname, '../../packages/common/src'),
     },
   },
   server: {

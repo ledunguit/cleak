@@ -1,54 +1,578 @@
-import { Injectable } from '@nestjs/common';
-import { LeakBundle, InvestigationVerdict, VerdictResult, ToolKind } from '@mcpvul/common';
+import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import {
+  LeakBundle,
+  InvestigationVerdict,
+  VerdictResult,
+  ToolKind,
+  LeakPatternType,
+  LeakRootCause,
+  LeakExplanation,
+  ControlFlowInfo,
+  ExitPathInfo,
+  RepairDiff,
+} from '@mcpvul/common';
+import { existsSync, readFileSync } from 'fs';
+import { analyzeLeakHeuristically } from './heuristic-leak-analysis';
 
 @Injectable()
 export class JudgeService {
-  judgeBundle(bundle: LeakBundle): VerdictResult {
-    // Heuristic-based judging (Phase 5 will add LLM-assisted judging)
-    if (bundle.evidence.length >= 2) {
-      return {
-        verdict: InvestigationVerdict.CONFIRMED_LEAK,
-        confidence: 0.85,
-        explanation: `Confirmed by ${bundle.evidence.length} tools`,
-        evidence: bundle.evidence.map((e) => `${e.tool}: ${e.function_name}`),
-        tool: ToolKind.HEURISTIC,
-      };
+  private readonly logger = new Logger(JudgeService.name);
+
+  constructor(private readonly config: ConfigService) {}
+
+  /**
+   * Judge a single bundle using LLM (if available) or heuristic fallback.
+   */
+  async judgeBundle(
+    bundle: LeakBundle,
+    staticContext?: Record<string, any>,
+    analysisMode?: string,
+  ): Promise<VerdictResult> {
+    // Only use the LLM judge in llm_assisted mode; no_llm uses the heuristic
+    // judge exclusively so the two modes stay cleanly comparable.
+    let verdict: VerdictResult | null = null;
+    if (analysisMode === 'llm_assisted') {
+      try {
+        verdict = await this.judgeWithLlm(bundle, staticContext);
+        if (verdict) {
+          this.logger.log(`[JUDGE] LLM verdict for ${bundle.bundleId}: ${verdict.verdict} (${(verdict.confidence * 100).toFixed(0)}%)`);
+        }
+      } catch (err: any) {
+        this.logger.warn(`[JUDGE] LLM failed for ${bundle.bundleId}, falling back to heuristic: ${err.message}`);
+        verdict = null;
+      }
     }
 
-    if (bundle.evidence.length >= 1) {
-      return {
-        verdict: InvestigationVerdict.LIKELY_LEAK,
-        confidence: 0.65,
-        explanation: `Dynamic evidence from ${bundle.evidence[0].tool}: ${bundle.evidence[0].bytes_lost} bytes lost`,
-        evidence: bundle.evidence.map((e) => `${e.tool}: ${e.function_name}`),
-        tool: ToolKind.HEURISTIC,
-      };
-    }
+    // Heuristic judging (and the only judge path in no_llm mode)
+    if (!verdict) verdict = this.judgeHeuristically(bundle, staticContext);
 
-    if (bundle.candidate.confidence === 'high') {
-      return {
-        verdict: InvestigationVerdict.LIKELY_LEAK,
-        confidence: 0.65,
-        explanation: 'High-confidence allocation pattern detected',
-        evidence: [],
-        tool: ToolKind.HEURISTIC,
-      };
-    }
+    // GOAL #4 guarantee: every leak verdict that leaves the judge carries a
+    // root-cause explanation AND an applicable (source-anchored) repair diff —
+    // filling whatever the heuristic path omits and whatever the LLM omits or
+    // produces as a diff that no longer matches the real source.
+    return this.enrichLeakVerdict(bundle, staticContext, verdict);
+  }
+
+  /**
+   * Ensure a leak verdict ships a structured root cause + an applicable repair
+   * diff. Validates any LLM-provided diff against the real file and replaces it
+   * with a deterministic, source-anchored diff when it does not match.
+   */
+  private enrichLeakVerdict(
+    bundle: LeakBundle,
+    staticContext: Record<string, any> | undefined,
+    verdict: VerdictResult,
+  ): VerdictResult {
+    const isLeak =
+      verdict.verdict === InvestigationVerdict.CONFIRMED_LEAK ||
+      verdict.verdict === InvestigationVerdict.LIKELY_LEAK ||
+      verdict.verdict === InvestigationVerdict.UNCERTAIN;
+    if (!isLeak) return verdict;
+
+    const fileContent = this.readFullFile(bundle.candidate.file_path);
+    const analysis = analyzeLeakHeuristically(bundle, staticContext, fileContent);
+    const fromLlm = verdict.tool === ToolKind.LLM;
+
+    // Division of labour: the LLM contributes the verdict + natural-language
+    // explanation + root-cause reasoning (its strength), while the deterministic
+    // synthesizer produces the canonical fix diff — a minimal, source-anchored
+    // free() insertion guaranteed to be applicable. LLM-authored diffs are
+    // unreliable (comments, whole-file rewrites), so they are used only as a
+    // fallback when the synthesizer cannot locate a fix site.
+    const llmDiffUsable =
+      !!verdict.repairDiff &&
+      this.isDiffApplicable(verdict.repairDiff, fileContent) &&
+      this.diffAddsCleanup(verdict.repairDiff) &&
+      this.diffIsMinimal(verdict.repairDiff);
+    const repairDiff = analysis.repairDiff || (llmDiffUsable ? verdict.repairDiff : undefined);
 
     return {
-      verdict: InvestigationVerdict.UNCERTAIN,
-      confidence: 0.3,
-      explanation: 'Insufficient evidence',
-      evidence: [],
-      tool: ToolKind.HEURISTIC,
+      ...verdict,
+      rootCause: verdict.rootCause || analysis.rootCause,
+      repairDiff,
+      // Keep the LLM's prose; enrich the terse heuristic string with the
+      // pattern-named narrative.
+      explanation: fromLlm && verdict.explanation ? verdict.explanation : analysis.explanation,
+      repair_suggestion: verdict.repair_suggestion || analysis.rootCause.rootCauseDescription,
     };
   }
 
-  judgeBundles(bundles: LeakBundle[]): Map<string, VerdictResult> {
-    const results = new Map<string, VerdictResult>();
-    for (const bundle of bundles) {
-      results.set(bundle.bundleId, this.judgeBundle(bundle));
+  /** True when the diff's originalLines match the file verbatim at startLine. */
+  private isDiffApplicable(diff: RepairDiff, fileContent: string | null): boolean {
+    if (!fileContent || !diff || !Array.isArray(diff.originalLines) || diff.originalLines.length === 0) return false;
+    const lines = fileContent.split('\n');
+    const start = (diff.startLine || 0) - 1;
+    if (start < 0 || start >= lines.length) return false;
+    for (let k = 0; k < diff.originalLines.length; k++) {
+      if ((lines[start + k] ?? '').trim() !== String(diff.originalLines[k]).trim()) return false;
     }
+    return true;
+  }
+
+  /** True when the diff actually adds a deallocation the original lines lacked. */
+  private diffAddsCleanup(diff: RepairDiff): boolean {
+    const dealloc = /\b(free|delete|g_free|kfree|fclose|release|destroy|cleanup|realloc)\s*\(/;
+    const added = (diff.suggestedLines || []).join('\n');
+    const original = (diff.originalLines || []).join('\n');
+    return dealloc.test(added) && !dealloc.test(original);
+  }
+
+  /** True when the diff is a small targeted edit, not a whole-file rewrite. */
+  private diffIsMinimal(diff: RepairDiff): boolean {
+    const added = (diff.suggestedLines || []).length;
+    const orig = (diff.originalLines || []).length;
+    return added > 0 && added - orig <= 4;
+  }
+
+  private readFullFile(filePath: string): string | null {
+    if (!filePath || !existsSync(filePath)) return null;
+    try {
+      return readFileSync(filePath, 'utf-8');
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * LLM-powered judging with explanation and repair suggestion.
+   */
+  private async judgeWithLlm(
+    bundle: LeakBundle,
+    staticContext?: Record<string, any>,
+  ): Promise<VerdictResult | null> {
+    const provider = this.config.get<string>('JUDGE_LLM_PROVIDER', this.config.get<string>('LLM_PROVIDER', 'anthropic'));
+    // Each provider has its OWN key variable so the real OpenAI key and the
+    // local-gateway key never collide: local → LOCAL_LLM_API_KEY, openai →
+    // OPENAI_API_KEY, anthropic → ANTHROPIC_API_KEY. No key → fall back to heuristic.
+    const apiKey = this.judgeApiKey(provider);
+    if (!apiKey) return null;
+
+    const codeSnippet = this.readContextSnippet(bundle.candidate.file_path, bundle.candidate.line_number);
+    const evidenceSummary = bundle.evidence
+      .map((e) => `  - ${e.tool}: ${e.function_name} at ${e.file_path}:${e.line_number} (${e.bytes_lost} bytes lost, severity: ${e.severity})`)
+      .join('\n');
+
+    const ctxSummary = staticContext
+      ? [
+          `  - Has explicit free: ${staticContext.hasExplicitFree}`,
+          `  - Allocations found: ${(staticContext.allocations || []).length}`,
+          `  - Frees found: ${(staticContext.frees || []).length}`,
+          `  - Feasible paths: ${(staticContext.feasiblePaths || []).length}`,
+          `  - Ownership type: ${staticContext.ownership?.ownershipType || 'unknown'}`,
+          `  - Flow paths: ${(staticContext.flowPaths || []).length}`,
+          `  - Early returns: ${staticContext.earlyReturnCount || 0}`,
+        ].join('\n')
+      : '  (no static context available)';
+
+    const systemPrompt = `You are an expert C/C++ memory leak detection analyst.
+
+A memory leak investigation has produced evidence about a potential leak.
+Your job is to analyze the evidence and produce a verdict with explanation.
+
+ANALYZE THE FOLLOWING:
+1. The allocation site (file, line, function, allocation type)
+2. The code snippet around the allocation
+3. Static analysis context (free status, paths, ownership)
+4. Dynamic analysis evidence (if any)
+
+PRODUCE A VERDICT:
+- confirmed_leak: Clear evidence that memory is allocated but never freed on at least one execution path
+- likely_leak: Strong evidence but some uncertainty (e.g., ownership might be transferred)
+- uncertain: Insufficient evidence to determine
+- likely_false_positive: Evidence suggests this is intentional or handled
+- false_positive: Clearly not a leak (e.g., global/static allocation)
+
+For confirmed_leak and likely_leak, your response MUST include:
+1. The root cause: what pattern caused the leak
+2. A clear explanation of WHY it leaks (which path, what happens)
+3. A concrete repair suggestion with code
+
+Respond with a JSON object ONLY. Use this exact format:
+{
+  "verdict": "confirmed_leak | likely_leak | uncertain | likely_false_positive | false_positive",
+  "confidence": 0.0-1.0,
+  "explanation": "Detailed explanation of why this is or isn't a leak",
+  "evidence": ["key evidence point 1", "key evidence point 2"],
+  "tool": "llm",
+  "repair_suggestion": "Concrete suggestion for fixing the leak",
+  "rootCause": {
+    "patternType": "early_return | conditional_leak | loop_accumulate | double_free | use_after_free | strdup_leak | struct_field_leak | realloc_mishandle | missing_null_check | interprocedural_leak | unknown",
+    "description": "Short description of the root cause pattern",
+    "allocationFunction": "name of function that allocates",
+    "allocationLine": 123,
+    "allocationFile": "path/to/file.c",
+    "rootCauseFunction": "function where the leak actually occurs",
+    "rootCauseLine": 123,
+    "rootCauseDescription": "Why the leak happens"
+  },
+  "repairDiff": {
+    "filePath": "path/to/file.c",
+    "originalLines": ["code line 1", "code line 2"],
+    "suggestedLines": ["fixed code line 1", "fixed code line 2"],
+    "startLine": 120,
+    "description": "What the fix does"
+  }
+}`;
+
+    const userMessage = `ALLOCATION SITE:
+- Bundle ID: ${bundle.bundleId}
+- Function: ${bundle.candidate.function_name}
+- File: ${bundle.candidate.file_path}
+- Line: ${bundle.candidate.line_number}
+- Allocation type: ${bundle.candidate.allocation_type}
+- Confidence: ${bundle.candidate.confidence}
+
+CODE SNIPPET (context around allocation):
+\`\`\`c
+${codeSnippet}
+\`\`\`
+
+STATIC ANALYSIS CONTEXT:
+${ctxSummary}
+
+DYNAMIC EVIDENCE (${bundle.evidence.length} item(s)):
+${evidenceSummary || '  (none)'}
+
+Analyze this potential leak and provide your expert verdict.`;
+
+    try {
+      const raw = await this.callLlm(systemPrompt, userMessage, provider);
+      const parsed = this.parseVerdict(raw, bundle);
+      return parsed;
+    } catch (err: any) {
+      this.logger.warn(`[JUDGE] LLM call/parse failed: ${err.message}`);
+      return null;
+    }
+  }
+
+  /**
+   * Heuristic fallback judging logic.
+   */
+  private judgeHeuristically(
+    bundle: LeakBundle,
+    staticContext?: Record<string, any>,
+  ): VerdictResult {
+    const hasDynamicEvidence = bundle.evidence.length > 0;
+    const hasStaticFree = staticContext?.hasExplicitFree === true;
+    const hasStaticAllocation = (staticContext?.allocations || []).length > 0;
+    const hasFeasiblePaths = (staticContext?.feasiblePaths || []).length > 0;
+    const hasOwnershipIssue = staticContext?.ownership?.ownershipType === 'malloc_without_free';
+    const earlyReturnCount: number = staticContext?.earlyReturnCount || 0;
+    const location = `${bundle.candidate.file_path}:${bundle.candidate.line_number}`;
+
+    let score = 0;
+    const reasons: string[] = [];
+
+    if (hasDynamicEvidence) {
+      score += 0.4;
+      reasons.push(`${bundle.evidence.length} tool(s) found runtime evidence`);
+    }
+
+    if (hasFeasiblePaths) {
+      score += 0.20;
+      reasons.push('allocation reachable through feasible execution path(s)');
+    }
+
+    if (!hasStaticFree && hasStaticAllocation) {
+      score += 0.25;
+      reasons.push('no free() found in function for this allocation');
+    }
+
+    if (hasOwnershipIssue) {
+      score += 0.15;
+      reasons.push('ownership convention: malloc_without_free');
+    }
+
+    if ((staticContext?.earlyReturnCount || 0) > 0 && hasStaticAllocation) {
+      score += 0.10;
+      reasons.push(`function has ${earlyReturnCount} early return(s) that may skip cleanup`);
+    }
+
+    if (bundle.candidate.confidence === 'high') {
+      score += 0.10;
+    }
+
+    // Source-level structural analysis is the primary evidence in no_llm mode,
+    // where the lexical static context above is frequently sparse. Locating a
+    // concrete missing-free site — an interprocedural caller drop, an early
+    // return before cleanup, a loop overwrite, realloc-onto-self, or an
+    // allocation never freed anywhere in its function — is strong static
+    // evidence of a real leak (a `low` signal means the variable looks freed).
+    const analysis = analyzeLeakHeuristically(bundle, staticContext, this.readFullFile(bundle.candidate.file_path));
+    if (analysis.structuralLikelihood === 'high') {
+      score += 0.5;
+      reasons.push(`structural analysis located a missing free (${analysis.patternType})`);
+    } else if (analysis.structuralLikelihood === 'medium') {
+      score += 0.25;
+      reasons.push(`structural analysis matched a ${analysis.patternType} pattern`);
+    }
+
+    const clamped = Math.min(1, Math.max(0, score));
+    const verdict =
+      clamped >= 0.7
+        ? InvestigationVerdict.CONFIRMED_LEAK
+        : clamped >= 0.4
+          ? InvestigationVerdict.LIKELY_LEAK
+          : InvestigationVerdict.UNCERTAIN;
+
+    return {
+      verdict,
+      confidence: verdict === InvestigationVerdict.UNCERTAIN ? Math.max(clamped, 0.3) : clamped,
+      // Prefer the pattern-named structural narrative; fall back to the score reasons.
+      explanation: analysis.explanation || `${verdict} at ${location}: ${reasons.join('; ')}`,
+      evidence: bundle.evidence.map((e) => `${e.tool}: ${e.function_name}`),
+      tool: ToolKind.HEURISTIC,
+      repair_suggestion: this.buildRepairSuggestion(bundle, staticContext),
+      rootCause: analysis.rootCause,
+      repairDiff: analysis.repairDiff,
+    };
+  }
+
+  /**
+   * Judge all bundles at once for batch processing.
+   */
+  async judgeBundles(
+    bundles: LeakBundle[],
+    staticContext: Map<string, Record<string, any>>,
+    analysisMode?: string,
+  ): Promise<Map<string, VerdictResult>> {
+    const results = new Map<string, VerdictResult>();
+
+    for (const bundle of bundles) {
+      const ctx = staticContext.get(bundle.bundleId) || {};
+      const verdict = await this.judgeBundle(bundle, ctx, analysisMode);
+      results.set(bundle.bundleId, verdict);
+    }
+
     return results;
+  }
+
+  /** Resolve the per-provider API key (kept separate so keys never collide). */
+  private judgeApiKey(provider: string): string | undefined {
+    if (provider === 'local') return this.config.get<string>('LOCAL_LLM_API_KEY');
+    if (provider === 'openai') return this.config.get<string>('OPENAI_API_KEY');
+    return this.config.get<string>('ANTHROPIC_API_KEY');
+  }
+
+  /**
+   * Call the LLM provider.
+   *
+   * `openai` = the real OpenAI API (OPENAI_* vars), `local` = a local
+   * OpenAI-compatible gateway with its OWN vars (LOCAL_LLM_* — separate key,
+   * base URL, model). Both speak the OpenAI chat-completions wire format.
+   */
+  private async callLlm(
+    systemPrompt: string,
+    userMessage: string,
+    provider: string,
+  ): Promise<string> {
+    if (provider === 'openai') {
+      return this.callOpenAiCompatible(systemPrompt, userMessage, {
+        apiKey: this.config.get<string>('OPENAI_API_KEY', ''),
+        model: this.config.get<string>('OPENAI_MODEL', 'gpt-4o'),
+        baseUrl: this.config.get<string>('OPENAI_BASE_URL', 'https://api.openai.com/v1'),
+        useJsonFormat: this.config.get<string>('OPENAI_JSON_MODE', 'true') !== 'false',
+      });
+    }
+
+    if (provider === 'local') {
+      return this.callOpenAiCompatible(systemPrompt, userMessage, {
+        apiKey: this.config.get<string>('LOCAL_LLM_API_KEY', ''),
+        model: this.config.get<string>('LOCAL_LLM_MODEL', 'gh/gpt-5-mini'),
+        baseUrl: this.config.get<string>('LOCAL_LLM_BASE_URL', 'http://host.docker.internal:20128/v1'),
+        useJsonFormat: this.config.get<string>('LOCAL_LLM_JSON_MODE', 'true') !== 'false',
+      });
+    }
+
+    // Default: Anthropic
+    const apiKey = this.config.get<string>('ANTHROPIC_API_KEY');
+    const model = this.config.get<string>('ANTHROPIC_MODEL', 'claude-sonnet-4-20250514');
+
+    const response = await this.fetchWithRetry(
+      'https://api.anthropic.com/v1/messages',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey || '',
+          'anthropic-version': '2023-06-01',
+        },
+        body: JSON.stringify({
+          model,
+          max_tokens: 4096,
+          system: systemPrompt,
+          messages: [{ role: 'user', content: userMessage }],
+        }),
+      },
+      { label: 'anthropic' },
+    );
+
+    const data: any = await response.json();
+    return data.content?.[0]?.text || '';
+  }
+
+  /**
+   * fetch() with an AbortController timeout + bounded jittered-backoff retry on
+   * TRANSIENT failures (timeout/abort, ECONNRESET, "socket closed", HTTP 429/5xx).
+   * Non-retryable 4xx and exhausted retries throw — the caller's catch then falls
+   * back to the heuristic judge. This is what keeps long LLM scans smooth instead
+   * of dropping on the first gateway hiccup.
+   */
+  private async fetchWithRetry(
+    url: string,
+    init: RequestInit,
+    opts: { label: string; timeoutMs?: number; retries?: number },
+  ): Promise<Response> {
+    const timeoutMs = opts.timeoutMs ?? Number(this.config.get('JUDGE_LLM_TIMEOUT_MS', 75000));
+    const maxRetries = opts.retries ?? Number(this.config.get('JUDGE_LLM_RETRIES', 2));
+    let lastErr: any;
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      const ac = new AbortController();
+      const timer = setTimeout(() => ac.abort(), timeoutMs);
+      try {
+        const res = await fetch(url, { ...init, signal: ac.signal });
+        if (res.status === 429 || res.status >= 500) {
+          lastErr = new Error(`${opts.label} HTTP ${res.status}`);
+        } else {
+          return res; // success or non-retryable 4xx (let caller inspect res.ok)
+        }
+      } catch (err: any) {
+        lastErr = err; // AbortError (timeout), ECONNRESET, socket closed, …
+      } finally {
+        clearTimeout(timer);
+      }
+      if (attempt < maxRetries) {
+        const backoff = Math.min(8000, 500 * 2 ** attempt) + Math.floor(Math.random() * 250);
+        this.logger.warn(`[JUDGE] ${opts.label} attempt ${attempt + 1} failed (${lastErr?.message}); retry in ${backoff}ms`);
+        await new Promise((r) => setTimeout(r, backoff));
+      }
+    }
+    throw lastErr ?? new Error(`${opts.label} request failed`);
+  }
+
+  /**
+   * Call any OpenAI chat-completions-compatible endpoint (the real OpenAI API
+   * or a local gateway). `stream:false` is explicit because some gateways
+   * stream (SSE) by default, which would break the single-object JSON parse.
+   */
+  private async callOpenAiCompatible(
+    systemPrompt: string,
+    userMessage: string,
+    opts: { apiKey: string; model: string; baseUrl: string; useJsonFormat: boolean },
+  ): Promise<string> {
+    const baseUrl = (opts.baseUrl || 'https://api.openai.com/v1').replace(/\/+$/, '');
+    const response = await this.fetchWithRetry(
+      `${baseUrl}/chat/completions`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${opts.apiKey}` },
+        body: JSON.stringify({
+          model: opts.model,
+          stream: false,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userMessage },
+          ],
+          ...(opts.useJsonFormat ? { response_format: { type: 'json_object' } } : {}),
+        }),
+      },
+      { label: 'openai/local' },
+    );
+    const data: any = await response.json();
+    return data.choices?.[0]?.message?.content || '';
+  }
+
+  /**
+   * Parse LLM response into a VerdictResult.
+   */
+  private parseVerdict(raw: string, bundle: LeakBundle): VerdictResult | null {
+    const jsonMatch = raw.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) return null;
+
+    try {
+      const parsed = JSON.parse(jsonMatch[0]);
+
+      // Validate verdict
+      const validVerdicts = ['confirmed_leak', 'likely_leak', 'uncertain', 'likely_false_positive', 'false_positive'];
+      if (!validVerdicts.includes(parsed.verdict)) return null;
+
+      return {
+        verdict: parsed.verdict as InvestigationVerdict,
+        confidence: typeof parsed.confidence === 'number' ? Math.min(1, Math.max(0, parsed.confidence)) : 0.5,
+        explanation: typeof parsed.explanation === 'string' ? parsed.explanation : 'LLM analysis completed',
+        evidence: Array.isArray(parsed.evidence) ? parsed.evidence : bundle.evidence.map((e) => `${e.tool}: ${e.function_name}`),
+        tool: ToolKind.LLM,
+        repair_suggestion: typeof parsed.repair_suggestion === 'string' ? parsed.repair_suggestion : undefined,
+        rootCause: this.parseRootCause(parsed.rootCause, bundle),
+        repairDiff: this.parseRepairDiff(parsed.repairDiff, bundle),
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  /** Validate the LLM's structured root-cause object (previously discarded). */
+  private parseRootCause(raw: any, bundle: LeakBundle): LeakRootCause | undefined {
+    if (!raw || typeof raw !== 'object') return undefined;
+    const validPatterns = Object.values(LeakPatternType) as string[];
+    const patternType = validPatterns.includes(raw.patternType)
+      ? (raw.patternType as LeakPatternType)
+      : LeakPatternType.UNKNOWN;
+    const description = typeof raw.description === 'string' ? raw.description : '';
+    return {
+      patternType,
+      description,
+      allocationFunction: typeof raw.allocationFunction === 'string' ? raw.allocationFunction : bundle.candidate.function_name,
+      allocationLine: Number(raw.allocationLine ?? bundle.candidate.line_number) || 0,
+      allocationFile: typeof raw.allocationFile === 'string' ? raw.allocationFile : bundle.candidate.file_path,
+      missingFreeLine: raw.missingFreeLine != null ? Number(raw.missingFreeLine) || undefined : undefined,
+      missingFreeFunction: typeof raw.missingFreeFunction === 'string' ? raw.missingFreeFunction : undefined,
+      rootCauseFunction: typeof raw.rootCauseFunction === 'string' ? raw.rootCauseFunction : bundle.candidate.function_name,
+      rootCauseLine: Number(raw.rootCauseLine ?? bundle.candidate.line_number) || 0,
+      rootCauseDescription: typeof raw.rootCauseDescription === 'string' ? raw.rootCauseDescription : description,
+    };
+  }
+
+  /** Validate the LLM's structured before/after repair diff (previously discarded). */
+  private parseRepairDiff(raw: any, bundle: LeakBundle): RepairDiff | undefined {
+    if (!raw || typeof raw !== 'object') return undefined;
+    const originalLines = Array.isArray(raw.originalLines) ? raw.originalLines.map(String) : [];
+    const suggestedLines = Array.isArray(raw.suggestedLines) ? raw.suggestedLines.map(String) : [];
+    if (originalLines.length === 0 && suggestedLines.length === 0) return undefined;
+    return {
+      filePath: typeof raw.filePath === 'string' ? raw.filePath : bundle.candidate.file_path,
+      originalLines,
+      suggestedLines,
+      startLine: Number(raw.startLine ?? bundle.candidate.line_number) || 0,
+      description: typeof raw.description === 'string' ? raw.description : '',
+    };
+  }
+
+  private buildRepairSuggestion(bundle: LeakBundle, staticContext?: Record<string, any>): string {
+    const alloc = bundle.candidate.allocation_type || 'allocation';
+    const frees = staticContext?.frees || [];
+
+    if (frees.length === 0) {
+      return `Ensure the object allocated via ${alloc} in ${bundle.candidate.function_name || 'this function'} is released on every exit path. Add cleanup before each return or route ownership to a caller that clearly frees it.`;
+    }
+
+    if ((staticContext?.feasiblePaths || []).length > 0) {
+      return `Review conditional branches around ${bundle.candidate.file_path}:${bundle.candidate.line_number}. At least one feasible path reaches function exit without hitting the observed free sites (${frees.join(', ')}). Move cleanup into a shared epilogue or use a single-exit cleanup label.`;
+    }
+
+    return `Document ownership for the value allocated at ${bundle.candidate.file_path}:${bundle.candidate.line_number} and ensure one matching free/delete occurs after the last use.`;
+  }
+
+  private readContextSnippet(filePath: string, lineNumber: number): string {
+    if (!filePath || !lineNumber || !existsSync(filePath)) return '';
+    try {
+      const lines = readFileSync(filePath, 'utf-8').split('\n');
+      const start = Math.max(0, lineNumber - 5);
+      const end = Math.min(lines.length, lineNumber + 5);
+      return lines.slice(start, end).map((line, index) => `${start + index + 1}: ${line}`).join('\n');
+    } catch {
+      return '';
+    }
   }
 }

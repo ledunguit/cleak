@@ -8,6 +8,7 @@ import { InvestigationsPage } from '@/pages/InvestigationsPage';
 import { ReportPage } from '@/pages/ReportPage';
 import { LogsPage } from '@/pages/LogsPage';
 import { WorkspaceDetailPage } from '@/pages/WorkspaceDetailPage';
+import { ScanConfigPage } from '@/pages/ScanConfigPage';
 import WorkspacesPage from '@/pages/WorkspacesPage';
 import SettingsPage from '@/pages/SettingsPage';
 import LoginPage from '@/pages/LoginPage';
@@ -117,6 +118,7 @@ export default function App() {
               <Route path="logs" element={<LogsPage />} />
               <Route path="workspaces" element={<WorkspacesPage />} />
               <Route path="workspace/:workspaceId" element={<WorkspaceDetailPage />} />
+              <Route path="workspace/:workspaceId/scan-config" element={<ScanConfigPage />} />
               <Route path="settings" element={<SettingsPage />} />
               <Route path="*" element={<Navigate to="/workspaces" replace />} />
             </Route>

@@ -46,6 +46,6 @@ COPY --from=build /app/proto ./proto
 COPY --from=build /app/node_modules/tree-sitter ./node_modules/tree-sitter
 COPY --from=build /app/node_modules/tree-sitter-c ./node_modules/tree-sitter-c
 
-EXPOSE 50051
+EXPOSE 50051 50061
 
 CMD ["node", "dist/main.js"]

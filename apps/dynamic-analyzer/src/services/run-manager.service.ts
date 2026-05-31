@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { writeFileSync, readFileSync, existsSync, mkdirSync } from 'fs';
+import { writeFileSync, readFileSync, existsSync, mkdirSync, readdirSync } from 'fs';
 import { join } from 'path';
 
 interface RunRecord {
@@ -42,7 +42,30 @@ export class RunManagerService {
   }
 
   async listRuns(tool?: string, limit?: number) {
-    // TODO: list runs from runs directory
-    return { runs: [] };
+    const files = readdirSync(this.runsDir)
+      .filter((file) => file.endsWith('.json'))
+      .map((file) => join(this.runsDir, file));
+
+    const runs = files
+      .map((filePath) => {
+        try {
+          return JSON.parse(readFileSync(filePath, 'utf-8')) as RunRecord;
+        } catch {
+          return null;
+        }
+      })
+      .filter((run): run is RunRecord => Boolean(run))
+      .filter((run) => !tool || run.tool === tool)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .slice(0, limit || 50)
+      .map((run) => ({
+        runId: run.runId,
+        tool: run.tool,
+        binaryPath: run.binaryPath,
+        createdAt: run.createdAt,
+        success: run.success,
+      }));
+
+    return { runs };
   }
 }

@@ -36,8 +36,10 @@ export class CandidateManagerService {
   }
 
   private computeBundleId(candidate: LeakCandidate): string {
-    // Hash allocation site for dedup
+    // Hash allocation site for dedup — use full hash to avoid collision
     const hash = candidate.allocation_site || `${candidate.file_path}:${candidate.line_number}`;
-    return `bundle_${Buffer.from(hash).toString('hex').slice(0, 12)}`;
+    const fullHex = Buffer.from(hash).toString('hex');
+    const suffix = fullHex.slice(-20) + fullHex.slice(0, 12);
+    return `bundle_${suffix}`;
   }
 }

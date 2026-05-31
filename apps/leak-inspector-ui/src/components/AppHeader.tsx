@@ -1,9 +1,7 @@
 import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Radar, Settings, LogOut } from 'lucide-react';
-import { Flex, Space, Tag, Typography, theme, Avatar, Dropdown } from 'antd';
-
-import { tagColor } from '@/utils/ui';
+import { Flex, Space, Typography, theme, Avatar, Dropdown, MenuProps } from 'antd';
 import type { ScanDetail, StructuredReport } from '@/types';
 import { useAuthStore } from '@/stores/authStore';
 
@@ -19,19 +17,15 @@ export function AppHeader({ selectedScan, reportData }: AppHeaderProps) {
   const { user, logout } = useAuthStore();
   const navigate = useNavigate();
 
-  const workspaceDisplayPath =
-    (reportData as any)?.metadata?.workspacePath
-    || selectedScan?.workspacePath
-    || 'Select a workspace and start a scan to populate the console.';
-
-  const dropdownItems = useMemo(() => [
+  const dropdownItems: MenuProps['items'] = useMemo(() => [
     {
       key: 'settings',
       icon: <Settings size={16} />,
       label: 'Settings',
       onClick: () => navigate('/settings'),
+      style: { padding: '10px 16px', borderRadius: 8 },
     },
-    { type: 'divider' as const },
+    { type: 'divider' as const, style: { margin: '4px 0' } },
     {
       key: 'logout',
       icon: <LogOut size={16} />,
@@ -40,6 +34,8 @@ export function AppHeader({ selectedScan, reportData }: AppHeaderProps) {
         await logout();
         navigate('/login');
       },
+      danger: true,
+      style: { padding: '10px 16px', borderRadius: 8 },
     },
   ], [navigate, logout]);
 
@@ -67,27 +63,47 @@ export function AppHeader({ selectedScan, reportData }: AppHeaderProps) {
       </Space>
 
       <Flex gap={8} wrap align="center" justify="flex-end">
-        <Tag color={tagColor(selectedScan?.status)}>{selectedScan?.status || 'idle'}</Tag>
-        <Text type="secondary" style={{ textAlign: 'right' }}>
-          {workspaceDisplayPath}
-        </Text>
-        {selectedScan ? <Tag>{selectedScan.scanId}</Tag> : <Tag>no active scan</Tag>}
-
         {user && (
-          <Dropdown menu={{ items: dropdownItems }} placement="bottomRight">
+          <Dropdown
+            menu={{
+              items: dropdownItems,
+              style: { minWidth: 180, borderRadius: 12, padding: 4 },
+            }}
+            placement="bottomRight"
+            trigger={['click']}
+          >
             <Flex
               align="center"
-              gap={8}
-              style={{ cursor: 'pointer', padding: '4px 8px', borderRadius: 8 }}
+              gap={10}
+              style={{
+                cursor: 'pointer',
+                padding: '6px 14px 6px 10px',
+                borderRadius: 10,
+                background: token.colorBgElevated,
+                border: `1px solid ${token.colorBorderSecondary}`,
+                transition: 'all 0.2s',
+                userSelect: 'none',
+              }}
+              className="user-dropdown-trigger"
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = token.colorBgTextHover;
+                e.currentTarget.style.borderColor = token.colorBorder;
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = token.colorBgElevated;
+                e.currentTarget.style.borderColor = token.colorBorderSecondary;
+              }}
             >
               <Avatar
                 src={user.avatarUrl}
-                size={32}
-                style={{ backgroundColor: token.colorPrimary }}
+                size={28}
+                style={{ backgroundColor: token.colorPrimary, flexShrink: 0 }}
               >
                 {user.login?.charAt(0).toUpperCase()}
               </Avatar>
-              <Text strong>{user.login}</Text>
+              <Typography.Text strong style={{ fontSize: 14, lineHeight: '28px' }}>
+                {user.login}
+              </Typography.Text>
             </Flex>
           </Dropdown>
         )}

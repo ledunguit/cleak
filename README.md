@@ -83,6 +83,23 @@ bun run dev
 bun run build
 ```
 
+## Runtime Preflight
+
+Use this before end-to-end scans to verify that the local stack is actually reachable:
+
+```bash
+curl http://localhost:8090/api/runtime/preflight
+```
+
+For a local corpus smoke run without the UI:
+
+```bash
+bun run scan:smoke -- --case early_return_leak
+```
+
+The smoke runner checks PostgreSQL, the static analyzer, the dynamic analyzer,
+and key toolchain binaries before attempting to boot the control plane.
+
 ## Architecture Docs
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for detailed system architecture.

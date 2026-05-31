@@ -37,7 +37,7 @@ export default function SettingsPage() {
   }
 
   return (
-    <Flex vertical gap={24} style={{ maxWidth: 720, margin: '0 auto' }}>
+    <Flex vertical gap={24}>
       <Title level={3}>Settings</Title>
 
       {/* Profile section */}

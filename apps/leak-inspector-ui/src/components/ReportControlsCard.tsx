@@ -15,6 +15,7 @@ interface ReportControlsCardProps {
   onReloadStructured: () => void;
   onLoadReport: (format: string) => void;
   onOpenHtml: () => void;
+  onOpenPdf: () => void;
 }
 
 export function ReportControlsCard({
@@ -24,6 +25,7 @@ export function ReportControlsCard({
   onReloadStructured,
   onLoadReport,
   onOpenHtml,
+  onOpenPdf,
 }: ReportControlsCardProps) {
   const [activeTab, setActiveTab] = useState('findings');
 
@@ -59,6 +61,9 @@ export function ReportControlsCard({
           </Button>
           <Button type="primary" size="small" onClick={onOpenHtml} disabled={!selectedScan}>
             Open HTML
+          </Button>
+          <Button size="small" onClick={onOpenPdf} disabled={!selectedScan}>
+            Open PDF
           </Button>
         </Space>
 

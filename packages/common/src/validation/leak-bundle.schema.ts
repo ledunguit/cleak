@@ -42,6 +42,27 @@ export const LeakEvidenceSchema = z.object({
   raw_output: z.string(),
 });
 
+export const LeakRootCauseSchema = z.object({
+  patternType: z.string(),
+  description: z.string(),
+  allocationFunction: z.string(),
+  allocationLine: z.number().int(),
+  allocationFile: z.string(),
+  missingFreeLine: z.number().int().optional(),
+  missingFreeFunction: z.string().optional(),
+  rootCauseFunction: z.string(),
+  rootCauseLine: z.number().int(),
+  rootCauseDescription: z.string(),
+});
+
+export const RepairDiffSchema = z.object({
+  filePath: z.string(),
+  originalLines: z.array(z.string()),
+  suggestedLines: z.array(z.string()),
+  startLine: z.number().int(),
+  description: z.string(),
+});
+
 export const VerdictResultSchema = z.object({
   verdict: InvestigationVerdictSchema,
   confidence: z.number().min(0).max(1),
@@ -49,6 +70,8 @@ export const VerdictResultSchema = z.object({
   evidence: z.array(z.string()),
   tool: ToolKindSchema,
   repair_suggestion: z.string().optional(),
+  rootCause: LeakRootCauseSchema.optional(),
+  repairDiff: RepairDiffSchema.optional(),
 });
 
 export const LeakBundleSchema = z.object({
@@ -64,6 +87,9 @@ export const LeakBundleSchema = z.object({
 export const ScanMetadataSchema = z.object({
   scanId: z.string(),
   workspacePath: z.string(),
+  sourceWorkspacePath: z.string().optional(),
+  materializedWorkspacePath: z.string().optional(),
+  materializedWorkspaceId: z.string().optional(),
   analysisMode: AnalysisModeSchema,
   dynamicMode: DynamicModeSchema,
   fileLimit: z.number().int(),

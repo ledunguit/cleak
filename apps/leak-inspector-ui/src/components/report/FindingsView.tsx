@@ -33,6 +33,20 @@ function getVerdictColor(verdict: Verdict | undefined, token: ReturnType<typeof 
   return token.colorPrimary;
 }
 
+function humanizePatternType(pattern?: string): string {
+  if (!pattern) return 'Unknown pattern';
+  return pattern
+    .replace(/[_-]+/g, ' ')
+    .trim()
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function formatSite(file?: string, line?: number): string | null {
+  if (!file && !line) return null;
+  if (file && line) return `${file}:${line}`;
+  return file || `line ${line}`;
+}
+
 interface EvidenceCardProps {
   evidence: EvidenceItem;
   index: number;
@@ -111,6 +125,23 @@ function FindingDetail({ finding }: FindingDetailProps) {
   const verdict = finding.verdict || {};
   const evidence: EvidenceItem[] = candidate.evidence || [];
   const suggestions: FixSuggestion[] = verdict.fix_suggestions || [];
+  const rootCause = verdict.root_cause;
+  const allocationSite = rootCause
+    ? formatSite(rootCause.allocation_file, rootCause.allocation_line)
+    : null;
+  const missingFreeSite =
+    rootCause && (rootCause.missing_free_function || rootCause.missing_free_line)
+      ? `${rootCause.missing_free_function || 'unknown function'}${
+          rootCause.missing_free_line ? ` @ line ${rootCause.missing_free_line}` : ''
+        }`
+      : null;
+  const hasRootCause = Boolean(
+    rootCause &&
+      (rootCause.pattern_type ||
+        allocationSite ||
+        missingFreeSite ||
+        rootCause.root_cause_description),
+  );
 
   const tabItems = [
     {
@@ -205,6 +236,78 @@ function FindingDetail({ finding }: FindingDetailProps) {
               {verdict.human_explanation || verdict.why || 'No explanation was produced.'}
             </Paragraph>
           </div>
+
+          {hasRootCause && rootCause ? (
+            <div
+              style={{
+                padding: '16px',
+                borderRadius: token.borderRadius,
+                background: token.colorBgContainer,
+                border: `1px solid ${token.colorBorderSecondary}`,
+                borderLeft: `4px solid ${token.colorError}`,
+              }}
+            >
+              <Space wrap size={8} style={{ marginBottom: 12 }}>
+                <Text
+                  strong
+                  style={{ fontSize: 14, color: token.colorText }}
+                >
+                  Root Cause
+                </Text>
+                {rootCause.pattern_type ? (
+                  <Tag color="red" style={{ margin: 0 }}>
+                    {humanizePatternType(rootCause.pattern_type)}
+                  </Tag>
+                ) : null}
+              </Space>
+
+              <Space direction="vertical" size={10} style={{ width: '100%' }}>
+                {allocationSite ? (
+                  <div>
+                    <Text
+                      type="secondary"
+                      style={{ fontSize: 12, display: 'block', marginBottom: 2 }}
+                    >
+                      Allocation site
+                      {rootCause.allocation_function
+                        ? ` (${rootCause.allocation_function})`
+                        : ''}
+                    </Text>
+                    <Text code style={{ fontSize: 12 }}>
+                      {allocationSite}
+                    </Text>
+                  </div>
+                ) : null}
+
+                {missingFreeSite ? (
+                  <div>
+                    <Text
+                      type="secondary"
+                      style={{ fontSize: 12, display: 'block', marginBottom: 2 }}
+                    >
+                      Missing free
+                    </Text>
+                    <Text code style={{ fontSize: 12 }}>
+                      {missingFreeSite}
+                    </Text>
+                  </div>
+                ) : null}
+
+                {rootCause.root_cause_description ? (
+                  <Paragraph
+                    style={{
+                      marginBottom: 0,
+                      fontSize: 13,
+                      lineHeight: '1.6',
+                      color: token.colorText,
+                    }}
+                  >
+                    {rootCause.root_cause_description}
+                  </Paragraph>
+                ) : null}
+              </Space>
+            </div>
+          ) : null}
 
           <div
             style={{

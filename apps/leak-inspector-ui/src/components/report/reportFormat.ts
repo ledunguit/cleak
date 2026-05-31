@@ -13,6 +13,20 @@ export interface LocationInfo {
   [key: string]: unknown;
 }
 
+export interface RootCauseInfo {
+  pattern_type?: string;
+  description?: string;
+  allocation_function?: string;
+  allocation_line?: number;
+  allocation_file?: string;
+  missing_free_line?: number;
+  missing_free_function?: string;
+  root_cause_function?: string;
+  root_cause_line?: number;
+  root_cause_description?: string;
+  [key: string]: unknown;
+}
+
 export interface FindingBase {
   finding_id?: string;
   bundleId?: string;
@@ -33,6 +47,7 @@ export interface FindingBase {
     human_explanation?: string;
     fix_suggestions?: FixSuggestion[];
     missing_evidence?: string[];
+    root_cause?: RootCauseInfo;
     [key: string]: unknown;
   };
   orchestrator_notes?: string[];

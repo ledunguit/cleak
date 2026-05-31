@@ -21,6 +21,10 @@ export function useReportPageActions() {
       activeScanId
         ? window.open(`/api/scans/${activeScanId}/report?format=html`, '_blank', 'noopener,noreferrer')
         : undefined,
+    handleOpenPdf: () =>
+      activeScanId
+        ? window.open(`/api/scans/${activeScanId}/report?format=pdf`, '_blank', 'noopener,noreferrer')
+        : undefined,
     handleOpenActivity: () => navigate(activeScanId ? `/activity/${activeScanId}` : '/activity'),
   };
 }

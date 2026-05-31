@@ -17,6 +17,21 @@ services:
     networks:
       - mcpvul-net
 
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - mcpvul-net
+
   control-plane:
     build:
       context: .
@@ -32,16 +47,57 @@ services:
       POSTGRES_DB: mcpvul
       STATIC_ANALYZER_URL: static-analyzer:50051
       DYNAMIC_ANALYZER_URL: dynamic-analyzer:50052
+      # Transport: grpc (default) | mcp | both. Set TRANSPORT_MODE=mcp across all
+      # services to route the control-plane↔analyzer tool calls over real MCP.
+      TRANSPORT_MODE: ${TRANSPORT_MODE:-grpc}
+      STATIC_ANALYZER_MCP_URL: http://static-analyzer:50061/mcp
+      DYNAMIC_ANALYZER_MCP_URL: http://dynamic-analyzer:50062/mcp
+      # Distributed deployment: the build/valgrind toolchain lives in the
+      # dynamic-analyzer image and LeakGuard runs inside leakguard-tool:dev, so
+      # the control-plane must NOT probe its own host for clang/make/valgrind.
+      # Set to "true" only for a single-host/in-process monolith setup.
+      RUNTIME_PREFLIGHT_LOCAL_TOOLCHAIN: ${RUNTIME_PREFLIGHT_LOCAL_TOOLCHAIN:-false}
+      # LLM judge (llm_assisted mode) — DEFAULT provider is the local
+      # OpenAI-compatible gateway, with its OWN key/url/model vars kept separate
+      # from the real OpenAI API. The gateway treats the container as a remote
+      # client, so set LOCAL_LLM_API_KEY (in a gitignored .env). With no key the
+      # LLM judge safely falls back to the heuristic judge.
+      JUDGE_LLM_PROVIDER: ${JUDGE_LLM_PROVIDER:-local}
+      # Local LLM gateway (default judge backend)
+      LOCAL_LLM_BASE_URL: ${LOCAL_LLM_BASE_URL:-http://host.docker.internal:20128/v1}
+      LOCAL_LLM_API_KEY: ${LOCAL_LLM_API_KEY:-}
+      LOCAL_LLM_MODEL: ${LOCAL_LLM_MODEL:-gh/gpt-5-mini}
+      LOCAL_LLM_JSON_MODE: ${LOCAL_LLM_JSON_MODE:-true}
+      # Real OpenAI API (only used when JUDGE_LLM_PROVIDER=openai)
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o}
+      OPENAI_JSON_MODE: ${OPENAI_JSON_MODE:-true}
+      # Default scan mode when a request doesn't specify one.
+      DEFAULT_ANALYSIS_MODE: ${DEFAULT_ANALYSIS_MODE:-llm_assisted}
+      # Scan job queue (BullMQ on Redis): scans run detached on an in-process
+      # worker so the POST returns instantly and long scans never drop.
+      REDIS_HOST: ${REDIS_HOST:-redis}
+      REDIS_PORT: ${REDIS_PORT:-6379}
+      SCAN_MAX_CONCURRENCY: ${SCAN_MAX_CONCURRENCY:-2}
       GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
       GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
       GITHUB_REDIRECT_URI: ${GITHUB_REDIRECT_URI:-http://localhost:8090/api/github/callback}
       GITHUB_CLONE_ROOT: /clones
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5173}
+      SCAN_WORKSPACE_ROOT: /workspace/targets/scan-workspaces
+      SCAN_WORKSPACE_ANALYZER_ROOT: /workspace/targets/scan-workspaces
     volumes:
       - clones:/clones
       - ./demo:/workspace/demo
+      - ./targets:/workspace/targets
+    # Reach a host-side LLM gateway (e.g. http://localhost:20128) from the container.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     networks:
       - mcpvul-net
@@ -53,11 +109,15 @@ services:
       dockerfile: apps/static-analyzer/Dockerfile
     ports:
       - "50051:50051"
+      - "50061:50061"
     environment:
       GRPC_URL: 0.0.0.0:50051
+      TRANSPORT_MODE: ${TRANSPORT_MODE:-grpc}
+      MCP_HTTP_PORT: 50061
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./demo:/workspace/demo
+      - ./targets:/workspace/targets
     depends_on:
       - leakguard-runtime
     networks:
@@ -70,12 +130,16 @@ services:
       dockerfile: apps/dynamic-analyzer/Dockerfile
     ports:
       - "50052:50052"
+      - "50062:50062"
     environment:
       GRPC_URL: 0.0.0.0:50052
+      TRANSPORT_MODE: ${TRANSPORT_MODE:-grpc}
+      MCP_HTTP_PORT: 50062
       RUNS_DIR: /runs
     volumes:
       - runs:/runs
       - ./demo:/workspace/demo
+      - ./targets:/workspace/targets
     networks:
       - mcpvul-net
     restart: unless-stopped
@@ -100,6 +164,7 @@ services:
 
 volumes:
   pgdata:
+  redisdata:
   clones:
   runs:
 

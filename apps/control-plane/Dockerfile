@@ -33,6 +33,11 @@ RUN bunx turbo run build --filter=control-plane
 # ── Runtime stage ──
 FROM --platform=linux/amd64 node:22-slim AS runtime
 
+# git + CA certs are required to clone GitHub repositories on demand at scan time.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 COPY --from=build /app/dist/apps/control-plane ./dist
 COPY --from=build /app/node_modules ./node_modules

@@ -2,9 +2,11 @@ import { AnalysisMode, DynamicMode, DynamicToolPreference } from '../types/leak-
 
 export class CreateScanDto {
   workspacePath: string;
+  sourceType?: 'github' | 'upload_zip' | 'local_path' | 'workspace_path';
   fileLimit?: number;
   analysisMode?: AnalysisMode;
   buildCommand?: string;
+  reportFormats?: string[];
   dynamicMode?: DynamicMode;
   dynamicToolPreference?: DynamicToolPreference;
   dynamicBinaryPath?: string;
@@ -25,6 +27,9 @@ export class ScanResponseDto {
   scanId: string;
   status: string;
   workspacePath: string;
+  sourceWorkspacePath?: string;
+  materializedWorkspacePath?: string;
+  materializedWorkspaceId?: string;
   analysisMode: string;
   createdAt: string;
   completedAt?: string;

@@ -6,7 +6,7 @@ import { useReportPageActions } from '@/handlers/useReportPageActions';
 
 export function ReportPage() {
   const { scanId } = useParams<{ scanId: string }>();
-  const { consoleState, handleReloadStructured, handleLoadReport, handleOpenHtml } = useReportPageActions();
+  const { consoleState, handleReloadStructured, handleLoadReport, handleOpenHtml, handleOpenPdf } = useReportPageActions();
   const selectedScanId = consoleState.selectedScan?.scanId;
 
   useEffect(() => {
@@ -25,6 +25,7 @@ export function ReportPage() {
         onReloadStructured={handleReloadStructured}
         onLoadReport={handleLoadReport}
         onOpenHtml={handleOpenHtml}
+        onOpenPdf={handleOpenPdf}
       />
     </div>
   );

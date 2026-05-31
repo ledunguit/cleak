@@ -13,6 +13,7 @@ import { Response } from 'express';
 import { Observable } from 'rxjs';
 import { ScanService } from '../services/scan.service';
 import { CreateScanDto } from '@mcpvul/common/dto/scan.dto';
+import { Public } from '../decorators/public.decorator';
 
 @Controller('api')
 export class ScanController {
@@ -46,8 +47,20 @@ export class ScanController {
 
   @Get('scans/:id/events')
   @Sse()
+  @Public()
   streamEvents(@Param('id') id: string): Observable<MessageEvent> {
     return this.scanService.streamEvents(id);
+  }
+
+  @Post('scans/purge-terminal')
+  async purgeTerminalScans() {
+    return this.scanService.purgeTerminalScans();
+  }
+
+  @Get('scans/:id/events/history')
+  async getEventsHistory(@Param('id') id: string) {
+    const events = this.scanService.getEventsHistory(id);
+    return { events };
   }
 
   @Get('scans/:id/report')
@@ -58,6 +71,9 @@ export class ScanController {
   ) {
     const report = await this.scanService.getReport(id, format || 'json');
     res.setHeader('Content-Type', report.contentType);
+    if (format === 'pdf') {
+      res.setHeader('Content-Disposition', `inline; filename="${id}.pdf"`);
+    }
     res.send(report.content);
   }
 }

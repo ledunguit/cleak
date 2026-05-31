@@ -1,8 +1,8 @@
 import { Injectable, Logger, OnApplicationBootstrap, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { readdirSync, statSync, existsSync, mkdirSync, unlinkSync, createReadStream, writeFileSync } from 'fs';
-import { join, resolve, basename, extname } from 'path';
+import { readdirSync, statSync, existsSync, mkdirSync, unlinkSync, writeFileSync, createWriteStream, readFileSync, rmSync } from 'fs';
+import { dirname, join, normalize, resolve, basename, extname, relative, sep } from 'path';
 import * as unzipper from 'unzipper';
 import {
   ScanEntity,
@@ -11,6 +11,7 @@ import {
   GitHubConnectionEntity,
 } from '@mcpvul/common';
 import { GitHubService } from './github.service';
+import { BuildDiscoveryService } from './build-discovery.service';
 
 @Injectable()
 export class PersistenceService implements OnApplicationBootstrap {
@@ -85,6 +86,7 @@ export class PersistenceService implements OnApplicationBootstrap {
     @InjectRepository(GitHubConnectionEntity)
     private gitHubRepo: Repository<GitHubConnectionEntity>,
     private gitHubService: GitHubService,
+    private buildDiscovery: BuildDiscoveryService,
   ) {}
 
   // ── Workspaces ──
@@ -109,7 +111,12 @@ export class PersistenceService implements OnApplicationBootstrap {
   }
 
   async createWorkspace(name: string, path: string) {
-    const entity = this.workspaceRepo.create({ name, path });
+    const resolvedPath = resolve(path);
+    if (!existsSync(resolvedPath)) {
+      mkdirSync(resolvedPath, { recursive: true });
+    }
+
+    const entity = this.workspaceRepo.create({ name, path: resolvedPath });
     const saved = await this.workspaceRepo.save(entity);
     return {
       workspaceId: saved.workspaceId,
@@ -210,18 +217,37 @@ export class PersistenceService implements OnApplicationBootstrap {
   }
 
   async detectBuild(workspaceId: string, repoId: string) {
-    // Simple heuristic detection; LLM version added later
-    return { command: 'make CC=clang' };
+    const repo = await this.repoRepo.findOneBy({ repoId, workspaceId });
+    if (!repo) {
+      throw new BadRequestException('Repository not found');
+    }
+
+    const plan = await this.buildDiscovery.discover({
+      workspaceId,
+      repoId,
+      workspacePath: repo.localClonePath,
+      preferLlm: true,
+    });
+
+    return {
+      command: plan.buildCommand,
+      plan,
+    };
   }
 
   async addRepoByPath(workspaceId: string, path: string, name?: string) {
+    const resolvedPath = resolve(path);
+    if (!existsSync(resolvedPath) || !statSync(resolvedPath).isDirectory()) {
+      throw new BadRequestException('Local repository path must exist and be a directory');
+    }
+
     const entity = this.repoRepo.create({
       workspaceId,
       repoFullName: name || path.split('/').pop() || path,
       cloneUrl: '',
       defaultBranch: '',
       isPrivate: false,
-      localClonePath: path,
+      localClonePath: resolvedPath,
     });
     const saved = await this.repoRepo.save(entity);
     return { repo_id: saved.repoId, local_clone_path: saved.localClonePath };
@@ -240,45 +266,93 @@ export class PersistenceService implements OnApplicationBootstrap {
     const extractDir = join(ws.path, repoName);
     mkdirSync(extractDir, { recursive: true });
 
-    // Write uploaded file to temp path
-    const tmpPath = join(extractDir, `__upload_${Date.now()}.zip`);
-    try {
-      writeFileSync(tmpPath, file.buffer);
-
-      // Extract ZIP
-      await new Promise<void>((resolve2, reject) => {
-        const stream = createReadStream(tmpPath);
-        stream.pipe(unzipper.Extract({ path: extractDir }))
-          .on('close', () => resolve2())
-          .on('error', reject);
-      });
-
-      // Create repo record
-      const entity = this.repoRepo.create({
-        workspaceId,
-        repoFullName: repoName,
-        cloneUrl: '',
-        defaultBranch: '',
-        isPrivate: false,
-        localClonePath: extractDir,
-      });
-      const saved = await this.repoRepo.save(entity);
-
-      this.logger.log(`Extracted ZIP "${file.originalname}" to ${extractDir}`);
-
-      return {
-        repo_id: saved.repoId,
-        repo_full_name: repoName,
-        local_clone_path: extractDir,
-      };
-    } finally {
-      try { unlinkSync(tmpPath); } catch { /* ignore */ }
+    // Support both memory storage (buffer) and disk storage (path)
+    let zipBuffer: Buffer;
+    if (file.buffer && file.buffer.length > 0) {
+      zipBuffer = file.buffer;
+    } else if (file.path && existsSync(file.path)) {
+      zipBuffer = readFileSync(file.path);
+    } else {
+      throw new BadRequestException('Could not read uploaded file');
     }
+
+    // Extract the zip contents
+    await this.extractZipSafely(zipBuffer, extractDir);
+
+    // Create repo record
+    const entity = this.repoRepo.create({
+      workspaceId,
+      repoFullName: repoName,
+      cloneUrl: '',
+      defaultBranch: '',
+      isPrivate: false,
+      localClonePath: extractDir,
+    });
+    const saved = await this.repoRepo.save(entity);
+
+    this.logger.log(`Extracted ZIP "${file.originalname}" to ${extractDir}`);
+
+    return {
+      repo_id: saved.repoId,
+      repo_full_name: repoName,
+      local_clone_path: extractDir,
+    };
   }
 
   async removeRepo(workspaceId: string, repoId: string) {
     await this.repoRepo.delete({ repoId, workspaceId });
     return { success: true };
+  }
+
+
+  /**
+   * Clone a public repository by URL (no OAuth required).
+   * Supports https://github.com/... and git@... URLs.
+   */
+  async cloneByPublicUrl(workspaceId: string, url: string, name?: string) {
+    const ws = await this.workspaceRepo.findOneBy({ workspaceId });
+    if (!ws) throw new BadRequestException('Workspace not found');
+
+    const repoName = name || url.split('/').pop()?.replace(/\.git$/, '') || 'repo';
+    const cloneDir = join(ws.path, repoName);
+
+    if (existsSync(cloneDir)) {
+      throw new BadRequestException(`Target directory already exists: ${cloneDir}. Remove it first or choose a different name.`);
+    }
+
+    mkdirSync(cloneDir, { recursive: true });
+
+    try {
+      const { execSync } = require('child_process');
+      execSync(`git clone --depth 1 ${url} ${cloneDir}`, {
+        timeout: 120000, // 2 min timeout
+        stdio: 'pipe',
+        encoding: 'utf-8',
+      });
+    } catch (err: any) {
+      // Cleanup on failure
+      try { rmSync(cloneDir, { recursive: true, force: true }); } catch { /* ignore */ }
+      throw new BadRequestException(`Git clone failed: ${err.stderr || err.message}`);
+    }
+
+    const entity = this.repoRepo.create({
+      workspaceId,
+      repoFullName: repoName,
+      cloneUrl: url,
+      defaultBranch: 'main',
+      isPrivate: false,
+      localClonePath: cloneDir,
+    });
+    const saved = await this.repoRepo.save(entity);
+
+    this.logger.log(`Cloned public repo ${url} to ${cloneDir}`);
+
+    return {
+      repo_id: saved.repoId,
+      repo_full_name: repoName,
+      local_clone_path: cloneDir,
+      clone_url: url,
+    };
   }
 
   // ── GitHub ──
@@ -303,6 +377,40 @@ export class PersistenceService implements OnApplicationBootstrap {
 
   async deleteGitHubConnection(githubUserId: number) {
     await this.gitHubRepo.delete({ githubUserId });
+  }
+
+  private async extractZipSafely(zipBuffer: Buffer, extractDir: string): Promise<void> {
+    const archive = await unzipper.Open.buffer(zipBuffer);
+    for (const entry of archive.files) {
+      const normalizedPath = normalize(entry.path).replace(/^(\.\.(\/|\\|$))+/, '');
+      const destination = resolve(extractDir, normalizedPath);
+
+      if (!this.isWithinRoot(destination, extractDir)) {
+        throw new BadRequestException(`ZIP entry escapes extraction root: ${entry.path}`);
+      }
+
+      if (entry.type === 'Directory') {
+        mkdirSync(destination, { recursive: true });
+        continue;
+      }
+
+      if (!normalizedPath || normalizedPath.endsWith('/')) {
+        continue;
+      }
+
+      mkdirSync(dirname(destination), { recursive: true });
+      await new Promise<void>((resolveEntry, rejectEntry) => {
+        entry.stream()
+          .pipe(createWriteStream(destination))
+          .on('finish', () => resolveEntry())
+          .on('error', rejectEntry);
+      });
+    }
+  }
+
+  private isWithinRoot(candidatePath: string, rootPath: string): boolean {
+    const rel = relative(resolve(rootPath), resolve(candidatePath));
+    return rel === '' || (!rel.startsWith(`..${sep}`) && rel !== '..');
   }
 
   // ── Scans ──

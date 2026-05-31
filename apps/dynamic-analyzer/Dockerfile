@@ -54,6 +54,6 @@ COPY --from=build /app/dist/apps/dynamic-analyzer ./dist
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/proto ./proto
 
-EXPOSE 50052
+EXPOSE 50052 50062
 
 CMD ["node", "dist/main.js"]

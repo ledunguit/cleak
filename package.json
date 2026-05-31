@@ -7,7 +7,11 @@
     "build": "turbo run build",
     "lint": "turbo run lint",
     "test": "turbo run test",
-    "format": "prettier --write \"**/*.ts\" \"**/*.tsx\""
+    "format": "prettier --write \"**/*.ts\" \"**/*.tsx\"",
+    "scan:smoke": "ts-node scripts/run-local-scan-smoke.ts",
+    "eval:corpus": "bun scripts/evaluate-corpus.ts",
+    "eval:compare": "bun scripts/compare-modes.ts",
+    "mcp:contract": "bun scripts/mcp-contract-test.ts"
   },
   "devDependencies": {
     "@nestjs/cli": "^11.0.5",
@@ -20,6 +24,8 @@
   "dependencies": {
     "@grpc/grpc-js": "^1.14.4",
     "@grpc/proto-loader": "^0.8.1",
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "@nestjs/bullmq": "^11.0.2",
     "@nestjs/common": "^11.1.23",
     "@nestjs/config": "^4.0.4",
     "@nestjs/core": "^11.1.23",
@@ -32,10 +38,12 @@
     "@types/node": "^25.9.1",
     "@types/passport-jwt": "^4.0.1",
     "@types/uuid": "^11.0.0",
+    "bullmq": "^5.34.0",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.15.1",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
+    "ioredis": "^5.4.1",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
     "pg": "^8.21.0",

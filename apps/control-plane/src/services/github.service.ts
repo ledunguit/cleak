@@ -197,14 +197,23 @@ export class GitHubService {
     const localDir = `${this.cloneRoot}/${repoFullName}`;
     const authUrl = cloneUrl.replace('https://', `https://oauth2:${token}@`);
 
-    if (existsSync(`${localDir}/.git`)) {
-      execSync('git fetch origin', { cwd: localDir, timeout: 120000 });
-      execSync(`git reset --hard origin/${branch}`, { cwd: localDir, timeout: 60000 });
-    } else {
-      execSync(
-        `git clone --depth 1 --branch ${branch} ${authUrl} ${localDir}`,
-        { timeout: 300000 },
-      );
+    try {
+      if (existsSync(`${localDir}/.git`)) {
+        execSync('git fetch origin', { cwd: localDir, timeout: 120000 });
+        execSync(`git reset --hard origin/${branch}`, { cwd: localDir, timeout: 60000 });
+      } else {
+        execSync(
+          `git clone --depth 1 --branch ${branch} ${authUrl} ${localDir}`,
+          { timeout: 300000 },
+        );
+      }
+    } catch (err: any) {
+      // Never surface the embedded OAuth token in the error message / logs.
+      const sanitized = String(err?.message || err)
+        .split(token)
+        .join('***')
+        .replace(/oauth2:[^@\s]*@/g, 'oauth2:***@');
+      throw new Error(sanitized);
     }
 
     return localDir;

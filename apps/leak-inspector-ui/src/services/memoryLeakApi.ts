@@ -4,6 +4,7 @@ import type {
   ScanEvent,
   ScanResponse,
   StructuredReport,
+  RuntimePreflightReport,
   Workspace,
   WorkspaceDetail,
   GitHubStatusResponse,
@@ -63,7 +64,7 @@ export function fetchScan(scanId: string): Promise<ScanDetail> {
 }
 
 export function fetchScanEvents(scanId: string): Promise<{ events: ScanEvent[] }> {
-  return api(`/api/scans/${scanId}/events?format=json&after=0`);
+  return api(`/api/scans/${scanId}/events/history`);
 }
 
 export function fetchScanReport(scanId: string, format = 'markdown'): Promise<string> {
@@ -82,6 +83,10 @@ export function createScan(payload: Record<string, any>): Promise<ScanResponse> 
     method: 'POST',
     body: JSON.stringify(payload),
   });
+}
+
+export function fetchRuntimePreflight(): Promise<RuntimePreflightReport> {
+  return api('/api/runtime/preflight');
 }
 
 export function cancelScanRequest(scanId: string): Promise<{ success: boolean }> {

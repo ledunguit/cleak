@@ -1,0 +1,2 @@
+*.o
+build/complex_leak_lab

@@ -22,10 +22,9 @@ pre {
 }
 
 .activity-shell {
-  display: grid;
-  grid-template-rows: minmax(0, 1fr) auto;
+  display: flex;
+  flex-direction: column;
   gap: 16px;
-  height: 100%;
   min-height: 0;
   overflow: hidden;
 }

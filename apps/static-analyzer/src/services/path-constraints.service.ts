@@ -14,23 +14,48 @@ export class PathConstraintsService {
     );
 
     if (!containingFunction) {
-      return { constraints: [], feasiblePaths: [] };
+      return { constraints: [], feasiblePaths: [], exitPaths: [] };
     }
 
+    // Extract all path constraints from conditions
     const constraints = containingFunction.conditions.map(
       (c) => `if (${c.text}) at line ${c.line}`,
     );
 
-    const feasiblePaths = this.computeFeasiblePaths(
-      containingFunction,
-      lineNumber,
-    );
+    // Use CFG exit paths for richer analysis
+    const feasiblePaths = containingFunction.exitPaths
+      .filter((p) => p.reachableFromEntry)
+      .map((p) => ({
+        kind: p.kind,
+        line: p.exitLine,
+        leakRisk: p.leakRisk,
+        conditions: p.pathConditions,
+        allocatedNotFreed: p.unreconciledAllocations,
+      }));
 
-    return { constraints, feasiblePaths };
+    // Also compute path through target line
+    const pathsToTarget = this.computePathsToLine(containingFunction, lineNumber);
+
+    return {
+      constraints,
+      feasiblePaths,
+      exitPaths: containingFunction.exitPaths.map((p) => ({
+        kind: p.kind,
+        exitLine: p.exitLine,
+        hasFreeOnPath: p.hasFreeOnPath,
+        freeLines: p.freeLinesOnPath,
+        leakRisk: p.leakRisk,
+        unreconciledAllocations: p.unreconciledAllocations,
+      })),
+      pathsToTarget,
+      containsEarlyReturn: containingFunction.returnStatements.length > 1,
+      earlyReturnCount: containingFunction.returnStatements.length,
+      totalExitPaths: containingFunction.exitPaths.length,
+      leakyExitPaths: containingFunction.exitPaths.filter((p) => p.leakRisk !== 'none').length,
+    };
   }
 
   private functionEndLine(fn: FunctionInfo, allFunctions: FunctionInfo[]): number {
-    // Approximate: next function's line - 1, or +100
     const idx = allFunctions.indexOf(fn);
     if (idx < allFunctions.length - 1) {
       return allFunctions[idx + 1].lineNumber - 1;
@@ -38,15 +63,17 @@ export class PathConstraintsService {
     return fn.lineNumber + 100;
   }
 
-  private computeFeasiblePaths(fn: FunctionInfo, targetLine: number): string[] {
+  private computePathsToLine(fn: FunctionInfo, targetLine: number): string[] {
     const paths: string[] = [];
     for (const cond of fn.conditions) {
-      if (cond.line < targetLine) {
-        paths.push(`path through line ${cond.line}: ${cond.text}`);
+      const condLineMatch = cond.text.match(/line (\d+)/);
+      const condLine = condLineMatch ? parseInt(condLineMatch[1]) : cond.line;
+      if (condLine < targetLine) {
+        paths.push(`path through line ${fn.conditions.indexOf(cond) + 1}: ${cond.text.slice(0, 80)}`);
       }
     }
     if (paths.length === 0) {
-      paths.push('direct path (no conditions)');
+      paths.push('direct path (no conditions before target)');
     }
     return paths;
   }

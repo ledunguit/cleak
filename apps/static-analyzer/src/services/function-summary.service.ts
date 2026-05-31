@@ -25,6 +25,10 @@ export class FunctionSummaryService {
           !fn.parameters.some((p) => p.name === a.variable),
       );
 
+      // Enhanced analysis
+      const leakyPaths = fn.exitPaths.filter((p) => p.leakRisk !== 'none');
+      const loopsWithAlloc = fn.loops.filter((l) => l.bodyHasAllocation);
+
       return {
         function_name: fn.functionName,
         parameter_count: fn.parameters.length,
@@ -36,6 +40,13 @@ export class FunctionSummaryService {
         leaked_variables: leakedVariables,
         nonlocal_allocations: nonlocalAllocations,
         has_allocation_without_local_free: leakedVariables.length > 0,
+        // New enhanced fields
+        exit_path_count: fn.exitPaths.length,
+        leaky_exit_paths: leakyPaths.length,
+        loop_count: fn.loops.length,
+        loops_with_allocations: loopsWithAlloc.length,
+        gotos: fn.gotoTargets.length,
+        severtiy: leakedVariables.length > 0 ? 'high' : (leakyPaths.length > 0 ? 'medium' : 'low'),
       };
     });
 

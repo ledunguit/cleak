@@ -44,6 +44,39 @@ message AstScanRequest {
 
 message AstScanResponse {
   repeated AstNode nodes = 1;
+  repeated AstPattern patterns = 2;
+  repeated AstFunctionSummary function_summaries = 3;
+}
+
+message AstPattern {
+  string pattern_type = 1;
+  string severity = 2;
+  string function_name = 3;
+  string file_path = 4;
+  int32 line_number = 5;
+  string description = 6;
+  string explanation = 7;
+  string allocation_type = 8;
+  string allocation_variable = 9;
+  int32 allocation_line = 10;
+  string suggested_fix = 11;
+}
+
+message AstFunctionSummary {
+  string function_name = 1;
+  string file_path = 2;
+  int32 line_number = 3;
+  int32 total_allocs = 4;
+  int32 total_frees = 5;
+  double alloc_free_ratio = 6;
+  bool has_leak_patterns = 7;
+  int32 pattern_count = 8;
+  int32 early_return_count = 9;
+  int32 loop_count = 10;
+  int32 loops_with_allocations = 11;
+  int32 exit_path_count = 12;
+  int32 leaky_exit_paths = 13;
+  string confidence = 14;
 }
 
 message CallGraphRequest {

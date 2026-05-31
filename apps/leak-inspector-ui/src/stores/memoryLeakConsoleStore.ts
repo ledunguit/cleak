@@ -1,9 +1,10 @@
 import { create } from 'zustand';
-import type { ScanSummary, ScanDetail, ScanEvent, ScanPayload, ScanResponse, StructuredReport } from '@/types';
+import type { RuntimePreflightReport, ScanSummary, ScanDetail, ScanEvent, ScanPayload, ScanResponse, StructuredReport } from '@/types';
 import {
   cancelScanRequest,
   createScan,
   deleteScanRequest,
+  fetchRuntimePreflight,
   fetchScan,
   fetchScanEvents,
   fetchScanReport,
@@ -12,6 +13,8 @@ import {
   fetchWorkspaces,
   purgeTerminalScansRequest,
 } from '@/services/memoryLeakApi';
+import { mapStructuredReport } from '@/components/report/reportAdapter';
+import { useWorkspaceStore } from '@/stores/workspaceStore';
 
 export const TERMINAL_STATES = ['completed', 'failed', 'cancelled'];
 
@@ -58,6 +61,8 @@ interface ConsoleState {
   reportData: StructuredReport | null;
   reportText: string;
   errorBanner: { text: string; hint: string };
+  runtimePreflight: RuntimePreflightReport | null;
+  runtimePreflightLoading: boolean;
   loadingWorkspaces: boolean;
   loadingScan: boolean;
   deleteDialog: DeleteDialog;
@@ -80,6 +85,7 @@ interface ConsoleActions {
   clearError: () => void;
   initialize: () => Promise<void>;
   loadRecentScans: () => Promise<ScanSummary[]>;
+  checkRuntimePreflight: () => Promise<RuntimePreflightReport | null>;
   loadReport: (scanId: string, format?: string) => Promise<string | null>;
   loadStructuredReport: (scanId: string) => Promise<StructuredReport | null>;
   refreshStatus: (scanId: string) => Promise<ScanDetail | null>;
@@ -103,7 +109,7 @@ export const useMemoryLeakConsoleStore = create<ConsoleState & ConsoleActions>((
   workspacePath: '',
   customPath: '',
   buildCommand: '',
-  analysisMode: 'no_llm',
+  analysisMode: 'llm_assisted',
   fileLimit: '500',
   dynamicRunIds: '',
   dynamicMode: 'selective',
@@ -117,6 +123,8 @@ export const useMemoryLeakConsoleStore = create<ConsoleState & ConsoleActions>((
   reportData: null,
   reportText: 'Run a scan to generate a report.',
   errorBanner: { text: '', hint: '' },
+  runtimePreflight: null,
+  runtimePreflightLoading: false,
   loadingWorkspaces: true,
   loadingScan: false,
   deleteDialog: { open: false, mode: 'single', scan: null, count: 0 },
@@ -167,6 +175,19 @@ export const useMemoryLeakConsoleStore = create<ConsoleState & ConsoleActions>((
     return data.scans || [];
   },
 
+  checkRuntimePreflight: async () => {
+    set({ runtimePreflightLoading: true });
+    try {
+      const data = await fetchRuntimePreflight();
+      set({ runtimePreflight: data, runtimePreflightLoading: false });
+      return data;
+    } catch (error: any) {
+      set({ runtimePreflightLoading: false });
+      get().showError(error.payload || error.message);
+      return null;
+    }
+  },
+
   loadReport: async (scanId, format = 'markdown') => {
     if (!scanId) return null;
     get().clearError();
@@ -185,7 +206,7 @@ export const useMemoryLeakConsoleStore = create<ConsoleState & ConsoleActions>((
     get().clearError();
     try {
       const data = await fetchScanReportJson(scanId);
-      set({ reportData: data });
+      set({ reportData: mapStructuredReport(data) as any });
       return data;
     } catch (error: any) {
       get().showError(error.payload || error.message);
@@ -265,8 +286,38 @@ export const useMemoryLeakConsoleStore = create<ConsoleState & ConsoleActions>((
   startScan: async () => {
     get().clearError();
     const state = get();
+    const preflight = await get().checkRuntimePreflight();
+    if (!preflight?.ok) {
+      const blockingChecks = (preflight?.checks || []).filter(
+        (check) => check.status === 'failed' && !String(check.detail).includes('optional'),
+      );
+      if (blockingChecks.length > 0) {
+        get().showError({
+          error: 'Runtime preflight failed. The scan stack is not ready.',
+          remediation: blockingChecks.map((check) => `${check.name}: ${check.detail}`).join('\n'),
+        });
+        return null;
+      }
+    }
+
+    const workspaceState = useWorkspaceStore.getState();
+    const selectedRepo = workspaceState.currentWorkspaceRepos.find(
+      (repo) => repo.repo_id === workspaceState.selectedRepoId,
+    );
+    const hasCustomPath = Boolean(state.customPath.trim());
+    const inferredSourceType = hasCustomPath
+      ? 'local_path'
+      : selectedRepo?.clone_url
+        ? 'github'
+        : selectedRepo?.local_clone_path && workspaceState.currentWorkspace?.path &&
+            selectedRepo.local_clone_path.startsWith(`${workspaceState.currentWorkspace.path}/`)
+          ? 'upload_zip'
+          : selectedRepo
+            ? 'local_path'
+            : 'workspace_path';
     const payload: Record<string, any> = {
       workspacePath: state.customPath.trim() || state.workspacePath,
+      sourceType: inferredSourceType,
       fileLimit: Number(state.fileLimit || 500),
       analysisMode: state.analysisMode,
       buildCommand: state.buildCommand.trim() || null,
@@ -280,6 +331,18 @@ export const useMemoryLeakConsoleStore = create<ConsoleState & ConsoleActions>((
         .map((item) => item.trim())
         .filter(Boolean),
     };
+
+    // Always send the identifiers when a repository is selected so the backend
+    // resolves the authoritative clone path from the DB. (Previously these were
+    // dropped whenever a customPath was set — which the repo flow always did —
+    // leaving the backend unable to locate the repo → "source path must exist" 400.)
+    if (workspaceState.selectedWorkspaceId && (workspaceState.selectedRepoId || !hasCustomPath)) {
+      payload.workspaceId = workspaceState.selectedWorkspaceId;
+    }
+
+    if (workspaceState.selectedRepoId) {
+      payload.repoId = workspaceState.selectedRepoId;
+    }
 
     let data: ScanResponse;
     try {

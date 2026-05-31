@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { Workspace, WorkspaceDetail, Repo, GitHubUser, GitHubRepo, Branch } from '@/types';
+import type { Workspace, WorkspaceDetail, Repo, GitHubUser, GitHubRepo, Branch, LlmAnalysisResult } from '@/types';
 import {
   addRepoByPath,
   addRepository,
@@ -36,6 +36,11 @@ interface WorkspaceState {
   selectedRepoId: string | null;
   selectedBranch: string;
   lsanEnabled: boolean;
+  llmAnalysisLoading: boolean;
+  llmAnalysisResult: LlmAnalysisResult | null;
+  llmAnalysisProgress: string;
+  llmAnalysisError: string | null;
+  llmFilesExamined: string[];
 }
 
 interface WorkspaceActions {
@@ -60,6 +65,8 @@ interface WorkspaceActions {
   detectBuild: (workspaceId: string, repoId: string) => Promise<string | null>;
   removeRepo: (workspaceId: string, repoId: string) => Promise<void>;
   deleteWorkspace: (workspaceId: string) => Promise<void>;
+  analyzeWithLLM: (workspaceId: string, repoId: string) => Promise<LlmAnalysisResult | null>;
+  resetLlmAnalysis: () => void;
 }
 
 export const useWorkspaceStore = create<WorkspaceState & WorkspaceActions>((set, get) => ({
@@ -77,6 +84,11 @@ export const useWorkspaceStore = create<WorkspaceState & WorkspaceActions>((set,
   selectedRepoId: null,
   selectedBranch: 'main',
   lsanEnabled: false,
+  llmAnalysisLoading: false,
+  llmAnalysisResult: null,
+  llmAnalysisProgress: '',
+  llmAnalysisError: null,
+  llmFilesExamined: [],
 
   initializeFromServer: async () => {
     try {
@@ -250,4 +262,94 @@ export const useWorkspaceStore = create<WorkspaceState & WorkspaceActions>((set,
     set({ currentWorkspace: null, currentWorkspaceRepos: [], selectedWorkspaceId: null });
     await get().initializeFromServer();
   },
+
+  analyzeWithLLM: async (workspaceId, repoId) => {
+    set({
+      llmAnalysisLoading: true,
+      llmAnalysisResult: null,
+      llmAnalysisProgress: 'Scanning repository files...',
+      llmAnalysisError: null,
+    });
+
+    try {
+      const token = localStorage.getItem('auth_token');
+      const url = `/api/workspaces/${workspaceId}/repos/${repoId}/llm-analyze`;
+
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Authorization': token ? `Bearer ${token}` : '',
+        },
+      });
+
+      const reader = response.body?.getReader();
+      if (!reader) throw new Error('No response body');
+
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (trimmed.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(trimmed.slice(6));
+
+              if (data.event === 'scanning_files') {
+                set({ llmAnalysisProgress: data.message });
+              } else if (data.event === 'analyzing_with_llm') {
+                set({ llmAnalysisProgress: data.message });
+              } else if (data.event === 'reading_file') {
+                set((state) => ({
+                  llmAnalysisProgress: data.message,
+                  llmFilesExamined: [...state.llmFilesExamined, data.data?.file].filter(Boolean),
+                }));
+              } else if (data.event === 'tool_call') {
+                set({ llmAnalysisProgress: data.message });
+              } else if (data.event === 'thinking') {
+                set({ llmAnalysisProgress: data.message || 'Model is analyzing...' });
+              } else if (data.event === 'complete' && data.data) {
+                set({
+                  llmAnalysisResult: data.data,
+                  llmAnalysisLoading: false,
+                  llmAnalysisProgress: 'Analysis complete',
+                });
+                return data.data as LlmAnalysisResult;
+              } else if (data.event === 'error') {
+                throw new Error(data.message || 'LLM analysis failed');
+              }
+            } catch (e) {
+              if (e instanceof SyntaxError) continue;
+              throw e;
+            }
+          }
+        }
+      }
+
+      set({ llmAnalysisLoading: false });
+      return null;
+    } catch (err: any) {
+      set({
+        llmAnalysisLoading: false,
+        llmAnalysisError: err.message || 'LLM analysis failed',
+        llmAnalysisProgress: '',
+      });
+      return null;
+    }
+  },
+
+  resetLlmAnalysis: () => set({
+    llmAnalysisLoading: false,
+    llmAnalysisResult: null,
+    llmAnalysisProgress: '',
+    llmAnalysisError: null,
+    llmFilesExamined: [],
+  }),
 }));

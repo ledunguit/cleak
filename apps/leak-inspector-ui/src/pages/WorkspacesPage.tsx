@@ -48,7 +48,7 @@ export default function WorkspacesPage() {
   }
 
   return (
-    <Flex vertical gap={24} style={{ maxWidth: 900, margin: '0 auto' }}>
+    <Flex vertical gap={24}>
       <Flex align="center" justify="space-between">
         <Title level={3} style={{ margin: 0 }}>Workspaces</Title>
         <Button type="primary" icon={<Plus size={16} />} onClick={() => setCreateOpen(true)}>

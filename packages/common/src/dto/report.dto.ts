@@ -1,6 +1,6 @@
 export class ReportResponseDto {
   scanId: string;
-  format: 'json' | 'markdown' | 'html';
+  format: 'json' | 'markdown' | 'html' | 'pdf' | 'snapshot';
   content: string;
 }
 
