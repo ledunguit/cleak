@@ -33,9 +33,16 @@ RUN bunx turbo run build --filter=static-analyzer
 # ── Runtime stage ──
 FROM --platform=linux/amd64 node:22-slim AS runtime
 
-# Runtime also needs node-gyp for tree-sitter native addon
+# Runtime needs: node-gyp toolchain for the tree-sitter native addon
+# (python3/make/g++), plus the Clang Static Analyzer (clang + clang-tools
+# provides `scan-build`) and gcc so scan-build can intercept project builds.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3 make g++ && rm -rf /var/lib/apt/lists/*
+    python3 make g++ gcc clang clang-tools && rm -rf /var/lib/apt/lists/* && \
+    # Debian ships scan-build as a versioned binary (scan-build-NN); expose an
+    # unversioned `scan-build` on PATH so the adapter's default works.
+    if ! command -v scan-build >/dev/null 2>&1; then \
+      ln -s "$(ls /usr/bin/scan-build-* | head -n1)" /usr/local/bin/scan-build; \
+    fi
 
 WORKDIR /app
 COPY --from=build /app/dist/apps/static-analyzer ./dist

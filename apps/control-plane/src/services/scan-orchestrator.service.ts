@@ -92,7 +92,7 @@ const TOOL_CATALOG: ToolCost[] = [
   { name: 'memory.path_constraints', phase: 'static_analysis', description: 'Path constraint analysis for conditional leaks', typicalDurationMs: 2000, prerequisites: ['memory.candidate_scan'], providesEvidenceFor: ['branch_conditions', 'feasible_paths'] },
   { name: 'memory.interprocedural_flow', phase: 'static_analysis', description: 'Interprocedural data flow analysis', typicalDurationMs: 5000, prerequisites: ['memory.call_graph'], providesEvidenceFor: ['data_flow', 'pointer_tracking'] },
   { name: 'memory.ownership_summary', phase: 'static_analysis', description: 'Ownership convention analysis', typicalDurationMs: 2000, prerequisites: ['memory.function_summary'], providesEvidenceFor: ['ownership_violations', 'conventions'] },
-  { name: 'memory.leakguard_run', phase: 'deep_static', description: 'Run LeakGuard Clang Static Analyzer inside Docker', typicalDurationMs: 60000, prerequisites: ['repo.index_files', 'build_command'], providesEvidenceFor: ['clang_analysis', 'csa_findings'] },
+  { name: 'memory.leakguard_run', phase: 'deep_static', description: 'Run the project-level Clang Static Analyzer (scan-build)', typicalDurationMs: 60000, prerequisites: ['repo.index_files', 'build_command'], providesEvidenceFor: ['clang_analysis', 'csa_findings'] },
   { name: 'memory.leakguard_get_report', phase: 'deep_static', description: 'Retrieve LeakGuard analysis report', typicalDurationMs: 500, prerequisites: ['memory.leakguard_run'], providesEvidenceFor: ['leakguard_findings'] },
   { name: 'build_target', phase: 'dynamic_prep', description: 'Build the target project with sanitizer flags', typicalDurationMs: 30000, prerequisites: ['build_command'], providesEvidenceFor: ['binary'] },
   { name: 'asan.run', phase: 'dynamic', description: 'Run binary under AddressSanitizer', typicalDurationMs: 10000, prerequisites: ['build_target'], providesEvidenceFor: ['asan_findings', 'leak_reports'] },
@@ -666,7 +666,7 @@ export class ScanOrchestratorService {
     registry.register({
       name: 'memory.leakguard_run',
       phase: 'deep_static',
-      description: 'Execute LeakGuard Clang Static Analyzer via Docker',
+      description: 'Run the project-level Clang Static Analyzer (scan-build)',
       typicalDurationMs: 60000,
       prerequisites: ['repo.index_files', 'build_command'],
       providesEvidenceFor: ['clang_analysis'],
@@ -830,9 +830,9 @@ export class ScanOrchestratorService {
     const findings = report?.findings || [];
     for (const finding of findings) {
       const rawFile = finding.filePath || finding.file_path || '';
-      // LeakGuard runs in a container mounted at /project; strip the prefix so
-      // the basename match against host candidate paths works.
-      const relFile = String(rawFile).replace(/^\/?project\//, '').replace(/^\.\//, '');
+      // The adapter already strips the projectPath prefix, so paths arrive
+      // relative to the project root; tolerate a stray leading ./ just in case.
+      const relFile = String(rawFile).replace(/^\.\//, '');
       const evidence: LeakEvidence = {
         tool: ToolKind.LEAKGUARD,
         runId: runId || '',

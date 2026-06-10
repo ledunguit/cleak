@@ -51,3 +51,5 @@ temp/
 /demo/**/simple_leak_asan
 
 .antigravitycli
+
+vendor

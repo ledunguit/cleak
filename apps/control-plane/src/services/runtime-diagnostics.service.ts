@@ -17,9 +17,9 @@ export class RuntimeDiagnosticsService {
       ? this.mcpHostPort(this.config.get<string>('DYNAMIC_ANALYZER_MCP_URL', 'http://localhost:50062/mcp'))
       : this.config.get<string>('DYNAMIC_ANALYZER_URL', 'localhost:50052');
 
-    // Only probe the local toolchain (clang/make/valgrind/leak_guard_tool/docker)
-    // when the analyzers run in-process/co-located. In the distributed Docker
-    // deployment these live in the analyzer images, not on the control-plane.
+    // Only probe the local toolchain (clang/make/valgrind/scan-build) when the
+    // analyzers run in-process/co-located. In the distributed Docker deployment
+    // these live in the analyzer images, not on the control-plane.
     const probeLocalToolchain =
       (process.env.RUNTIME_PREFLIGHT_LOCAL_TOOLCHAIN ||
         this.config.get<string>('RUNTIME_PREFLIGHT_LOCAL_TOOLCHAIN', 'false')).toLowerCase() === 'true';
@@ -29,7 +29,6 @@ export class RuntimeDiagnosticsService {
       postgresPort: this.config.get<number>('POSTGRES_PORT', 5432),
       staticAnalyzerUrl,
       dynamicAnalyzerUrl,
-      leakguardRepoRoot: this.config.get<string>('LEAKGUARD_REPO_ROOT', 'tools/leak_guard_tool'),
       probeLocalToolchain,
     });
   }

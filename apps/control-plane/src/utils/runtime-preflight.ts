@@ -1,7 +1,5 @@
 import net from 'net';
-import { existsSync } from 'fs';
 import { spawnSync } from 'child_process';
-import { resolve } from 'path';
 
 export interface RuntimePreflightCheck {
   name: string;
@@ -22,18 +20,17 @@ export interface RuntimePreflightOptions {
   postgresPort?: number;
   staticAnalyzerUrl?: string;
   dynamicAnalyzerUrl?: string;
-  leakguardRepoRoot?: string;
   /**
    * Probe the local PATH/filesystem for the analysis toolchain
-   * (clang/clang++/make/valgrind, leak_guard_tool source, docker).
+   * (clang/clang++/make/valgrind/scan-build/docker).
    *
    * In the distributed deployment the control-plane is only an orchestrator —
-   * the build/valgrind toolchain lives in the dynamic-analyzer image and
-   * LeakGuard runs inside the `leakguard-tool:dev` container driven by the
-   * static-analyzer. So these tools are NOT expected on the control-plane host
-   * and probing for them there yields false "failed" checks that wrongly block
-   * scans. Only enable this when the analyzers run in-process / co-located with
-   * the control-plane (a single-host monolith setup). Defaults to false.
+   * the build/valgrind toolchain lives in the dynamic-analyzer image and the
+   * Clang Static Analyzer (scan-build) runs inside the static-analyzer image.
+   * So these tools are NOT expected on the control-plane host and probing for
+   * them there yields false "failed" checks that wrongly block scans. Only
+   * enable this when the analyzers run in-process / co-located with the
+   * control-plane (a single-host monolith setup). Defaults to false.
    */
   probeLocalToolchain?: boolean;
 }
@@ -45,7 +42,6 @@ export async function runRuntimePreflight(
   const postgresPort = options.postgresPort || Number(process.env.POSTGRES_PORT || 5432);
   const staticAnalyzer = parseHostPort(options.staticAnalyzerUrl || process.env.STATIC_ANALYZER_URL || 'localhost:50051', 50051);
   const dynamicAnalyzer = parseHostPort(options.dynamicAnalyzerUrl || process.env.DYNAMIC_ANALYZER_URL || 'localhost:50052', 50052);
-  const leakguardRoot = resolve(options.leakguardRepoRoot || process.env.LEAKGUARD_REPO_ROOT || 'tools/leak_guard_tool');
 
   const probeLocalToolchain = options.probeLocalToolchain ?? false;
 
@@ -53,20 +49,19 @@ export async function runRuntimePreflight(
   // The control-plane owns persistence and orchestrates the analyzers, so the
   // checks it can meaningfully verify from where it runs are: the database and
   // reachability of the two analyzer services. Their internal toolchain
-  // (clang/make/valgrind baked into the dynamic-analyzer image, LeakGuard inside
-  // leakguard-tool:dev) is the analyzer's responsibility.
+  // (clang/make/valgrind/scan-build baked into the analyzer images) is the
+  // analyzer's responsibility.
   checks.push(await probeTcpCheck('postgres', postgresHost, postgresPort));
   checks.push(await probeTcpCheck('static-analyzer', staticAnalyzer.host, staticAnalyzer.port));
   checks.push(await probeTcpCheck('dynamic-analyzer', dynamicAnalyzer.host, dynamicAnalyzer.port));
 
   // Local toolchain probes only apply to a single-host / in-process deployment.
   if (probeLocalToolchain) {
-    checks.push(probePathCheck('leakguard-root', leakguardRoot));
     checks.push(probeCommandCheck('clang'));
     checks.push(probeCommandCheck('clang++'));
+    checks.push(probeCommandCheck('scan-build', true));
     checks.push(probeCommandCheck('make'));
     checks.push(probeCommandCheck('valgrind', true));
-    checks.push(probeCommandCheck('docker', true));
   }
 
   return {
@@ -84,16 +79,6 @@ async function probeTcpCheck(name: string, host: string, port: number): Promise<
     status: result.ok ? 'ok' : 'failed',
     detail: result.ok ? `reachable at ${host}:${port}` : `unreachable at ${host}:${port}: ${result.error}`,
     metadata: { host, port },
-  };
-}
-
-function probePathCheck(name: string, path: string): RuntimePreflightCheck {
-  return {
-    name,
-    category: 'filesystem',
-    status: existsSync(path) ? 'ok' : 'failed',
-    detail: existsSync(path) ? `found at ${path}` : `missing at ${path}`,
-    metadata: { path },
   };
 }
 

@@ -53,8 +53,9 @@ services:
       STATIC_ANALYZER_MCP_URL: http://static-analyzer:50061/mcp
       DYNAMIC_ANALYZER_MCP_URL: http://dynamic-analyzer:50062/mcp
       # Distributed deployment: the build/valgrind toolchain lives in the
-      # dynamic-analyzer image and LeakGuard runs inside leakguard-tool:dev, so
-      # the control-plane must NOT probe its own host for clang/make/valgrind.
+      # dynamic-analyzer image and the Clang Static Analyzer (scan-build) runs
+      # inside the static-analyzer image, so the control-plane must NOT probe
+      # its own host for clang/make/valgrind.
       # Set to "true" only for a single-host/in-process monolith setup.
       RUNTIME_PREFLIGHT_LOCAL_TOOLCHAIN: ${RUNTIME_PREFLIGHT_LOCAL_TOOLCHAIN:-false}
       # LLM judge (llm_assisted mode) — DEFAULT provider is the local
@@ -115,11 +116,8 @@ services:
       TRANSPORT_MODE: ${TRANSPORT_MODE:-grpc}
       MCP_HTTP_PORT: 50061
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
       - ./demo:/workspace/demo
       - ./targets:/workspace/targets
-    depends_on:
-      - leakguard-runtime
     networks:
       - mcpvul-net
     restart: unless-stopped
@@ -143,13 +141,6 @@ services:
     networks:
       - mcpvul-net
     restart: unless-stopped
-
-  leakguard-runtime:
-    image: leakguard-tool:dev
-    build:
-      context: ./tools/leak_guard_tool
-    networks:
-      - mcpvul-net
 
   leak-inspector-ui:
     build:

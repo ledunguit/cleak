@@ -84,13 +84,13 @@ export function createStaticMcpServer(svc: StaticToolServices): McpServer {
 
   server.registerTool(
     'leakguardRun',
-    { description: 'Execute LeakGuard Clang Static Analyzer via Docker', inputSchema: { projectPath: z.string(), buildCommand: z.string(), timeoutSec: z.number().optional() } },
+    { description: 'Run the project-level Clang Static Analyzer (scan-build) over the project build', inputSchema: { projectPath: z.string(), buildCommand: z.string(), timeoutSec: z.number().optional() } },
     async (a) => ok(await svc.leakguard.run(a.projectPath, a.buildCommand, a.timeoutSec)),
   );
 
   server.registerTool(
     'leakguardGetReport',
-    { description: 'Retrieve LeakGuard analysis findings', inputSchema: { runId: z.string() } },
+    { description: 'Retrieve Clang Static Analyzer (scan-build) findings', inputSchema: { runId: z.string() } },
     async (a) => ok(await svc.leakguard.getReport(a.runId)),
   );
 

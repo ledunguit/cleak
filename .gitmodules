@@ -1,6 +1,3 @@
-[submodule "leak_guard_tool"]
-	path = tools/leak_guard_tool
-	url = https://gitee.com/yin-luming/leak_guard_tool.git
 [submodule "mcp-dynamic-analysis-server"]
 	path = mcp-dynamic-analysis-server
 	url = git@zed:ledunguit/mcp-dynamic-analysis-server.git
