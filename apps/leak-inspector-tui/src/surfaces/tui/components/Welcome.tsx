@@ -36,8 +36,8 @@ export function Welcome({ provider, model, staticUrl, cwd, recentScans }: Welcom
           </Text>
           <Text dimColor>
             <Text color={color.accent}>/preflight</Text> check analyzers {glyph.bullet}{' '}
-            <Text color={color.accent}>/mode</Text> {glyph.bullet} <Text color={color.accent}>/tools</Text> {glyph.bullet}{' '}
-            <Text color={color.accent}>/quit</Text>
+            <Text color={color.accent}>/mode</Text> {glyph.bullet} <Text color={color.accent}>/config</Text> {glyph.bullet}{' '}
+            <Text color={color.accent}>/tools</Text> {glyph.bullet} <Text color={color.accent}>/quit</Text>
           </Text>
         </Box>
         <Box marginLeft={4} flexDirection="column">

@@ -3,14 +3,17 @@ import { color, glyph } from '../theme';
 import type { UiState } from '../store';
 
 export function Footer({ state }: { state: UiState }) {
-  const tokens = state.usage.inputTokens + state.usage.outputTokens;
+  const { inputTokens, outputTokens, thinkingTokens } = state.usage;
   const chips: Array<[string, string]> = [
     [`${state.provider}:${state.model || '?'}`, color.accent],
     [`mode ${state.mode}`, color.subtle],
     [`dyn ${state.dynamic}`, color.subtle],
   ];
   if (state.currentPhase) chips.push([state.currentPhase, color.system]);
-  if (tokens > 0) chips.push([`${state.usage.inputTokens}/${state.usage.outputTokens} tok`, color.subtle]);
+  if (inputTokens + outputTokens > 0) {
+    const think = thinkingTokens > 0 ? ` / ${thinkingTokens} think` : '';
+    chips.push([`${inputTokens} in / ${outputTokens} out${think} tok`, color.subtle]);
+  }
 
   return (
     <Box flexDirection="row" flexWrap="wrap">

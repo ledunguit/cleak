@@ -8,6 +8,21 @@ This is a Master's thesis workspace on LLM-orchestrated memory leak investigatio
 
 ## Architecture
 
+> **Current source of truth:** [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+> (components, protocols, diagrams) and [docs/PROMPTS.md](docs/PROMPTS.md) (every
+> LLM prompt). Two updates since this section was first written:
+> - New components: **`packages/agent-core`** (framework-free native tool-calling
+>   loop: MCP client, multi-provider streaming `callModel`, idle-timeout, context
+>   compaction) and **`apps/leak-inspector-tui`** (standalone HYBRID scanner that
+>   drives the analyzers over MCP directly).
+> - The analyzers now live under `apps/static-analyzer` and `apps/dynamic-analyzer`
+>   (not `mcp-memory-*`), each serving **both** gRPC and MCP. The leakguard slot
+>   is now a self-contained **Clang Static Analyzer (`scan-build`)** — the
+>   third-party `tools/leak_guard_tool` submodule has been removed.
+> - There are **two orchestration paths**: the web path (`control-plane`, a
+>   JSON-action orchestrator) and the CLI/TUI path (`leak-inspector-tui`,
+>   agent-core native tool-calling). See docs/ARCHITECTURE.md §1.
+
 The workspace consists of six main components:
 
 ### apps/control-plane (Control Plane — NestJS)

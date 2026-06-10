@@ -13,7 +13,7 @@ import { loadConfig } from '../../config';
 import { buildPathResolver } from '../../domain/pathResolver';
 import { ScanEmitter, CallbackSink, JsonlFileSink, MultiSink } from '../../orchestrator/events';
 import { runScan } from '../../orchestrator/scanController';
-import { buildInvestigationPhase } from '../../orchestrator/investigationPhase';
+import { buildWorkflowInvestigationPhase } from '../../orchestrator/workflowInvestigation';
 import { scanDir, writeReports, writeScanMetrics } from '../../domain/reportSink';
 import { computeScanMetrics } from '../../domain/scanMetrics';
 import { readFileSync } from 'node:fs';
@@ -68,7 +68,7 @@ export async function runTuiScan(store: TuiStore, req: TuiScanRequest): Promise<
   });
   if (dynamicMode !== DynamicMode.OFF) store.addSystemMessage(`dynamic enabled · analyzer path map: ${pathResolver.describe()}`);
   const investigation =
-    analysisMode === AnalysisMode.LLM_ASSISTED ? buildInvestigationPhase(cfg, dynamicMode) : undefined;
+    analysisMode === AnalysisMode.LLM_ASSISTED ? buildWorkflowInvestigationPhase(cfg, dynamicMode) : undefined;
 
   const abort = new AbortController();
   store.setAbortController(abort);
@@ -86,7 +86,8 @@ export async function runTuiScan(store: TuiStore, req: TuiScanRequest): Promise<
         abortSignal: abort.signal,
         getSteering: () => store.drainSteering(),
         awaitResume: () => store.awaitResume(),
-        onAgentEvent: (ev) => store.applyAgentEvent(ev),
+        onAgentEvent: (ev, agent) => store.applyAgentEvent(ev, agent),
+        onModelActivity: (dir) => store.setIo(dir === 'send' ? 'up' : 'down'),
         requestPermission: (r) => store.requestPermission(r),
       },
     );

@@ -21,6 +21,7 @@ import {
   type CalibrationBin,
   type Sample,
 } from '@mcpvul/common/analysis/metrics';
+import { mapWithLimit } from '@mcpvul/agent-core';
 import { runHeadless } from '../surfaces/headless';
 import { scoreCase, isFlagged, type LabeledCase, type LabeledManifest, type SnapshotFinding } from './evalScoring';
 
@@ -76,21 +77,6 @@ interface CachedCase {
   id: string;
   samples: Sample[];
   row: CaseRow;
-}
-
-/** Run all cases through a bounded concurrency pool. */
-async function mapPool<T, R>(items: T[], concurrency: number, fn: (item: T, index: number) => Promise<R>): Promise<R[]> {
-  const results = new Array<R>(items.length);
-  let next = 0;
-  const workers = Array.from({ length: Math.min(concurrency, items.length || 1) }, async () => {
-    while (true) {
-      const i = next++;
-      if (i >= items.length) break;
-      results[i] = await fn(items[i], i);
-    }
-  });
-  await Promise.all(workers);
-  return results;
 }
 
 function metricsByKey(groups: Map<string, Sample[]>): Record<string, Metrics> {
@@ -181,7 +167,7 @@ export async function runEval(opts: EvalOptions): Promise<EvalResult> {
     }
   };
 
-  const cached = await mapPool(cases, concurrency, scoreOne);
+  const cached = await mapWithLimit(cases, concurrency, scoreOne);
 
   // ── Aggregate ──
   const allSamples: Sample[] = [];

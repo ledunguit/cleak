@@ -14,7 +14,7 @@ import { loadEnvFiles } from '../domain/env';
 import { buildPathResolver } from '../domain/pathResolver';
 import { ScanEmitter, JsonlFileSink, MultiSink, type EventSink } from '../orchestrator/events';
 import { runScan, type ScanResult } from '../orchestrator/scanController';
-import { buildInvestigationPhase } from '../orchestrator/investigationPhase';
+import { buildWorkflowInvestigationPhase } from '../orchestrator/workflowInvestigation';
 import { scanDir, writeReports, writeScanMetrics, type ReportFormatOpt } from '../domain/reportSink';
 import { computeScanMetrics } from '../domain/scanMetrics';
 
@@ -72,7 +72,7 @@ export async function runHeadless(opts: HeadlessOptions): Promise<HeadlessResult
   });
 
   const investigation =
-    analysisMode === AnalysisMode.LLM_ASSISTED ? buildInvestigationPhase(cfg, dynamicMode) : undefined;
+    analysisMode === AnalysisMode.LLM_ASSISTED ? buildWorkflowInvestigationPhase(cfg, dynamicMode) : undefined;
 
   const startedAt = Date.now();
   try {

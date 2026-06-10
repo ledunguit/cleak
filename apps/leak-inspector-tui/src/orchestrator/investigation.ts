@@ -11,6 +11,13 @@ import type { ScanEmitter } from './events';
 import type { PathResolver } from '../domain/pathResolver';
 import type { CandidateManager } from '../domain/candidateState';
 
+/** Identifies which (sub-)agent an event belongs to, for per-agent log separation. */
+export interface AgentMeta {
+  id: string;
+  label: string;
+  kind: 'main' | 'static' | 'dynamic';
+}
+
 export interface InvestigationContext {
   repoPath: string;
   buildCommand?: string;
@@ -18,8 +25,14 @@ export interface InvestigationContext {
   staticClient: McpClient;
   dynamicClient?: McpClient;
   pathResolver: PathResolver;
-  /** Raw agent-loop events (assistant text, tool use/result) for rich UI rendering. */
-  onAgentEvent?: (ev: AgentEvent) => void;
+  /**
+   * Raw agent-loop events for rich UI rendering. `agent` identifies the emitting
+   * sub-agent (omitted/main for orchestrator-level notices) so the TUI can keep a
+   * separate log per agent instead of one flat stream.
+   */
+  onAgentEvent?: (ev: AgentEvent, agent?: AgentMeta) => void;
+  /** Model I/O cue: 'send' before a request, 'receive' on the first streamed chunk. */
+  onModelActivity?: (dir: 'send' | 'receive') => void;
   /** Interactive permission resolver (TUI). Absent → 'ask' tools auto-allow (headless). */
   requestPermission?: (req: { id: string; name: string; input: unknown }) => Promise<'allow' | 'deny'>;
   /** Abort signal (ESC) to interrupt the agentic loop. */

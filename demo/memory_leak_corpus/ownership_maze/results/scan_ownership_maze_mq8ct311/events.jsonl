@@ -1,0 +1,3 @@
+{"seq":0,"ts":1781113192599,"name":"scan_created","phase":"setup","data":{"scanId":"scan_ownership_maze_mq8ct311","repoPath":"/Users/zed/Master/leak-investigator/demo/memory_leak_corpus/ownership_maze","mode":"llm_assisted"}}
+{"seq":1,"ts":1781113192600,"name":"preflight_started","phase":"preflight","data":{}}
+{"seq":2,"ts":1781113192628,"name":"preflight_failed","phase":"preflight","data":{"reason":"static analyzer unreachable"}}

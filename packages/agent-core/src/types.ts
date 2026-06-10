@@ -36,6 +36,13 @@ export interface Message {
 export interface Usage {
   inputTokens: number;
   outputTokens: number;
+  /**
+   * Reasoning/thinking tokens, when the provider reports them (OpenAI
+   * `completion_tokens_details.reasoning_tokens`) or as an estimate from the
+   * streamed thinking text. Informational — for most providers these are a
+   * SUBSET of `outputTokens`, so a total is still `inputTokens + outputTokens`.
+   */
+  thinkingTokens?: number;
 }
 
 export type StopReason = 'stop' | 'tool_use' | 'max_tokens' | 'error';

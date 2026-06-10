@@ -46,6 +46,7 @@ export const COMMANDS: CommandSpec[] = [
   { name: '/report', summary: 'view a past scan (pick a finding)', usage: '/report [scanId]', kind: 'action' },
   { name: '/metrics', summary: 'show metrics for a scan', usage: '/metrics [scanId]', kind: 'action' },
   { name: '/scans', summary: 'list recent scans', kind: 'action' },
+  { name: '/config', summary: 'settings — defaults & auto-show report', kind: 'action' },
   { name: '/preflight', summary: 'check analyzer connectivity', kind: 'action' },
   { name: '/tools', summary: 'list available MCP tools', kind: 'action' },
   { name: '/quit', summary: 'exit', kind: 'action' },

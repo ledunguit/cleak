@@ -13,13 +13,15 @@ keeps the thesis components together at one top level.
 - Scan orchestration, judging, reporting, GitHub OAuth
 - PostgreSQL persistence via TypeORM
 
-### `apps/static-analyzer` — Static Analysis (NestJS/gRPC)
-- gRPC service at port 50051
-- Tree-sitter AST, lexical scan, call graph, LeakGuard adapter
+### `apps/static-analyzer` — Static Analysis (NestJS)
+- Serves gRPC (port 50051) and MCP Streamable-HTTP (port 50061)
+- Tree-sitter AST, lexical scan, call graph, ownership analysis
+- Clang Static Analyzer (`scan-build`), self-contained (the third-party
+  LeakGuard submodule has been removed)
 
-### `apps/dynamic-analyzer` — Dynamic Analysis (NestJS/gRPC)
-- gRPC service at port 50052
-- Valgrind Memcheck, AddressSanitizer, LeakSanitizer
+### `apps/dynamic-analyzer` — Dynamic Analysis (NestJS)
+- Serves gRPC (port 50052) and MCP Streamable-HTTP (port 50062)
+- Valgrind Memcheck, AddressSanitizer, LeakSanitizer (Linux/Docker only)
 
 ### `apps/leak-inspector-ui` — Frontend (React + Vite)
 - React 19 + TypeScript SPA with Ant Design 5
@@ -27,14 +29,19 @@ keeps the thesis components together at one top level.
 - Real-time scan progress via SSE
 - @xyflow/react workflow graph visualization
 
+### `apps/leak-inspector-tui` — Standalone scanner (Ink CLI/TUI)
+- Headless/interactive scanner driving the HYBRID pipeline directly
+  (discovery → agentic investigation → judging → reporting)
+- Connects to the analyzers over MCP; writes artifacts to `results/<scanId>/`
+
+### `packages/agent-core` — Agentic loop (TS library)
+- Framework-free native tool-calling loop, MCP client, multi-provider
+  `callModel` (streaming, idle-timeout, context compaction)
+
 ### `packages/common` — Shared Types
 - TypeScript types, DTOs, entities, Zod validation schemas
-- Shared across all NestJS apps via `@mcpvul/common`
-
-### `tools/leak_guard_tool` — Clang Static Analyzer (submodule)
-- Third-party leak detection tool
-- Integrated via static-analyzer's LeakGuardAdapter
-- Runs in `leakguard-runtime` Docker container
+- Shared heuristic judge + leak analysis + report renderers
+- Shared across all apps via `@mcpvul/common`
 
 ### `proto/` — gRPC service definitions
 - Shared .proto files for inter-service communication
@@ -42,10 +49,19 @@ keeps the thesis components together at one top level.
 
 ## System Flow
 
-1. Static and dynamic analyzers expose gRPC services
-2. Control plane coordinates investigation across a target C/C++ repo
+There are two orchestration paths sharing the same analyzers and schemas:
+- **Web path** (`control-plane`): a JSON-action orchestrator drives the analyzers
+  over gRPC/MCP, with PostgreSQL + a BullMQ queue and an SSE stream to the SPA.
+- **CLI/TUI path** (`leak-inspector-tui`): `agent-core`'s native tool-calling loop
+  drives the analyzers over MCP directly, writing report artifacts to disk.
+
+Both run the HYBRID pipeline:
+1. Static and dynamic analyzers expose gRPC and/or MCP tools
+2. The orchestrator coordinates investigation across a target C/C++ repo
 3. Findings are normalized into shared leak bundles
 4. The system returns leak verdicts, explanations, and repair guidance
+
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for components/protocols/diagrams.
 
 ## Demo Corpus
 
@@ -102,5 +118,7 @@ and key toolchain binaries before attempting to boot the control plane.
 
 ## Architecture Docs
 
-See [ARCHITECTURE.md](ARCHITECTURE.md) for detailed system architecture.
-See [THESIS_WORKSPACE_OVERVIEW.md](THESIS_WORKSPACE_OVERVIEW.md) for workspace overview.
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — components, protocols, diagrams, the two orchestration paths
+- [docs/PROMPTS.md](docs/PROMPTS.md) — catalog of every LLM prompt + tool description
+- [docs/sequence-diagrams.md](docs/sequence-diagrams.md) — runtime sequence flows
+- [docs/GOAL.md](docs/GOAL.md) — thesis goals + success criteria

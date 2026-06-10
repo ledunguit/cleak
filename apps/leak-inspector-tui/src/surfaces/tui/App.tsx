@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Box, Text, useApp, useInput } from 'ink';
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, basename } from 'node:path';
 import { useStore } from './components/hooks';
 import { Welcome } from './components/Welcome';
 import { MessageList } from './components/MessageList';
+import { AgentList } from './components/AgentList';
 import { PhaseTimeline } from './components/PhaseTimeline';
 import { Footer } from './components/Footer';
 import { Spinner } from './components/Spinner';
@@ -12,10 +13,12 @@ import { PromptInput } from './components/PromptInput';
 import { PermissionPrompt } from './components/PermissionPrompt';
 import { Select, type SelectOption } from './components/Select';
 import { CommandSuggestions } from './components/CommandSuggestions';
+import { ConfigScreen } from './components/ConfigScreen';
 import { COMMANDS, matchCommands, findCommand } from './commands';
-import { color, glyph } from './theme';
+import { color, glyph, formatDuration } from './theme';
+import { savePreferences, type UserPreferences } from './preferences';
 import { runTuiScan } from './runner';
-import type { TuiStore } from './store';
+import { visibleMessages, type TuiStore } from './store';
 
 export interface AppProps {
   store: TuiStore;
@@ -73,10 +76,73 @@ export function App({ store, staticUrl, dynamicUrl, cwd, resultsDir, recentScans
       return;
     }
     if (ctrlCArmed) setCtrlCArmed(false);
-    if (key.escape && !overlay && (state.status === 'running' || state.status === 'paused') && !state.pendingPermission) {
+    if (
+      key.escape &&
+      state.view === 'main' &&
+      !overlay &&
+      (state.status === 'running' || state.status === 'paused') &&
+      !state.pendingPermission
+    ) {
       store.abort();
     }
   });
+
+  // ── Log scrolling: PageUp/PageDown only — never part of typed text, so it's safe
+  // to keep active while the prompt has focus (Ink delivers keys to all handlers). ──
+  const viewportRows = Math.max(8, (process.stdout.rows ?? 30) - 12);
+  const visible = visibleMessages(state);
+  const maxOffset = Math.max(0, visible.length - viewportRows);
+  const page = Math.max(1, Math.floor(viewportRows / 2));
+  useInput(
+    (_ch, key) => {
+      if (key.pageUp) store.scrollBy(page, maxOffset);
+      else if (key.pageDown) {
+        // PageDown at the bottom snaps fully back to live.
+        if (state.scrollOffset <= page) store.scrollToBottom();
+        else store.scrollBy(-page, maxOffset);
+      }
+    },
+    { isActive: state.view === 'main' && !overlay && !state.pendingPermission },
+  );
+
+  // ── Modal agent navigation (active only when the prompt is empty, so it never
+  // fights typing): ↓ from main drops into the agent list; in the list ↑/↓ choose,
+  // enter opens an agent's log; inside a log ↑/↓ move the focus cursor, enter
+  // expands/collapses the focused thinking/tool line, ← returns to the main flow. ──
+  useInput(
+    (_ch, key) => {
+      if (state.navMode === 'agentlog') {
+        if (key.leftArrow) store.backToMain();
+        else if (key.upArrow) store.logFocusMove(-1, viewportRows);
+        else if (key.downArrow) store.logFocusMove(1, viewportRows);
+        else if (key.return) store.toggleFocusedCollapse();
+      } else if (state.navMode === 'agentlist') {
+        if (key.leftArrow || key.escape) store.backToMain();
+        else if (key.upArrow) store.navMove(-1);
+        else if (key.downArrow) store.navMove(1);
+        else if (key.return) store.openFocusedAgent();
+      } else {
+        // normal main flow: ↓ drops into the agent list (if any sub-agents)
+        if (key.downArrow && state.agents.length > 0) store.enterAgentList();
+      }
+    },
+    { isActive: state.view === 'main' && !overlay && !state.pendingPermission && input === '' },
+  );
+
+  // ── Auto-show the report when a scan finishes (if enabled in /config) ──
+  const lastShownScanId = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (
+      state.autoShowReport &&
+      state.status === 'done' &&
+      state.scanId &&
+      lastShownScanId.current !== state.scanId
+    ) {
+      lastShownScanId.current = state.scanId;
+      openReport(state.scanId);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.status, state.scanId, state.autoShowReport]);
 
   // ── Suggestion navigation: ↑/↓ to choose, Tab to complete (text-input ignores these keys) ──
   useInput(
@@ -180,6 +246,9 @@ export function App({ store, staticUrl, dynamicUrl, cwd, resultsDir, recentScans
       case '/scans':
         listScans(store, resultsDir);
         return;
+      case '/config':
+        store.setView('config');
+        return;
       case '/report':
         openReport(arg || undefined);
         return;
@@ -223,7 +292,37 @@ export function App({ store, staticUrl, dynamicUrl, cwd, resultsDir, recentScans
     if (trimmed) dispatch(trimmed);
   };
 
-  const tokens = state.usage.inputTokens + state.usage.outputTokens;
+  const saveConfig = (prefs: UserPreferences) => {
+    let savedPath = '';
+    try {
+      savedPath = savePreferences(prefs);
+    } catch (err: any) {
+      store.addSystemMessage(`failed to save settings: ${err?.message ?? err}`);
+    }
+    store.setOptions({ mode: prefs.defaultMode, dynamic: prefs.defaultDynamic });
+    store.setAutoShowReport(prefs.autoShowReport);
+    store.setView('main');
+    store.addSystemMessage(
+      `settings saved${savedPath ? ` → ${savedPath}` : ''} · mode ${prefs.defaultMode}, dynamic ${prefs.defaultDynamic}, auto-report ${prefs.autoShowReport ? 'on' : 'off'}`,
+    );
+  };
+
+  if (state.view === 'config') {
+    return (
+      <Box flexDirection="column">
+        <ConfigScreen
+          initial={{
+            defaultMode: state.mode,
+            defaultDynamic: state.dynamic,
+            autoShowReport: state.autoShowReport,
+            defaultProvider: state.provider as UserPreferences['defaultProvider'],
+          }}
+          onSave={saveConfig}
+          onCancel={() => store.setView('main')}
+        />
+      </Box>
+    );
+  }
 
   return (
     <Box flexDirection="column">
@@ -235,13 +334,22 @@ export function App({ store, staticUrl, dynamicUrl, cwd, resultsDir, recentScans
         recentScans={recentScans}
       />
 
+      {state.viewAgentId !== 'main' ? (
+        <Box marginTop={1}>
+          <Text color={color.accent}>
+            ▸ {state.agents.find((a) => a.id === state.viewAgentId)?.label ?? state.viewAgentId} log
+          </Text>
+          <Text dimColor> {glyph.bullet} ↑/↓ focus · enter expand/collapse · ← back to main</Text>
+        </Box>
+      ) : null}
+
       <Box flexDirection="column" marginTop={1}>
-        <MessageList messages={state.messages} />
+        <MessageList messages={visible} scrollOffset={state.scrollOffset} viewportRows={viewportRows} focusMsgId={state.focusMsgId} />
       </Box>
 
       {state.status === 'running' ? (
         <Box marginTop={1}>
-          <Spinner label={state.statusText} startedAt={state.startedAt} tokens={tokens} />
+          <Spinner label={state.statusText} startedAt={state.startedAt} usage={state.usage} io={state.io} />
         </Box>
       ) : null}
 
@@ -307,6 +415,7 @@ export function App({ store, staticUrl, dynamicUrl, cwd, resultsDir, recentScans
               onSubmit={submit}
             />
             {showSuggest ? <CommandSuggestions commands={matches} index={idx} /> : null}
+            <AgentList state={state} />
             <Footer state={state} />
           </>
         )}
@@ -381,7 +490,7 @@ function showMetrics(store: TuiStore, resultsDir: string, scanId?: string): void
   store.addSystemMessage(`  confidence: mean ${(m.confidence?.mean ?? 0).toFixed(2)} (min ${(m.confidence?.min ?? 0).toFixed(2)}, max ${(m.confidence?.max ?? 0).toFixed(2)})`);
   if (roots) store.addSystemMessage(`  root causes: ${roots}`);
   store.addSystemMessage(`  evidence: ${m.evidence_count ?? 0} · tools: ${(m.tools_used ?? []).join(', ') || 'none'}`);
-  store.addSystemMessage(`  cost: ${m.turns ?? '?'} turns · ${m.total_tokens ?? 0} tokens · ${m.duration_ms != null ? `${(m.duration_ms / 1000).toFixed(1)}s` : '?'}`);
+  store.addSystemMessage(`  cost: ${m.turns ?? '?'} turns · ${m.total_tokens ?? 0} tokens · ${m.duration_ms != null ? formatDuration(m.duration_ms) : '?'}`);
 }
 
 /** Most recent scan id under the results dir (for `/report` with no arg). */

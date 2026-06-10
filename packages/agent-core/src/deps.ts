@@ -12,6 +12,8 @@ export interface CallModelRequest {
   messages: Message[];
   tools: Tool[];
   signal?: AbortSignal;
+  /** Fired once when the first streamed chunk arrives (drives a "receiving" UI cue). */
+  onFirstChunk?: () => void;
 }
 
 export type CallModel = (req: CallModelRequest) => Promise<NormalizedResponse>;

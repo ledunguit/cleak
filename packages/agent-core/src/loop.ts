@@ -14,6 +14,8 @@
 import type { AgentEvent, ContentBlock, LoopResult, Message, ToolResultBlock, ToolUseBlock, Usage } from './types';
 import { findToolByName, truncateResult, type Tool, type ToolCtx } from './tool';
 import type { AgentDeps } from './deps';
+import { estimateTokens, pruneStaleToolResults } from './compaction';
+import { mapWithLimit } from './concurrency';
 
 export interface QueryParams {
   systemPrompt: string;
@@ -34,6 +36,28 @@ export interface QueryParams {
    * When absent (headless), a model failure ends the run with reason 'error'.
    */
   awaitResume?: (reason: string) => Promise<'resume' | 'abort'>;
+  /**
+   * Auto-compaction: once the (estimated) prompt size crosses `thresholdTokens`,
+   * stale tool-result payloads outside the most recent `keepRecentTurns` turns are
+   * pruned in place before the next model call. Omit to disable.
+   */
+  compaction?: { thresholdTokens: number; keepRecentTurns: number };
+  /**
+   * Side-channel UI cue for model I/O: `'send'` fires just before the request,
+   * `'receive'` fires on the first streamed chunk. Not a yielded event because
+   * the first chunk arrives mid-await (a yield would land after the whole turn).
+   */
+  onModelActivity?: (dir: 'send' | 'receive') => void;
+  /**
+   * Completion guard. Called when the model returns no tool calls (i.e. it would
+   * stop). Return a nudge string to inject as a user message and keep going (the
+   * work isn't actually done — e.g. candidates still lack verdicts), or `null` to
+   * allow the run to stop. Bounded by `maxStopNudges` so a stubborn model can't
+   * loop forever; the counter resets whenever a turn makes progress (calls tools).
+   */
+  checkCompletion?: () => string | null;
+  /** Max consecutive nudges before a bare stop is honored (default 3). */
+  maxStopNudges?: number;
 }
 
 interface ExecResult {
@@ -50,6 +74,9 @@ export async function* queryLoop(params: QueryParams): AsyncGenerator<AgentEvent
   const messages: Message[] = [...params.messages];
   const usage: Usage = { inputTokens: 0, outputTokens: 0 };
   let turn = 0;
+  let lastInputTokens = 0; // prompt size the model reported last turn (drives compaction)
+  const maxStopNudges = params.maxStopNudges ?? 3;
+  let stopNudges = 0; // consecutive "stopped early" nudges; reset when a turn calls tools
 
   while (true) {
     if (ctx.abortSignal?.aborted) {
@@ -66,10 +93,29 @@ export async function* queryLoop(params: QueryParams): AsyncGenerator<AgentEvent
       if (text.trim()) messages.push({ role: 'user', content: text });
     }
 
+    // 0b. Compact the transcript if it has grown past the threshold. Use the
+    // model-reported prompt size when available, else a cheap char estimate.
+    if (params.compaction) {
+      const approxTokens = lastInputTokens || estimateTokens(messages);
+      if (approxTokens > params.compaction.thresholdTokens) {
+        const saved = pruneStaleToolResults(messages, params.compaction.keepRecentTurns);
+        if (saved > 0) {
+          yield { type: 'notice', text: `Compacted context: pruned ~${Math.round(saved / 4)} tokens of stale tool output` };
+        }
+      }
+    }
+
     // 1. Ask the model.
     let resp;
     try {
-      resp = await deps.callModel({ systemPrompt, messages, tools, signal: ctx.abortSignal });
+      params.onModelActivity?.('send');
+      resp = await deps.callModel({
+        systemPrompt,
+        messages,
+        tools,
+        signal: ctx.abortSignal,
+        onFirstChunk: () => params.onModelActivity?.('receive'),
+      });
     } catch (err: any) {
       if (ctx.abortSignal?.aborted) {
         yield { type: 'done', reason: 'aborted' };
@@ -96,6 +142,8 @@ export async function* queryLoop(params: QueryParams): AsyncGenerator<AgentEvent
     if (resp.usage) {
       usage.inputTokens += resp.usage.inputTokens;
       usage.outputTokens += resp.usage.outputTokens;
+      usage.thinkingTokens = (usage.thinkingTokens ?? 0) + (resp.usage.thinkingTokens ?? 0);
+      if (resp.usage.inputTokens > 0) lastInputTokens = resp.usage.inputTokens;
     }
     if (resp.thinking) yield { type: 'thinking', text: resp.thinking };
 
@@ -103,15 +151,35 @@ export async function* queryLoop(params: QueryParams): AsyncGenerator<AgentEvent
     const assistantContent: ContentBlock[] = [];
     if (resp.text) assistantContent.push({ type: 'text', text: resp.text });
     for (const tu of resp.toolUses) assistantContent.push(tu);
-    messages.push({ role: 'assistant', content: assistantContent.length ? assistantContent : resp.text ?? '' });
+    if (assistantContent.length > 0) {
+      messages.push({ role: 'assistant', content: assistantContent });
+    } else {
+      // The model produced only reasoning/thinking (no text, no tool calls). Never
+      // append an EMPTY assistant message — OpenAI-compatible providers reject
+      // "assistant must provide content, reasoning_content or tool_calls". Carry the
+      // thinking text (or a minimal placeholder) so the turn stays valid.
+      messages.push({ role: 'assistant', content: resp.thinking?.trim() || '(thinking)' });
+    }
     if (resp.text) yield { type: 'assistant_text', text: resp.text };
 
-    // No tools requested → the model is done talking.
+    // No tools requested → the model wants to stop. Before honoring that, give the
+    // caller a chance to say the work isn't done (e.g. candidates still un-judged)
+    // and nudge the model to finish — bounded by maxStopNudges so it can't loop.
     if (resp.toolUses.length === 0) {
+      const nudge =
+        turn < maxTurns && stopNudges < maxStopNudges ? params.checkCompletion?.() ?? null : null;
+      if (nudge) {
+        stopNudges++;
+        messages.push({ role: 'user', content: nudge });
+        yield { type: 'notice', text: `Agent stopped early — nudging to finish (${stopNudges}/${maxStopNudges})` };
+        yield { type: 'turn_end', turn, usage: resp.usage };
+        continue;
+      }
       yield { type: 'turn_end', turn, usage: resp.usage };
       yield { type: 'done', reason: 'stop' };
       return { messages, reason: 'stop', turns: turn, usage };
     }
+    stopNudges = 0; // the model is making progress (calling tools) → reset the nudge budget
 
     // Announce each requested tool call.
     for (const tu of resp.toolUses) {
@@ -217,20 +285,4 @@ function errResult(toolUseId: string, message: string, durationMs: number): Exec
     durationMs,
     block: { type: 'tool_result', tool_use_id: toolUseId, content: message, is_error: true },
   };
-}
-
-/** Run `fn` over `items` with at most `limit` in flight; preserves input order in the result. */
-async function mapWithLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
-  const results = new Array<R>(items.length);
-  let next = 0;
-  const worker = async () => {
-    while (true) {
-      const idx = next++;
-      if (idx >= items.length) return;
-      results[idx] = await fn(items[idx]);
-    }
-  };
-  const workers = Array.from({ length: Math.min(Math.max(1, limit), items.length || 1) }, worker);
-  await Promise.all(workers);
-  return results;
 }

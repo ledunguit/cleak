@@ -30,6 +30,30 @@ export const glyph = {
   cross: '✗',
   bullet: '·',
   running: '◐',
+  /** Sending a request to the model. */
+  arrowUp: '↑',
+  /** Receiving the streamed response. */
+  arrowDown: '↓',
+  /** Collapsed (click to expand) / expanded disclosure markers. */
+  collapsed: '▶',
+  expanded: '▼',
 } as const;
 
 export const SPINNER_FRAMES = ['✶', '✸', '✹', '✺', '✹', '✷'];
+
+/**
+ * Human-readable elapsed time: seconds under a minute, `Nm Ss` under an hour,
+ * `Hh Mm` beyond. Used for the running spinner and scan metrics.
+ */
+export function formatDuration(ms: number): string {
+  const total = Math.max(0, Math.round(ms / 1000));
+  if (total < 60) return `${total}s`;
+  if (total < 3600) {
+    const m = Math.floor(total / 60);
+    const s = total % 60;
+    return s ? `${m}m ${s}s` : `${m}m`;
+  }
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  return m ? `${h}h ${m}m` : `${h}h`;
+}

@@ -10,6 +10,7 @@ import { App } from './App';
 import { TuiStore } from './store';
 import { loadEnvFiles } from '../../domain/env';
 import { loadConfig, type Provider } from '../../config';
+import { loadPreferences } from './preferences';
 
 export interface LaunchTuiOptions {
   provider?: Provider;
@@ -29,12 +30,15 @@ export async function launchTui(opts: LaunchTuiOptions = {}): Promise<void> {
     return;
   }
   loadEnvFiles();
-  const cfg = loadConfig({ provider: opts.provider });
+  const prefs = loadPreferences();
+  // Precedence: explicit CLI flag > saved preference > built-in default.
+  const cfg = loadConfig({ provider: opts.provider ?? prefs.defaultProvider });
   const store = new TuiStore({
     provider: cfg.provider,
     model: cfg.llm.model,
-    mode: opts.mode ?? 'llm_assisted',
-    dynamic: opts.dynamic ?? 'off',
+    mode: opts.mode ?? prefs.defaultMode,
+    dynamic: opts.dynamic ?? prefs.defaultDynamic,
+    autoShowReport: prefs.autoShowReport,
   });
   const resultsDir = resolve(cfg.resultsDir);
   const { waitUntilExit } = render(

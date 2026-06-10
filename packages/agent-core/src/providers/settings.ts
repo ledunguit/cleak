@@ -7,6 +7,11 @@ export interface ProviderSettings {
   apiKey: string;
   model: string;
   maxTokens: number;
+  /** Total-deadline timeout for the legacy non-streaming path (e.g. control-plane judge). */
   timeoutMs: number;
+  /** Max gap between streamed chunks before the request is considered hung. */
+  idleTimeoutMs: number;
+  /** Time-to-first-byte budget (headers) before giving up on connecting. */
+  connectTimeoutMs: number;
   retries: number;
 }

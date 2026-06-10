@@ -6,8 +6,14 @@
 
 import type { CallModelRequest } from '../deps';
 import type { NormalizedResponse } from '../types';
-import { fetchWithRetry } from './transport';
-import { toOpenAiMessages, toOpenAiTools, parseOpenAiResponse, readJsonBody } from './normalize';
+import { streamWithRetry } from './transport';
+import {
+  toOpenAiMessages,
+  toOpenAiTools,
+  parseOpenAiResponse,
+  createOpenAiStreamAssembler,
+  coerceJson,
+} from './normalize';
 import type { ProviderSettings } from './settings';
 
 export async function callOpenAiChat(
@@ -21,6 +27,8 @@ export async function callOpenAiChat(
     model: settings.model,
     max_tokens: settings.maxTokens,
     messages: toOpenAiMessages(req.systemPrompt, req.messages),
+    stream: true,
+    stream_options: { include_usage: true },
   };
   if (req.tools.length) {
     body.tools = toOpenAiTools(req.tools);
@@ -30,21 +38,28 @@ export async function callOpenAiChat(
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (settings.apiKey) headers.Authorization = `Bearer ${settings.apiKey}`;
 
-  const res = await fetchWithRetry(
+  let assembler = createOpenAiStreamAssembler(uuid);
+  let fallback: NormalizedResponse | undefined;
+  await streamWithRetry(
     `${baseUrl}/chat/completions`,
     { method: 'POST', headers, body: JSON.stringify(body) },
     {
-      timeoutMs: settings.timeoutMs,
+      connectTimeoutMs: settings.connectTimeoutMs,
+      idleTimeoutMs: settings.idleTimeoutMs,
       retries: settings.retries,
       signal: req.signal,
       onRetry: ({ attempt, reason, nextInMs }) =>
         onNotice?.(`LLM ${reason}; retry ${attempt}/${settings.retries} in ${Math.round(nextInMs / 1000)}s`),
+      onAttemptStart: () => {
+        assembler = createOpenAiStreamAssembler(uuid);
+        fallback = undefined;
+      },
+      onFirstChunk: req.onFirstChunk,
+      onData: (payload) => assembler.push(payload),
+      onJsonFallback: (raw) => {
+        fallback = parseOpenAiResponse(coerceJson(raw), uuid);
+      },
     },
   );
-  if (!res.ok) {
-    const err = await res.text().catch(() => '');
-    throw new Error(`LLM error ${res.status}: ${err.slice(0, 300)}`);
-  }
-  const data = await readJsonBody(res);
-  return parseOpenAiResponse(data, uuid);
+  return fallback ?? assembler.finish();
 }

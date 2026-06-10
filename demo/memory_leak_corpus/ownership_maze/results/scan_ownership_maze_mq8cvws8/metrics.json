@@ -1,0 +1,35 @@
+{
+  "scan_id": "scan_ownership_maze_mq8cvws8",
+  "generated_at": "2026-06-10T17:43:55.320Z",
+  "mode": "llm_assisted",
+  "dynamic": "off",
+  "candidates": 12,
+  "confirmed": 9,
+  "likely": 2,
+  "verdicts": {
+    "confirmed_leak": 9,
+    "likely_leak": 2,
+    "uncertain": 1
+  },
+  "confidence": {
+    "min": 0.3,
+    "max": 1,
+    "mean": 0.7999999999999999
+  },
+  "root_cause_counts": {
+    "interprocedural_leak": 3,
+    "early_return": 9
+  },
+  "verdict_tool_counts": {
+    "heuristic": 12
+  },
+  "evidence_count": 0,
+  "tools_used": [
+    "heuristic"
+  ],
+  "turns": 16,
+  "input_tokens": 115662,
+  "output_tokens": 8550,
+  "total_tokens": 124212,
+  "duration_ms": 110847
+}

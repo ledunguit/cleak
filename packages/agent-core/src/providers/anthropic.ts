@@ -5,8 +5,14 @@
 
 import type { CallModelRequest } from '../deps';
 import type { NormalizedResponse } from '../types';
-import { fetchWithRetry } from './transport';
-import { toAnthropicMessages, toAnthropicTools, parseAnthropicResponse, readJsonBody } from './normalize';
+import { streamWithRetry } from './transport';
+import {
+  toAnthropicMessages,
+  toAnthropicTools,
+  parseAnthropicResponse,
+  createAnthropicStreamAssembler,
+  coerceJson,
+} from './normalize';
 import type { ProviderSettings } from './settings';
 
 export async function callAnthropic(
@@ -22,10 +28,13 @@ export async function callAnthropic(
     max_tokens: settings.maxTokens,
     system: req.systemPrompt,
     messages: toAnthropicMessages(req.messages),
+    stream: true,
   };
   if (req.tools.length) body.tools = toAnthropicTools(req.tools);
 
-  const res = await fetchWithRetry(
+  let assembler = createAnthropicStreamAssembler(uuid);
+  let fallback: NormalizedResponse | undefined;
+  await streamWithRetry(
     `${baseUrl}/v1/messages`,
     {
       method: 'POST',
@@ -37,17 +46,22 @@ export async function callAnthropic(
       body: JSON.stringify(body),
     },
     {
-      timeoutMs: settings.timeoutMs,
+      connectTimeoutMs: settings.connectTimeoutMs,
+      idleTimeoutMs: settings.idleTimeoutMs,
       retries: settings.retries,
       signal: req.signal,
       onRetry: ({ attempt, reason, nextInMs }) =>
         onNotice?.(`LLM ${reason}; retry ${attempt}/${settings.retries} in ${Math.round(nextInMs / 1000)}s`),
+      onAttemptStart: () => {
+        assembler = createAnthropicStreamAssembler(uuid);
+        fallback = undefined;
+      },
+      onFirstChunk: req.onFirstChunk,
+      onData: (payload) => assembler.push(payload),
+      onJsonFallback: (raw) => {
+        fallback = parseAnthropicResponse(coerceJson(raw), uuid);
+      },
     },
   );
-  if (!res.ok) {
-    const err = await res.text().catch(() => '');
-    throw new Error(`Anthropic error ${res.status}: ${err.slice(0, 300)}`);
-  }
-  const data = await readJsonBody(res);
-  return parseAnthropicResponse(data, uuid);
+  return fallback ?? assembler.finish();
 }

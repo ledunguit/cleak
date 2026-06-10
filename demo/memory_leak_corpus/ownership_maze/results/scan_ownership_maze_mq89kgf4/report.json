@@ -1,0 +1,741 @@
+{
+  "scanId": "scan_ownership_maze_mq89kgf4",
+  "metadata": {
+    "scanId": "scan_ownership_maze_mq89kgf4",
+    "workspacePath": "/Users/zed/Master/leak-investigator/demo/memory_leak_corpus/ownership_maze",
+    "sourceWorkspacePath": "/Users/zed/Master/leak-investigator/demo/memory_leak_corpus/ownership_maze",
+    "analysisMode": "llm_assisted",
+    "dynamicMode": "off",
+    "fileLimit": 0,
+    "startedAt": "2026-06-10T16:09:11.202Z",
+    "completedAt": "2026-06-10T16:12:52.368Z",
+    "status": "completed"
+  },
+  "bundles": [
+    {
+      "bundleId": "bundle_633a383a6d616c6c6f632f5573657273",
+      "candidate": {
+        "id": "static-candidate-0001",
+        "function_name": "session_open",
+        "file_path": "/Users/zed/Master/leak-investigator/demo/memory_leak_corpus/ownership_maze/session.c",
+        "line_number": 8,
+        "allocation_site": "/Users/zed/Master/leak-investigator/demo/memory_leak_corpus/ownership_maze/session.c:8:malloc",
+        "allocation_type": "malloc",
+        "confidence": "medium",
+        "context": "Session *session = malloc(sizeof(*session));"
+      },
+      "evidence": [],
+      "status": "pending",
+      "createdAt": "2026-06-10T16:09:11.289Z",
+      "updatedAt": "2026-06-10T16:10:34.105Z",
+      "verdict": {
+        "verdict": "confirmed_leak",
+        "confidence": 0.9,
+        "explanation": "In session_open(), line 8 allocates session = malloc(sizeof(*session)). If mode < 0 || mode > 2 (line 18), the function returns NULL at line 19 without freeing session or mode_banner. This is a clear memory leak on that error path.",
+        "evidence": [],
+        "tool": "llm",
+        "rootCause": {
+          "patternType": "interprocedural_leak",
+          "description": "the function transfers ownership by returning the allocation, but the caller never frees it",
+          "allocationFunction": "session_open",
+          "allocationLine": 8,
+          "allocationFile": "/Users/zed/Master/leak-investigator/demo/memory_leak_corpus/ownership_maze/session.c",
+          "missingFreeLine": 8,
+          "missingFreeFunction": "session_open",
+          "rootCauseFunction": "session_open",
+          "rootCauseLine": 8,
+          "rootCauseDescription": "`session_open()` returns the allocated `session`; ownership transfers to its caller, which must free it. The caller was not found in this file."
+        },
+        "repair_suggestion": "`session_open()` returns the allocated `session`; ownership transfers to its caller, which must free it. The caller was not found in this file."
+      }
+    },
+    {
+      "bundleId": "bundle_633a393a6d616c6c6f632f5573657273",
+      "candidate": {
+        "id": "static-candidate-0002",
+        "function_name": "session_open",
+        "file_path": "/Users/zed/Master/leak-investigator/demo/memory_leak_corpus/ownership_maze/session.c",
+        "line_number": 9,
+        "allocation_site": "/Users/zed/Master/leak-investigator/demo/memory_leak_corpus/ownership_maze/session.c:9:malloc",
+        "allocation_type": "malloc",
+        "confidence": "medium",
+        "context": "char *mode_banner = malloc(64);"
+      },
+      "evidence": [],
+      "status": "pending",
+      "createdAt": "2026-06-10T16:09:11.289Z",
+      "updatedAt": "2026-06-10T16:10:39.090Z",
+      "verdict": {
+        "verdict": "confirmed_leak",
+        "confidence": 0.9,
+        "explanation": "In session_open(), line 9 allocates mode_banner = malloc(64). If mode < 0 || mode > 2 (line 18), the function returns NULL at line 19 without freeing session or mode_banner. This is a clear memory leak on that error path.",
+        "evidence": [],
+        "tool": "llm",
+        "rootCause": {
+          "patternType": "unknown",
+          "description": "memory is allocated but no matching free is reached on at least one exit path",
+          "allocationFunction": "session_open",
+          "allocationLine": 9,
+          "allocationFile": "/Users/zed/Master/leak-investigator/demo/memory_leak_corpus/ownership_maze/session.c",
+          "missingFreeLine": 40,
+          "missingFreeFunction": "session_open",
+          "rootCauseFunction": "session_open",
+          "rootCauseLine": 40,
+          "rootCauseDescription": "`mode_banner` is freed on some paths but may not be released before every exit of session_open()."
+        },
+        "repairDiff": {
+          "filePath": "/Users/zed/Master/leak-investigator/demo/memory_leak_corpus/ownership_maze/session.c",
+          "originalLines": [
+            "    return session;"
+          ],
+          "suggestedLines": [
+            "    free(mode_banner);",
+            "    return session;"
+          ],
+          "startLine": 40,
+          "description": "Free `mode_banner` before the exit at line 40 so every path releases the allocation."
+        },
+        "repair_suggestion": "`mode_banner` is freed on some paths but may not be released before every exit of session_open()."
+      }
+    },
+    {
+      "bundleId": "bundle_3a32323a6d616c6c6f632f5573657273",
+      "candidate": {
+        "id": "static-candidate-0003",
+        "function_name": "session_open",
+        "file_path": "/Users/zed/Master/leak-investigator/demo/memory_leak_corpus/ownership_maze/session.c",
+        "line_number": 22,
+        "allocation_site": "/Users/zed/Master/leak-investigator/demo/memory_leak_corpus/ownership_maze/session.c:22:malloc",
+        "allocation_type": "malloc",
+        "confidence": "medium",
+        "context": "session->name = malloc(strlen(user) + 1);"
+      },
+      "evidence": [],
+      "status": "pending",
+      "createdAt": "2026-06-10T16:09:11.289Z",
+      "updatedAt": "2026-06-10T16:11:03.851Z",
+      "verdict": {
+        "verdict": "likely_leak",
+        "confidence": 0.75,
+        "explanation": "In session_open(), line 22 allocates session->name. Within session_open, the NULL-check error path properly frees it. However, session_rename() (line 50) overwrites session->name without freeing the old value, so the original allocation can be leaked if session_rename is ever called. session_close_buggy does free session->name, so if session_rename is never called, it is properly freed. This is a likely leak due to the overwrite pattern in session_rename.",
+        "evidence": [],
+        "tool": "llm",
+        "rootCause": {
+          "patternType": "early_return",
+          "description": "an early return leaves the function before the allocated memory is freed",
+          "allocationFunction": "session_open",
+          "allocationLine": 22,
+          "allocationFile": "/Users/zed/Master/leak-investigator/demo/memory_leak_corpus/ownership_maze/session.c",
+          "missingFreeLine": 33,
+          "missingFreeFunction": "session_open",
+          "rootCauseFunction": "session_open",
+          "rootCauseLine": 33,
+          "rootCauseDescription": "The early exit at /Users/zed/Master/leak-investigator/demo/memory_leak_corpus/ownership_maze/session.c:33 returns before `name` is freed."
+        },
+        "repairDiff": {
+          "filePath": "/Users/zed/Master/leak-investigator/demo/memory_leak_corpus/ownership_maze/session.c",
+          "originalLines": [
+            "        return NULL;"
+          ],
+          "suggestedLines": [
+            "        free(name);",
+            "        return NULL;"
+          ],
+          "startLine": 33,
+          "description": "Free `name` before the exit at line 33 so every path releases the allocation."
+        },
+        "repair_suggestion": "The early exit at /Users/zed/Master/leak-investigator/demo/memory_leak_corpus/ownership_maze/session.c:33 returns before `name` is freed."
+      }
+    },
+    {
+      "bundleId": "bundle_3a32333a6d616c6c6f632f5573657273",
+      "candidate": {
+        "id": "static-candidate-0004",
+        "function_name": "session_open",
+        "file_path": "/Users/zed/Master/leak-investigator/demo/memory_leak_corpus/ownership_maze/session.c",
+        "line_number": 23,
+        "allocation_site": "/Users/zed/Master/leak-investigator/demo/memory_leak_corpus/ownership_maze/session.c:23:malloc",
+        "allocation_type": "malloc",
+        "confidence": "medium",
+        "context": "session->cached_route = malloc(strlen(\"/api/v1/default\") + 1);"
+      },
+      "evidence": [],
+      "status": "pending",
+      "createdAt": "2026-06-10T16:09:11.289Z",
+      "updatedAt": "2026-06-10T16:11:16.204Z",
+      "verdict": {
+        "verdict": "likely_leak",
+        "confidence": 0.75,
+        "explanation": "In session_open(), line 23 allocates session->cached_route. Within session_open, the NULL-check error path properly frees it. However, session_replace_route() (line 66) overwrites session->cached_route without freeing the old value, so the original allocation can be leaked if session_replace_route is ever called. session_close_buggy does free session->cached_route, so if session_replace_route is never called, it is properly freed. This is a likely leak due to the overwrite pattern in session_replace_route.",
+        "evidence": [],
+        "tool": "llm",
+        "rootCause": {
+          "patternType": "early_return",
+          "description": "an early return leaves the function before the allocated memory is freed",
+          "allocationFunction": "session_open",
+          "allocationLine": 23,
+          "allocationFile": "/Users/zed/Master/leak-investigator/demo/memory_leak_corpus/ownership_maze/session.c",
+          "missingFreeLine": 33,
+          "missingFreeFunction": "session_open",
+          "rootCauseFunction": "session_open",
+          "rootCauseLine": 33,
+          "rootCauseDescription": "The early exit at /Users/zed/Master/leak-investigator/demo/memory_leak_corpus/ownership_maze/session.c:33 returns before `cached_route` is freed."
+        },
+        "repairDiff": {
+          "filePath": "/Users/zed/Master/leak-investigator/demo/memory_leak_corpus/ownership_maze/session.c",
+          "originalLines": [
+            "        return NULL;"
+          ],
+          "suggestedLines": [
+            "        free(cached_route);",
+            "        return NULL;"
+          ],
+          "startLine": 33,
+          "description": "Free `cached_route` before the exit at line 33 so every path releases the allocation."
+        },
+        "repair_suggestion": "The early exit at /Users/zed/Master/leak-investigator/demo/memory_leak_corpus/ownership_maze/session.c:33 returns before `cached_route` is freed."
+      }
+    },
+    {
+      "bundleId": "bundle_3a32343a6d616c6c6f632f5573657273",
+      "candidate": {
+        "id": "static-candidate-0005",
+        "function_name": "session_open",
+        "file_path": "/Users/zed/Master/leak-investigator/demo/memory_leak_corpus/ownership_maze/session.c",
+        "line_number": 24,
+        "allocation_site": "/Users/zed/Master/leak-investigator/demo/memory_leak_corpus/ownership_maze/session.c:24:malloc",
+        "allocation_type": "malloc",
+        "confidence": "medium",
+        "context": "session->request_context = malloc(96);"
+      },
+      "evidence": [],
+      "status": "pending",
+      "createdAt": "2026-06-10T16:09:11.289Z",
+      "updatedAt": "2026-06-10T16:11:22.602Z",
+      "verdict": {
+        "verdict": "confirmed_leak",
+        "confidence": 0.95,
+        "explanation": "In session_open(), line 24 allocates session->request_context = malloc(96). The session_close_buggy() function (line 83) frees session->name, session->cached_route, and session, but does NOT free session->request_context. This is a confirmed memory leak whenever a session is closed.",
+        "evidence": [],
+        "tool": "llm",
+        "rootCause": {
+          "patternType": "early_return",
+          "description": "an early return leaves the function before the allocated memory is freed",
+          "allocationFunction": "session_open",
+          "allocationLine": 24,
+          "allocationFile": "/Users/zed/Master/leak-investigator/demo/memory_leak_corpus/ownership_maze/session.c",
+          "missingFreeLine": 33,
+          "missingFreeFunction": "session_open",
+          "rootCauseFunction": "session_open",
+          "rootCauseLine": 33,
+          "rootCauseDescription": "The early exit at /Users/zed/Master/leak-investigator/demo/memory_leak_corpus/ownership_maze/session.c:33 returns before `request_context` is freed."
+        },
+        "repairDiff": {
+          "filePath": "/Users/zed/Master/leak-investigator/demo/memory_leak_corpus/ownership_maze/session.c",
+          "originalLines": [
+            "        return NULL;"
+          ],
+          "suggestedLines": [
+            "        free(request_context);",
+            "        return NULL;"
+          ],
+          "startLine": 33,
+          "description": "Free `request_context` before the exit at line 33 so every path releases the allocation."
+        },
+        "repair_suggestion": "The early exit at /Users/zed/Master/leak-investigator/demo/memory_leak_corpus/ownership_maze/session.c:33 returns before `request_context` is freed."
+      }
+    },
+    {
+      "bundleId": "bundle_3a35303a6d616c6c6f632f5573657273",
+      "candidate": {
+        "id": "static-candidate-0006",
+        "function_name": "session_rename",
+        "file_path": "/Users/zed/Master/leak-investigator/demo/memory_leak_corpus/ownership_maze/session.c",
+        "line_number": 50,
+        "allocation_site": "/Users/zed/Master/leak-investigator/demo/memory_leak_corpus/ownership_maze/session.c:50:malloc",
+        "allocation_type": "malloc",
+        "confidence": "medium",
+        "context": "replacement = malloc(strlen(name) + 1);"
+      },
+      "evidence": [],
+      "status": "pending",
+      "createdAt": "2026-06-10T16:09:11.289Z",
+      "updatedAt": "2026-06-10T16:11:27.924Z",
+      "verdict": {
+        "verdict": "confirmed_leak",
+        "confidence": 0.95,
+        "explanation": "In session_rename(), line 50 allocates replacement = malloc(strlen(name) + 1). After copying the new name, line 58 assigns session->name = replacement without freeing the old session->name. The old name string is leaked every time session_rename() is called.",
+        "evidence": [],
+        "tool": "llm",
+        "rootCause": {
+          "patternType": "unknown",
+          "description": "memory is allocated but no matching free is reached on at least one exit path",
+          "allocationFunction": "session_rename",
+          "allocationLine": 50,
+          "allocationFile": "/Users/zed/Master/leak-investigator/demo/memory_leak_corpus/ownership_maze/session.c",
+          "missingFreeLine": 52,
+          "missingFreeFunction": "session_rename",
+          "rootCauseFunction": "session_rename",
+          "rootCauseLine": 52,
+          "rootCauseDescription": "`replacement` allocated at /Users/zed/Master/leak-investigator/demo/memory_leak_corpus/ownership_maze/session.c:50 is never freed before session_rename() returns."
+        },
+        "repairDiff": {
+          "filePath": "/Users/zed/Master/leak-investigator/demo/memory_leak_corpus/ownership_maze/session.c",
+          "originalLines": [
+            "        return;"
+          ],
+          "suggestedLines": [
+            "        free(replacement);",
+            "        return;"
+          ],
+          "startLine": 52,
+          "description": "Free `replacement` before the exit at line 52 so every path releases the allocation."
+        },
+        "repair_suggestion": "`replacement` allocated at /Users/zed/Master/leak-investigator/demo/memory_leak_corpus/ownership_maze/session.c:50 is never freed before session_rename() returns."
+      }
+    },
+    {
+      "bundleId": "bundle_3a36363a6d616c6c6f632f5573657273",
+      "candidate": {
+        "id": "static-candidate-0007",
+        "function_name": "session_replace_route",
+        "file_path": "/Users/zed/Master/leak-investigator/demo/memory_leak_corpus/ownership_maze/session.c",
+        "line_number": 66,
+        "allocation_site": "/Users/zed/Master/leak-investigator/demo/memory_leak_corpus/ownership_maze/session.c:66:malloc",
+        "allocation_type": "malloc",
+        "confidence": "medium",
+        "context": "replacement = malloc(strlen(route) + 1);"
+      },
+      "evidence": [],
+      "status": "pending",
+      "createdAt": "2026-06-10T16:09:11.289Z",
+      "updatedAt": "2026-06-10T16:11:33.596Z",
+      "verdict": {
+        "verdict": "confirmed_leak",
+        "confidence": 0.95,
+        "explanation": "In session_replace_route(), line 66 allocates replacement = malloc(strlen(route) + 1). After copying the new route, line 74 assigns session->cached_route = replacement without freeing the old session->cached_route. The old cached_route string is leaked every time session_replace_route() is called.",
+        "evidence": [],
+        "tool": "llm",
+        "rootCause": {
+          "patternType": "unknown",
+          "description": "memory is allocated but no matching free is reached on at least one exit path",
+          "allocationFunction": "session_replace_route",
+          "allocationLine": 66,
+          "allocationFile": "/Users/zed/Master/leak-investigator/demo/memory_leak_corpus/ownership_maze/session.c",
+          "missingFreeLine": 68,
+          "missingFreeFunction": "session_replace_route",
+          "rootCauseFunction": "session_replace_route",
+          "rootCauseLine": 68,
+          "rootCauseDescription": "`replacement` allocated at /Users/zed/Master/leak-investigator/demo/memory_leak_corpus/ownership_maze/session.c:66 is never freed before session_replace_route() returns."
+        },
+        "repairDiff": {
+          "filePath": "/Users/zed/Master/leak-investigator/demo/memory_leak_corpus/ownership_maze/session.c",
+          "originalLines": [
+            "        return;"
+          ],
+          "suggestedLines": [
+            "        free(replacement);",
+            "        return;"
+          ],
+          "startLine": 68,
+          "description": "Free `replacement` before the exit at line 68 so every path releases the allocation."
+        },
+        "repair_suggestion": "`replacement` allocated at /Users/zed/Master/leak-investigator/demo/memory_leak_corpus/ownership_maze/session.c:66 is never freed before session_replace_route() returns."
+      }
+    },
+    {
+      "bundleId": "bundle_3a37363a63616c6c6f632f5573657273",
+      "candidate": {
+        "id": "static-candidate-0008",
+        "function_name": "session_replace_route",
+        "file_path": "/Users/zed/Master/leak-investigator/demo/memory_leak_corpus/ownership_maze/session.c",
+        "line_number": 76,
+        "allocation_site": "/Users/zed/Master/leak-investigator/demo/memory_leak_corpus/ownership_maze/session.c:76:calloc",
+        "allocation_type": "calloc",
+        "confidence": "medium",
+        "context": "char **batch = calloc((size_t)count + 1, sizeof(*batch));"
+      },
+      "evidence": [],
+      "status": "pending",
+      "createdAt": "2026-06-10T16:09:11.289Z",
+      "updatedAt": "2026-06-10T16:11:40.479Z",
+      "verdict": {
+        "verdict": "confirmed_leak",
+        "confidence": 0.95,
+        "explanation": "In build_retry_batch() (line 76), batch = calloc(count + 1, sizeof(*batch)). Two leak paths: (1) If any batch[i] = malloc(48) fails (line 83), the function returns NULL without freeing the already-allocated batch array and any previously allocated batch[i] entries. (2) If i == fail_index (line 88), the function returns NULL without freeing batch or any batch[i] entries. Both paths leak the calloc'd batch array and all previously allocated string entries.",
+        "evidence": [],
+        "tool": "llm",
+        "rootCause": {
+          "patternType": "interprocedural_leak",
+          "description": "the function transfers ownership by returning the allocation, but the caller never frees it",
+          "allocationFunction": "session_replace_route",
+          "allocationLine": 76,
+          "allocationFile": "/Users/zed/Master/leak-investigator/demo/memory_leak_corpus/ownership_maze/session.c",
+          "missingFreeLine": 76,
+          "missingFreeFunction": "session_replace_route",
+          "rootCauseFunction": "session_replace_route",
+          "rootCauseLine": 76,
+          "rootCauseDescription": "`session_replace_route()` returns the allocated `batch`; ownership transfers to its caller, which must free it. The caller was not found in this file."
+        },
+        "repair_suggestion": "`session_replace_route()` returns the allocated `batch`; ownership transfers to its caller, which must free it. The caller was not found in this file."
+      }
+    },
+    {
+      "bundleId": "bundle_3a38333a6d616c6c6f632f5573657273",
+      "candidate": {
+        "id": "static-candidate-0009",
+        "function_name": "unknown",
+        "file_path": "/Users/zed/Master/leak-investigator/demo/memory_leak_corpus/ownership_maze/session.c",
+        "line_number": 83,
+        "allocation_site": "/Users/zed/Master/leak-investigator/demo/memory_leak_corpus/ownership_maze/session.c:83:malloc",
+        "allocation_type": "malloc",
+        "confidence": "medium",
+        "context": "batch[i] = malloc(48);"
+      },
+      "evidence": [],
+      "status": "pending",
+      "createdAt": "2026-06-10T16:09:11.289Z",
+      "updatedAt": "2026-06-10T16:11:46.706Z",
+      "verdict": {
+        "verdict": "confirmed_leak",
+        "confidence": 0.95,
+        "explanation": "In build_retry_batch() (line 83), batch[i] = malloc(48). Two leak paths: (1) If any subsequent batch[j] allocation fails, the function returns NULL without freeing the current batch[i] or any previously allocated entries. (2) If i == fail_index (line 88), the function returns NULL immediately without freeing batch[i] or any previously allocated entries. Each batch[i] entry leaks on these error paths.",
+        "evidence": [],
+        "tool": "llm",
+        "rootCause": {
+          "patternType": "unknown",
+          "description": "memory is allocated but no matching free is reached on at least one exit path",
+          "allocationFunction": "unknown",
+          "allocationLine": 83,
+          "allocationFile": "/Users/zed/Master/leak-investigator/demo/memory_leak_corpus/ownership_maze/session.c",
+          "missingFreeLine": 83,
+          "missingFreeFunction": "unknown",
+          "rootCauseFunction": "unknown",
+          "rootCauseLine": 83,
+          "rootCauseDescription": "memory is allocated but no matching free is reached on at least one exit path"
+        },
+        "repair_suggestion": "memory is allocated but no matching free is reached on at least one exit path"
+      }
+    },
+    {
+      "bundleId": "bundle_3a32313a6d616c6c6f632f5573657273",
+      "candidate": {
+        "id": "static-candidate-0001",
+        "function_name": "queue_push",
+        "file_path": "/Users/zed/Master/leak-investigator/demo/memory_leak_corpus/ownership_maze/queue.c",
+        "line_number": 21,
+        "allocation_site": "/Users/zed/Master/leak-investigator/demo/memory_leak_corpus/ownership_maze/queue.c:21:malloc",
+        "allocation_type": "malloc",
+        "confidence": "medium",
+        "context": "node = malloc(sizeof(*node));"
+      },
+      "evidence": [],
+      "status": "pending",
+      "createdAt": "2026-06-10T16:09:11.296Z",
+      "updatedAt": "2026-06-10T16:09:11.296Z",
+      "verdict": {
+        "verdict": "uncertain",
+        "confidence": 0.3,
+        "explanation": "Unknown: `node` is freed on some paths but may not be released before every exit of queue_push(). The allocation at /Users/zed/Master/leak-investigator/demo/memory_leak_corpus/ownership_maze/queue.c:21 (`node`) has no matching free on the leaking path.",
+        "evidence": [],
+        "tool": "heuristic",
+        "repair_suggestion": "Ensure the object allocated via malloc in queue_push is released on every exit path. Add cleanup before each return or route ownership to a caller that clearly frees it.",
+        "rootCause": {
+          "patternType": "unknown",
+          "description": "memory is allocated but no matching free is reached on at least one exit path",
+          "allocationFunction": "queue_push",
+          "allocationLine": 21,
+          "allocationFile": "/Users/zed/Master/leak-investigator/demo/memory_leak_corpus/ownership_maze/queue.c",
+          "missingFreeLine": 46,
+          "missingFreeFunction": "queue_push",
+          "rootCauseFunction": "queue_push",
+          "rootCauseLine": 46,
+          "rootCauseDescription": "`node` is freed on some paths but may not be released before every exit of queue_push()."
+        },
+        "repairDiff": {
+          "filePath": "/Users/zed/Master/leak-investigator/demo/memory_leak_corpus/ownership_maze/queue.c",
+          "originalLines": [
+            "    return 0;"
+          ],
+          "suggestedLines": [
+            "    free(node);",
+            "    return 0;"
+          ],
+          "startLine": 46,
+          "description": "Free `node` before the exit at line 46 so every path releases the allocation."
+        }
+      }
+    },
+    {
+      "bundleId": "bundle_3a35383a6d616c6c6f632f5573657273",
+      "candidate": {
+        "id": "static-candidate-0003",
+        "function_name": "queue_fanout_clone",
+        "file_path": "/Users/zed/Master/leak-investigator/demo/memory_leak_corpus/ownership_maze/queue.c",
+        "line_number": 58,
+        "allocation_site": "/Users/zed/Master/leak-investigator/demo/memory_leak_corpus/ownership_maze/queue.c:58:malloc",
+        "allocation_type": "malloc",
+        "confidence": "medium",
+        "context": "clone = malloc(size);"
+      },
+      "evidence": [],
+      "status": "pending",
+      "createdAt": "2026-06-10T16:09:11.296Z",
+      "updatedAt": "2026-06-10T16:09:11.296Z",
+      "verdict": {
+        "verdict": "uncertain",
+        "confidence": 0.3,
+        "explanation": "Interprocedural leak: `queue_fanout_clone()` returns the allocated `clone`; ownership transfers to its caller, which must free it. The caller was not found in this file. The allocation at /Users/zed/Master/leak-investigator/demo/memory_leak_corpus/ownership_maze/queue.c:58 (`clone`) has no matching free on the leaking path.",
+        "evidence": [],
+        "tool": "heuristic",
+        "repair_suggestion": "Ensure the object allocated via malloc in queue_fanout_clone is released on every exit path. Add cleanup before each return or route ownership to a caller that clearly frees it.",
+        "rootCause": {
+          "patternType": "interprocedural_leak",
+          "description": "the function transfers ownership by returning the allocation, but the caller never frees it",
+          "allocationFunction": "queue_fanout_clone",
+          "allocationLine": 58,
+          "allocationFile": "/Users/zed/Master/leak-investigator/demo/memory_leak_corpus/ownership_maze/queue.c",
+          "missingFreeLine": 58,
+          "missingFreeFunction": "queue_fanout_clone",
+          "rootCauseFunction": "queue_fanout_clone",
+          "rootCauseLine": 58,
+          "rootCauseDescription": "`queue_fanout_clone()` returns the allocated `clone`; ownership transfers to its caller, which must free it. The caller was not found in this file."
+        }
+      }
+    },
+    {
+      "bundleId": "bundle_3a32373a6d616c6c6f632f5573657273",
+      "candidate": {
+        "id": "static-candidate-0001",
+        "function_name": "register_hook_context",
+        "file_path": "/Users/zed/Master/leak-investigator/demo/memory_leak_corpus/ownership_maze/hooks.c",
+        "line_number": 27,
+        "allocation_site": "/Users/zed/Master/leak-investigator/demo/memory_leak_corpus/ownership_maze/hooks.c:27:malloc",
+        "allocation_type": "malloc",
+        "confidence": "medium",
+        "context": "ctx = malloc(sizeof(*ctx));"
+      },
+      "evidence": [],
+      "status": "pending",
+      "createdAt": "2026-06-10T16:09:11.305Z",
+      "updatedAt": "2026-06-10T16:09:11.305Z",
+      "verdict": {
+        "verdict": "likely_leak",
+        "confidence": 0.5,
+        "explanation": "Early return: The early exit at /Users/zed/Master/leak-investigator/demo/memory_leak_corpus/ownership_maze/hooks.c:36 returns before `ctx` is freed. The allocation at /Users/zed/Master/leak-investigator/demo/memory_leak_corpus/ownership_maze/hooks.c:27 (`ctx`) has no matching free on the leaking path.",
+        "evidence": [],
+        "tool": "heuristic",
+        "repair_suggestion": "Ensure the object allocated via malloc in register_hook_context is released on every exit path. Add cleanup before each return or route ownership to a caller that clearly frees it.",
+        "rootCause": {
+          "patternType": "early_return",
+          "description": "an early return leaves the function before the allocated memory is freed",
+          "allocationFunction": "register_hook_context",
+          "allocationLine": 27,
+          "allocationFile": "/Users/zed/Master/leak-investigator/demo/memory_leak_corpus/ownership_maze/hooks.c",
+          "missingFreeLine": 36,
+          "missingFreeFunction": "register_hook_context",
+          "rootCauseFunction": "register_hook_context",
+          "rootCauseLine": 36,
+          "rootCauseDescription": "The early exit at /Users/zed/Master/leak-investigator/demo/memory_leak_corpus/ownership_maze/hooks.c:36 returns before `ctx` is freed."
+        },
+        "repairDiff": {
+          "filePath": "/Users/zed/Master/leak-investigator/demo/memory_leak_corpus/ownership_maze/hooks.c",
+          "originalLines": [
+            "        return 1;"
+          ],
+          "suggestedLines": [
+            "        free(ctx);",
+            "        return 1;"
+          ],
+          "startLine": 36,
+          "description": "Free `ctx` before the exit at line 36 so every path releases the allocation."
+        }
+      }
+    }
+  ],
+  "summary": {
+    "totalCandidates": 12,
+    "confirmedLeaks": 7,
+    "likelyLeaks": 3,
+    "falsePositives": 0,
+    "totalBytesLost": 0,
+    "toolsUsed": [
+      "llm",
+      "heuristic"
+    ],
+    "durationSec": 221.166
+  },
+  "agentDecisions": [
+    {
+      "turn": 1,
+      "actionKind": "judge_bundle",
+      "rationale": "In session_open(), line 8 allocates session = malloc(sizeof(*session)). If mode < 0 || mode > 2 (line 18), the function returns NULL at line 19 without freeing session or mode_banner. This is a clear ",
+      "strategySource": "llm",
+      "toolName": "record_verdict",
+      "targetBundleIds": [
+        "bundle_633a383a6d616c6c6f632f5573657273"
+      ],
+      "args": {
+        "bundleId": "bundle_633a383a6d616c6c6f632f5573657273",
+        "verdict": "confirmed_leak",
+        "confidence": 0.9,
+        "explanation": "In session_open(), line 8 allocates session = malloc(sizeof(*session)). If mode < 0 || mode > 2 (line 18), the function returns NULL at line 19 without freeing session or mode_banner. This is a clear memory leak on that error path."
+      },
+      "reasoning": "",
+      "decidedAt": "2026-06-10T16:10:34.105Z",
+      "resultSummary": "confirmed_leak (90%)"
+    },
+    {
+      "turn": 2,
+      "actionKind": "judge_bundle",
+      "rationale": "In session_open(), line 9 allocates mode_banner = malloc(64). If mode < 0 || mode > 2 (line 18), the function returns NULL at line 19 without freeing session or mode_banner. This is a clear memory lea",
+      "strategySource": "llm",
+      "toolName": "record_verdict",
+      "targetBundleIds": [
+        "bundle_633a393a6d616c6c6f632f5573657273"
+      ],
+      "args": {
+        "bundleId": "bundle_633a393a6d616c6c6f632f5573657273",
+        "verdict": "confirmed_leak",
+        "confidence": 0.9,
+        "explanation": "In session_open(), line 9 allocates mode_banner = malloc(64). If mode < 0 || mode > 2 (line 18), the function returns NULL at line 19 without freeing session or mode_banner. This is a clear memory leak on that error path."
+      },
+      "reasoning": "",
+      "decidedAt": "2026-06-10T16:10:39.090Z",
+      "resultSummary": "confirmed_leak (90%)"
+    },
+    {
+      "turn": 3,
+      "actionKind": "judge_bundle",
+      "rationale": "In session_open(), line 22 allocates session->name. Within session_open, the NULL-check error path properly frees it. However, session_rename() (line 50) overwrites session->name without freeing the o",
+      "strategySource": "llm",
+      "toolName": "record_verdict",
+      "targetBundleIds": [
+        "bundle_3a32323a6d616c6c6f632f5573657273"
+      ],
+      "args": {
+        "bundleId": "bundle_3a32323a6d616c6c6f632f5573657273",
+        "confidence": 0.75,
+        "explanation": "In session_open(), line 22 allocates session->name. Within session_open, the NULL-check error path properly frees it. However, session_rename() (line 50) overwrites session->name without freeing the old value, so the original allocation can be leaked if session_rename is ever called. session_close_buggy does free session->name, so if session_rename is never called, it is properly freed. This is a likely leak due to the overwrite pattern in session_rename.",
+        "verdict": "likely_leak"
+      },
+      "reasoning": "",
+      "decidedAt": "2026-06-10T16:11:03.851Z",
+      "resultSummary": "likely_leak (75%)"
+    },
+    {
+      "turn": 4,
+      "actionKind": "judge_bundle",
+      "rationale": "In session_open(), line 23 allocates session->cached_route. Within session_open, the NULL-check error path properly frees it. However, session_replace_route() (line 66) overwrites session->cached_rout",
+      "strategySource": "llm",
+      "toolName": "record_verdict",
+      "targetBundleIds": [
+        "bundle_3a32333a6d616c6c6f632f5573657273"
+      ],
+      "args": {
+        "bundleId": "bundle_3a32333a6d616c6c6f632f5573657273",
+        "confidence": 0.75,
+        "explanation": "In session_open(), line 23 allocates session->cached_route. Within session_open, the NULL-check error path properly frees it. However, session_replace_route() (line 66) overwrites session->cached_route without freeing the old value, so the original allocation can be leaked if session_replace_route is ever called. session_close_buggy does free session->cached_route, so if session_replace_route is never called, it is properly freed. This is a likely leak due to the overwrite pattern in session_replace_route.",
+        "verdict": "likely_leak"
+      },
+      "reasoning": "",
+      "decidedAt": "2026-06-10T16:11:16.204Z",
+      "resultSummary": "likely_leak (75%)"
+    },
+    {
+      "turn": 5,
+      "actionKind": "judge_bundle",
+      "rationale": "In session_open(), line 24 allocates session->request_context = malloc(96). The session_close_buggy() function (line 83) frees session->name, session->cached_route, and session, but does NOT free sess",
+      "strategySource": "llm",
+      "toolName": "record_verdict",
+      "targetBundleIds": [
+        "bundle_3a32343a6d616c6c6f632f5573657273"
+      ],
+      "args": {
+        "bundleId": "bundle_3a32343a6d616c6c6f632f5573657273",
+        "confidence": 0.95,
+        "explanation": "In session_open(), line 24 allocates session->request_context = malloc(96). The session_close_buggy() function (line 83) frees session->name, session->cached_route, and session, but does NOT free session->request_context. This is a confirmed memory leak whenever a session is closed.",
+        "verdict": "confirmed_leak"
+      },
+      "reasoning": "",
+      "decidedAt": "2026-06-10T16:11:22.602Z",
+      "resultSummary": "confirmed_leak (95%)"
+    },
+    {
+      "turn": 6,
+      "actionKind": "judge_bundle",
+      "rationale": "In session_rename(), line 50 allocates replacement = malloc(strlen(name) + 1). After copying the new name, line 58 assigns session->name = replacement without freeing the old session->name. The old na",
+      "strategySource": "llm",
+      "toolName": "record_verdict",
+      "targetBundleIds": [
+        "bundle_3a35303a6d616c6c6f632f5573657273"
+      ],
+      "args": {
+        "bundleId": "bundle_3a35303a6d616c6c6f632f5573657273",
+        "confidence": 0.95,
+        "explanation": "In session_rename(), line 50 allocates replacement = malloc(strlen(name) + 1). After copying the new name, line 58 assigns session->name = replacement without freeing the old session->name. The old name string is leaked every time session_rename() is called.",
+        "verdict": "confirmed_leak"
+      },
+      "reasoning": "",
+      "decidedAt": "2026-06-10T16:11:27.924Z",
+      "resultSummary": "confirmed_leak (95%)"
+    },
+    {
+      "turn": 7,
+      "actionKind": "judge_bundle",
+      "rationale": "In session_replace_route(), line 66 allocates replacement = malloc(strlen(route) + 1). After copying the new route, line 74 assigns session->cached_route = replacement without freeing the old session-",
+      "strategySource": "llm",
+      "toolName": "record_verdict",
+      "targetBundleIds": [
+        "bundle_3a36363a6d616c6c6f632f5573657273"
+      ],
+      "args": {
+        "bundleId": "bundle_3a36363a6d616c6c6f632f5573657273",
+        "confidence": 0.95,
+        "explanation": "In session_replace_route(), line 66 allocates replacement = malloc(strlen(route) + 1). After copying the new route, line 74 assigns session->cached_route = replacement without freeing the old session->cached_route. The old cached_route string is leaked every time session_replace_route() is called.",
+        "verdict": "confirmed_leak"
+      },
+      "reasoning": "",
+      "decidedAt": "2026-06-10T16:11:33.596Z",
+      "resultSummary": "confirmed_leak (95%)"
+    },
+    {
+      "turn": 8,
+      "actionKind": "judge_bundle",
+      "rationale": "In build_retry_batch() (line 76), batch = calloc(count + 1, sizeof(*batch)). Two leak paths: (1) If any batch[i] = malloc(48) fails (line 83), the function returns NULL without freeing the already-all",
+      "strategySource": "llm",
+      "toolName": "record_verdict",
+      "targetBundleIds": [
+        "bundle_3a37363a63616c6c6f632f5573657273"
+      ],
+      "args": {
+        "bundleId": "bundle_3a37363a63616c6c6f632f5573657273",
+        "confidence": 0.95,
+        "explanation": "In build_retry_batch() (line 76), batch = calloc(count + 1, sizeof(*batch)). Two leak paths: (1) If any batch[i] = malloc(48) fails (line 83), the function returns NULL without freeing the already-allocated batch array and any previously allocated batch[i] entries. (2) If i == fail_index (line 88), the function returns NULL without freeing batch or any batch[i] entries. Both paths leak the calloc'd batch array and all previously allocated string entries.",
+        "verdict": "confirmed_leak"
+      },
+      "reasoning": "",
+      "decidedAt": "2026-06-10T16:11:40.479Z",
+      "resultSummary": "confirmed_leak (95%)"
+    },
+    {
+      "turn": 9,
+      "actionKind": "judge_bundle",
+      "rationale": "In build_retry_batch() (line 83), batch[i] = malloc(48). Two leak paths: (1) If any subsequent batch[j] allocation fails, the function returns NULL without freeing the current batch[i] or any previous",
+      "strategySource": "llm",
+      "toolName": "record_verdict",
+      "targetBundleIds": [
+        "bundle_3a38333a6d616c6c6f632f5573657273"
+      ],
+      "args": {
+        "bundleId": "bundle_3a38333a6d616c6c6f632f5573657273",
+        "confidence": 0.95,
+        "explanation": "In build_retry_batch() (line 83), batch[i] = malloc(48). Two leak paths: (1) If any subsequent batch[j] allocation fails, the function returns NULL without freeing the current batch[i] or any previously allocated entries. (2) If i == fail_index (line 88), the function returns NULL immediately without freeing batch[i] or any previously allocated entries. Each batch[i] entry leaks on these error paths.",
+        "verdict": "confirmed_leak"
+      },
+      "reasoning": "",
+      "decidedAt": "2026-06-10T16:11:46.706Z",
+      "resultSummary": "confirmed_leak (95%)"
+    }
+  ]
+}

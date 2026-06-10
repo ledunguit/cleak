@@ -15,6 +15,10 @@ export interface ProviderConfig {
   model: string;
   jsonMode: boolean;
   timeoutMs: number;
+  /** Max silence between streamed chunks before the request is treated as hung. */
+  idleTimeoutMs: number;
+  /** Time-to-first-byte budget when connecting. */
+  connectTimeoutMs: number;
   retries: number;
   maxTokens: number;
 }
@@ -29,6 +33,10 @@ export interface RunConfig {
   analyzerRoot?: string;
   resultsDir: string;
   maxTurns: number;
+  /** Auto-compaction thresholds for the agent transcript. */
+  compaction: { thresholdTokens: number; keepRecentTurns: number };
+  /** Staged-workflow investigation knobs (bounded to protect the single LLM gateway). */
+  workflow: { staticConcurrency: number; staticGroupSize: number; judgeConcurrency: number };
 }
 
 function env(name: string, fallback = ""): string {
@@ -54,6 +62,10 @@ function hostAwareUrl(url: string): string {
 /** Resolve the per-provider LLM settings (separate keys so they never collide). */
 export function resolveProvider(provider: Provider): ProviderConfig {
   const timeoutMs = Number(env("LLM_TIMEOUT_MS", "75000"));
+  // Streaming path: an *idle* gap timer (no bytes for this long = hung), not a
+  // total deadline — so a model that keeps emitting tokens is never killed.
+  const idleTimeoutMs = Number(env("LLM_IDLE_TIMEOUT_MS", env("LLM_TIMEOUT_MS", "75000")));
+  const connectTimeoutMs = Number(env("LLM_CONNECT_TIMEOUT_MS", "30000"));
   const retries = Number(env("LLM_RETRIES", "2"));
   const maxTokens = Number(env("LLM_MAX_TOKENS", "4096"));
   if (provider === "openai") {
@@ -64,6 +76,8 @@ export function resolveProvider(provider: Provider): ProviderConfig {
       model: env("OPENAI_MODEL", "gpt-4o"),
       jsonMode: bool("OPENAI_JSON_MODE", true),
       timeoutMs,
+      idleTimeoutMs,
+      connectTimeoutMs,
       retries,
       maxTokens,
     };
@@ -76,6 +90,8 @@ export function resolveProvider(provider: Provider): ProviderConfig {
       model: env("ANTHROPIC_MODEL", "claude-sonnet-4-20250514"),
       jsonMode: false,
       timeoutMs,
+      idleTimeoutMs,
+      connectTimeoutMs,
       retries,
       maxTokens,
     };
@@ -88,6 +104,8 @@ export function resolveProvider(provider: Provider): ProviderConfig {
     model: env("LOCAL_LLM_MODEL", "mimo/mimo-v2.5-pro"),
     jsonMode: bool("LOCAL_LLM_JSON_MODE", true),
     timeoutMs,
+    idleTimeoutMs,
+    connectTimeoutMs,
     retries,
     maxTokens,
   };
@@ -107,6 +125,16 @@ export function loadConfig(
     analyzerRoot: env("ANALYZER_ROOT") || undefined,
     resultsDir: env("RESULTS_DIR", "results"),
     maxTurns: Number(env("AGENT_MAX_TURNS", "15")),
+    compaction: {
+      thresholdTokens: Number(env("LLM_COMPACT_THRESHOLD_TOKENS", "100000")),
+      keepRecentTurns: Number(env("LLM_COMPACT_KEEP_TURNS", "3")),
+    },
+    workflow: {
+      // Bounded: many concurrent sub-agents would overload a single local gateway.
+      staticConcurrency: Math.max(1, Number(env("WORKFLOW_STATIC_CONCURRENCY", "3"))),
+      staticGroupSize: Math.max(1, Number(env("WORKFLOW_STATIC_GROUP_SIZE", "4"))),
+      judgeConcurrency: Math.max(1, Number(env("WORKFLOW_JUDGE_CONCURRENCY", "3"))),
+    },
   };
   // Apply only DEFINED overrides so an absent flag (e.g. --provider) never
   // clobbers a resolved value with undefined.

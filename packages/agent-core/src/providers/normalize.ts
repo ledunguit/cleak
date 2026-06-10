@@ -50,7 +50,14 @@ export function toOpenAiMessages(systemPrompt: string, messages: Message[]): unk
           type: 'function',
           function: { name: b.name, arguments: JSON.stringify(b.input ?? {}) },
         }));
-      const msg: Record<string, unknown> = { role: 'assistant', content: text || null };
+      // An assistant message must carry content OR tool_calls — a null/empty content
+      // with no tool_calls is rejected by OpenAI-compatible gateways ("assistant must
+      // provide content, reasoning_content or tool_calls"). When there are tool_calls,
+      // null content is fine; otherwise fall back to a non-empty placeholder.
+      const msg: Record<string, unknown> = {
+        role: 'assistant',
+        content: text || (toolCalls.length ? null : '(no content)'),
+      };
       if (toolCalls.length) msg.tool_calls = toolCalls;
       out.push(msg);
     } else {
@@ -126,15 +133,32 @@ export function parseOpenAiResponse(data: any, uuid: () => string): NormalizedRe
       }))
     : [];
   const thinking: string | undefined = choice?.reasoning_content || choice?.reasoning || undefined;
+  const thinkingText = typeof thinking === 'string' && thinking.trim() ? thinking : undefined;
   return {
     text,
-    thinking: typeof thinking === 'string' && thinking.trim() ? thinking : undefined,
+    thinking: thinkingText,
     toolUses,
     usage: data?.usage
-      ? { inputTokens: data.usage.prompt_tokens ?? 0, outputTokens: data.usage.completion_tokens ?? 0 }
+      ? {
+          inputTokens: data.usage.prompt_tokens ?? 0,
+          outputTokens: data.usage.completion_tokens ?? 0,
+          thinkingTokens: openAiReasoningTokens(data.usage, thinkingText),
+        }
       : undefined,
     stopReason: mapOpenAiFinish(finish, toolUses.length > 0),
   };
+}
+
+/** Reasoning-token count: prefer the provider's number, else estimate from text. */
+function openAiReasoningTokens(usage: any, thinkingText?: string): number {
+  const reported = usage?.completion_tokens_details?.reasoning_tokens;
+  if (typeof reported === 'number' && reported > 0) return reported;
+  return thinkingText ? Math.ceil(thinkingText.length / 4) : 0;
+}
+
+/** ~4 chars/token estimate, for providers that don't report reasoning tokens. */
+function estimateTokensFromText(text: string): number {
+  return text.trim() ? Math.ceil(text.length / 4) : 0;
 }
 
 export function parseAnthropicResponse(data: any, uuid: () => string): NormalizedResponse {
@@ -151,15 +175,19 @@ export function parseAnthropicResponse(data: any, uuid: () => string): Normalize
     thinking: thinking || undefined,
     toolUses,
     usage: data?.usage
-      ? { inputTokens: data.usage.input_tokens ?? 0, outputTokens: data.usage.output_tokens ?? 0 }
+      ? {
+          inputTokens: data.usage.input_tokens ?? 0,
+          outputTokens: data.usage.output_tokens ?? 0,
+          // Anthropic folds thinking into output_tokens — estimate for visibility.
+          thinkingTokens: thinking ? estimateTokensFromText(thinking) : 0,
+        }
       : undefined,
     stopReason: reason,
   };
 }
 
-/** Robustly parse a response body that may carry an SSE trailer or stray text. */
-export async function readJsonBody(res: Response): Promise<any> {
-  const raw = await res.text();
+/** Robustly parse a JSON body that may carry an SSE trailer or stray text. */
+export function coerceJson(raw: string): any {
   // Strip a trailing SSE chunk after the JSON object (e.g. "\ndata: [DONE]").
   let body = raw;
   const end = raw.lastIndexOf('}');
@@ -180,4 +208,151 @@ export async function readJsonBody(res: Response): Promise<any> {
     }
     throw new Error(`Provider returned non-JSON response: ${raw.slice(0, 200)}`);
   }
+}
+
+/** Robustly parse a response body that may carry an SSE trailer or stray text. */
+export async function readJsonBody(res: Response): Promise<any> {
+  return coerceJson(await res.text());
+}
+
+// ── Streaming assemblers ──
+// Each provider streams a sequence of SSE `data:` payloads; the assembler folds
+// the deltas into the same NormalizedResponse the non-streaming path returns, so
+// the loop never learns whether a turn was streamed.
+
+export interface StreamAssembler {
+  /** Fold one SSE `data:` payload (raw JSON string) into the running response. */
+  push(payload: string): void;
+  /** Final NormalizedResponse once the stream ends. */
+  finish(): NormalizedResponse;
+}
+
+/** OpenAI-compatible chat-completions streaming (covers the local gateway + OpenAI). */
+export function createOpenAiStreamAssembler(uuid: () => string): StreamAssembler {
+  let text = '';
+  let thinking = '';
+  let finish: string | undefined;
+  let usage: NormalizedResponse['usage'];
+  const calls = new Map<number, { id?: string; name?: string; args: string }>();
+
+  return {
+    push(payload) {
+      let obj: any;
+      try {
+        obj = JSON.parse(payload);
+      } catch {
+        return;
+      }
+      const choice = obj?.choices?.[0];
+      const delta = choice?.delta;
+      if (delta) {
+        if (typeof delta.content === 'string') text += delta.content;
+        const r = delta.reasoning_content ?? delta.reasoning;
+        if (typeof r === 'string') thinking += r;
+        if (Array.isArray(delta.tool_calls)) {
+          for (const tc of delta.tool_calls) {
+            const idx = typeof tc.index === 'number' ? tc.index : 0;
+            const cur = calls.get(idx) ?? { args: '' };
+            if (tc.id) cur.id = tc.id;
+            if (tc.function?.name) cur.name = tc.function.name;
+            if (typeof tc.function?.arguments === 'string') cur.args += tc.function.arguments;
+            calls.set(idx, cur);
+          }
+        }
+      }
+      if (choice?.finish_reason) finish = choice.finish_reason;
+      if (obj?.usage) {
+        usage = {
+          inputTokens: obj.usage.prompt_tokens ?? 0,
+          outputTokens: obj.usage.completion_tokens ?? 0,
+          thinkingTokens: openAiReasoningTokens(obj.usage, thinking.trim() ? thinking : undefined),
+        };
+      }
+    },
+    finish() {
+      const toolUses: ToolUseBlock[] = [...calls.entries()]
+        .sort((a, b) => a[0] - b[0])
+        .map(([, c]) => ({
+          type: 'tool_use' as const,
+          id: c.id || uuid(),
+          name: c.name ?? '',
+          input: parseToolArguments(c.args),
+        }));
+      return {
+        text,
+        thinking: thinking.trim() ? thinking : undefined,
+        toolUses,
+        usage,
+        stopReason: mapOpenAiFinish(finish, toolUses.length > 0),
+      };
+    },
+  };
+}
+
+/** Anthropic Messages API streaming (SSE events carry their `type` inside the JSON). */
+export function createAnthropicStreamAssembler(uuid: () => string): StreamAssembler {
+  let text = '';
+  let thinking = '';
+  let stopReason: string | undefined;
+  let inputTokens = 0;
+  let outputTokens = 0;
+  const blocks = new Map<number, { type?: string; id?: string; name?: string; json: string }>();
+
+  return {
+    push(payload) {
+      let e: any;
+      try {
+        e = JSON.parse(payload);
+      } catch {
+        return;
+      }
+      switch (e?.type) {
+        case 'message_start':
+          inputTokens = e.message?.usage?.input_tokens ?? 0;
+          break;
+        case 'content_block_start': {
+          const cb = e.content_block ?? {};
+          blocks.set(e.index, { type: cb.type, id: cb.id, name: cb.name, json: '' });
+          if (cb.type === 'text' && typeof cb.text === 'string') text += cb.text;
+          break;
+        }
+        case 'content_block_delta': {
+          const d = e.delta ?? {};
+          if (d.type === 'text_delta') text += d.text ?? '';
+          else if (d.type === 'thinking_delta') thinking += d.thinking ?? '';
+          else if (d.type === 'input_json_delta') {
+            const b = blocks.get(e.index);
+            if (b) b.json += d.partial_json ?? '';
+          }
+          break;
+        }
+        case 'message_delta':
+          if (e.delta?.stop_reason) stopReason = e.delta.stop_reason;
+          if (e.usage?.output_tokens != null) outputTokens = e.usage.output_tokens;
+          break;
+        default:
+          break;
+      }
+    },
+    finish() {
+      const toolUses: ToolUseBlock[] = [...blocks.entries()]
+        .filter(([, b]) => b.type === 'tool_use')
+        .sort((a, b) => a[0] - b[0])
+        .map(([, b]) => ({
+          type: 'tool_use' as const,
+          id: b.id || uuid(),
+          name: b.name ?? '',
+          input: parseToolArguments(b.json || '{}'),
+        }));
+      const reason: StopReason =
+        stopReason === 'max_tokens' ? 'max_tokens' : toolUses.length > 0 ? 'tool_use' : 'stop';
+      return {
+        text,
+        thinking: thinking.trim() ? thinking : undefined,
+        toolUses,
+        usage: { inputTokens, outputTokens, thinkingTokens: estimateTokensFromText(thinking) },
+        stopReason: reason,
+      };
+    },
+  };
 }

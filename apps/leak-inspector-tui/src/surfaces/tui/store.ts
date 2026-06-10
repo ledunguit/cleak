@@ -14,10 +14,14 @@ import {
   type ScanEventName,
 } from '@mcpvul/common/flow/scan-flow-contract';
 import type { ScanEvent } from '../../orchestrator/events';
+import type { AgentMeta } from '../../orchestrator/investigation';
 import { toolSource, type ToolSource } from '../../domain/mcpToolPlan';
 
 export type PhaseStatus = 'pending' | 'active' | 'done' | 'skipped' | 'failed';
 export type RunStatus = 'idle' | 'running' | 'paused' | 'done' | 'error';
+
+/** Cap on the full tool output retained for expansion (the card preview stays short). */
+const MAX_TOOL_OUTPUT = 4000;
 
 export interface ToolCardData {
   name: string;
@@ -25,7 +29,10 @@ export interface ToolCardData {
   source: ToolSource;
   status: 'running' | 'ok' | 'error';
   durationMs?: number;
+  /** Short preview shown when collapsed. */
   preview?: string;
+  /** Full (capped) output shown when expanded. */
+  output?: string;
 }
 
 export interface UiMessage {
@@ -35,7 +42,23 @@ export interface UiMessage {
   /** Optional colour for a system line (e.g. report diff red/green); default is dim. */
   color?: string;
   tool?: ToolCardData;
+  /** Which (sub-)agent produced this line; 'main' = orchestrator/main flow. */
+  agentId: string;
+  /** Collapsible (thinking/tool) lines start collapsed; toggled by the user. */
+  collapsed?: boolean;
 }
+
+/** A spawned sub-agent shown in the agent list under the input. */
+export interface AgentInfo {
+  id: string;
+  label: string;
+  kind: AgentMeta['kind'];
+  status: 'running' | 'done' | 'error';
+  turns: number;
+}
+
+/** Log navigation: browsing the agent list, or inside one agent's log. */
+export type NavMode = 'normal' | 'agentlist' | 'agentlog';
 
 export interface PendingPermission {
   id: string;
@@ -50,7 +73,9 @@ export interface UiState {
   currentPhase?: ScanPhase;
   status: RunStatus;
   statusText: string;
-  usage: { inputTokens: number; outputTokens: number };
+  usage: { inputTokens: number; outputTokens: number; thinkingTokens: number };
+  /** Model I/O direction during a request: 'up' = sending, 'down' = receiving stream. */
+  io?: 'up' | 'down';
   mode: 'no_llm' | 'llm_assisted';
   dynamic: 'off' | 'selective' | 'aggressive';
   provider: string;
@@ -60,7 +85,36 @@ export interface UiState {
   summary?: { candidates: number; confirmed: number; likely: number };
   pendingPermission?: PendingPermission;
   startedAt?: number;
+  /** Which surface to render. */
+  view: 'main' | 'config';
+  /** Auto-open the report findings picker when a scan finishes. */
+  autoShowReport: boolean;
+  /** Whether the agent invoked any dynamic-analysis tool this scan. */
+  ranDynamicTool: boolean;
+  /** Lines from the live bottom that the log viewport is scrolled up by (0 = live). */
+  scrollOffset: number;
+  /** Spawned sub-agents (static #1..#K, dynamic), shown under the input. */
+  agents: AgentInfo[];
+  /** Which agent's log is being viewed ('main' = orchestrator/main flow). */
+  viewAgentId: string;
+  /** Keyboard navigation mode for the log/agent-list. */
+  navMode: NavMode;
+  /** Cursor index into `agents` while navMode === 'agentlist'. */
+  navIndex: number;
+  /** Message id under the focus cursor while navMode === 'agentlog'. */
+  focusMsgId?: string;
 }
+
+/** Messages belonging to the currently-viewed agent (main = the 'main' flow). */
+export function visibleMessages(state: UiState): UiMessage[] {
+  return state.messages.filter((m) => m.agentId === state.viewAgentId);
+}
+
+/** Keep the in-memory log bounded — only truncate when it grows very large. */
+const MAX_HISTORY = 2000;
+
+/** Default attribution for events with no sub-agent (orchestrator/main flow). */
+const MAIN_AGENT: AgentMeta = { id: 'main', label: 'main', kind: 'main' };
 
 function initialPhases(): Record<ScanPhase, PhaseStatus> {
   const p = {} as Record<ScanPhase, PhaseStatus>;
@@ -84,11 +138,19 @@ export class TuiStore {
       phases: initialPhases(),
       status: 'idle',
       statusText: 'idle',
-      usage: { inputTokens: 0, outputTokens: 0 },
+      usage: { inputTokens: 0, outputTokens: 0, thinkingTokens: 0 },
       mode: 'llm_assisted',
       dynamic: 'off',
       provider: 'local',
       model: '',
+      view: 'main',
+      autoShowReport: false,
+      ranDynamicTool: false,
+      scrollOffset: 0,
+      agents: [],
+      viewAgentId: 'main',
+      navMode: 'normal',
+      navIndex: 0,
       ...init,
     };
   }
@@ -109,10 +171,116 @@ export class TuiStore {
     return `${prefix}_${this.idSeq++}`;
   }
 
-  private push(msg: Omit<UiMessage, 'id'>): string {
+  private push(msg: Omit<UiMessage, 'id' | 'agentId'> & { agentId?: string }): string {
     const id = this.nextId(msg.kind);
-    this.set({ messages: [...this.state.messages, { id, ...msg }] });
+    const agentId = msg.agentId ?? 'main';
+    let messages = [...this.state.messages, { id, ...msg, agentId }];
+    let scrollOffset = this.state.scrollOffset;
+    if (messages.length > MAX_HISTORY) {
+      const dropped = messages.length - MAX_HISTORY;
+      messages = messages.slice(dropped);
+      scrollOffset = Math.max(0, scrollOffset - dropped);
+    }
+    // If the user has scrolled up, keep their view anchored — but only bump for a
+    // line that's actually in the currently-viewed agent's log.
+    if (scrollOffset > 0 && agentId === this.state.viewAgentId) scrollOffset += 1;
+    this.set({ messages, scrollOffset });
     return id;
+  }
+
+  /** Scroll the log by `delta` messages, clamped to [0, maxOffset] (0 = live). */
+  scrollBy(delta: number, maxOffset: number): void {
+    const next = Math.max(0, Math.min(maxOffset, this.state.scrollOffset + delta));
+    if (next !== this.state.scrollOffset) this.set({ scrollOffset: next });
+  }
+
+  scrollToBottom(): void {
+    if (this.state.scrollOffset !== 0) this.set({ scrollOffset: 0 });
+  }
+
+  // ── Agent-log navigation ──
+  /** From the main flow, drop the cursor into the agent list (if any agents). */
+  enterAgentList(): void {
+    if (this.state.agents.length === 0) return;
+    this.set({ navMode: 'agentlist', navIndex: 0 });
+  }
+
+  /** Move the agent-list cursor; moving above the top exits back to the main flow. */
+  navMove(delta: number): void {
+    if (this.state.navMode !== 'agentlist') return;
+    const next = this.state.navIndex + delta;
+    if (next < 0) {
+      this.set({ navMode: 'normal' });
+      return;
+    }
+    this.set({ navIndex: Math.min(this.state.agents.length - 1, next) });
+  }
+
+  /** Open the selected agent's log (focus its first collapsible line). */
+  openFocusedAgent(): void {
+    if (this.state.navMode !== 'agentlist') return;
+    const agent = this.state.agents[this.state.navIndex];
+    if (!agent) return;
+    const first = this.state.messages.find((m) => m.agentId === agent.id);
+    this.set({ viewAgentId: agent.id, navMode: 'agentlog', focusMsgId: first?.id, scrollOffset: 0 });
+  }
+
+  /** Return from an agent's log to the main flow. */
+  backToMain(): void {
+    this.set({ viewAgentId: 'main', navMode: 'normal', focusMsgId: undefined, scrollOffset: 0 });
+  }
+
+  /** Move the focus cursor within the viewed agent's log, keeping it on screen. */
+  logFocusMove(delta: number, viewportRows: number): void {
+    if (this.state.navMode !== 'agentlog') return;
+    const list = visibleMessages(this.state);
+    if (list.length === 0) return;
+    const cur = list.findIndex((m) => m.id === this.state.focusMsgId);
+    const idx = Math.max(0, Math.min(list.length - 1, (cur < 0 ? list.length - 1 : cur) + delta));
+    const focusMsgId = list[idx].id;
+    // Clamp scrollOffset so the focused index stays within [end-rows, end-1].
+    const rows = Math.max(1, viewportRows);
+    const lower = list.length - rows - idx;
+    const upper = list.length - 1 - idx;
+    let scrollOffset = this.state.scrollOffset;
+    if (scrollOffset < lower) scrollOffset = lower;
+    if (scrollOffset > upper) scrollOffset = upper;
+    scrollOffset = Math.max(0, scrollOffset);
+    this.set({ focusMsgId, scrollOffset });
+  }
+
+  /** Expand/collapse the focused thinking/tool line. */
+  toggleFocusedCollapse(): void {
+    const id = this.state.focusMsgId;
+    if (!id) return;
+    const messages = this.state.messages.map((m) =>
+      m.id === id && (m.kind === 'thinking' || m.kind === 'tool') ? { ...m, collapsed: !m.collapsed } : m,
+    );
+    this.set({ messages });
+  }
+
+  /** Register a sub-agent on first sight, or patch its status/turns. */
+  private upsertAgent(agent: AgentMeta, patch?: Partial<AgentInfo>): void {
+    const existing = this.state.agents.find((a) => a.id === agent.id);
+    if (!existing) {
+      this.set({
+        agents: [...this.state.agents, { id: agent.id, label: agent.label, kind: agent.kind, status: 'running', turns: 0, ...patch }],
+      });
+    } else if (patch) {
+      this.set({ agents: this.state.agents.map((a) => (a.id === agent.id ? { ...a, ...patch } : a)) });
+    }
+  }
+
+  setIo(io: UiState['io']): void {
+    if (io !== this.state.io) this.set({ io });
+  }
+
+  setView(view: UiState['view']): void {
+    this.set({ view });
+  }
+
+  setAutoShowReport(autoShowReport: boolean): void {
+    this.set({ autoShowReport });
   }
 
   // ── User-facing actions ──
@@ -189,6 +357,10 @@ export class TuiStore {
   beginRun(scanId: string, mode: UiState['mode']): void {
     this.steeringQueue = [];
     this.resumeResolver = undefined;
+    // Keep prior scans in the scrollback but separate them visually.
+    if (this.state.messages.length > 0) this.push({ kind: 'phase', text: '── new scan ──' });
+    // Per-scan reset: tokens, phases, summary, I/O cue, and dynamic-usage tracking
+    // all start fresh so a second scan never inherits the first's counters.
     this.set({
       status: 'running',
       statusText: 'starting…',
@@ -196,12 +368,31 @@ export class TuiStore {
       mode,
       phases: initialPhases(),
       summary: undefined,
+      reportDir: undefined,
+      currentPhase: undefined,
+      io: undefined,
+      usage: { inputTokens: 0, outputTokens: 0, thinkingTokens: 0 },
+      ranDynamicTool: false,
+      scrollOffset: 0,
+      agents: [],
+      viewAgentId: 'main',
+      navMode: 'normal',
+      navIndex: 0,
+      focusMsgId: undefined,
       startedAt: Date.now(),
     });
   }
 
   finishRun(reportDir: string, summary: UiState['summary']): void {
-    this.set({ status: 'done', statusText: 'done', reportDir, summary });
+    if (this.state.dynamic !== 'off' && !this.state.ranDynamicTool) {
+      this.push({
+        kind: 'system',
+        text:
+          '⚠ dynamic was enabled but the agent ran no dynamic tools — the model judged static evidence ' +
+          'sufficient (selective). Use /config or /dynamic → aggressive to force a run.',
+      });
+    }
+    this.set({ status: 'done', statusText: 'done', reportDir, summary, io: undefined });
   }
 
   failRun(message: string): void {
@@ -238,18 +429,28 @@ export class TuiStore {
   // ── AgentEvent stream → assistant text + tool cards ──
   private toolMsgByUseId = new Map<string, string>();
 
-  applyAgentEvent(ev: AgentEvent): void {
+  applyAgentEvent(ev: AgentEvent, agent: AgentMeta = MAIN_AGENT): void {
+    const agentId = agent.id;
+    if (agent.kind !== 'main') this.upsertAgent(agent);
     switch (ev.type) {
       case 'thinking':
-        if (ev.text?.trim()) this.push({ kind: 'thinking', text: ev.text.trim() });
+        // thinking/tool start collapsed — expand from the agent's log view.
+        if (ev.text?.trim()) this.push({ kind: 'thinking', text: ev.text.trim(), agentId, collapsed: true });
         break;
       case 'assistant_text':
-        if (ev.text?.trim()) this.push({ kind: 'assistant', text: ev.text.trim() });
+        if (ev.text?.trim()) this.push({ kind: 'assistant', text: ev.text.trim(), agentId });
         break;
       case 'tool_use': {
+        // Model finished generating this turn's request → no longer sending/receiving.
+        if (this.state.io) this.set({ io: undefined });
+        if (toolSource(ev.name) === 'mcp-dynamic' && !this.state.ranDynamicTool) {
+          this.set({ ranDynamicTool: true });
+        }
         const title = `${displayToolName(ev.name)}${summarizeInput(ev.input)}`;
         const msgId = this.push({
           kind: 'tool',
+          agentId,
+          collapsed: true,
           tool: { name: ev.name, title, source: toolSource(ev.name), status: 'running' },
         });
         this.toolMsgByUseId.set(ev.id, msgId);
@@ -266,7 +467,8 @@ export class TuiStore {
                     ...m.tool,
                     status: ev.isError ? ('error' as const) : ('ok' as const),
                     durationMs: ev.durationMs,
-                    preview: previewOutput(ev.output),
+                    preview: previewOutput(ev.output, 160),
+                    output: previewOutput(ev.output, MAX_TOOL_OUTPUT),
                   },
                 }
               : m,
@@ -281,30 +483,37 @@ export class TuiStore {
             usage: {
               inputTokens: this.state.usage.inputTokens + ev.usage.inputTokens,
               outputTokens: this.state.usage.outputTokens + ev.usage.outputTokens,
+              thinkingTokens: this.state.usage.thinkingTokens + (ev.usage.thinkingTokens ?? 0),
             },
           });
         }
+        if (agent.kind !== 'main') this.upsertAgent(agent, { turns: (this.state.agents.find((a) => a.id === agentId)?.turns ?? 0) + 1 });
+        if (this.state.io) this.set({ io: undefined });
         break;
       case 'notice':
-        this.push({ kind: 'system', text: `↻ ${ev.text}` });
+        this.push({ kind: 'system', text: `↻ ${ev.text}`, agentId });
         this.set({ statusText: ev.text });
         break;
       case 'paused':
         this.push({
           kind: 'system',
+          agentId,
           text: `⏸ agent paused (${ev.reason}) — type "continue" or add guidance to resume, ESC to stop`,
         });
         this.set({ status: 'paused', statusText: 'paused — awaiting your input' });
         break;
       case 'resumed':
-        this.push({ kind: 'system', text: '▶ resumed' });
+        this.push({ kind: 'system', text: '▶ resumed', agentId });
         this.set({ status: 'running', statusText: 'resuming…' });
         break;
       case 'error':
-        this.push({ kind: 'system', text: `⚠ agent error: ${ev.message}` });
+        this.push({ kind: 'system', text: `⚠ agent error: ${ev.message}`, agentId });
+        if (agent.kind !== 'main') this.upsertAgent(agent, { status: 'error' });
         break;
       case 'done':
-        if (ev.reason === 'max_turns') this.push({ kind: 'system', text: '⚠ investigation hit the turn limit' });
+        if (this.state.io) this.set({ io: undefined });
+        if (agent.kind !== 'main') this.upsertAgent(agent, { status: ev.reason === 'error' ? 'error' : 'done' });
+        if (ev.reason === 'max_turns') this.push({ kind: 'system', text: '⚠ investigation hit the turn limit', agentId });
         break;
     }
   }
@@ -358,11 +567,11 @@ function shortPath(p: string): string {
   return parts.length <= 2 ? p : '…/' + parts.slice(-2).join('/');
 }
 
-function previewOutput(output: unknown): string {
+function previewOutput(output: unknown, max: number): string {
   if (output == null) return '';
-  if (typeof output === 'string') return output.slice(0, 160);
+  if (typeof output === 'string') return output.slice(0, max);
   try {
-    return JSON.stringify(output).slice(0, 160);
+    return JSON.stringify(output).slice(0, max);
   } catch {
     return '';
   }

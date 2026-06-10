@@ -12,6 +12,7 @@
  * is where the model freely chooses which analysis tools to run.
  */
 
+import { mapWithLimit } from '@mcpvul/agent-core';
 import type { AgentEvent, McpClient } from '@mcpvul/agent-core';
 import {
   AnalysisMode,
@@ -47,8 +48,10 @@ export interface ScanDeps {
   pathResolver: PathResolver;
   /** The agentic investigation phase (M3). When absent, the scan is discovery + heuristic judge only. */
   investigation?: InvestigationPhase;
-  /** Optional raw agent-event sink for rich UI rendering (TUI). */
-  onAgentEvent?: (ev: AgentEvent) => void;
+  /** Optional raw agent-event sink for rich UI rendering (TUI); `agent` tags the source sub-agent. */
+  onAgentEvent?: (ev: AgentEvent, agent?: import('./investigation').AgentMeta) => void;
+  /** Optional model I/O cue ('send'/'receive') for the send/receive UI arrow. */
+  onModelActivity?: (dir: 'send' | 'receive') => void;
   /** Optional interactive permission resolver (TUI). */
   requestPermission?: (req: { id: string; name: string; input: unknown }) => Promise<'allow' | 'deny'>;
   /** Abort signal to interrupt discovery + the agentic loop (e.g. ESC in the TUI). */
@@ -96,21 +99,30 @@ export async function runScan(input: ScanInput, deps: ScanDeps): Promise<ScanRes
   const cFiles = walkCFiles(input.repoPath, input.fileLimit && input.fileLimit > 0 ? input.fileLimit : 2000);
   emitter.emit(ScanEventName.CANDIDATES_SCANNING, { totalFiles: cFiles.length });
 
-  for (const file of cFiles) {
-    if (deps.abortSignal?.aborted) break;
+  // Scan files concurrently (each candidateScan is an independent, stateless MCP
+  // call) — the sequential per-file round-trips were the discovery bottleneck.
+  const DISCOVERY_CONCURRENCY = Math.max(1, Number(process.env.DISCOVERY_CONCURRENCY ?? 8));
+  const scanned = await mapWithLimit(cFiles, DISCOVERY_CONCURRENCY, async (file) => {
+    if (deps.abortSignal?.aborted) return null;
     const content = readFileSafe(file);
-    if (content === null) continue;
+    if (content === null) return null;
     try {
-      const cs: any = await staticClient.callTool('candidateScan', { filePath: file, content });
-      for (const c of cs.candidates || []) {
-        // file_path is the real host path (identity) — the host reads it for
-        // snippets/diffs and content is sent to the analyzers.
-        candidates.ingest(normalizeCandidate({ ...c, filePath: c.filePath || c.file_path || file }, (p) => p));
-      }
+      return (await staticClient.callTool('candidateScan', { filePath: file, content })) as any;
     } catch {
-      // A single unreadable/odd file shouldn't abort discovery.
+      return null; // a single unreadable/odd file shouldn't abort discovery
     }
-  }
+  });
+  // Ingest IN FILE ORDER (mapWithLimit preserves input order) so the candidate set
+  // and its ordering stay deterministic regardless of completion order.
+  scanned.forEach((cs, i) => {
+    if (!cs) return;
+    const file = cFiles[i];
+    for (const c of cs.candidates || []) {
+      // file_path is the real host path (identity) — the host reads it for
+      // snippets/diffs and content is sent to the analyzers.
+      candidates.ingest(normalizeCandidate({ ...c, filePath: c.filePath || c.file_path || file }, (p) => p));
+    }
+  });
 
   const discovered = candidates.getAllBundles().length;
   const warning =
@@ -139,6 +151,7 @@ export async function runScan(input: ScanInput, deps: ScanDeps): Promise<ScanRes
       getSteering: deps.getSteering,
       awaitResume: deps.awaitResume,
       onAgentEvent: deps.onAgentEvent,
+      onModelActivity: deps.onModelActivity,
       requestPermission: deps.requestPermission,
     });
   }
