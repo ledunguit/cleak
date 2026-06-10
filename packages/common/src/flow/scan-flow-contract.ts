@@ -199,7 +199,7 @@ export const PHASE_META: Record<ScanPhase, PhaseMeta> = {
   [ScanPhase.WORKSPACE]: { title: 'Workspace', subtitle: 'Materialize + build plan', optional: false },
   [ScanPhase.DISCOVERY]: { title: 'Discovery', subtitle: 'Index + candidate scan', optional: false },
   [ScanPhase.INVESTIGATION]: { title: 'Investigation', subtitle: 'Agentic loop: static tools + decisions', optional: false },
-  [ScanPhase.LEAKGUARD]: { title: 'LeakGuard', subtitle: 'Project-level static (Clang SA)', optional: true },
+  [ScanPhase.LEAKGUARD]: { title: 'Clang SA', subtitle: 'Project-level scan-build (Clang Static Analyzer)', optional: true },
   [ScanPhase.DYNAMIC]: { title: 'Dynamic', subtitle: 'Build + sanitizers', optional: true },
   [ScanPhase.JUDGING]: { title: 'Judging', subtitle: 'Verdicts + confidence', optional: false },
   [ScanPhase.REPORTING]: { title: 'Reporting', subtitle: 'Build outputs', optional: false },

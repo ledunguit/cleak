@@ -1,0 +1,6 @@
+[
+  {
+    "role": "user",
+    "content": "Discovery found no allocation-site candidates. Call finalize_report to conclude the scan."
+  }
+]

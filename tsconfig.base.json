@@ -21,7 +21,9 @@
     "resolveJsonModule": true,
     "paths": {
       "@mcpvul/common": ["packages/common/src"],
-      "@mcpvul/common/*": ["packages/common/src/*"]
+      "@mcpvul/common/*": ["packages/common/src/*"],
+      "@mcpvul/agent-core": ["packages/agent-core/src"],
+      "@mcpvul/agent-core/*": ["packages/agent-core/src/*"]
     }
   },
   "include": ["apps/**/*", "packages/**/*"]

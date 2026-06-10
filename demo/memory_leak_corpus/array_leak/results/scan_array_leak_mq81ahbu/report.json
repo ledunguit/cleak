@@ -1,0 +1,173 @@
+{
+  "scanId": "scan_array_leak_mq81ahbu",
+  "metadata": {
+    "scanId": "scan_array_leak_mq81ahbu",
+    "workspacePath": "/Users/zed/Master/leak-investigator/demo/memory_leak_corpus/array_leak",
+    "sourceWorkspacePath": "/Users/zed/Master/leak-investigator/demo/memory_leak_corpus/array_leak",
+    "analysisMode": "llm_assisted",
+    "dynamicMode": "selective",
+    "fileLimit": 0,
+    "startedAt": "2026-06-10T12:17:28.892Z",
+    "completedAt": "2026-06-10T12:21:25.950Z",
+    "status": "completed"
+  },
+  "bundles": [
+    {
+      "bundleId": "bundle_633a383a6d616c6c6f632f5573657273",
+      "candidate": {
+        "id": "static-candidate-0001",
+        "function_name": "unknown",
+        "file_path": "/Users/zed/Master/leak-investigator/demo/memory_leak_corpus/array_leak/main.c",
+        "line_number": 8,
+        "allocation_site": "/Users/zed/Master/leak-investigator/demo/memory_leak_corpus/array_leak/main.c:8:malloc",
+        "allocation_type": "malloc",
+        "confidence": "medium",
+        "context": "char **arr = malloc(count * sizeof(char*));"
+      },
+      "evidence": [
+        {
+          "tool": "lsan",
+          "runId": "",
+          "function_name": "unknown",
+          "file_path": "/Users/zed/Master/leak-investigator/demo/memory_leak_corpus/array_leak/main.c",
+          "line_number": 8,
+          "bytes_lost": 0,
+          "blocks_lost": 0,
+          "severity": "none",
+          "stack_trace": "",
+          "raw_output": "LeakSanitizer detected leaks from strdup at line 13 (odd indices), but the malloc at line 8 (array container) is freed by free(arr) in cleanup_partial() and free(arr) in the error path of create_strings()."
+        }
+      ],
+      "status": "pending",
+      "createdAt": "2026-06-10T12:17:28.945Z",
+      "updatedAt": "2026-06-10T12:21:17.831Z",
+      "verdict": {
+        "verdict": "false_positive",
+        "confidence": 0.95,
+        "explanation": "The malloc at line 8 allocates the pointer array container. This container IS freed on all paths: (1) Normal path — cleanup_partial() calls free(arr) as its last statement. (2) Error path in create_strings — if strdup fails, the error handler frees all previously allocated entries then calls free(arr). The malloc'd container itself is not leaked; only the strdup'd string elements at odd indices leak (covered by the other candidate).",
+        "evidence": [
+          "free(arr) called in cleanup_partial() at end of function",
+          "free(arr) called in error path of create_strings() at line 17",
+          "LSAN did not report the array container as a separate leak"
+        ],
+        "tool": "llm"
+      }
+    },
+    {
+      "bundleId": "bundle_3a31333a7374726475702f5573657273",
+      "candidate": {
+        "id": "static-candidate-0002",
+        "function_name": "unknown",
+        "file_path": "/Users/zed/Master/leak-investigator/demo/memory_leak_corpus/array_leak/main.c",
+        "line_number": 13,
+        "allocation_site": "/Users/zed/Master/leak-investigator/demo/memory_leak_corpus/array_leak/main.c:13:strdup",
+        "allocation_type": "strdup",
+        "confidence": "medium",
+        "context": "arr[i] = strdup(buf);"
+      },
+      "evidence": [
+        {
+          "tool": "lsan",
+          "runId": "",
+          "function_name": "unknown",
+          "file_path": "/Users/zed/Master/leak-investigator/demo/memory_leak_corpus/array_leak/main.c",
+          "line_number": 13,
+          "bytes_lost": 20,
+          "blocks_lost": 2,
+          "severity": "high",
+          "stack_trace": "",
+          "raw_output": "LeakSanitizer: detected memory leaks - odd-indexed strdup'd strings (arr[1], arr[3]) are never freed by cleanup_partial() which only iterates with i+=2"
+        }
+      ],
+      "status": "pending",
+      "createdAt": "2026-06-10T12:17:28.945Z",
+      "updatedAt": "2026-06-10T12:21:17.831Z",
+      "verdict": {
+        "verdict": "confirmed_leak",
+        "confidence": 1,
+        "explanation": "The strdup at line 13 in create_strings() allocates strings stored in arr[i]. These are passed to cleanup_partial() in main(), which only frees even-indexed elements (loop uses i += 2). Odd-indexed elements (arr[1], arr[3]) are never freed — their pointers are lost when free(arr) destroys the container. With count=5, this leaks 2 of 5 strdup'd strings on every normal execution path. Confirmed by LeakSanitizer.",
+        "evidence": [
+          "lsan: detected memory leaks from strdup allocations at odd indices",
+          "functionSummary: leaked_variables includes arr[i] (strdup) with has_allocation_without_local_free=true",
+          "Static analysis: cleanup_partial iterates i=0; i<count; i+=2, freeing only even indices, then frees the array container"
+        ],
+        "tool": "llm",
+        "rootCause": {
+          "patternType": "strdup_leak",
+          "description": "the duplicated string is never freed before the function exits",
+          "allocationFunction": "unknown",
+          "allocationLine": 13,
+          "allocationFile": "/Users/zed/Master/leak-investigator/demo/memory_leak_corpus/array_leak/main.c",
+          "missingFreeLine": 13,
+          "missingFreeFunction": "unknown",
+          "rootCauseFunction": "unknown",
+          "rootCauseLine": 13,
+          "rootCauseDescription": "the duplicated string is never freed before the function exits"
+        },
+        "repair_suggestion": "the duplicated string is never freed before the function exits"
+      }
+    }
+  ],
+  "summary": {
+    "totalCandidates": 2,
+    "confirmedLeaks": 1,
+    "likelyLeaks": 0,
+    "falsePositives": 1,
+    "totalBytesLost": 20,
+    "toolsUsed": [
+      "llm",
+      "lsan"
+    ],
+    "durationSec": 237.058
+  },
+  "agentDecisions": [
+    {
+      "turn": 1,
+      "actionKind": "judge_bundle",
+      "rationale": "The strdup at line 13 in create_strings() allocates strings stored in arr[i]. These are passed to cleanup_partial() in main(), which only frees even-indexed elements (loop uses i += 2). Odd-indexed el",
+      "strategySource": "llm",
+      "toolName": "record_verdict",
+      "targetBundleIds": [
+        "bundle_3a31333a7374726475702f5573657273"
+      ],
+      "args": {
+        "bundleId": "bundle_3a31333a7374726475702f5573657273",
+        "verdict": "confirmed_leak",
+        "confidence": 1,
+        "explanation": "The strdup at line 13 in create_strings() allocates strings stored in arr[i]. These are passed to cleanup_partial() in main(), which only frees even-indexed elements (loop uses i += 2). Odd-indexed elements (arr[1], arr[3]) are never freed — their pointers are lost when free(arr) destroys the container. With count=5, this leaks 2 of 5 strdup'd strings on every normal execution path. Confirmed by LeakSanitizer.",
+        "evidence": [
+          "lsan: detected memory leaks from strdup allocations at odd indices",
+          "functionSummary: leaked_variables includes arr[i] (strdup) with has_allocation_without_local_free=true",
+          "Static analysis: cleanup_partial iterates i=0; i<count; i+=2, freeing only even indices, then frees the array container"
+        ]
+      },
+      "reasoning": "",
+      "decidedAt": "2026-06-10T12:21:17.831Z",
+      "resultSummary": "confirmed_leak (100%)"
+    },
+    {
+      "turn": 2,
+      "actionKind": "judge_bundle",
+      "rationale": "The malloc at line 8 allocates the pointer array container. This container IS freed on all paths: (1) Normal path — cleanup_partial() calls free(arr) as its last statement. (2) Error path in create_st",
+      "strategySource": "llm",
+      "toolName": "record_verdict",
+      "targetBundleIds": [
+        "bundle_633a383a6d616c6c6f632f5573657273"
+      ],
+      "args": {
+        "bundleId": "bundle_633a383a6d616c6c6f632f5573657273",
+        "verdict": "false_positive",
+        "confidence": 0.95,
+        "explanation": "The malloc at line 8 allocates the pointer array container. This container IS freed on all paths: (1) Normal path — cleanup_partial() calls free(arr) as its last statement. (2) Error path in create_strings — if strdup fails, the error handler frees all previously allocated entries then calls free(arr). The malloc'd container itself is not leaked; only the strdup'd string elements at odd indices leak (covered by the other candidate).",
+        "evidence": [
+          "free(arr) called in cleanup_partial() at end of function",
+          "free(arr) called in error path of create_strings() at line 17",
+          "LSAN did not report the array container as a separate leak"
+        ]
+      },
+      "reasoning": "",
+      "decidedAt": "2026-06-10T12:21:17.831Z",
+      "resultSummary": "false_positive (95%)"
+    }
+  ]
+}

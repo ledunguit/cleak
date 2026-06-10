@@ -13,7 +13,7 @@ import {
   RepairDiff,
 } from '@mcpvul/common';
 import { existsSync, readFileSync } from 'fs';
-import { analyzeLeakHeuristically } from './heuristic-leak-analysis';
+import { judgeHeuristically, enrichLeakVerdict } from '@mcpvul/common/analysis/heuristic-judge';
 
 @Injectable()
 export class JudgeService {
@@ -44,94 +44,16 @@ export class JudgeService {
       }
     }
 
-    // Heuristic judging (and the only judge path in no_llm mode)
-    if (!verdict) verdict = this.judgeHeuristically(bundle, staticContext);
+    // Heuristic judging (and the only judge path in no_llm mode). Shared with
+    // the leak-inspector-tui via @mcpvul/common/analysis so both produce
+    // byte-identical verdicts.
+    if (!verdict) verdict = judgeHeuristically(bundle, staticContext);
 
-    // GOAL #4 guarantee: every leak verdict that leaves the judge carries a
-    // root-cause explanation AND an applicable (source-anchored) repair diff —
-    // filling whatever the heuristic path omits and whatever the LLM omits or
-    // produces as a diff that no longer matches the real source.
-    return this.enrichLeakVerdict(bundle, staticContext, verdict);
-  }
-
-  /**
-   * Ensure a leak verdict ships a structured root cause + an applicable repair
-   * diff. Validates any LLM-provided diff against the real file and replaces it
-   * with a deterministic, source-anchored diff when it does not match.
-   */
-  private enrichLeakVerdict(
-    bundle: LeakBundle,
-    staticContext: Record<string, any> | undefined,
-    verdict: VerdictResult,
-  ): VerdictResult {
-    const isLeak =
-      verdict.verdict === InvestigationVerdict.CONFIRMED_LEAK ||
-      verdict.verdict === InvestigationVerdict.LIKELY_LEAK ||
-      verdict.verdict === InvestigationVerdict.UNCERTAIN;
-    if (!isLeak) return verdict;
-
-    const fileContent = this.readFullFile(bundle.candidate.file_path);
-    const analysis = analyzeLeakHeuristically(bundle, staticContext, fileContent);
-    const fromLlm = verdict.tool === ToolKind.LLM;
-
-    // Division of labour: the LLM contributes the verdict + natural-language
-    // explanation + root-cause reasoning (its strength), while the deterministic
-    // synthesizer produces the canonical fix diff — a minimal, source-anchored
-    // free() insertion guaranteed to be applicable. LLM-authored diffs are
-    // unreliable (comments, whole-file rewrites), so they are used only as a
-    // fallback when the synthesizer cannot locate a fix site.
-    const llmDiffUsable =
-      !!verdict.repairDiff &&
-      this.isDiffApplicable(verdict.repairDiff, fileContent) &&
-      this.diffAddsCleanup(verdict.repairDiff) &&
-      this.diffIsMinimal(verdict.repairDiff);
-    const repairDiff = analysis.repairDiff || (llmDiffUsable ? verdict.repairDiff : undefined);
-
-    return {
-      ...verdict,
-      rootCause: verdict.rootCause || analysis.rootCause,
-      repairDiff,
-      // Keep the LLM's prose; enrich the terse heuristic string with the
-      // pattern-named narrative.
-      explanation: fromLlm && verdict.explanation ? verdict.explanation : analysis.explanation,
-      repair_suggestion: verdict.repair_suggestion || analysis.rootCause.rootCauseDescription,
-    };
-  }
-
-  /** True when the diff's originalLines match the file verbatim at startLine. */
-  private isDiffApplicable(diff: RepairDiff, fileContent: string | null): boolean {
-    if (!fileContent || !diff || !Array.isArray(diff.originalLines) || diff.originalLines.length === 0) return false;
-    const lines = fileContent.split('\n');
-    const start = (diff.startLine || 0) - 1;
-    if (start < 0 || start >= lines.length) return false;
-    for (let k = 0; k < diff.originalLines.length; k++) {
-      if ((lines[start + k] ?? '').trim() !== String(diff.originalLines[k]).trim()) return false;
-    }
-    return true;
-  }
-
-  /** True when the diff actually adds a deallocation the original lines lacked. */
-  private diffAddsCleanup(diff: RepairDiff): boolean {
-    const dealloc = /\b(free|delete|g_free|kfree|fclose|release|destroy|cleanup|realloc)\s*\(/;
-    const added = (diff.suggestedLines || []).join('\n');
-    const original = (diff.originalLines || []).join('\n');
-    return dealloc.test(added) && !dealloc.test(original);
-  }
-
-  /** True when the diff is a small targeted edit, not a whole-file rewrite. */
-  private diffIsMinimal(diff: RepairDiff): boolean {
-    const added = (diff.suggestedLines || []).length;
-    const orig = (diff.originalLines || []).length;
-    return added > 0 && added - orig <= 4;
-  }
-
-  private readFullFile(filePath: string): string | null {
-    if (!filePath || !existsSync(filePath)) return null;
-    try {
-      return readFileSync(filePath, 'utf-8');
-    } catch {
-      return null;
-    }
+    // Every leak verdict that leaves the judge carries a root-cause explanation
+    // AND an applicable (source-anchored) repair diff — filling whatever the
+    // heuristic path omits and whatever the LLM omits or produces as a diff that
+    // no longer matches the real source.
+    return enrichLeakVerdict(bundle, staticContext, verdict);
   }
 
   /**
@@ -244,89 +166,6 @@ Analyze this potential leak and provide your expert verdict.`;
       this.logger.warn(`[JUDGE] LLM call/parse failed: ${err.message}`);
       return null;
     }
-  }
-
-  /**
-   * Heuristic fallback judging logic.
-   */
-  private judgeHeuristically(
-    bundle: LeakBundle,
-    staticContext?: Record<string, any>,
-  ): VerdictResult {
-    const hasDynamicEvidence = bundle.evidence.length > 0;
-    const hasStaticFree = staticContext?.hasExplicitFree === true;
-    const hasStaticAllocation = (staticContext?.allocations || []).length > 0;
-    const hasFeasiblePaths = (staticContext?.feasiblePaths || []).length > 0;
-    const hasOwnershipIssue = staticContext?.ownership?.ownershipType === 'malloc_without_free';
-    const earlyReturnCount: number = staticContext?.earlyReturnCount || 0;
-    const location = `${bundle.candidate.file_path}:${bundle.candidate.line_number}`;
-
-    let score = 0;
-    const reasons: string[] = [];
-
-    if (hasDynamicEvidence) {
-      score += 0.4;
-      reasons.push(`${bundle.evidence.length} tool(s) found runtime evidence`);
-    }
-
-    if (hasFeasiblePaths) {
-      score += 0.20;
-      reasons.push('allocation reachable through feasible execution path(s)');
-    }
-
-    if (!hasStaticFree && hasStaticAllocation) {
-      score += 0.25;
-      reasons.push('no free() found in function for this allocation');
-    }
-
-    if (hasOwnershipIssue) {
-      score += 0.15;
-      reasons.push('ownership convention: malloc_without_free');
-    }
-
-    if ((staticContext?.earlyReturnCount || 0) > 0 && hasStaticAllocation) {
-      score += 0.10;
-      reasons.push(`function has ${earlyReturnCount} early return(s) that may skip cleanup`);
-    }
-
-    if (bundle.candidate.confidence === 'high') {
-      score += 0.10;
-    }
-
-    // Source-level structural analysis is the primary evidence in no_llm mode,
-    // where the lexical static context above is frequently sparse. Locating a
-    // concrete missing-free site — an interprocedural caller drop, an early
-    // return before cleanup, a loop overwrite, realloc-onto-self, or an
-    // allocation never freed anywhere in its function — is strong static
-    // evidence of a real leak (a `low` signal means the variable looks freed).
-    const analysis = analyzeLeakHeuristically(bundle, staticContext, this.readFullFile(bundle.candidate.file_path));
-    if (analysis.structuralLikelihood === 'high') {
-      score += 0.5;
-      reasons.push(`structural analysis located a missing free (${analysis.patternType})`);
-    } else if (analysis.structuralLikelihood === 'medium') {
-      score += 0.25;
-      reasons.push(`structural analysis matched a ${analysis.patternType} pattern`);
-    }
-
-    const clamped = Math.min(1, Math.max(0, score));
-    const verdict =
-      clamped >= 0.7
-        ? InvestigationVerdict.CONFIRMED_LEAK
-        : clamped >= 0.4
-          ? InvestigationVerdict.LIKELY_LEAK
-          : InvestigationVerdict.UNCERTAIN;
-
-    return {
-      verdict,
-      confidence: verdict === InvestigationVerdict.UNCERTAIN ? Math.max(clamped, 0.3) : clamped,
-      // Prefer the pattern-named structural narrative; fall back to the score reasons.
-      explanation: analysis.explanation || `${verdict} at ${location}: ${reasons.join('; ')}`,
-      evidence: bundle.evidence.map((e) => `${e.tool}: ${e.function_name}`),
-      tool: ToolKind.HEURISTIC,
-      repair_suggestion: this.buildRepairSuggestion(bundle, staticContext),
-      rootCause: analysis.rootCause,
-      repairDiff: analysis.repairDiff,
-    };
   }
 
   /**
@@ -547,21 +386,6 @@ Analyze this potential leak and provide your expert verdict.`;
       startLine: Number(raw.startLine ?? bundle.candidate.line_number) || 0,
       description: typeof raw.description === 'string' ? raw.description : '',
     };
-  }
-
-  private buildRepairSuggestion(bundle: LeakBundle, staticContext?: Record<string, any>): string {
-    const alloc = bundle.candidate.allocation_type || 'allocation';
-    const frees = staticContext?.frees || [];
-
-    if (frees.length === 0) {
-      return `Ensure the object allocated via ${alloc} in ${bundle.candidate.function_name || 'this function'} is released on every exit path. Add cleanup before each return or route ownership to a caller that clearly frees it.`;
-    }
-
-    if ((staticContext?.feasiblePaths || []).length > 0) {
-      return `Review conditional branches around ${bundle.candidate.file_path}:${bundle.candidate.line_number}. At least one feasible path reaches function exit without hitting the observed free sites (${frees.join(', ')}). Move cleanup into a shared epilogue or use a single-exit cleanup label.`;
-    }
-
-    return `Document ownership for the value allocated at ${bundle.candidate.file_path}:${bundle.candidate.line_number} and ensure one matching free/delete occurs after the last use.`;
   }
 
   private readContextSnippet(filePath: string, lineNumber: number): string {

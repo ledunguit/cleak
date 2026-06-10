@@ -1,0 +1,16 @@
+{
+  "scan_id": "scan_array_leak_mq7rnwhu",
+  "repo_path": "/Users/zed/Master/leak-investigator/demo/memory_leak_corpus/array_leak",
+  "materialized_repo_path": "/Users/zed/Master/leak-investigator/demo/memory_leak_corpus/array_leak",
+  "generated_at": "2026-06-10T07:47:59.047Z",
+  "finding_count": 0,
+  "confirmed_leak_count": 0,
+  "likely_leak_count": 0,
+  "evidence_count": 0,
+  "tools_used": [],
+  "build_plan": null,
+  "investigation_plan": null,
+  "agent_decisions": [],
+  "dynamic_execution_plan": null,
+  "findings": []
+}

@@ -38,7 +38,12 @@ services:
       dockerfile: apps/control-plane/Dockerfile
     ports:
       - "8090:8090"
+    env_file:
+      - apps/control-plane/.env
     environment:
+      # Container networking + paths below OVERRIDE the host-oriented values in
+      # the app .env (env_file). Everything else (LLM keys/models, GitHub OAuth,
+      # JWT, DEFAULT_ANALYSIS_MODE, HTTP/scan tunables) is provided by the .env.
       PORT: 8090
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432
@@ -58,34 +63,12 @@ services:
       # its own host for clang/make/valgrind.
       # Set to "true" only for a single-host/in-process monolith setup.
       RUNTIME_PREFLIGHT_LOCAL_TOOLCHAIN: ${RUNTIME_PREFLIGHT_LOCAL_TOOLCHAIN:-false}
-      # LLM judge (llm_assisted mode) — DEFAULT provider is the local
-      # OpenAI-compatible gateway, with its OWN key/url/model vars kept separate
-      # from the real OpenAI API. The gateway treats the container as a remote
-      # client, so set LOCAL_LLM_API_KEY (in a gitignored .env). With no key the
-      # LLM judge safely falls back to the heuristic judge.
-      JUDGE_LLM_PROVIDER: ${JUDGE_LLM_PROVIDER:-local}
-      # Local LLM gateway (default judge backend)
-      LOCAL_LLM_BASE_URL: ${LOCAL_LLM_BASE_URL:-http://host.docker.internal:20128/v1}
-      LOCAL_LLM_API_KEY: ${LOCAL_LLM_API_KEY:-}
-      LOCAL_LLM_MODEL: ${LOCAL_LLM_MODEL:-gh/gpt-5-mini}
-      LOCAL_LLM_JSON_MODE: ${LOCAL_LLM_JSON_MODE:-true}
-      # Real OpenAI API (only used when JUDGE_LLM_PROVIDER=openai)
-      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o}
-      OPENAI_JSON_MODE: ${OPENAI_JSON_MODE:-true}
-      # Default scan mode when a request doesn't specify one.
-      DEFAULT_ANALYSIS_MODE: ${DEFAULT_ANALYSIS_MODE:-llm_assisted}
-      # Scan job queue (BullMQ on Redis): scans run detached on an in-process
-      # worker so the POST returns instantly and long scans never drop.
-      REDIS_HOST: ${REDIS_HOST:-redis}
-      REDIS_PORT: ${REDIS_PORT:-6379}
-      SCAN_MAX_CONCURRENCY: ${SCAN_MAX_CONCURRENCY:-2}
-      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
-      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
-      GITHUB_REDIRECT_URI: ${GITHUB_REDIRECT_URI:-http://localhost:8090/api/github/callback}
+      # Scan job queue (BullMQ on Redis): redis host/port must point at the
+      # compose service, so keep these inline (override the .env).
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      # Container paths (override the host paths an app .env might carry).
       GITHUB_CLONE_ROOT: /clones
-      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5173}
       SCAN_WORKSPACE_ROOT: /workspace/targets/scan-workspaces
       SCAN_WORKSPACE_ANALYZER_ROOT: /workspace/targets/scan-workspaces
     volumes:
@@ -111,9 +94,13 @@ services:
     ports:
       - "50051:50051"
       - "50061:50061"
+    env_file:
+      - apps/static-analyzer/.env
     environment:
+      # Inline values override the app .env where the container needs different ones.
       GRPC_URL: 0.0.0.0:50051
-      TRANSPORT_MODE: ${TRANSPORT_MODE:-grpc}
+      # Serve BOTH gRPC (for the control-plane) and MCP/HTTP (for leak-inspector-tui).
+      TRANSPORT_MODE: ${ANALYZER_TRANSPORT_MODE:-both}
       MCP_HTTP_PORT: 50061
     volumes:
       - ./demo:/workspace/demo
@@ -129,10 +116,15 @@ services:
     ports:
       - "50052:50052"
       - "50062:50062"
+    env_file:
+      - apps/dynamic-analyzer/.env
     environment:
+      # Inline values override the app .env where the container needs different ones.
       GRPC_URL: 0.0.0.0:50052
-      TRANSPORT_MODE: ${TRANSPORT_MODE:-grpc}
+      # Serve BOTH gRPC (for the control-plane) and MCP/HTTP (for leak-inspector-tui).
+      TRANSPORT_MODE: ${ANALYZER_TRANSPORT_MODE:-both}
       MCP_HTTP_PORT: 50062
+      # Container runs dir (override any host path in the app .env).
       RUNS_DIR: /runs
     volumes:
       - runs:/runs
@@ -146,6 +138,10 @@ services:
     build:
       context: .
       dockerfile: apps/leak-inspector-ui/Dockerfile
+    # VITE_API_PROXY_TARGET is a build-time var; loaded here for parity (nginx
+    # serves the prebuilt SPA at runtime).
+    env_file:
+      - apps/leak-inspector-ui/.env
     ports:
       - "5173:80"
     depends_on:

@@ -1,0 +1,150 @@
+{
+  "scanId": "scan_array_leak_mq7wsc7d",
+  "metadata": {
+    "scanId": "scan_array_leak_mq7wsc7d",
+    "workspacePath": "/Users/zed/Master/leak-investigator/demo/memory_leak_corpus/array_leak",
+    "sourceWorkspacePath": "/Users/zed/Master/leak-investigator/demo/memory_leak_corpus/array_leak",
+    "analysisMode": "llm_assisted",
+    "dynamicMode": "selective",
+    "fileLimit": 0,
+    "startedAt": "2026-06-10T10:11:23.980Z",
+    "completedAt": "2026-06-10T10:14:49.284Z",
+    "status": "completed"
+  },
+  "bundles": [
+    {
+      "bundleId": "bundle_633a383a6d616c6c6f632f5573657273",
+      "candidate": {
+        "id": "static-candidate-0001",
+        "function_name": "unknown",
+        "file_path": "/Users/zed/Master/leak-investigator/demo/memory_leak_corpus/array_leak/main.c",
+        "line_number": 8,
+        "allocation_site": "/Users/zed/Master/leak-investigator/demo/memory_leak_corpus/array_leak/main.c:8:malloc",
+        "allocation_type": "malloc",
+        "confidence": "medium",
+        "context": "char **arr = malloc(count * sizeof(char*));"
+      },
+      "evidence": [],
+      "status": "pending",
+      "createdAt": "2026-06-10T10:11:24.060Z",
+      "updatedAt": "2026-06-10T10:14:42.769Z",
+      "verdict": {
+        "verdict": "false_positive",
+        "confidence": 0.95,
+        "explanation": "The malloc at line 8 allocates the array container `char **arr`. This container is freed on all paths: (1) on the strdup-failure error path, `free(arr)` is called at line 17 before returning NULL; (2) on the success path, ownership is transferred to the caller via `return arr` at line 21, and the caller (`main`) invokes `cleanup_partial()` which frees `arr` at line 33. The real leak is in the strdup'd elements stored inside the array (odd indices), not the array container itself.",
+        "evidence": [
+          "functionSummary: create_strings has 2 allocs and 2 frees within the function, allocation_count=2 deallocation_count=2",
+          "pathConstraints line 8: exit path at line 9 has leakRisk=none (malloc failed), exit at line 18 has free(arr) at line 17, exit at line 21 returns arr to caller",
+          "cleanup_partial frees arr at line 33 via free(arr)",
+          "The malloc result is either freed locally on error or ownership transferred to caller on success"
+        ],
+        "tool": "llm"
+      }
+    },
+    {
+      "bundleId": "bundle_3a31333a7374726475702f5573657273",
+      "candidate": {
+        "id": "static-candidate-0002",
+        "function_name": "unknown",
+        "file_path": "/Users/zed/Master/leak-investigator/demo/memory_leak_corpus/array_leak/main.c",
+        "line_number": 13,
+        "allocation_site": "/Users/zed/Master/leak-investigator/demo/memory_leak_corpus/array_leak/main.c:13:strdup",
+        "allocation_type": "strdup",
+        "confidence": "medium",
+        "context": "arr[i] = strdup(buf);"
+      },
+      "evidence": [],
+      "status": "pending",
+      "createdAt": "2026-06-10T10:11:24.060Z",
+      "updatedAt": "2026-06-10T10:14:42.770Z",
+      "verdict": {
+        "verdict": "confirmed_leak",
+        "confidence": 0.97,
+        "explanation": "The strdup at line 13 allocates strings stored in `arr[i]`. On the success path, `create_strings` returns the array to `main()`, which calls `cleanup_partial()`. However, `cleanup_partial` has a bug: its loop increments by 2 (`i += 2`), so it only frees even-indexed elements (arr[0], arr[2], arr[4]). Odd-indexed elements (arr[1], arr[3]) are never freed, causing a memory leak of 2 out of 5 strdup'd strings. The function comment explicitly states this: \"BUG: only frees even-indexed elements\". For count=5, this leaks the strings at indices 1 and 3.",
+        "evidence": [
+          "functionSummary: create_strings has leaked_variable arr[i] at line 13",
+          "pathConstraints line 13: exit paths at lines 18 and 21 have leakRisk=high with unreconciledAllocations=[arr[i]]",
+          "cleanup_partial loop uses i += 2, only freeing arr[0], arr[2], arr[4] — arr[1] and arr[3] are never freed",
+          "Source comment at line 26: 'BUG: only frees even-indexed elements' and line 31: 'arr[1], arr[3], ... LEAK'"
+        ],
+        "tool": "llm",
+        "rootCause": {
+          "patternType": "strdup_leak",
+          "description": "the duplicated string is never freed before the function exits",
+          "allocationFunction": "unknown",
+          "allocationLine": 13,
+          "allocationFile": "/Users/zed/Master/leak-investigator/demo/memory_leak_corpus/array_leak/main.c",
+          "missingFreeLine": 13,
+          "missingFreeFunction": "unknown",
+          "rootCauseFunction": "unknown",
+          "rootCauseLine": 13,
+          "rootCauseDescription": "the duplicated string is never freed before the function exits"
+        },
+        "repair_suggestion": "the duplicated string is never freed before the function exits"
+      }
+    }
+  ],
+  "summary": {
+    "totalCandidates": 2,
+    "confirmedLeaks": 1,
+    "likelyLeaks": 0,
+    "falsePositives": 1,
+    "totalBytesLost": 0,
+    "toolsUsed": [
+      "llm"
+    ],
+    "durationSec": 205.304
+  },
+  "agentDecisions": [
+    {
+      "turn": 1,
+      "actionKind": "judge_bundle",
+      "rationale": "The malloc at line 8 allocates the array container `char **arr`. This container is freed on all paths: (1) on the strdup-failure error path, `free(arr)` is called at line 17 before returning NULL; (2)",
+      "strategySource": "llm",
+      "toolName": "record_verdict",
+      "targetBundleIds": [
+        "bundle_633a383a6d616c6c6f632f5573657273"
+      ],
+      "args": {
+        "bundleId": "bundle_633a383a6d616c6c6f632f5573657273",
+        "verdict": "false_positive",
+        "confidence": 0.95,
+        "explanation": "The malloc at line 8 allocates the array container `char **arr`. This container is freed on all paths: (1) on the strdup-failure error path, `free(arr)` is called at line 17 before returning NULL; (2) on the success path, ownership is transferred to the caller via `return arr` at line 21, and the caller (`main`) invokes `cleanup_partial()` which frees `arr` at line 33. The real leak is in the strdup'd elements stored inside the array (odd indices), not the array container itself.",
+        "evidence": [
+          "functionSummary: create_strings has 2 allocs and 2 frees within the function, allocation_count=2 deallocation_count=2",
+          "pathConstraints line 8: exit path at line 9 has leakRisk=none (malloc failed), exit at line 18 has free(arr) at line 17, exit at line 21 returns arr to caller",
+          "cleanup_partial frees arr at line 33 via free(arr)",
+          "The malloc result is either freed locally on error or ownership transferred to caller on success"
+        ]
+      },
+      "reasoning": "",
+      "decidedAt": "2026-06-10T10:14:42.769Z",
+      "resultSummary": "false_positive (95%)"
+    },
+    {
+      "turn": 2,
+      "actionKind": "judge_bundle",
+      "rationale": "The strdup at line 13 allocates strings stored in `arr[i]`. On the success path, `create_strings` returns the array to `main()`, which calls `cleanup_partial()`. However, `cleanup_partial` has a bug: ",
+      "strategySource": "llm",
+      "toolName": "record_verdict",
+      "targetBundleIds": [
+        "bundle_3a31333a7374726475702f5573657273"
+      ],
+      "args": {
+        "bundleId": "bundle_3a31333a7374726475702f5573657273",
+        "verdict": "confirmed_leak",
+        "confidence": 0.97,
+        "explanation": "The strdup at line 13 allocates strings stored in `arr[i]`. On the success path, `create_strings` returns the array to `main()`, which calls `cleanup_partial()`. However, `cleanup_partial` has a bug: its loop increments by 2 (`i += 2`), so it only frees even-indexed elements (arr[0], arr[2], arr[4]). Odd-indexed elements (arr[1], arr[3]) are never freed, causing a memory leak of 2 out of 5 strdup'd strings. The function comment explicitly states this: \"BUG: only frees even-indexed elements\". For count=5, this leaks the strings at indices 1 and 3.",
+        "evidence": [
+          "functionSummary: create_strings has leaked_variable arr[i] at line 13",
+          "pathConstraints line 13: exit paths at lines 18 and 21 have leakRisk=high with unreconciledAllocations=[arr[i]]",
+          "cleanup_partial loop uses i += 2, only freeing arr[0], arr[2], arr[4] — arr[1] and arr[3] are never freed",
+          "Source comment at line 26: 'BUG: only frees even-indexed elements' and line 31: 'arr[1], arr[3], ... LEAK'"
+        ]
+      },
+      "reasoning": "",
+      "decidedAt": "2026-06-10T10:14:42.770Z",
+      "resultSummary": "confirmed_leak (97%)"
+    }
+  ]
+}

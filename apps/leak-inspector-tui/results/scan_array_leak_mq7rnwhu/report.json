@@ -1,0 +1,25 @@
+{
+  "scanId": "scan_array_leak_mq7rnwhu",
+  "metadata": {
+    "scanId": "scan_array_leak_mq7rnwhu",
+    "workspacePath": "/Users/zed/Master/leak-investigator/demo/memory_leak_corpus/array_leak",
+    "sourceWorkspacePath": "/Users/zed/Master/leak-investigator/demo/memory_leak_corpus/array_leak",
+    "analysisMode": "llm_assisted",
+    "dynamicMode": "off",
+    "fileLimit": 0,
+    "startedAt": "2026-06-10T07:47:58.915Z",
+    "completedAt": "2026-06-10T07:47:59.047Z",
+    "status": "completed"
+  },
+  "bundles": [],
+  "summary": {
+    "totalCandidates": 0,
+    "confirmedLeaks": 0,
+    "likelyLeaks": 0,
+    "falsePositives": 0,
+    "totalBytesLost": 0,
+    "toolsUsed": [],
+    "durationSec": 0.132
+  },
+  "agentDecisions": []
+}

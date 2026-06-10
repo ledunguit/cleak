@@ -1,0 +1,16 @@
+{"seq":0,"ts":1781074656299,"name":"scan_created","phase":"setup","data":{"scanId":"scan_array_leak_mq7pv489","repoPath":"/Users/zed/Master/leak-investigator/demo/memory_leak_corpus/array_leak","mode":"llm_assisted"}}
+{"seq":1,"ts":1781074656300,"name":"preflight_started","phase":"preflight","data":{}}
+{"seq":2,"ts":1781074656376,"name":"preflight_passed","phase":"preflight","data":{}}
+{"seq":3,"ts":1781074656381,"name":"workspace_started","phase":"workspace","data":{"repoPath":"/Users/zed/Master/leak-investigator/demo/memory_leak_corpus/array_leak"}}
+{"seq":4,"ts":1781074656383,"name":"workspace_finished","phase":"workspace","data":{}}
+{"seq":5,"ts":1781074656384,"name":"discovery_started","phase":"discovery","data":{"repoPath":"/Users/zed/Master/leak-investigator/demo/memory_leak_corpus/array_leak"}}
+{"seq":6,"ts":1781074656396,"name":"candidates_scanning","phase":"discovery","data":{"totalFiles":0}}
+{"seq":7,"ts":1781074656398,"name":"discovery_finished","phase":"discovery","data":{"totalCandidates":0,"totalFiles":0}}
+{"seq":8,"ts":1781074656410,"name":"investigation_started","phase":"investigation","data":{"candidates":0,"tools":17,"maxTurns":15}}
+{"seq":9,"ts":1781074656413,"name":"agent_turn_started","phase":"investigation","data":{"turn":1}}
+{"seq":10,"ts":1781074656434,"name":"investigation_finished","phase":"investigation","data":{"turns":1,"reason":"error","verdicts":0}}
+{"seq":11,"ts":1781074656435,"name":"judging_started","phase":"judging","data":{}}
+{"seq":12,"ts":1781074656437,"name":"judging_finished","phase":"judging","data":{}}
+{"seq":13,"ts":1781074656437,"name":"reporting_started","phase":"reporting","data":{}}
+{"seq":14,"ts":1781074656439,"name":"reporting_finished","phase":"reporting","data":{"confirmed":0,"likely":0}}
+{"seq":15,"ts":1781074656439,"name":"completed","phase":"report","data":{"candidates":0,"confirmed":0,"likely":0}}

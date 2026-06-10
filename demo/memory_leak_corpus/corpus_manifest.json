@@ -1,5 +1,5 @@
 {
-  "schema_version": "memory-leak-corpus/v1",
+  "schema_version": "memory-leak-corpus/v2",
   "name": "thesis-demo-memory-leak-corpus",
   "cases": [
     {
@@ -7,63 +7,89 @@
       "repo_path": "simple_leak",
       "build_command": "make CC=clang",
       "expected_leak_count": 1,
-      "notes": "A simple interprocedural leak where make_buffer returns allocated memory and main exits without freeing it."
+      "flaws": [{ "file": "main.c", "function": "make_buffer", "line": 5 }],
+      "clean": [],
+      "notes": "make_buffer returns allocated memory; main exits without freeing it."
     },
     {
       "id": "complex_leak_lab",
       "repo_path": "complex_leak_lab",
       "build_command": "make CC=clang",
       "expected_leak_count": 8,
-      "notes": "A multi-file lab with several leak patterns: early return after allocation, overwritten ownership, loop-based partial leaks, and buggy linked-list cleanup."
+      "notes": "Multi-file lab (count-only ground truth): early return, overwritten ownership, loop partial leaks, buggy list cleanup."
     },
     {
       "id": "ownership_maze",
       "repo_path": "ownership_maze",
       "build_command": "make CC=clang",
       "expected_leak_count": 9,
-      "notes": "A harder multi-file case with ownership overwrite, rejected callback registration, saturated queue enqueue, fan-out clone loss, partial batch-construction failure, and buggy teardown that drops request context."
+      "notes": "Harder multi-file case (count-only ground truth)."
     },
     {
       "id": "early_return_leak",
       "repo_path": "early_return_leak",
       "build_command": "make CC=clang",
       "expected_leak_count": 2,
-      "notes": "Two leaks via early return paths: flag < 0 guard skips free of data; build_label allocation in caller never freed."
+      "flaws": [
+        { "file": "main.c", "function": "build_label", "line": 17 },
+        { "file": "main.c", "function": "process", "line": 26 }
+      ],
+      "clean": [{ "file": "main.c", "function": "duplicate_or_die", "line": 6 }],
+      "notes": "build_label result never freed; process leaks data on the flag<0 early return. duplicate_or_die is freed."
     },
     {
       "id": "realloc_lose_pointer",
       "repo_path": "realloc_lose_pointer",
       "build_command": "make CC=clang",
       "expected_leak_count": 1,
-      "notes": "Direct reassign of realloc result without a temp variable — if realloc fails, the original pointer is lost."
+      "flaws": [{ "file": "main.c", "function": "grow_buffer", "line": 12 }],
+      "clean": [{ "file": "main.c", "function": "main", "line": 21 }],
+      "notes": "grow_buffer reassigns realloc without a temp (lost on failure). main's buf is freed."
     },
     {
       "id": "loop_accumulate",
       "repo_path": "loop_accumulate",
       "build_command": "make CC=clang",
       "expected_leak_count": 5,
-      "notes": "Each loop iteration overwrites the pointer without freeing the previous allocation. 5 iterations = 5 leaks."
+      "flaws": [{ "file": "main.c", "function": "main", "line": 11 }],
+      "clean": [{ "file": "main.c", "function": "main", "line": 19 }],
+      "notes": "Loop overwrites `record` each iteration without freeing (leaking site at line 11). `epilogue` (line 19) is freed."
     },
     {
       "id": "struct_partial_free",
       "repo_path": "struct_partial_free",
       "build_command": "make CC=clang",
       "expected_leak_count": 2,
-      "notes": "Buggy record_free frees name and description but skips tag field and the struct itself. The sibling allocation s is properly freed."
+      "flaws": [
+        { "file": "main.c", "function": "record_new", "line": 12 },
+        { "file": "main.c", "function": "record_new", "line": 17 }
+      ],
+      "clean": [
+        { "file": "main.c", "function": "record_new", "line": 15 },
+        { "file": "main.c", "function": "record_new", "line": 16 }
+      ],
+      "notes": "record_free_buggy frees name(15) + description(16) but not tag(17) or the struct r(12)."
     },
     {
       "id": "ownership_transfer",
       "repo_path": "ownership_transfer",
       "build_command": "make CC=clang",
       "expected_leak_count": 2,
-      "notes": "Functions transfer ownership via return value, but callers omit free on two of three allocations."
+      "flaws": [
+        { "file": "main.c", "function": "load_config_value", "line": 9 },
+        { "file": "main.c", "function": "flatten_path", "line": 17 }
+      ],
+      "clean": [],
+      "notes": "config_value and path returned to main and never freed (ctrl reuses the load_config_value site but is freed)."
     },
     {
       "id": "list_cleanup_partial",
       "repo_path": "list_cleanup_partial",
       "build_command": "make CC=clang",
       "expected_leak_count": 1,
-      "notes": "Linked list destroy frees only the head node. Two tail nodes survive, but the manifest counts this as 1 leak pattern (partial cleanup function)."
+      "flaws": [{ "file": "main.c", "function": "node_new", "line": 11 }],
+      "clean": [],
+      "notes": "list_destroy_buggy frees only the head node; tail nodes (allocated at node_new line 11) leak."
     }
   ]
 }

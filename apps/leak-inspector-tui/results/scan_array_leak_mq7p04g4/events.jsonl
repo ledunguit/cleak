@@ -1,0 +1,3 @@
+{"seq":0,"ts":1781073210246,"name":"scan_created","phase":"setup","data":{"scanId":"scan_array_leak_mq7p04g4","repoPath":"/Users/zed/Master/leak-investigator/demo/memory_leak_corpus/array_leak","mode":"llm_assisted"}}
+{"seq":1,"ts":1781073210247,"name":"preflight_started","phase":"preflight","data":{}}
+{"seq":2,"ts":1781073210274,"name":"preflight_failed","phase":"preflight","data":{"reason":"static analyzer unreachable"}}
