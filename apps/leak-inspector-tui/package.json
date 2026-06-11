@@ -13,7 +13,7 @@
     "eval": "bun src/cli.ts eval",
     "build": "tsc --noEmit -p tsconfig.json",
     "lint": "echo 'lint ok'",
-    "test": "echo 'no tests'"
+    "test": "bun test"
   },
   "dependencies": {
     "@mcpvul/agent-core": "workspace:*",

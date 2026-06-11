@@ -5,6 +5,7 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
 } from 'typeorm';
+import { encryptedColumn } from './encrypted-column';
 
 @Entity('users')
 export class UserEntity {
@@ -26,10 +27,10 @@ export class UserEntity {
   @Column({ nullable: true })
   avatarUrl?: string;
 
-  @Column()
+  @Column({ transformer: encryptedColumn })
   accessToken!: string;
 
-  @Column({ nullable: true })
+  @Column({ nullable: true, transformer: encryptedColumn })
   refreshToken?: string;
 
   @Column({ nullable: true })

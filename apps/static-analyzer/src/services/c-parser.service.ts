@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { createHash } from 'node:crypto';
 
 const ALLOCATION_FUNCTIONS = new Set([
   'malloc', 'calloc', 'realloc', 'strdup', 'strndup',
@@ -98,18 +99,49 @@ export interface ParseResult {
 export class CParserService {
   private readonly logger = new Logger(CParserService.name);
 
-  parse(content: string, _filePath?: string): ParseResult {
-    return this.parseWithTreeSitter(content);
-  }
+  /** Lazily-built, reused tree-sitter parser (instantiating one per call is wasteful). */
+  private parser: any;
+  /**
+   * Parse-result cache keyed by content hash. The same file is parsed by several
+   * tools (candidate-scan → ast-scan → function-summary); parsing is a pure
+   * function of content, so we memoize it. Treat results as READ-ONLY — they are
+   * shared across callers. Bounded LRU so a huge repo can't grow it without limit.
+   */
+  private readonly cache = new Map<string, ParseResult>();
+  private static readonly CACHE_MAX = 512;
 
-  private parseWithTreeSitter(content: string): ParseResult {
-    try {
+  private getParser(): any {
+    if (!this.parser) {
       // eslint-disable-next-line @typescript-eslint/no-var-requires
       const Parser = require('tree-sitter');
       // eslint-disable-next-line @typescript-eslint/no-var-requires
       const C = require('tree-sitter-c');
-      const parser = new Parser();
-      parser.setLanguage(C);
+      this.parser = new Parser();
+      this.parser.setLanguage(C);
+    }
+    return this.parser;
+  }
+
+  parse(content: string, _filePath?: string): ParseResult {
+    const key = createHash('sha1').update(content).digest('base64');
+    const hit = this.cache.get(key);
+    if (hit) {
+      // LRU bump: re-insert so the most-recently-used stays last.
+      this.cache.delete(key);
+      this.cache.set(key, hit);
+      return hit;
+    }
+    const result = this.parseWithTreeSitter(content);
+    this.cache.set(key, result);
+    if (this.cache.size > CParserService.CACHE_MAX) {
+      this.cache.delete(this.cache.keys().next().value as string);
+    }
+    return result;
+  }
+
+  private parseWithTreeSitter(content: string): ParseResult {
+    try {
+      const parser = this.getParser();
       const tree = parser.parse(content);
       const root = tree.rootNode;
       const lines = content.split('\n');

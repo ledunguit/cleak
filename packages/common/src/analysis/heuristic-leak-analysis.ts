@@ -38,12 +38,19 @@ export interface HeuristicAnalysis {
    *   low    = the variable appears freed, or the analysis could not confirm a leak
    */
   structuralLikelihood: 'high' | 'medium' | 'low';
+  /**
+   * Set when the allocated pointer is handed to a callee that frees it (1-hop
+   * interprocedural). The buffer is the sink's responsibility, so this is NOT a
+   * leak — the judge should dismiss it (the Juliet good*→goodSink pattern). Absent
+   * for a bad sink that does not free, so real leaks are preserved.
+   */
+  freedViaCallee?: { callee: string; variable: string };
 }
 
 const ALLOC_FNS =
   'malloc|calloc|realloc|reallocarray|strdup|strndup|aligned_alloc|valloc|memalign|posix_memalign|g_malloc|g_malloc0|g_strdup|asprintf';
 
-interface FunctionBounds {
+export interface FunctionBounds {
   /** 0-based line index of the line containing the opening brace. */
   startIdx: number;
   /** 0-based line index of the matching closing brace. */
@@ -88,10 +95,31 @@ function findAllocVar(
   return matches[0];
 }
 
-/** Locate the enclosing function body via brace matching around the allocation. */
-function findEnclosingFunction(lines: string[], allocIdx: number): FunctionBounds | null {
-  // Walk backwards to find the nearest line that opens a brace at function scope.
-  // Track net brace depth from the allocation line upward.
+const BLOCK_KEYWORD_RE = /^\s*\}?\s*(?:if|for|while|switch|else|do)\b/;
+
+/**
+ * Is the unmatched `{` at `braceIdx` a FUNCTION's opening brace (vs an
+ * if/else/loop/switch block)? Looks at the brace line and up to 2 lines above
+ * for a `name(args)` signature whose name is not a control keyword.
+ */
+function looksLikeFunctionOpen(lines: string[], braceIdx: number): boolean {
+  for (let j = braceIdx; j >= Math.max(0, braceIdx - 2); j--) {
+    const l = lines[j];
+    if (j < braceIdx && !l.trim()) continue; // skip blank lines above the brace
+    if (BLOCK_KEYWORD_RE.test(l)) return false;
+    const m = l.match(/([A-Za-z_]\w*)\s*\([^;{]*\)\s*\{?\s*$/);
+    if (m && !['if', 'for', 'while', 'switch', 'return', 'sizeof'].includes(m[1])) return true;
+    if (j < braceIdx && l.trim()) return false; // some other statement — not a signature
+  }
+  return false;
+}
+
+/** Locate the enclosing FUNCTION body via brace matching around the allocation. */
+export function findEnclosingFunction(lines: string[], allocIdx: number): FunctionBounds | null {
+  // Walk backwards counting net brace depth. Each unmatched `{` steps one block
+  // out — but only stop at the FUNCTION's brace: an allocation inside
+  // `if(1) { ... }` (Juliet control-flow variants) must not be bounded to the
+  // if-block, or every free/sink below the block is invisible to the analysis.
   let depth = 0;
   let startIdx = -1;
   for (let i = allocIdx; i >= 0; i--) {
@@ -99,8 +127,11 @@ function findEnclosingFunction(lines: string[], allocIdx: number): FunctionBound
     const closes = (lines[i].match(/\}/g) || []).length;
     depth += closes - opens;
     if (depth < 0) {
-      startIdx = i;
-      break;
+      if (looksLikeFunctionOpen(lines, i)) {
+        startIdx = i;
+        break;
+      }
+      depth = 0; // a block brace (if/else/loop/switch) — step out and keep climbing
     }
   }
   if (startIdx < 0) return null;
@@ -202,6 +233,84 @@ function blockEnd(lines: string[], headerIdx: number): number {
   return headerIdx;
 }
 
+/** Brace-match a function body starting at its signature line. */
+function bodyBounds(lines: string[], sigIdx: number): FunctionBounds | null {
+  let open = -1;
+  for (let j = sigIdx; j <= Math.min(sigIdx + 3, lines.length - 1); j++) {
+    if (lines[j].includes('{')) {
+      open = j;
+      break;
+    }
+  }
+  if (open < 0) return null;
+  let bd = 0;
+  let started = false;
+  for (let i = open; i < lines.length; i++) {
+    const o = (lines[i].match(/\{/g) || []).length;
+    const c = (lines[i].match(/\}/g) || []).length;
+    if (o > 0) started = true;
+    bd += o - c;
+    if (started && bd <= 0) return { startIdx: sigIdx, endIdx: i };
+  }
+  return { startIdx: sigIdx, endIdx: lines.length - 1 };
+}
+
+/** Find the DEFINITION (not a call/prototype) of a function named `name`. */
+function findFunctionDefBounds(lines: string[], name: string): FunctionBounds | null {
+  const def = new RegExp(`^\\s*(?:static\\s+)?[A-Za-z_][\\w\\s\\*]*\\b${name}\\s*\\([^;]*\\)\\s*\\{?\\s*$`);
+  for (let i = 0; i < lines.length; i++) {
+    if (def.test(lines[i])) return bodyBounds(lines, i);
+  }
+  return null;
+}
+
+/** Pointer parameter names from a signature line, e.g. `void f(char * data)` → [data]. */
+function pointerParams(sigLine: string): string[] {
+  const inner = (sigLine.match(/\(([^)]*)\)/) || [])[1] || '';
+  return inner
+    .split(',')
+    .map((p) => {
+      const m = p.match(/\*\s*([A-Za-z_]\w*)\s*$/);
+      return m ? m[1] : null;
+    })
+    .filter((x): x is string => !!x);
+}
+
+const NON_SINK_CALLS = new Set([
+  'if', 'for', 'while', 'switch', 'sizeof', 'return', 'free', 'malloc', 'calloc', 'realloc',
+  'strdup', 'memset', 'memcpy', 'strcpy', 'strncpy', 'printLine', 'printIntLine', 'exit',
+  'printf', 'fprintf', 'snprintf', 'sprintf',
+]);
+
+/**
+ * 1-hop interprocedural free: is `varName` passed to a callee (defined in this
+ * file) that frees the corresponding pointer? Distinguishes the Juliet
+ * good*→goodSink (frees) pattern from bad→badSink (does not free).
+ */
+export function isFreedViaCallee(
+  lines: string[],
+  caller: FunctionBounds,
+  varName: string,
+): { callee: string } | null {
+  const callRe = /\b([A-Za-z_]\w*)\s*\(([^)]*)\)/g;
+  const argHas = new RegExp(`\\b${varName}\\b`);
+  for (let i = caller.startIdx; i <= caller.endIdx && i < lines.length; i++) {
+    callRe.lastIndex = 0;
+    let m: RegExpExecArray | null;
+    while ((m = callRe.exec(lines[i]))) {
+      const callee = m[1];
+      const args = m[2];
+      if (NON_SINK_CALLS.has(callee) || !argHas.test(args)) continue;
+      const def = findFunctionDefBounds(lines, callee);
+      if (!def) continue;
+      for (const p of pointerParams(lines[def.startIdx])) {
+        if (hasFreeOfVar(lines, def.startIdx, def.endIdx, p)) return { callee };
+      }
+    }
+  }
+  return null;
+}
+
 /** Locate a caller of `fnName` elsewhere in the file (for interprocedural leaks). */
 function findCallerAssignment(
   lines: string[],
@@ -294,6 +403,8 @@ export function analyzeLeakHeuristically(
 
   const fnBounds: FunctionBounds = fn || { startIdx: allocIdx, endIdx: Math.min(allocIdx + 20, lines.length - 1) };
   const returned = varName ? returnsVar(lines, fnBounds, v) : false;
+  // 1-hop interprocedural free: the pointer is handed to a sink that frees it.
+  const freedViaCalleeHit = varName ? isFreedViaCallee(lines, fnBounds, v) : null;
   const loopHeader = loopEnclosingAlloc(lines, allocIdx, fnBounds);
   const inLoop = loopHeader >= 0;
   const earlyExitIdx = varName ? findEarlyLeakingExit(lines, allocIdx, fnBounds, v) : -1;
@@ -391,6 +502,16 @@ export function analyzeLeakHeuristically(
     structuralLikelihood = freedAnywhere ? 'low' : 'high';
   }
 
+  // Interprocedural free overrides a "missing free" conclusion: the pointer is
+  // the sink's responsibility (Juliet good*→goodSink). Not a leak. Don't override
+  // the `returned`/realloc ownership cases (those are genuine caller-side leaks).
+  if (freedViaCalleeHit && !returned && pattern !== LeakPatternType.REALLOC_MISHANDLE) {
+    structuralLikelihood = 'low';
+    repairDiff = undefined;
+    rootCauseDescription = `\`${v}\` is passed to \`${freedViaCalleeHit.callee}()\`, which frees it — ownership is consumed by the sink, not leaked.`;
+    codeFlow.push(`\`${v}\` is handed to \`${freedViaCalleeHit.callee}()\` which calls free() — no leak`);
+  }
+
   const rootCause: LeakRootCause = {
     patternType: pattern,
     description: describePattern(pattern),
@@ -405,10 +526,22 @@ export function analyzeLeakHeuristically(
   };
 
   const explanation =
-    `${capitalize(pattern.replace(/_/g, ' '))}: ${rootCauseDescription} ` +
-    `The allocation at ${allocFile}:${realAllocLine}${varName ? ` (\`${v}\`)` : ''} has no matching free on the leaking path.`;
+    freedViaCalleeHit && structuralLikelihood === 'low'
+      ? rootCauseDescription
+      : `${capitalize(pattern.replace(/_/g, ' '))}: ${rootCauseDescription} ` +
+        `The allocation at ${allocFile}:${realAllocLine}${varName ? ` (\`${v}\`)` : ''} has no matching free on the leaking path.`;
 
-  return { patternType: pattern, rootCause, repairDiff, explanation, codeFlow, structuralLikelihood };
+  return {
+    patternType: pattern,
+    rootCause,
+    repairDiff,
+    explanation,
+    codeFlow,
+    structuralLikelihood,
+    ...(freedViaCalleeHit && structuralLikelihood === 'low'
+      ? { freedViaCallee: { callee: freedViaCalleeHit.callee, variable: v } }
+      : {}),
+  };
 }
 
 /** Build a free()-insertion diff anchored verbatim on the line at `anchorIdx`. */

@@ -31,33 +31,90 @@ export function judgeHeuristically(
   bundle: LeakBundle,
   staticContext?: Record<string, any>,
 ): VerdictResult {
-  const hasDynamicEvidence = bundle.evidence.length > 0;
   const hasStaticFree = staticContext?.hasExplicitFree === true;
   const hasStaticAllocation = (staticContext?.allocations || []).length > 0;
   const hasFeasiblePaths = (staticContext?.feasiblePaths || []).length > 0;
   const hasOwnershipIssue = staticContext?.ownership?.ownershipType === 'malloc_without_free';
   const earlyReturnCount: number = staticContext?.earlyReturnCount || 0;
   const location = `${bundle.candidate.file_path}:${bundle.candidate.line_number}`;
+  // Prefer the rich, typed static evidence; fall back to the loose context keys
+  // so no_llm runs against pre-existing reports stay comparable.
+  const se = bundle.staticEvidence;
 
   let score = 0;
   const reasons: string[] = [];
 
-  if (hasDynamicEvidence) {
-    score += 0.4;
-    reasons.push(`${bundle.evidence.length} tool(s) found runtime evidence`);
+  // ── Dynamic evidence: correlation- and kind-aware, not a flat credit. We take
+  // the single strongest finding's contribution rather than stacking many. ──
+  if (bundle.evidence.length > 0) {
+    let dyn = 0;
+    let dynReason = '';
+    for (const e of bundle.evidence) {
+      const correlated = e.correlatedToCandidate === true;
+      const kind = e.leakKind;
+      let c = 0;
+      if (kind === 'still_reachable') {
+        c = 0; // benign — runtime says memory is still reachable at exit
+      } else if (correlated && (kind === 'definitely_lost' || kind === 'asan_leak' || kind === 'indirectly_lost')) {
+        c = 0.5;
+      } else if (correlated && kind === 'possibly_lost') {
+        c = 0.2;
+      } else if (correlated) {
+        c = 0.4; // correlated runtime leak, kind unknown
+      } else {
+        c = 0.15; // same-file / uncorrelated finding — weak
+      }
+      if (c > dyn) {
+        dyn = c;
+        dynReason = `${e.tool} ${kind ?? 'leak'} ${correlated ? 'LINKED to candidate' : '(uncorrelated)'}`;
+      }
+    }
+    if (dyn > 0) {
+      score += dyn;
+      reasons.push(`runtime evidence: ${dynReason}`);
+    }
   }
 
-  if (hasFeasiblePaths) {
-    score += 0.2;
-    reasons.push('allocation reachable through feasible execution path(s)');
-  }
-
-  if (!hasStaticFree && hasStaticAllocation) {
+  // ── Alloc→free pairing: an UNPAIRED allocation of the candidate variable. ──
+  const candidatePair = (se?.allocFreePairs || []).find(
+    (p) => Math.abs(p.allocLine - bundle.candidate.line_number) <= 1,
+  );
+  if (candidatePair && candidatePair.status === 'unpaired') {
+    score += 0.25;
+    reasons.push(`alloc of '${candidatePair.variable}' is never freed (unpaired)`);
+  } else if (candidatePair && candidatePair.status === 'conditional') {
+    score += 0.15;
+    reasons.push(`alloc of '${candidatePair.variable}' is freed on some paths only`);
+  } else if (!hasStaticFree && hasStaticAllocation) {
     score += 0.25;
     reasons.push('no free() found in function for this allocation');
   }
 
-  if (hasOwnershipIssue) {
+  // ── Feasible (reachable) leak path through the candidate. ──
+  const reachableLeakPath = (se?.feasibleLeakPaths || []).some((lp) => lp.reachable && lp.leakRisk !== 'none');
+  if (reachableLeakPath) {
+    score += 0.2;
+    reasons.push('a reachable execution path leaves this allocation un-freed');
+  } else if (hasFeasiblePaths) {
+    score += 0.2;
+    reasons.push('allocation reachable through feasible execution path(s)');
+  }
+
+  // ── Ownership: allocator that carries no ownership out → likely a local leak. ──
+  if (se?.ownership && (se.ownership.role === 'allocator' || se.ownership.role === 'both') && se.ownership.ownershipCarrier?.kind === 'none') {
+    score += 0.15;
+    reasons.push('allocator role with no ownership transfer out of the function');
+  } else if (se?.ownership && se.ownership.ownershipCarrier?.kind !== 'none') {
+    // Ownership is returned/consumed — this is the caller's (or sink's)
+    // responsibility, a strong false-positive signal. Penalize harder when there
+    // is NO correlated runtime leak on this candidate (e.g. Juliet good* funcs
+    // hand the buffer to a sink and never run dynamically under -DOMITGOOD).
+    const correlatedLeak = bundle.evidence.some(
+      (e) => e.correlatedToCandidate === true && e.leakKind !== 'still_reachable',
+    );
+    score -= correlatedLeak ? 0.1 : 0.25;
+    reasons.push(`ownership transferred (${se.ownership.ownershipCarrier?.kind}) — likely the caller's to free`);
+  } else if (hasOwnershipIssue) {
     score += 0.15;
     reasons.push('ownership convention: malloc_without_free');
   }
@@ -74,6 +131,24 @@ export function judgeHeuristically(
   // Source-level structural analysis is the primary evidence in no_llm mode,
   // where the lexical static context above is frequently sparse.
   const analysis = analyzeLeakHeuristically(bundle, staticContext, readFullFile(bundle.candidate.file_path));
+
+  // 1-hop interprocedural free: the allocated pointer is handed to a sink that
+  // frees it (e.g. Juliet good*→goodSink). Dismiss with confidence so it is NOT
+  // flagged and does NOT escalate to the LLM (which can't see the sink in the
+  // ±-line snippet). Unless a runtime tool actually reported a leak at this site.
+  const correlatedRuntimeLeak = bundle.evidence.some(
+    (e) => e.correlatedToCandidate === true && e.leakKind !== 'still_reachable',
+  );
+  if (analysis.freedViaCallee && !correlatedRuntimeLeak) {
+    return {
+      verdict: InvestigationVerdict.LIKELY_FALSE_POSITIVE,
+      confidence: 0.8,
+      explanation: `\`${analysis.freedViaCallee.variable}\` is freed in callee \`${analysis.freedViaCallee.callee}()\` — ownership is consumed by the sink, not leaked.`,
+      evidence: bundle.evidence.map((e) => `${e.tool}: ${e.function_name}`),
+      tool: ToolKind.HEURISTIC,
+    };
+  }
+
   if (analysis.structuralLikelihood === 'high') {
     score += 0.5;
     reasons.push(`structural analysis located a missing free (${analysis.patternType})`);

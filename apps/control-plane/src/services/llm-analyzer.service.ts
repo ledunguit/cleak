@@ -577,6 +577,7 @@ Please analyze this project. Use read_file() to inspect build configuration file
     const body: any = {
       model: this.config.get<string>('ANTHROPIC_MODEL', 'claude-sonnet-4-20250514'),
       max_tokens: 4096,
+      temperature: Number(this.config.get('LLM_TEMPERATURE', '0')) || 0,
       system,
       messages: messages.map(m => {
         if (m.role === 'system') return { role: 'user', content: m.content };
@@ -678,6 +679,7 @@ Please analyze this project. Use read_file() to inspect build configuration file
       body: JSON.stringify({
         model,
         max_output_tokens: 4096,
+        temperature: Number(this.config.get('LLM_TEMPERATURE', '0')) || 0,
         instructions,
         input,
         tools: this.tools.map(t => ({
@@ -764,6 +766,7 @@ Please analyze this project. Use read_file() to inspect build configuration file
       body: JSON.stringify({
         model,
         max_tokens: 4096,
+        temperature: Number(this.config.get('LLM_TEMPERATURE', '0')) || 0,
         messages: localMessages,
         tools: this.tools.map(t => ({
           type: 'function',

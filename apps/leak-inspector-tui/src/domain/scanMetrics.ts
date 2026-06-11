@@ -25,6 +25,10 @@ interface SnapshotLike {
 export interface ScanMetricsContext {
   mode: string;
   dynamic: string;
+  /** Provenance for reproducibility — which model/provider/temperature produced this run. */
+  provider?: string;
+  model?: string;
+  temperature?: number;
   turns?: number;
   inputTokens?: number;
   outputTokens?: number;
@@ -36,6 +40,9 @@ export interface ScanMetrics {
   generated_at: string;
   mode: string;
   dynamic: string;
+  provider?: string;
+  model?: string;
+  temperature?: number;
   candidates: number;
   confirmed: number;
   likely: number;
@@ -84,6 +91,9 @@ export function computeScanMetrics(snapshot: SnapshotLike, ctx: ScanMetricsConte
     generated_at: new Date().toISOString(),
     mode: ctx.mode,
     dynamic: ctx.dynamic,
+    provider: ctx.provider,
+    model: ctx.model,
+    temperature: ctx.temperature,
     candidates: snapshot.finding_count ?? findings.length,
     confirmed: snapshot.confirmed_leak_count ?? verdicts['confirmed_leak'] ?? 0,
     likely: snapshot.likely_leak_count ?? verdicts['likely_leak'] ?? 0,

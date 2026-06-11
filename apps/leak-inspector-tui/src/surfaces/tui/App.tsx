@@ -14,10 +14,12 @@ import { PermissionPrompt } from './components/PermissionPrompt';
 import { Select, type SelectOption } from './components/Select';
 import { CommandSuggestions } from './components/CommandSuggestions';
 import { ConfigScreen } from './components/ConfigScreen';
+import { EvalScreen } from './components/EvalScreen';
 import { COMMANDS, matchCommands, findCommand } from './commands';
 import { color, glyph, formatDuration } from './theme';
 import { savePreferences, type UserPreferences } from './preferences';
 import { runTuiScan } from './runner';
+import { runTuiEval } from './evalRunner';
 import { visibleMessages, type TuiStore } from './store';
 
 export interface AppProps {
@@ -131,6 +133,7 @@ export function App({ store, staticUrl, dynamicUrl, cwd, resultsDir, recentScans
 
   // ── Auto-show the report when a scan finishes (if enabled in /config) ──
   const lastShownScanId = useRef<string | undefined>(undefined);
+  const evalBusy = useRef(false);
   useEffect(() => {
     if (
       state.autoShowReport &&
@@ -262,6 +265,10 @@ export function App({ store, staticUrl, dynamicUrl, cwd, resultsDir, recentScans
         // Read the freshest options from the store (not the render closure) so a
         // mode/dynamic just chosen from a picker always applies to this scan.
         const snap = store.getSnapshot();
+        if (evalBusy.current) {
+          store.addSystemMessage('an eval is running — wait for it to finish before scanning');
+          return;
+        }
         if (snap.status === 'running') {
           store.addSystemMessage('a scan is running — press ESC to interrupt, or type a message to steer the agent');
           return;
@@ -272,6 +279,45 @@ export function App({ store, staticUrl, dynamicUrl, cwd, resultsDir, recentScans
         }
         store.addUserMessage(`/scan ${arg} (mode ${snap.mode}, dynamic ${snap.dynamic})`);
         void runTuiScan(store, { repo: arg, mode: snap.mode, dynamic: snap.dynamic, staticUrl, dynamicUrl });
+        return;
+      }
+      case '/eval': {
+        // /eval <corpus-path> [limit] [c=N] [--resume] — uses the current /mode + /dynamic.
+        // /eval with no path re-opens the live/last dashboard (e.g. after Esc'ing out).
+        const snap = store.getSnapshot();
+        const tokens = rest.filter((t) => t.length > 0);
+        // corpus = first token that's not a flag, not a bare number, not c=N
+        const corpus = tokens.find((t) => !t.startsWith('--') && !/^\d+$/.test(t) && !/^c=\d+$/i.test(t));
+        if (!corpus) {
+          if (snap.eval) {
+            store.setView('eval');
+          } else {
+            store.addSystemMessage('usage: /eval <corpus-path> [limit] [c=N parallel] [--resume]');
+          }
+          return;
+        }
+        if (evalBusy.current) {
+          store.addSystemMessage('an eval is already running — type /eval (no args) to watch it');
+          return;
+        }
+        if (snap.status === 'running') {
+          store.addSystemMessage('a scan is running — wait for it to finish before evaluating');
+          return;
+        }
+        const limitTok = tokens.find((t) => /^\d+$/.test(t));
+        const limit = limitTok ? parseInt(limitTok, 10) : undefined;
+        const concTok = tokens.find((t) => /^c=\d+$/i.test(t));
+        const concurrency = concTok ? parseInt(concTok.slice(2), 10) : undefined;
+        const resume = tokens.includes('--resume');
+        store.addUserMessage(
+          `/eval ${corpus} (mode ${snap.mode}, dynamic ${snap.dynamic}${limit ? `, limit ${limit}` : ''}` +
+            `${concurrency ? `, c=${concurrency}` : ''}${resume ? ', resume' : ''})`,
+        );
+        evalBusy.current = true;
+        void runTuiEval(store, { corpus, mode: snap.mode, dynamic: snap.dynamic, limit, concurrency, resume, staticUrl, dynamicUrl })
+          .finally(() => {
+            evalBusy.current = false;
+          });
         return;
       }
       default:
@@ -320,6 +366,14 @@ export function App({ store, staticUrl, dynamicUrl, cwd, resultsDir, recentScans
           onSave={saveConfig}
           onCancel={() => store.setView('main')}
         />
+      </Box>
+    );
+  }
+
+  if (state.view === 'eval' && state.eval) {
+    return (
+      <Box flexDirection="column">
+        <EvalScreen store={store} evalState={state.eval} resultsDir={resultsDir} />
       </Box>
     );
   }

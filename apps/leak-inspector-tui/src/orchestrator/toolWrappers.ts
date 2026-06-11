@@ -64,6 +64,7 @@ export function toProviderSettings(cfg: RunConfig): ProviderSettings {
     apiKey: cfg.llm.apiKey,
     model: cfg.llm.model,
     maxTokens: cfg.llm.maxTokens,
+    temperature: cfg.llm.temperature,
     timeoutMs: cfg.llm.timeoutMs,
     idleTimeoutMs: cfg.llm.idleTimeoutMs,
     connectTimeoutMs: cfg.llm.connectTimeoutMs,

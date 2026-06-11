@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { FeasibleLeakPath } from '@mcpvul/common';
 import { CParserService, FunctionInfo } from './c-parser.service';
 
 @Injectable()
@@ -36,9 +37,15 @@ export class PathConstraintsService {
     // Also compute path through target line
     const pathsToTarget = this.computePathsToLine(containingFunction, lineNumber);
 
+    // Feasible leak paths: reachable exit paths that leave an allocation un-freed.
+    // This existing reachability + condition logic IS the pre-LLM feasibility
+    // filter the literature (MemHint) calls for — we only emit reachable paths.
+    const feasibleLeakPaths = this.buildFeasibleLeakPaths(containingFunction);
+
     return {
       constraints,
       feasiblePaths,
+      feasibleLeakPaths,
       exitPaths: containingFunction.exitPaths.map((p) => ({
         kind: p.kind,
         exitLine: p.exitLine,
@@ -53,6 +60,47 @@ export class PathConstraintsService {
       totalExitPaths: containingFunction.exitPaths.length,
       leakyExitPaths: containingFunction.exitPaths.filter((p) => p.leakRisk !== 'none').length,
     };
+  }
+
+  private buildFeasibleLeakPaths(fn: FunctionInfo): FeasibleLeakPath[] {
+    const allocByVar = new Map(
+      fn.allocationVariables.map((a) => [a.variable, a]),
+    );
+
+    return fn.exitPaths
+      .filter(
+        (p) =>
+          p.reachableFromEntry &&
+          p.leakRisk !== 'none' &&
+          p.unreconciledAllocations.length > 0,
+      )
+      .map((p) => ({
+        kind: p.kind,
+        exitLine: p.exitLine,
+        reachable: p.reachableFromEntry,
+        conditions: p.pathConditions,
+        unreconciledAllocations: p.unreconciledAllocations,
+        leakRisk: p.leakRisk,
+        narrative: this.describeLeakPath(p, allocByVar),
+        feasibilityChecked: 'heuristic' as const,
+      }));
+  }
+
+  private describeLeakPath(
+    p: FunctionInfo['exitPaths'][number],
+    allocByVar: Map<string, { variable: string; line: number; callName: string }>,
+  ): string {
+    const allocDescr = p.unreconciledAllocations
+      .map((v) => {
+        const a = allocByVar.get(v);
+        return a ? `\`${v}\` (${a.callName}, line ${a.line})` : `\`${v}\``;
+      })
+      .join(', ');
+    const condClause =
+      p.pathConditions.length > 0
+        ? ` under condition [${p.pathConditions.join(' && ')}]`
+        : '';
+    return `allocation of ${allocDescr} reaches the ${p.kind} at line ${p.exitLine}${condClause} without an intervening free`;
   }
 
   private functionEndLine(fn: FunctionInfo, allFunctions: FunctionInfo[]): number {

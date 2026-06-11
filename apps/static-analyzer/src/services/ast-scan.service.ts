@@ -10,7 +10,7 @@ const ALLOC_FUNCS = new Set([
 
 const FREE_FUNCS = new Set(['free', 'xfree', 'kfree', 'vfree']);
 
-interface MemoryPattern {
+export interface MemoryPattern {
   patternType: string;
   severity: 'critical' | 'high' | 'medium' | 'low';
   functionName: string;
@@ -24,12 +24,12 @@ interface MemoryPattern {
   suggestedFix?: string;
 }
 
-interface ScanResult {
+export interface ScanResult {
   patterns: MemoryPattern[];
   functionSummaries: FunctionSummary[];
 }
 
-interface FunctionSummary {
+export interface FunctionSummary {
   functionName: string;
   filePath: string;
   lineNumber: number;

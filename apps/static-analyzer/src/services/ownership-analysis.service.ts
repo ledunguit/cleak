@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { readFileSync } from 'fs';
-import { CParserService } from './c-parser.service';
+import { OwnershipSummary } from '@mcpvul/common';
+import { CParserService, FunctionInfo } from './c-parser.service';
 
 @Injectable()
 export class OwnershipAnalysisService {
@@ -14,6 +15,8 @@ export class OwnershipAnalysisService {
       allocatedObjects: string[];
       leakPaths: number;
       leakRisk: string;
+      /** Ownership-explicit summary (role + which value carries ownership). */
+      summary: OwnershipSummary;
     }[] = [];
 
     for (const file of files) {
@@ -34,6 +37,7 @@ export class OwnershipAnalysisService {
               allocatedObjects,
               leakPaths: leakyPaths.length,
               leakRisk: this.computeLeakRisk(fn),
+              summary: this.inferOwnershipSummary(fn, file, ownershipType),
             });
           }
         }
@@ -43,6 +47,76 @@ export class OwnershipAnalysisService {
     }
 
     return { ownerships };
+  }
+
+  /**
+   * Ownership-explicit summary (MemHint/LAMeD): classify the function and state
+   * WHICH value carries memory ownership out of it. Reuses fields already on
+   * FunctionInfo — no extra parsing.
+   */
+  inferOwnershipSummary(
+    fn: FunctionInfo,
+    filePath: string,
+    ownershipType?: string,
+  ): OwnershipSummary {
+    const freedNames = new Set(fn.freedVariables.map((f) => f.variable));
+    const notFreedAllocs = fn.allocationVariables.filter(
+      (a) => !freedNames.has(a.variable),
+    );
+    const hasPointerParam = fn.parameters.some((p) => p.type.includes('*'));
+    const freesAParam = fn.freedVariables.some((f) =>
+      fn.parameters.some((p) => p.name === f.variable),
+    );
+
+    const isAllocator = notFreedAllocs.length > 0;
+    const isDeallocator = hasPointerParam && fn.freedVariables.length > 0;
+    let role: OwnershipSummary['role'];
+    if (isAllocator && isDeallocator) role = 'both';
+    else if (isAllocator) role = 'allocator';
+    else if (isDeallocator) role = 'deallocator';
+    else role = 'neither';
+
+    // Which value carries ownership OUT of the function?
+    let ownershipCarrier: OwnershipSummary['ownershipCarrier'] = { kind: 'none' };
+    let carrierRationale = 'no value carries ownership out of the function';
+
+    const returnedAlloc = notFreedAllocs.find((a) =>
+      fn.returnStatements.some((r) => this.mentionsVariable(r.text, a.variable)),
+    );
+    if (returnedAlloc) {
+      ownershipCarrier = { kind: 'return_value' };
+      carrierRationale = `'${returnedAlloc.variable}' is allocated (${returnedAlloc.callName}) and returned without a local free — ownership transfers to the caller`;
+    } else if (freesAParam) {
+      const freedParam = fn.freedVariables.find((f) =>
+        fn.parameters.some((p) => p.name === f.variable),
+      )!;
+      const index = fn.parameters.findIndex((p) => p.name === freedParam.variable);
+      ownershipCarrier = { kind: 'parameter', name: freedParam.variable, index };
+      carrierRationale = `parameter '${freedParam.variable}' (index ${index}) is freed inside the function — ownership is consumed from the caller`;
+    } else if (isAllocator) {
+      carrierRationale = `${notFreedAllocs.length} allocation(s) (${notFreedAllocs
+        .map((a) => a.variable)
+        .join(', ')}) are not freed locally and do not reach a return — possible leak`;
+    }
+
+    return {
+      functionName: fn.functionName,
+      filePath,
+      role,
+      ownershipCarrier,
+      ownershipType: ownershipType ?? this.inferOwnershipType(fn),
+      rationale: carrierRationale,
+    };
+  }
+
+  /** Loose substring match for a variable inside a return statement's text. */
+  private mentionsVariable(text: string, variable: string): boolean {
+    const re = new RegExp(`(^|[^A-Za-z0-9_])${this.escapeRegExp(variable)}([^A-Za-z0-9_]|$)`);
+    return re.test(text);
+  }
+
+  private escapeRegExp(s: string): string {
+    return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   }
 
   conventions(content: string, filePath: string) {

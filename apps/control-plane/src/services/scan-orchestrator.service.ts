@@ -21,15 +21,26 @@ import {
   ControlFlowInfo,
   FindingStatus,
   ScanEventName,
+  StaticLeakEvidence,
 } from '@mcpvul/common';
 import { CreateScanDto } from '@mcpvul/common/dto/scan.dto';
+import {
+  deriveDynamicFields,
+  correlateEvidence,
+  correlationRank,
+} from '@mcpvul/common/analysis/dynamic-evidence';
 import { CandidateManagerService } from './candidate-manager.service';
 import { DynamicPlannerService } from './dynamic-planner.service';
 import { InvestigationPlannerService } from './investigation-planner.service';
 import { JudgeService } from './judge.service';
 import { ReportingService } from './reporting.service';
 import { ToolRegistryService, ToolRegistration } from './tool-registry.service';
+import { mapWithLimit } from '../utils/concurrency';
 import { existsSync, readFileSync } from 'fs';
+
+// Bounded fan-out for independent gRPC/LLM calls (env-tunable).
+const SCAN_CONCURRENCY = Math.max(1, Number(process.env.SCAN_CONCURRENCY ?? 4));
+const JUDGE_CONCURRENCY = Math.max(1, Number(process.env.JUDGE_CONCURRENCY ?? 4));
 
 export interface StaticAnalyzerService {
   indexFiles(data: any): any;
@@ -154,25 +165,31 @@ export class ScanOrchestratorService {
     this.candidateManager.clear();
     const cFileCount = (indexResult.files || []).length;
 
-    for (const file of indexResult.files || []) {
+    // Scan files concurrently (bounded) — each scan is an independent gRPC call.
+    // Ingestion stays sequential over the ordered results so candidate ids/order
+    // are deterministic regardless of which scan finished first.
+    const scanResults = await mapWithLimit(indexResult.files || [], SCAN_CONCURRENCY, async (file) => {
       try {
         const csResult: any = await registry.invoke('memory.candidate_scan', { filePath: file, content: '' });
-        for (const c of csResult.candidates || []) {
-          const hostFilePath = this.toHostPath(c.filePath || c.file_path || '', deps);
-          const allocationSite = c.allocationSite || c.allocation_site || '';
-          this.candidateManager.ingest({
-            id: c.id,
-            function_name: c.functionName || c.function_name || '',
-            file_path: hostFilePath,
-            line_number: c.lineNumber ?? c.line_number ?? 0,
-            allocation_site: c.allocationSite || c.allocation_site || '',
-            allocation_type: c.allocationType || c.allocation_type || '',
-            confidence: c.confidence || 'medium',
-            context: c.context || '',
-          });
-        }
+        return csResult.candidates || [];
       } catch (err: any) {
         this.logger.warn(`[ORCH] candidateScan failed for file=${file}: ${err.message}`);
+        return [];
+      }
+    });
+    for (const candidates of scanResults) {
+      for (const c of candidates) {
+        const hostFilePath = this.toHostPath(c.filePath || c.file_path || '', deps);
+        this.candidateManager.ingest({
+          id: c.id,
+          function_name: c.functionName || c.function_name || '',
+          file_path: hostFilePath,
+          line_number: c.lineNumber ?? c.line_number ?? 0,
+          allocation_site: c.allocationSite || c.allocation_site || '',
+          allocation_type: c.allocationType || c.allocation_type || '',
+          confidence: c.confidence || 'medium',
+          context: c.context || '',
+        });
       }
     }
 
@@ -270,17 +287,34 @@ export class ScanOrchestratorService {
               if (decision.toolName === 'memory.path_constraints' && result) {
                 accumulatedCtx.feasiblePaths = result.feasiblePaths || [];
                 accumulatedCtx.constraints = result.constraints || [];
+                if (Array.isArray(result.feasibleLeakPaths)) {
+                  accumulatedCtx.feasibleLeakPaths = result.feasibleLeakPaths;
+                  this.mergeBundleStaticEvidence(bundle, {
+                    feasibleLeakPaths: result.feasibleLeakPaths,
+                    earlyReturnCount: Number(result.earlyReturnCount ?? 0),
+                  });
+                }
               }
               if (decision.toolName === 'memory.function_summary' && result) {
                 accumulatedCtx.hasExplicitFree = (result.frees?.length || 0) > 0;
                 accumulatedCtx.allocations = result.allocations || [];
                 accumulatedCtx.frees = result.frees || [];
+                if (Array.isArray(result.pairs)) {
+                  accumulatedCtx.allocFreePairs = result.pairs;
+                  this.mergeBundleStaticEvidence(bundle, { allocFreePairs: result.pairs });
+                }
               }
               if (decision.toolName === 'memory.ownership_summary' && result) {
                 const match = (result.ownerships || []).find(
                   (o: any) => o.functionName === bundle.candidate.function_name,
                 );
-                if (match) accumulatedCtx.ownership = match;
+                if (match) {
+                  accumulatedCtx.ownership = match;
+                  if (match.summary) {
+                    accumulatedCtx.ownershipSummary = match.summary;
+                    this.mergeBundleStaticEvidence(bundle, { ownership: match.summary });
+                  }
+                }
               }
               if (decision.toolName === 'memory.call_graph' && result) {
                 accumulatedCtx.callEdges = result.edges || [];
@@ -398,7 +432,7 @@ export class ScanOrchestratorService {
           case AgentActionKind.JUDGE_BUNDLE: {
             const targetBundles = this.resolveTargetBundles(agentState.bundles, targetBundleIds);
             emitEvent(scanId, ScanEventName.JUDGING_STARTED, { bundleCount: targetBundles.length });
-            for (const bundle of targetBundles) {
+            await mapWithLimit(targetBundles, JUDGE_CONCURRENCY, async (bundle) => {
               const ctx = staticContext.get(bundle.bundleId) || {};
               const verdict = await this.judgeService.judgeBundle(bundle, ctx, dto.analysisMode);
               bundle.verdict = verdict;
@@ -406,7 +440,7 @@ export class ScanOrchestratorService {
                 ? FindingStatus.CONFIRMED
                 : FindingStatus.DISMISSED;
               bundle.updatedAt = new Date().toISOString();
-            }
+            });
             const confirmed = targetBundles.filter((b) => b.verdict?.verdict === 'confirmed_leak' || b.verdict?.verdict === 'likely_leak');
             actionResult = `Judged ${targetBundles.length} bundle(s): ${confirmed.length} confirmed/likely leak(s)`;
             emitEvent(scanId, ScanEventName.JUDGING_FINISHED, { judged: targetBundles.length, confirmed: confirmed.length });
@@ -417,13 +451,13 @@ export class ScanOrchestratorService {
           case AgentActionKind.CHANGE_STRATEGY: {
             // Judge all remaining unresolved bundles
             const unresolved = agentState.bundles.filter((b) => !b.verdict);
-            for (const bundle of unresolved) {
+            await mapWithLimit(unresolved, JUDGE_CONCURRENCY, async (bundle) => {
               const ctx = staticContext.get(bundle.bundleId) || {};
               const verdict = await this.judgeService.judgeBundle(bundle, ctx, dto.analysisMode);
               bundle.verdict = verdict;
               bundle.status = FindingStatus.DISMISSED;
               bundle.updatedAt = new Date().toISOString();
-            }
+            });
             actionResult = `Finalized ${unresolved.length} remaining bundle(s)`;
             turn = maxLoops; // Break loop
             break;
@@ -468,14 +502,12 @@ export class ScanOrchestratorService {
 
     // Final judging pass for any bundles still pending
     emitEvent(scanId, ScanEventName.JUDGING_STARTED, { bundleCount: bundles.filter((b) => !b.verdict).length });
-    for (const bundle of bundles) {
-      if (!bundle.verdict) {
-        const ctx = staticContext.get(bundle.bundleId) || {};
-        const verdict = await this.judgeService.judgeBundle(bundle, ctx, dto.analysisMode);
-        bundle.verdict = verdict;
-        bundle.updatedAt = new Date().toISOString();
-      }
-    }
+    await mapWithLimit(bundles.filter((b) => !b.verdict), JUDGE_CONCURRENCY, async (bundle) => {
+      const ctx = staticContext.get(bundle.bundleId) || {};
+      const verdict = await this.judgeService.judgeBundle(bundle, ctx, dto.analysisMode);
+      bundle.verdict = verdict;
+      bundle.updatedAt = new Date().toISOString();
+    });
     emitEvent(scanId, ScanEventName.JUDGING_FINISHED, { total: bundles.length });
 
     emitEvent(scanId, ScanEventName.REPORTING_STARTED, { bundleCount: bundles.length });
@@ -817,7 +849,21 @@ export class ScanOrchestratorService {
         raw_output: finding.message || finding.rawOutput || finding.raw_output || '',
       };
 
-      this.attachEvidence(bundles, evidence);
+      // Enrich with leakKind / allocStack / allocSite / signature. The raw
+      // Valgrind leak kind rides on `allocation_type` (proto field 11); ASan/LSan
+      // carry it via the tool + message.
+      const rawLeakKind =
+        finding.allocationType ||
+        finding.allocation_type ||
+        finding.kind ||
+        finding.aux?.leak?.kind ||
+        '';
+      const enriched = deriveDynamicFields(evidence, {
+        rawLeakKind,
+        rawStack: finding.stack,
+      });
+
+      this.attachEvidence(bundles, enriched);
     }
   }
 
@@ -853,21 +899,40 @@ export class ScanOrchestratorService {
    * Match one piece of evidence to the best bundle (same file, nearby line) and
    * attach it. Shared by dynamic (ASan/LSan/Valgrind) and LeakGuard evidence.
    */
+  /** Merge a partial into a bundle's typed staticEvidence, creating it if absent. */
+  private mergeBundleStaticEvidence(bundle: LeakBundle, partial: Partial<StaticLeakEvidence>): void {
+    const cur: StaticLeakEvidence = bundle.staticEvidence ?? {
+      allocFreePairs: [],
+      feasibleLeakPaths: [],
+      earlyReturnCount: 0,
+      leakyExitPaths: 0,
+    };
+    bundle.staticEvidence = { ...cur, ...partial };
+  }
+
   private attachEvidence(bundles: LeakBundle[], evidence: LeakEvidence): boolean {
+    // Pick the bundle whose candidate best correlates with this finding's
+    // allocation site (exact line > near > function match > same file). The
+    // chosen bundle gets the evidence stamped with how it was matched, so the
+    // judge/heuristic can weight a runtime leak LINKED to this candidate far
+    // more than one that merely lives in the same file.
+    let best: { bundle: LeakBundle; method: ReturnType<typeof correlateEvidence> } | null = null;
     for (const bundle of bundles) {
-      if (evidence.file_path && bundle.candidate.file_path && bundle.candidate.file_path.endsWith(evidence.file_path) && Math.abs(evidence.line_number - bundle.candidate.line_number) <= 10) {
-        bundle.evidence.push(evidence);
-        bundle.updatedAt = new Date().toISOString();
-        return true;
+      const corr = correlateEvidence(evidence, bundle.candidate);
+      if (correlationRank(corr.correlationMethod) === 0) continue;
+      if (!best || correlationRank(corr.correlationMethod) > correlationRank(best.method.correlationMethod)) {
+        best = { bundle, method: corr };
       }
     }
 
-    const related = bundles.filter((b) => evidence.file_path && b.candidate.file_path && b.candidate.file_path.endsWith(evidence.file_path));
-    if (related.length > 0) {
-      related[0].evidence.push(evidence);
-      related[0].updatedAt = new Date().toISOString();
-      return true;
-    }
-    return false;
+    if (!best) return false;
+    best.bundle.evidence.push({
+      ...evidence,
+      correlatedToCandidate: best.method.correlatedToCandidate,
+      correlationMethod: best.method.correlationMethod,
+      correlationDistanceLines: best.method.correlationDistanceLines,
+    });
+    best.bundle.updatedAt = new Date().toISOString();
+    return true;
   }
 }

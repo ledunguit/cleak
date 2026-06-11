@@ -16,6 +16,8 @@ import {
 import type { ScanEvent } from '../../orchestrator/events';
 import type { AgentMeta } from '../../orchestrator/investigation';
 import { toolSource, type ToolSource } from '../../domain/mcpToolPlan';
+import type { EvalResult } from '../../domain/evalHarness';
+import type { SnapshotFinding, LabeledFlaw, CleanSite } from '../../domain/evalScoring';
 
 export type PhaseStatus = 'pending' | 'active' | 'done' | 'skipped' | 'failed';
 export type RunStatus = 'idle' | 'running' | 'paused' | 'done' | 'error';
@@ -67,6 +69,58 @@ export interface PendingPermission {
   resolve: (decision: 'allow' | 'deny') => void;
 }
 
+export type EvalCaseStatus = 'pending' | 'running' | 'ok' | 'error' | 'skipped';
+
+/** One benchmark case as rendered by the eval screen. */
+export interface EvalCaseUi {
+  id: string;
+  cwe?: string;
+  flowVariant?: string;
+  functionalVariant?: string;
+  status: EvalCaseStatus;
+  /** Current phase while running (live). */
+  phase?: string;
+  startedAt?: number;
+  durationMs?: number;
+  tp: number;
+  fp: number;
+  fn: number;
+  tn: number;
+  candidates?: number;
+  flagged?: number;
+  scanId?: string;
+  error?: string;
+  /** Detail for the Detail tab (populated on completion). */
+  findings?: SnapshotFinding[];
+  flaws?: LabeledFlaw[];
+  clean?: CleanSite[];
+}
+
+export type EvalTab = 'overview' | 'cases' | 'detail';
+
+export interface EvalUiState {
+  corpus: string;
+  mode: string;
+  dynamic: string;
+  total: number;
+  done: number;
+  concurrency: number;
+  startedAt: number;
+  finishedAt?: number;
+  running: boolean;
+  /** A cancel was requested — draining in-flight cases, skipping the rest. */
+  cancelling?: boolean;
+  cases: EvalCaseUi[];
+  tab: EvalTab;
+  /** Cursor into `cases` for the Cases tab. */
+  cursor: number;
+  /** Case id pinned to the Detail tab. */
+  selectedId?: string;
+  /** Final aggregate (set at the end) — per-variant, calibration, cost. */
+  result?: EvalResult;
+  outDir?: string;
+}
+
 export interface UiState {
   messages: UiMessage[];
   phases: Record<ScanPhase, PhaseStatus>;
@@ -86,7 +140,9 @@ export interface UiState {
   pendingPermission?: PendingPermission;
   startedAt?: number;
   /** Which surface to render. */
-  view: 'main' | 'config';
+  view: 'main' | 'config' | 'eval';
+  /** Benchmark evaluation state (when view === 'eval'). */
+  eval?: EvalUiState;
   /** Auto-open the report findings picker when a scan finishes. */
   autoShowReport: boolean;
   /** Whether the agent invoked any dynamic-analysis tool this scan. */
@@ -129,6 +185,7 @@ export class TuiStore {
   private listeners = new Set<Listener>();
   private idSeq = 0;
   private abortController?: AbortController;
+  private evalAbortController?: AbortController;
   private steeringQueue: string[] = [];
   private resumeResolver?: (decision: 'resume' | 'abort') => void;
 
@@ -277,6 +334,130 @@ export class TuiStore {
 
   setView(view: UiState['view']): void {
     this.set({ view });
+  }
+
+  // ── Eval screen ──
+  private patchEval(patch: Partial<EvalUiState>): void {
+    if (!this.state.eval) return;
+    this.set({ eval: { ...this.state.eval, ...patch } });
+  }
+
+  private patchEvalCase(id: string, patch: Partial<EvalCaseUi>): void {
+    if (!this.state.eval) return;
+    const cases = this.state.eval.cases.map((c) => (c.id === id ? { ...c, ...patch } : c));
+    this.set({ eval: { ...this.state.eval, cases } });
+  }
+
+  beginEval(meta: {
+    corpus: string;
+    mode: string;
+    dynamic: string;
+    total: number;
+    concurrency: number;
+    cases: Array<Pick<EvalCaseUi, 'id' | 'cwe' | 'flowVariant' | 'functionalVariant'>>;
+  }): void {
+    this.set({
+      view: 'eval',
+      eval: {
+        corpus: meta.corpus,
+        mode: meta.mode,
+        dynamic: meta.dynamic,
+        total: meta.total,
+        done: 0,
+        concurrency: meta.concurrency,
+        startedAt: Date.now(),
+        running: true,
+        cases: meta.cases.map((c) => ({ ...c, status: 'pending', tp: 0, fp: 0, fn: 0, tn: 0 })),
+        tab: 'cases',
+        cursor: 0,
+      },
+    });
+  }
+
+  evalCaseStart(id: string): void {
+    this.patchEvalCase(id, { status: 'running', startedAt: Date.now(), phase: 'starting' });
+  }
+
+  evalCasePhase(id: string, phase: string): void {
+    const c = this.state.eval?.cases.find((x) => x.id === id);
+    if (c && c.status === 'running') this.patchEvalCase(id, { phase });
+  }
+
+  evalCaseResult(detail: {
+    id: string;
+    status: 'ok' | 'error' | 'skipped';
+    tp: number;
+    fp: number;
+    fn: number;
+    tn: number;
+    candidates?: number;
+    flagged?: number;
+    durationMs?: number;
+    scanId?: string;
+    error?: string;
+    findings?: SnapshotFinding[];
+    flaws?: LabeledFlaw[];
+    clean?: CleanSite[];
+  }): void {
+    if (!this.state.eval) return;
+    const { id, ...rest } = detail;
+    this.patchEvalCase(id, { ...rest, phase: undefined });
+    this.patchEval({ done: this.state.eval.done + 1 });
+  }
+
+  endEval(result: EvalResult, outDir: string): void {
+    this.evalAbortController = undefined;
+    this.patchEval({ running: false, cancelling: false, finishedAt: Date.now(), result, outDir });
+  }
+
+  /** Register the controller that `evalAbort` trips (set by the eval runner). */
+  setEvalAbort(ac: AbortController | undefined): void {
+    this.evalAbortController = ac;
+  }
+
+  /**
+   * Cancel a running eval: abort in-flight cases and mark every not-yet-started
+   * case skipped. Completed cases keep their results — the run still finalizes a
+   * report over whatever finished.
+   */
+  evalAbort(): void {
+    if (!this.state.eval || !this.state.eval.running || this.state.eval.cancelling) return;
+    this.evalAbortController?.abort();
+    const cases = this.state.eval.cases.map((c) =>
+      c.status === 'pending' ? { ...c, status: 'skipped' as const } : c,
+    );
+    this.set({ eval: { ...this.state.eval, cancelling: true, cases } });
+  }
+
+  evalCycleTab(dir: 1 | -1): void {
+    if (!this.state.eval) return;
+    const order: EvalTab[] = ['overview', 'cases', 'detail'];
+    const i = order.indexOf(this.state.eval.tab);
+    this.patchEval({ tab: order[(i + dir + order.length) % order.length] });
+  }
+
+  evalSetTab(tab: EvalTab): void {
+    this.patchEval({ tab });
+  }
+
+  /** Move the case cursor (Cases tab). */
+  evalMove(delta: number): void {
+    if (!this.state.eval) return;
+    const n = this.state.eval.cases.length;
+    if (n === 0) return;
+    this.patchEval({ cursor: Math.max(0, Math.min(n - 1, this.state.eval.cursor + delta)) });
+  }
+
+  /** Pin the case under the cursor to the Detail tab and switch to it. */
+  evalOpenDetail(): void {
+    if (!this.state.eval) return;
+    const c = this.state.eval.cases[this.state.eval.cursor];
+    if (c) this.patchEval({ selectedId: c.id, tab: 'detail' });
+  }
+
+  /** Leave the eval screen back to the main flow. */
+  evalExit(): void {
+    this.set({ view: 'main' });
   }
 
   setAutoShowReport(autoShowReport: boolean): void {

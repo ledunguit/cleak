@@ -103,8 +103,12 @@ program
   .command('tui', { isDefault: true })
   .description('Interactive terminal UI')
   .option('--provider <provider>', 'local | openai | anthropic')
-  .option('--mode <mode>', 'no_llm | llm_assisted', 'llm_assisted')
-  .option('--dynamic <mode>', 'off | selective | aggressive', 'off')
+  // No defaults here: a hardcoded default makes commander set opts.mode/opts.dynamic
+  // even when the user omits the flag, which would clobber the saved /config
+  // preference (launchTui does `opts.dynamic ?? prefs.defaultDynamic`). Leaving
+  // them undefined preserves precedence: CLI flag > saved preference > default.
+  .option('--mode <mode>', 'no_llm | llm_assisted (default: saved preference)')
+  .option('--dynamic <mode>', 'off | selective | aggressive (default: saved preference)')
   .option('--static-url <url>', 'static analyzer MCP url')
   .option('--dynamic-url <url>', 'dynamic analyzer MCP url')
   .option('--host-root <path>', 'host repo root (for path mapping when analyzers run in Docker)')

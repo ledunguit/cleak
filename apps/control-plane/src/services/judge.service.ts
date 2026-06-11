@@ -14,6 +14,7 @@ import {
 } from '@mcpvul/common';
 import { existsSync, readFileSync } from 'fs';
 import { judgeHeuristically, enrichLeakVerdict } from '@mcpvul/common/analysis/heuristic-judge';
+import { enclosingFunctionSnippet, isLeakVerdictString } from '@mcpvul/common/analysis/judge-shared';
 
 @Injectable()
 export class JudgeService {
@@ -72,20 +73,19 @@ export class JudgeService {
 
     const codeSnippet = this.readContextSnippet(bundle.candidate.file_path, bundle.candidate.line_number);
     const evidenceSummary = bundle.evidence
-      .map((e) => `  - ${e.tool}: ${e.function_name} at ${e.file_path}:${e.line_number} (${e.bytes_lost} bytes lost, severity: ${e.severity})`)
+      .map((e) => {
+        const kind = e.leakKind ? ` ${e.leakKind}` : '';
+        const link =
+          e.correlatedToCandidate
+            ? ' — LINKED to this candidate'
+            : e.correlationMethod === 'file_only'
+              ? ' — same file, different site'
+              : '';
+        return `  - ${e.tool}:${kind} ${e.function_name} at ${e.file_path}:${e.line_number} (${e.bytes_lost} bytes / ${e.blocks_lost} blocks, severity: ${e.severity})${link}`;
+      })
       .join('\n');
 
-    const ctxSummary = staticContext
-      ? [
-          `  - Has explicit free: ${staticContext.hasExplicitFree}`,
-          `  - Allocations found: ${(staticContext.allocations || []).length}`,
-          `  - Frees found: ${(staticContext.frees || []).length}`,
-          `  - Feasible paths: ${(staticContext.feasiblePaths || []).length}`,
-          `  - Ownership type: ${staticContext.ownership?.ownershipType || 'unknown'}`,
-          `  - Flow paths: ${(staticContext.flowPaths || []).length}`,
-          `  - Early returns: ${staticContext.earlyReturnCount || 0}`,
-        ].join('\n')
-      : '  (no static context available)';
+    const ctxSummary = this.renderStaticContext(bundle, staticContext);
 
     const systemPrompt = `You are an expert C/C++ memory leak detection analyst.
 
@@ -104,6 +104,12 @@ PRODUCE A VERDICT:
 - uncertain: Insufficient evidence to determine
 - likely_false_positive: Evidence suggests this is intentional or handled
 - false_positive: Clearly not a leak (e.g., global/static allocation)
+
+CALIBRATE using the evidence, in priority order:
+- A runtime leak (valgrind/asan/lsan) whose allocation site is LINKED to this candidate is decisive (confirmed_leak, confidence >= 0.9). Weight by leak kind: definitely_lost / asan_leak => decisive; possibly_lost => weak; still_reachable => usually benign, lean false_positive.
+- A runtime finding in the SAME FILE but a DIFFERENT site (not linked) is weak corroboration only.
+- Ownership: if the allocation is returned to the caller or its pointer is handed off, freeing it is the caller's job => likely false_positive here. An UNPAIRED alloc->free with a reachable leak path and no ownership transfer => confirmed_leak.
+- Freed on all paths / static-global => false_positive.
 
 For confirmed_leak and likely_leak, your response MUST include:
 1. The root cause: what pattern caused the leak
@@ -187,6 +193,16 @@ Analyze this potential leak and provide your expert verdict.`;
     return results;
   }
 
+  /**
+   * Pinned judge temperature (default 0). Deterministic verdicts keep the web
+   * (JSON-action) path comparable to the TUI path, which pins the same default —
+   * a fair paradigm comparison needs both judges sampling identically.
+   */
+  private judgeTemperature(): number {
+    const t = Number(this.config.get('JUDGE_LLM_TEMPERATURE', '0'));
+    return Number.isFinite(t) ? t : 0;
+  }
+
   /** Resolve the per-provider API key (kept separate so keys never collide). */
   private judgeApiKey(provider: string): string | undefined {
     if (provider === 'local') return this.config.get<string>('LOCAL_LLM_API_KEY');
@@ -240,6 +256,7 @@ Analyze this potential leak and provide your expert verdict.`;
         body: JSON.stringify({
           model,
           max_tokens: 4096,
+          temperature: this.judgeTemperature(),
           system: systemPrompt,
           messages: [{ role: 'user', content: userMessage }],
         }),
@@ -309,6 +326,7 @@ Analyze this potential leak and provide your expert verdict.`;
         body: JSON.stringify({
           model: opts.model,
           stream: false,
+          temperature: this.judgeTemperature(),
           messages: [
             { role: 'system', content: systemPrompt },
             { role: 'user', content: userMessage },
@@ -332,9 +350,8 @@ Analyze this potential leak and provide your expert verdict.`;
     try {
       const parsed = JSON.parse(jsonMatch[0]);
 
-      // Validate verdict
-      const validVerdicts = ['confirmed_leak', 'likely_leak', 'uncertain', 'likely_false_positive', 'false_positive'];
-      if (!validVerdicts.includes(parsed.verdict)) return null;
+      // Validate verdict against the shared taxonomy (@mcpvul/common).
+      if (!isLeakVerdictString(parsed.verdict)) return null;
 
       return {
         verdict: parsed.verdict as InvestigationVerdict,
@@ -388,13 +405,64 @@ Analyze this potential leak and provide your expert verdict.`;
     };
   }
 
+  /**
+   * Render the static analysis context for the judge prompt. Prefers the rich,
+   * typed `bundle.staticEvidence` (ownership summary + alloc→free pairing +
+   * feasible leak paths); falls back to the loose context counts.
+   */
+  private renderStaticContext(bundle: LeakBundle, staticContext?: Record<string, any>): string {
+    const se = bundle.staticEvidence;
+    if (!se && !staticContext) return '  (no static context available)';
+    const lines: string[] = [];
+
+    if (se?.ownership) {
+      const own = se.ownership;
+      const carrier =
+        own.ownershipCarrier?.kind === 'return_value'
+          ? 'returned to caller'
+          : own.ownershipCarrier?.kind === 'parameter'
+            ? `consumed via parameter '${(own.ownershipCarrier as any).name}'`
+            : 'none';
+      lines.push(`  - Ownership: role=${own.role}; carrier=${carrier} (${own.rationale})`);
+    } else {
+      lines.push(`  - Ownership type: ${staticContext?.ownership?.ownershipType || 'unknown'}`);
+    }
+
+    const pairs = se?.allocFreePairs || [];
+    if (pairs.length) {
+      lines.push('  - Alloc→free pairing:');
+      for (const p of pairs.slice(0, 12)) {
+        const freed = p.freeLine != null ? `free@${p.freeLine}` : 'UNPAIRED';
+        lines.push(`      ${p.variable}: ${p.allocCall}@${p.allocLine} → ${freed} (${p.status})`);
+      }
+    } else {
+      lines.push(`  - Has explicit free: ${staticContext?.hasExplicitFree} · Allocations: ${(staticContext?.allocations || []).length} · Frees: ${(staticContext?.frees || []).length}`);
+    }
+
+    const leakPaths = se?.feasibleLeakPaths || [];
+    if (leakPaths.length) {
+      lines.push('  - Feasible leak paths:');
+      for (const lp of leakPaths.slice(0, 5)) {
+        lines.push(`      • ${lp.narrative} (risk: ${lp.leakRisk})`);
+      }
+    } else {
+      lines.push(`  - Feasible paths: ${(staticContext?.feasiblePaths || []).length} · Early returns: ${staticContext?.earlyReturnCount || 0}`);
+    }
+
+    return lines.join('\n');
+  }
+
   private readContextSnippet(filePath: string, lineNumber: number): string {
     if (!filePath || !lineNumber || !existsSync(filePath)) return '';
     try {
-      const lines = readFileSync(filePath, 'utf-8').split('\n');
-      const start = Math.max(0, lineNumber - 5);
-      const end = Math.min(lines.length, lineNumber + 5);
-      return lines.slice(start, end).map((line, index) => `${start + index + 1}: ${line}`).join('\n');
+      // Shared with the TUI judge via @mcpvul/common (comment stripping +
+      // enclosing-function extraction). This path prefixes line numbers and uses
+      // a symmetric ±5-line fallback window.
+      return enclosingFunctionSnippet(readFileSync(filePath, 'utf-8'), lineNumber, {
+        withLineNumbers: true,
+        fallbackBefore: 5,
+        fallbackAfter: 5,
+      });
     } catch {
       return '';
     }

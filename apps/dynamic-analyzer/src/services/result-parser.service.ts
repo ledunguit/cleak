@@ -1,13 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { readFileSync } from 'fs';
 
-interface StackFrame {
+export interface StackFrame {
   function: string | null;
   file: string | null;
   line: number | null;
 }
 
-interface Finding {
+export interface Finding {
   kind: string;
   message: string;
   stack: StackFrame[];
@@ -15,7 +15,7 @@ interface Finding {
   aux: Record<string, any>;
 }
 
-interface LeakBlock {
+export interface LeakBlock {
   bytes: number | null;
   blocks: number | null;
   kind: string | null;

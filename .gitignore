@@ -33,11 +33,25 @@ temp/
 # Build outputs and caches
 /dist/
 /output/
-/results/
 /coverage/
 /apps/leak-inspector-ui/dist/
 /.turbo/
 /apps/leak-inspector-ui/node_modules/
+
+# Scan/eval outputs (generated) anywhere in the tree
+**/results/
+
+# Benchmark archives + ingested corpora (regenerate via scripts/juliet/ingest.ts)
+/juliet.zip
+*.zip
+/demo/juliet_cwe401/
+
+# Compiled demo-corpus binaries (rebuild from source via each case's Makefile)
+/demo/memory_leak_corpus/*/array_leak
+/demo/memory_leak_corpus/*/array_leak_*
+/demo/memory_leak_corpus/*/ownership_maze
+/demo/memory_leak_corpus/*/use_after_free
+/demo/**/a.out
 
 # User-provided scan targets
 /targets/*

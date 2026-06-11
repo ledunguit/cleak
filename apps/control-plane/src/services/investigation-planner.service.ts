@@ -439,6 +439,15 @@ What is the best next action? Respond with JSON only.`;
     return parsed;
   }
 
+  /**
+   * Pinned planner temperature (default 0). Recorded in eval provenance; pinning
+   * it makes the orchestrator's tool-selection reproducible across runs.
+   */
+  private plannerTemperature(): number {
+    const t = Number(this.config.get('PLANNER_LLM_TEMPERATURE', '0'));
+    return Number.isFinite(t) ? t : 0;
+  }
+
   private async callAnthropic(systemPrompt: string, userMessage: string): Promise<string> {
     const apiKey = this.config.get<string>('ANTHROPIC_API_KEY');
     const model = this.config.get<string>('ANTHROPIC_MODEL', 'claude-sonnet-4-20250514');
@@ -453,6 +462,7 @@ What is the best next action? Respond with JSON only.`;
       body: JSON.stringify({
         model,
         max_tokens: 4096,
+        temperature: this.plannerTemperature(),
         system: systemPrompt,
         messages: [{ role: 'user', content: userMessage }],
       }),
@@ -474,6 +484,7 @@ What is the best next action? Respond with JSON only.`;
       },
       body: JSON.stringify({
         model,
+        temperature: this.plannerTemperature(),
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userMessage },
@@ -494,6 +505,7 @@ What is the best next action? Respond with JSON only.`;
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         model,
+        temperature: this.plannerTemperature(),
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userMessage },

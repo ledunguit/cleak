@@ -42,28 +42,26 @@ The workspace consists of six main components:
 - Real-time scan progress via Server-Sent Events (SSE)
 - Docker multi-stage build (nginx:alpine serves static files, proxies /api/ to control-plane:8090)
 
-### mcp-memory-static-analysis-server
-- Static analysis MCP server exposing memory-leak-oriented tools
-- Provides repository indexing, candidate scanning, AST analysis, call graphs
-- Integrates LeakGuard analyzer via Docker
-- Supports both stdio and HTTP transports
-- Requires Docker access for LeakGuard execution
+> **Stale sections removed.** Earlier revisions documented standalone Python MCP
+> servers (`mcp-memory-static-analysis-server`, `mcp-dynamic-analysis-server`,
+> `mcp-memory-common`) and a `tools/leak_guard_tool` submodule. **None of these
+> exist anymore.** The current shape:
+> - Static & dynamic analysis are NestJS apps (`apps/static-analyzer`,
+>   `apps/dynamic-analyzer`), each serving **both** gRPC (for the control-plane)
+>   and MCP/HTTP (for the TUI).
+> - Shared types/schemas/analysis live in `packages/common` (`@mcpvul/common`) —
+>   TypeScript + Zod, not Pydantic.
+> - The "deep static" slot is a self-contained Clang `scan-build` pass inside the
+>   static-analyzer (no submodule, no TensorFlow, no `leakguard-runtime`).
+> - `packages/agent-core` + `apps/leak-inspector-tui` are the native tool-calling
+>   orchestration path (the control-plane is the JSON-action path).
 
-### mcp-dynamic-analysis-server
-- Dynamic analysis MCP server for runtime evidence collection
-- Wraps Valgrind Memcheck, AddressSanitizer, and LeakSanitizer
-- Normalizes findings into shared leak bundle format
-- Stores run artifacts under `runs/` directory
-- Linux-only (use Docker on macOS)
-
-### mcp-memory-common
-- Shared Pydantic models for memory leak schemas
-- Ensures consistent data exchange between all components
-
-### tools/leak_guard_tool
-- Existing memory leak analyzer codebase (third-party submodule)
-- Integrated via static server's LeakGuard adapter
-- Runs in `leakguard-runtime` Docker container
+### Canonical docs (source of truth)
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — components, protocols, the two orchestration paths
+- [docs/PROMPTS.md](docs/PROMPTS.md) — every LLM prompt
+- [docs/EVALUATION.md](docs/EVALUATION.md) — metrics, scoring model, reproducibility & baseline protocol
+- [docs/SECURITY.md](docs/SECURITY.md) — trust model & controls for executing untrusted code
+- [docs/DATASETS.md](docs/DATASETS.md) — obtaining/rebuilding Juliet + demo corpora (not committed)
 
 ### proto/
 - Shared gRPC service definitions
@@ -74,7 +72,7 @@ The workspace consists of six main components:
 
 1. Static and dynamic analyzers expose MCP tools over HTTP
 2. NestJS control plane coordinates investigation by calling these tools
-3. Findings are normalized into shared leak bundles (from mcp-memory-common)
+3. Findings are normalized into shared leak bundles (from `@mcpvul/common`)
 4. Judge layer produces verdicts, explanations, and repair suggestions
 5. Reports are emitted in multiple formats for evaluation
 
@@ -87,19 +85,20 @@ Thesis/
 │   ├── static-analyzer/            ← Static analysis gRPC service (port 50051)
 │   ├── dynamic-analyzer/           ← Dynamic analysis gRPC service (port 50052)
 │   └── leak-inspector-ui/          ← React SPA frontend
+│   └── leak-inspector-tui/         ← Standalone agentic TUI/CLI scanner (HYBRID, MCP)
 ├── packages/
-│   └── common/                     ← Shared types, DTOs, entities, Zod schemas (@mcpvul/common)
-├── tools/
-│   └── leak_guard_tool/            ← Third-party Clang Static Analyzer (submodule)
+│   ├── common/                     ← Shared types, DTOs, entities, Zod schemas, analysis (@mcpvul/common)
+│   └── agent-core/                 ← Framework-free native tool-calling loop + providers + MCP client
 ├── proto/                          ← Shared gRPC service definitions
-├── docker-compose.yml              ← Full stack deployment (6 services)
+├── docs/                           ← Canonical docs (ARCHITECTURE, PROMPTS, EVALUATION, SECURITY, DATASETS)
+├── docker-compose.yml              ← Full stack deployment
 ├── nest-cli.json                   ← NestJS monorepo configuration
 ├── package.json                    ← Root workspace config + turbo scripts
 ├── turbo.json                      ← Task pipeline (build/dev/lint/test)
 ├── tsconfig.base.json              ← Shared TypeScript config for NestJS apps
-├── demo/memory_leak_corpus/        ← Test corpus
-└── results/                        ← Scan outputs
+└── demo/memory_leak_corpus/        ← Test corpus (sources committed; binaries/results git-ignored)
 ```
+(`tools/leak_guard_tool/` and `results/` are gone / git-ignored — see the note above.)
 
 ## Common Commands
 

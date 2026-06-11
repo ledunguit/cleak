@@ -7,7 +7,24 @@ process.on('unhandledRejection', (reason) => {
   console.error('[unhandledRejection]', reason);
 });
 
+const DEFAULT_JWT_SECRET = 'mcpvul-dev-secret-change-in-production';
+
+/** Loudly flag insecure defaults so a dev config is never silently shipped. */
+function warnInsecureDefaults() {
+  const warn = (m: string) => console.warn(`[security] ${m}`);
+  if (!process.env.JWT_SECRET || process.env.JWT_SECRET === DEFAULT_JWT_SECRET) {
+    warn('JWT_SECRET is the built-in default — set a strong JWT_SECRET before any non-local use.');
+  }
+  if (process.env.DB_SYNC === 'true') {
+    warn('DB_SYNC=true — TypeORM auto-sync is on; use migrations for any persistent database.');
+  }
+  if (!process.env.TOKEN_ENC_KEY) {
+    warn('TOKEN_ENC_KEY is unset — GitHub OAuth tokens are stored UNENCRYPTED at rest.');
+  }
+}
+
 async function bootstrap() {
+  warnInsecureDefaults();
   const app = await NestFactory.create(ControlPlaneModule);
 
   // Graceful shutdown so the BullMQ worker drains/closes cleanly (in-flight jobs

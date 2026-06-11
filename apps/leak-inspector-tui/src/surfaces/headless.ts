@@ -12,7 +12,7 @@ import { AnalysisMode, DynamicMode } from '@mcpvul/common/types';
 import { loadConfig, type Provider } from '../config';
 import { loadEnvFiles } from '../domain/env';
 import { buildPathResolver } from '../domain/pathResolver';
-import { ScanEmitter, JsonlFileSink, MultiSink, type EventSink } from '../orchestrator/events';
+import { ScanEmitter, JsonlFileSink, MultiSink, CallbackSink, type EventSink, type ScanEvent } from '../orchestrator/events';
 import { runScan, type ScanResult } from '../orchestrator/scanController';
 import { buildWorkflowInvestigationPhase } from '../orchestrator/workflowInvestigation';
 import { scanDir, writeReports, writeScanMetrics, type ReportFormatOpt } from '../domain/reportSink';
@@ -29,6 +29,10 @@ export interface HeadlessOptions {
   staticUrl?: string;
   dynamicUrl?: string;
   quiet?: boolean;
+  /** Live ScanEvent stream (used by the eval harness to show per-case phase). */
+  onEvent?: (ev: ScanEvent) => void;
+  /** Interrupt discovery + the agentic loop (e.g. eval cancel). */
+  signal?: AbortSignal;
 }
 
 export interface HeadlessResult extends ScanResult {
@@ -60,6 +64,7 @@ export async function runHeadless(opts: HeadlessOptions): Promise<HeadlessResult
   const dir = scanDir(cfg.resultsDir, scanId);
 
   const sinks: EventSink[] = [new JsonlFileSink(join(dir, 'events.jsonl'), !opts.quiet)];
+  if (opts.onEvent) sinks.push(new CallbackSink(opts.onEvent));
   const emitter = new ScanEmitter(new MultiSink(sinks));
 
   const staticClient = new McpClient(cfg.staticUrl, 'static');
@@ -85,7 +90,7 @@ export async function runHeadless(opts: HeadlessOptions): Promise<HeadlessResult
         fileLimit: opts.fileLimit,
         buildCommand: opts.build,
       },
-      { staticClient, dynamicClient, emitter, pathResolver, investigation },
+      { staticClient, dynamicClient, emitter, pathResolver, investigation, abortSignal: opts.signal },
     );
 
     const formats = parseFormats(opts.format);
@@ -104,6 +109,10 @@ export async function runHeadless(opts: HeadlessOptions): Promise<HeadlessResult
           computeScanMetrics(snap, {
             mode: opts.mode,
             dynamic: opts.dynamic,
+            // Provenance only meaningful when the LLM actually drove the scan.
+            ...(analysisMode === AnalysisMode.LLM_ASSISTED
+              ? { provider: cfg.llm.provider, model: cfg.llm.model, temperature: cfg.llm.temperature }
+              : {}),
             turns: result.investigation?.turns,
             inputTokens: result.investigation?.usage?.inputTokens,
             outputTokens: result.investigation?.usage?.outputTokens,

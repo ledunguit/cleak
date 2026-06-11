@@ -22,8 +22,29 @@ import {
   type Sample,
 } from '@mcpvul/common/analysis/metrics';
 import { mapWithLimit } from '@mcpvul/agent-core';
+import { EVENT_PHASE, EVENT_KIND, type ScanEventName } from '@mcpvul/common/flow/scan-flow-contract';
 import { runHeadless } from '../surfaces/headless';
-import { scoreCase, isFlagged, type LabeledCase, type LabeledManifest, type SnapshotFinding } from './evalScoring';
+import { loadConfig } from '../config';
+import { captureProvenance, summarizeStat, type EvalProvenance, type Stat } from './provenance';
+import {
+  scoreCase,
+  isFlagged,
+  type LabeledCase,
+  type LabeledManifest,
+  type SnapshotFinding,
+  type LabeledFlaw,
+  type CleanSite,
+} from './evalScoring';
+
+/** Per-case detail streamed to the UI so it can show findings vs ground truth. */
+export interface EvalCaseDetail {
+  id: string;
+  row: CaseRow;
+  findings: SnapshotFinding[];
+  flaws: LabeledFlaw[];
+  clean: CleanSite[];
+  scanId?: string;
+}
 
 export interface EvalOptions {
   corpusDir: string;
@@ -35,7 +56,17 @@ export interface EvalOptions {
   resume?: boolean;
   staticUrl?: string;
   dynamicUrl?: string;
+  /** Independent repetitions for variance reporting (multi-run); set by runEvalRepeated. */
+  runs?: number;
+  /** Cancel the run: in-flight cases are aborted, not-yet-started ones are skipped. */
+  signal?: AbortSignal;
   onProgress?: (done: number, total: number, id: string) => void;
+  /** A case has started running (before its scan begins). */
+  onCaseStart?: (id: string) => void;
+  /** A running case advanced to a new phase (live). */
+  onCasePhase?: (id: string, phase: string) => void;
+  /** A case finished — full detail (findings vs ground truth) for the UI. */
+  onCaseResult?: (detail: EvalCaseDetail) => void;
 }
 
 export interface CaseRow {
@@ -43,7 +74,7 @@ export interface CaseRow {
   cwe?: string;
   flowVariant?: string;
   functionalVariant?: string;
-  status: 'ok' | 'error';
+  status: 'ok' | 'error' | 'skipped';
   tp: number;
   fp: number;
   fn: number;
@@ -61,6 +92,8 @@ export interface EvalResult {
   mode: string;
   dynamic: string;
   generatedAt: string;
+  /** Model/provider/temperature/tool-versions/git-commit/corpus-hash for reproducibility. */
+  provenance: EvalProvenance;
   caseCount: number;
   ranOk: number;
   overall: Metrics;
@@ -77,6 +110,8 @@ interface CachedCase {
   id: string;
   samples: Sample[];
   row: CaseRow;
+  /** Snapshot findings retained so --resume can replay the per-case detail view. */
+  findings?: SnapshotFinding[];
 }
 
 function metricsByKey(groups: Map<string, Sample[]>): Record<string, Metrics> {
@@ -89,25 +124,72 @@ export async function runEval(opts: EvalOptions): Promise<EvalResult> {
   const manifestPath = join(opts.corpusDir, 'corpus_manifest.json');
   const manifest = JSON.parse(readFileSync(manifestPath, 'utf-8')) as LabeledManifest;
   const cases = (manifest.cases ?? []).slice(0, opts.limit ?? Infinity);
+
+  // Reproducibility provenance — the exact config that produced these numbers.
+  const llmCfg = opts.mode === 'llm_assisted' ? loadConfig({}).llm : undefined;
+  const provenance = captureProvenance({
+    provider: llmCfg?.provider,
+    model: llmCfg?.model,
+    temperature: llmCfg?.temperature,
+    dynamicEnabled: opts.dynamic !== 'off',
+    manifestPath,
+    runs: opts.runs ?? 1,
+  });
   const caseCacheDir = join(opts.outDir, 'cases');
   mkdirSync(caseCacheDir, { recursive: true });
 
   const concurrency = opts.concurrency ?? (opts.mode === 'no_llm' ? 6 : 3);
   let done = 0;
 
+  const emitResult = (c: LabeledCase, cached: CachedCase) => {
+    opts.onCaseResult?.({
+      id: c.id,
+      row: cached.row,
+      findings: cached.findings ?? [],
+      flaws: c.flaws ?? [],
+      clean: c.clean ?? [],
+      scanId: cached.row.scanId,
+    });
+  };
+
+  const skippedRow = (c: LabeledCase): CaseRow => ({
+    id: c.id,
+    cwe: c.cwe,
+    flowVariant: c.flowVariant,
+    functionalVariant: c.functionalVariant,
+    status: 'skipped',
+    tp: 0,
+    fp: 0,
+    fn: 0,
+    tn: 0,
+    candidates: 0,
+    flagged: 0,
+    durationMs: 0,
+    tokens: 0,
+  });
+
   const scoreOne = async (c: LabeledCase): Promise<CachedCase> => {
     const cachePath = join(caseCacheDir, `${c.id}.json`);
     if (opts.resume && existsSync(cachePath)) {
       try {
         const cached = JSON.parse(readFileSync(cachePath, 'utf-8')) as CachedCase;
+        emitResult(c, cached); // replay the cached case straight into the UI
         opts.onProgress?.(++done, cases.length, `${c.id} (cached)`);
         return cached;
       } catch {
         /* fall through to re-run */
       }
     }
+    // Cancelled before this case got a worker → skip it (don't run, don't score).
+    if (opts.signal?.aborted) {
+      const result: CachedCase = { id: c.id, samples: [], row: skippedRow(c), findings: [] };
+      emitResult(c, result);
+      opts.onProgress?.(++done, cases.length, `${c.id} (skipped)`);
+      return result;
+    }
     const repo = join(opts.corpusDir, c.repo_path);
     const started = Date.now();
+    opts.onCaseStart?.(c.id);
     try {
       const r = await runHeadless({
         repo,
@@ -118,10 +200,26 @@ export async function runEval(opts: EvalOptions): Promise<EvalResult> {
         staticUrl: opts.staticUrl,
         dynamicUrl: opts.dynamicUrl,
         quiet: true,
+        signal: opts.signal,
+        // Stream phase transitions so the UI can show each case's live progress.
+        onEvent: opts.onCasePhase
+          ? (ev) => {
+              if (EVENT_KIND[ev.name as ScanEventName] === 'phase_start') {
+                const phase = EVENT_PHASE[ev.name as ScanEventName] ?? ev.phase;
+                if (phase) opts.onCasePhase!(c.id, String(phase));
+              }
+            }
+          : undefined,
       });
       const durationMs = Date.now() - started;
       const snapshot = JSON.parse(readFileSync(join(r.dir, 'snapshot.json'), 'utf-8')) as { findings?: SnapshotFinding[] };
-      const findings = snapshot.findings ?? [];
+      // Fail LOUDLY on a malformed snapshot: a missing findings array would
+      // otherwise score the case as 0 candidates / all-FN and silently bias the
+      // metrics. Better to mark the case `error` (the catch below) than lie.
+      if (!Array.isArray(snapshot.findings)) {
+        throw new Error(`snapshot.json for ${c.id} has no findings array (got ${typeof snapshot.findings})`);
+      }
+      const findings = snapshot.findings;
       const samples = scoreCase(findings, c);
       const cm = accumulate(samples);
       const tokens = (r.investigation?.usage?.inputTokens ?? 0) + (r.investigation?.usage?.outputTokens ?? 0);
@@ -141,17 +239,21 @@ export async function runEval(opts: EvalOptions): Promise<EvalResult> {
         tokens,
         scanId: r.scanId,
       };
-      const result: CachedCase = { id: c.id, samples, row };
+      const result: CachedCase = { id: c.id, samples, row, findings };
       writeFileSync(cachePath, JSON.stringify(result));
+      emitResult(c, result);
       opts.onProgress?.(++done, cases.length, c.id);
       return result;
     } catch (err: any) {
+      // A case interrupted by cancel counts as skipped (not a real error), and is
+      // NOT cached so a later --resume re-runs it.
+      const aborted = opts.signal?.aborted || err?.name === 'AbortError';
       const row: CaseRow = {
         id: c.id,
         cwe: c.cwe,
         flowVariant: c.flowVariant,
         functionalVariant: c.functionalVariant,
-        status: 'error',
+        status: aborted ? 'skipped' : 'error',
         tp: 0,
         fp: 0,
         fn: 0,
@@ -160,10 +262,12 @@ export async function runEval(opts: EvalOptions): Promise<EvalResult> {
         flagged: 0,
         durationMs: Date.now() - started,
         tokens: 0,
-        error: err?.message ?? String(err),
+        ...(aborted ? {} : { error: err?.message ?? String(err) }),
       };
-      opts.onProgress?.(++done, cases.length, `${c.id} (error)`);
-      return { id: c.id, samples: [], row };
+      const result: CachedCase = { id: c.id, samples: [], row, findings: [] };
+      emitResult(c, result);
+      opts.onProgress?.(++done, cases.length, `${c.id} (${aborted ? 'skipped' : 'error'})`);
+      return result;
     }
   };
 
@@ -198,6 +302,7 @@ export async function runEval(opts: EvalOptions): Promise<EvalResult> {
     mode: opts.mode,
     dynamic: opts.dynamic,
     generatedAt: new Date().toISOString(),
+    provenance,
     caseCount: cases.length,
     ranOk: okRows.length,
     overall: computeMetrics(accumulate(allSamples)),
@@ -213,5 +318,50 @@ export async function runEval(opts: EvalOptions): Promise<EvalResult> {
       meanTokens: okRows.length ? Math.round(totalTokens / okRows.length) : 0,
     },
     rows,
+  };
+}
+
+/** Aggregate of N independent eval runs: headline metric mean ± std across runs. */
+export interface RepeatedEvalResult {
+  runs: number;
+  mode: string;
+  dynamic: string;
+  provenance: EvalProvenance;
+  /** Mean/std/min/max across runs for the headline metrics + ECE. */
+  aggregate: Record<'precision' | 'recall' | 'f1' | 'accuracy' | 'mcc' | 'ece', Stat>;
+  perRun: EvalResult[];
+}
+
+/**
+ * Run the whole eval `runs` times and report mean ± std of the headline metrics.
+ * LLM sampling is nondeterministic, so a single `llm_assisted` pass is a point
+ * estimate; reporting variance across runs is what makes the comparison credible.
+ * Each run writes to its own `outDir/run-K` so per-case caches never collide.
+ * For deterministic `no_llm` mode one run suffices (callers should pass runs=1).
+ */
+export async function runEvalRepeated(opts: EvalOptions, runs: number): Promise<RepeatedEvalResult> {
+  const n = Math.max(1, Math.floor(runs));
+  const perRun: EvalResult[] = [];
+  for (let k = 0; k < n; k++) {
+    if (opts.signal?.aborted) break;
+    const result = await runEval({ ...opts, outDir: join(opts.outDir, `run-${k + 1}`), runs: n });
+    perRun.push(result);
+    opts.onProgress?.(k + 1, n, `run ${k + 1}/${n}`);
+  }
+  const pick = (sel: (m: Metrics) => number) => summarizeStat(perRun.map((r) => sel(r.overall)));
+  return {
+    runs: perRun.length,
+    mode: opts.mode,
+    dynamic: opts.dynamic,
+    provenance: perRun[0]?.provenance ?? captureProvenance({ dynamicEnabled: opts.dynamic !== 'off', runs: n }),
+    aggregate: {
+      precision: pick((m) => m.precision),
+      recall: pick((m) => m.recall),
+      f1: pick((m) => m.f1),
+      accuracy: pick((m) => m.accuracy),
+      mcc: pick((m) => m.mcc),
+      ece: summarizeStat(perRun.map((r) => r.ece)),
+    },
+    perRun,
   };
 }

@@ -28,6 +28,29 @@ export enum AnalysisMode {
   LLM_ASSISTED = 'llm_assisted',
 }
 
+/**
+ * Calibrated dynamic leak taxonomy. Mirrors Valgrind's leak kinds plus a
+ * generic ASan/LSan bucket, so the judge can weight `definitely_lost` as
+ * near-decisive while treating `still_reachable` as likely-benign instead of
+ * giving every runtime finding the same flat credit.
+ */
+export enum DynamicLeakKind {
+  DEFINITELY_LOST = 'definitely_lost',
+  INDIRECTLY_LOST = 'indirectly_lost',
+  POSSIBLY_LOST = 'possibly_lost',
+  STILL_REACHABLE = 'still_reachable',
+  ASAN_LEAK = 'asan_leak',
+  OTHER = 'other',
+}
+
+/** How a dynamic finding's allocation site was matched to a static candidate. */
+export type CorrelationMethod =
+  | 'file_line_exact'
+  | 'file_line_near'
+  | 'function_match'
+  | 'file_only'
+  | 'none';
+
 export enum DynamicMode {
   OFF = 'off',
   SELECTIVE = 'selective',
@@ -87,9 +110,25 @@ export interface LeakBundle {
   candidate: LeakCandidate;
   verdict?: VerdictResult;
   evidence: LeakEvidence[];
+  /**
+   * Rich, typed static evidence assembled from the static-analyzer tools
+   * (ownership summary, alloc→free pairing, feasible leak paths). Optional so
+   * older serialized reports still parse and bundles judged before this field
+   * existed remain valid.
+   */
+  staticEvidence?: StaticLeakEvidence;
   status: FindingStatus;
   createdAt: string;
   updatedAt: string;
+}
+
+/** A single frame of a dynamic allocation/leak backtrace. */
+export interface StackFrameRef {
+  function: string | null;
+  file: string | null;
+  line: number | null;
+  /** false for libc/allocator internals (malloc, calloc, operator new …). */
+  isUserFrame: boolean;
 }
 
 export interface LeakEvidence {
@@ -103,6 +142,77 @@ export interface LeakEvidence {
   severity: string;
   stack_trace: string;
   raw_output: string;
+  // ── Enriched dynamic evidence (all optional / additive) ──
+  /** Calibrated leak taxonomy (Valgrind kind or ASan/LSan bucket). */
+  leakKind?: DynamicLeakKind;
+  /** Full allocation backtrace, user + library frames preserved. */
+  allocStack?: StackFrameRef[];
+  /** First user frame of the allocation backtrace — the alloc site. */
+  allocSite?: { file: string; line: number; function: string };
+  /** SHA1 dedup signature from the normalizer. */
+  signature?: string;
+  /** True once the cross-correlation step links this finding to its candidate. */
+  correlatedToCandidate?: boolean;
+  /** How the link was established (exact line, near, function, file, none). */
+  correlationMethod?: CorrelationMethod;
+  /** |alloc line − candidate line| when both are known. */
+  correlationDistanceLines?: number;
+}
+
+// ── Static evidence artifacts (research: MemHint / LAMeD) ──
+
+/**
+ * Ownership-explicit function summary: classifies a function and states which
+ * value carries memory ownership. The single highest-value static artifact for
+ * the LLM judge.
+ */
+export interface OwnershipSummary {
+  functionName: string;
+  filePath: string;
+  role: 'allocator' | 'deallocator' | 'neither' | 'both';
+  /** Which value carries ownership out of the function. */
+  ownershipCarrier:
+    | { kind: 'return_value' }
+    | { kind: 'parameter'; name: string; index: number }
+    | { kind: 'none' };
+  /** Legacy coarse type: returns_ownership / consumes_ownership / local_ownership / none. */
+  ownershipType: string;
+  rationale: string;
+}
+
+/** An allocation paired with its corresponding free (or null when unpaired). */
+export interface AllocFreePair {
+  variable: string;
+  allocCall: string;
+  allocLine: number;
+  allocFile: string;
+  freeLine: number | null;
+  freeFunction: string | null;
+  /** LAMeD post-filter: the alloc binds to a NEW variable, not an existing object. */
+  bindsToNewVariable: boolean;
+  /** paired = freed on all paths; unpaired = never freed; conditional = freed on some paths only. */
+  status: 'paired' | 'unpaired' | 'conditional';
+}
+
+/** A feasible (reachable) exit path that leaves an allocation un-freed. */
+export interface FeasibleLeakPath {
+  kind: 'return' | 'goto' | 'exit' | 'longjmp' | 'fallthrough';
+  exitLine: number;
+  reachable: boolean;
+  conditions: string[];
+  unreconciledAllocations: string[];
+  leakRisk: 'high' | 'medium' | 'low' | 'none';
+  /** Human/LLM-readable alloc→exit-without-free story. */
+  narrative: string;
+  feasibilityChecked: 'heuristic' | 'z3' | 'none';
+}
+
+export interface StaticLeakEvidence {
+  ownership?: OwnershipSummary;
+  allocFreePairs: AllocFreePair[];
+  feasibleLeakPaths: FeasibleLeakPath[];
+  earlyReturnCount: number;
+  leakyExitPaths: number;
 }
 
 export interface ScanMetadata {

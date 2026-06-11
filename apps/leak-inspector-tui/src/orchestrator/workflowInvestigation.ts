@@ -205,7 +205,7 @@ export function buildWorkflowInvestigationPhase(cfg: RunConfig, dynamicMode: Dyn
       onNotice(`Stage D · ${borderline.length}/${allBundles.length} borderline → LLM judge (concurrency ${cfg.workflow.judgeConcurrency})`);
       await mapWithLimit(borderline, cfg.workflow.judgeConcurrency, async (b) => {
         if (ctx.abortSignal?.aborted) return;
-        const llm = await judgeBundleWithLlm(b, staticStore.get(b.bundleId), callModel, ctx.abortSignal);
+        const llm = await judgeBundleWithLlm(b, staticStore.get(b.bundleId), callModel, ctx.abortSignal, cfg.llm.judgeTemperature);
         if (!llm) return;
         b.verdict = llm;
         b.updatedAt = new Date().toISOString();

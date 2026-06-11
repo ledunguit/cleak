@@ -29,6 +29,30 @@ export const LeakCandidateSchema = z.object({
   context: z.string(),
 });
 
+export const DynamicLeakKindSchema = z.enum([
+  'definitely_lost',
+  'indirectly_lost',
+  'possibly_lost',
+  'still_reachable',
+  'asan_leak',
+  'other',
+]);
+
+export const CorrelationMethodSchema = z.enum([
+  'file_line_exact',
+  'file_line_near',
+  'function_match',
+  'file_only',
+  'none',
+]);
+
+export const StackFrameRefSchema = z.object({
+  function: z.string().nullable(),
+  file: z.string().nullable(),
+  line: z.number().int().nullable(),
+  isUserFrame: z.boolean(),
+});
+
 export const LeakEvidenceSchema = z.object({
   tool: ToolKindSchema,
   runId: z.string(),
@@ -40,6 +64,59 @@ export const LeakEvidenceSchema = z.object({
   severity: z.string(),
   stack_trace: z.string(),
   raw_output: z.string(),
+  // ── Enriched dynamic evidence (optional / additive) ──
+  leakKind: DynamicLeakKindSchema.optional(),
+  allocStack: z.array(StackFrameRefSchema).optional(),
+  allocSite: z
+    .object({ file: z.string(), line: z.number().int(), function: z.string() })
+    .optional(),
+  signature: z.string().optional(),
+  correlatedToCandidate: z.boolean().optional(),
+  correlationMethod: CorrelationMethodSchema.optional(),
+  correlationDistanceLines: z.number().int().optional(),
+});
+
+export const OwnershipSummarySchema = z.object({
+  functionName: z.string(),
+  filePath: z.string(),
+  role: z.enum(['allocator', 'deallocator', 'neither', 'both']),
+  ownershipCarrier: z.union([
+    z.object({ kind: z.literal('return_value') }),
+    z.object({ kind: z.literal('parameter'), name: z.string(), index: z.number().int() }),
+    z.object({ kind: z.literal('none') }),
+  ]),
+  ownershipType: z.string(),
+  rationale: z.string(),
+});
+
+export const AllocFreePairSchema = z.object({
+  variable: z.string(),
+  allocCall: z.string(),
+  allocLine: z.number().int(),
+  allocFile: z.string(),
+  freeLine: z.number().int().nullable(),
+  freeFunction: z.string().nullable(),
+  bindsToNewVariable: z.boolean(),
+  status: z.enum(['paired', 'unpaired', 'conditional']),
+});
+
+export const FeasibleLeakPathSchema = z.object({
+  kind: z.enum(['return', 'goto', 'exit', 'longjmp', 'fallthrough']),
+  exitLine: z.number().int(),
+  reachable: z.boolean(),
+  conditions: z.array(z.string()),
+  unreconciledAllocations: z.array(z.string()),
+  leakRisk: z.enum(['high', 'medium', 'low', 'none']),
+  narrative: z.string(),
+  feasibilityChecked: z.enum(['heuristic', 'z3', 'none']),
+});
+
+export const StaticLeakEvidenceSchema = z.object({
+  ownership: OwnershipSummarySchema.optional(),
+  allocFreePairs: z.array(AllocFreePairSchema),
+  feasibleLeakPaths: z.array(FeasibleLeakPathSchema),
+  earlyReturnCount: z.number().int(),
+  leakyExitPaths: z.number().int(),
 });
 
 export const LeakRootCauseSchema = z.object({
@@ -79,6 +156,7 @@ export const LeakBundleSchema = z.object({
   candidate: LeakCandidateSchema,
   verdict: VerdictResultSchema.optional(),
   evidence: z.array(LeakEvidenceSchema),
+  staticEvidence: StaticLeakEvidenceSchema.optional(),
   status: z.enum(['pending', 'investigating', 'confirmed', 'dismissed']),
   createdAt: z.string(),
   updatedAt: z.string(),
@@ -117,3 +195,28 @@ export const ScanReportSchema = z.object({
   bundles: z.array(LeakBundleSchema),
   summary: ReportSummarySchema,
 });
+
+// ── Runtime validation helpers ──
+// The schemas above are only worth defining if they actually run at ingestion
+// boundaries. These wrappers turn a parsed `unknown` into a typed value, throwing
+// a descriptive error instead of letting malformed data flow on as a silent `as` cast.
+
+export type LeakBundleParsed = z.infer<typeof LeakBundleSchema>;
+
+/** Validate one leak bundle; throws with the zod issue list on mismatch. */
+export function validateLeakBundle(data: unknown): LeakBundleParsed {
+  const r = LeakBundleSchema.safeParse(data);
+  if (!r.success) {
+    throw new Error(`Invalid LeakBundle: ${r.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ')}`);
+  }
+  return r.data;
+}
+
+/** Validate a whole scan report (bundles + metadata + summary). */
+export function validateScanReport(data: unknown): z.infer<typeof ScanReportSchema> {
+  const r = ScanReportSchema.safeParse(data);
+  if (!r.success) {
+    throw new Error(`Invalid ScanReport: ${r.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ')}`);
+  }
+  return r.data;
+}

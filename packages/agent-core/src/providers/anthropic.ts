@@ -30,6 +30,8 @@ export async function callAnthropic(
     messages: toAnthropicMessages(req.messages),
     stream: true,
   };
+  const temperature = req.temperature ?? settings.temperature;
+  if (temperature != null) body.temperature = temperature;
   if (req.tools.length) body.tools = toAnthropicTools(req.tools);
 
   let assembler = createAnthropicStreamAssembler(uuid);

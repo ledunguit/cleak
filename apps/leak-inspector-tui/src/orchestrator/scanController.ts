@@ -12,6 +12,7 @@
  * is where the model freely chooses which analysis tools to run.
  */
 
+import { basename } from 'node:path';
 import { mapWithLimit } from '@mcpvul/agent-core';
 import type { AgentEvent, McpClient } from '@mcpvul/agent-core';
 import {
@@ -31,6 +32,20 @@ import { heuristicVerdict } from '../domain/judge';
 import type { InvestigationPhase, InvestigationOutcome } from './investigation';
 
 const reporter = new LeakReporting();
+
+/**
+ * Juliet's shared test-harness files. The buildable-project ingest copies these
+ * into each case dir so testcases compile, but they are NOT testcase code —
+ * scanning them only produces noise candidates (e.g. `unknown@std_testcase.h`)
+ * that waste tokens and confuse the judge. Skip them at discovery.
+ */
+const JULIET_SUPPORT_FILES = new Set([
+  'std_testcase.h',
+  'std_testcase_io.h',
+  'std_testcase.cpp',
+  'io.c',
+  'main.cpp',
+]);
 
 export interface ScanInput {
   scanId: string;
@@ -96,7 +111,9 @@ export async function runScan(input: ScanInput, deps: ScanDeps): Promise<ScanRes
   // tool. No shared filesystem with the analyzer — works the same whether the
   // analyzer runs locally or on a remote host. ──
   emitter.emit(ScanEventName.DISCOVERY_STARTED, { repoPath: input.repoPath });
-  const cFiles = walkCFiles(input.repoPath, input.fileLimit && input.fileLimit > 0 ? input.fileLimit : 2000);
+  const cFiles = walkCFiles(input.repoPath, input.fileLimit && input.fileLimit > 0 ? input.fileLimit : 2000).filter(
+    (f) => !JULIET_SUPPORT_FILES.has(basename(f).toLowerCase()),
+  );
   emitter.emit(ScanEventName.CANDIDATES_SCANNING, { totalFiles: cFiles.length });
 
   // Scan files concurrently (each candidateScan is an independent, stateless MCP

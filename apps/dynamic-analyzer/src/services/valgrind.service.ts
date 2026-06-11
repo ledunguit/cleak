@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
-import { execSync } from 'child_process';
 import { RunManagerService } from './run-manager.service';
 import { ResultParserService } from './result-parser.service';
+import { runConfined, sanitizeRunId } from './safe-exec';
 
 @Injectable()
 export class ValgrindService {
@@ -16,19 +16,19 @@ export class ValgrindService {
     runId?: string,
     timeoutSec?: number,
   ) {
-    const id = runId || `vg_${Date.now()}`;
+    // runId reaches the filesystem (/tmp/<id>.xml) — sanitize to defeat traversal.
+    const id = sanitizeRunId(runId || `vg_${Date.now()}`, 'vg');
     const timeout = timeoutSec || 120;
+    const xmlPath = `/tmp/${id}.xml`;
 
     try {
-      const cmd = `valgrind --tool=memcheck --leak-check=full --xml=yes --xml-file=/tmp/${id}.xml ${binaryPath} ${(args || []).join(' ')}`;
-      console.error(`[Valgrind] Running: ${cmd}`);
-      const output = execSync(cmd, {
-        timeout: timeout * 1000,
-        encoding: 'utf-8',
-        maxBuffer: 10 * 1024 * 1024,
-      });
+      // No shell: valgrind + the untrusted binary + its args go through an argv array.
+      const vgArgs = ['--tool=memcheck', '--leak-check=full', '--xml=yes', `--xml-file=${xmlPath}`, binaryPath, ...(args || [])];
+      console.error(`[Valgrind] Running: valgrind ${vgArgs.join(' ')}`);
+      const result = await runConfined('valgrind', vgArgs, { timeoutSec: timeout });
+      const output = result.stdout || result.stderr;
 
-      const rawFindings = this.resultParser.parseValgrindXml(`/tmp/${id}.xml`);
+      const rawFindings = this.resultParser.parseValgrindXml(xmlPath);
       // Map findings to flat LeakFinding proto format
       const findings = rawFindings.map((f, i) => this.toLeakFinding(f, id, i));
 

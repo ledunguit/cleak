@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { execSync } from 'child_process';
+import { spawnSync } from 'child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { join } from 'path';
 
@@ -29,28 +29,21 @@ export class LeakGuardAdapterService {
     const timeout = timeoutSec || 300;
     const runId = `lg_${Date.now()}`;
     const reportDir = join(this.runsDir, runId);
-    const escaped = buildCommand.replace(/"/g, '\\"');
 
-    try {
-      // --keep-going: don't abort the whole pass on a single TU failure.
-      // 2>&1: clang analyzer diagnostics go to stderr; merge so we parse them.
-      const output = execSync(
-        `${this.scanBuildBin} -o "${reportDir}" --keep-going /bin/sh -c "${escaped}" 2>&1`,
-        {
-          cwd: projectPath,
-          timeout: timeout * 1000,
-          encoding: 'utf-8',
-          maxBuffer: 10 * 1024 * 1024,
-        },
-      );
-
-      this.saveRun(runId, output, projectPath);
-      return { success: true, runId, output };
-    } catch (err: any) {
-      const output = `${err.stdout || ''}${err.stderr || ''}` || err.message || '';
-      this.saveRun(runId, output, projectPath);
-      return { success: false, runId, output };
-    }
+    // No outer shell: scan-build, the report dir and bin are passed as argv, so a
+    // crafted path/bin can't inject. The build command keeps ONE intended shell
+    // layer (`/bin/sh -c <buildCommand>`) — scan-build needs to intercept a real
+    // build — but it's a single argv element, so there's no escaping to get wrong.
+    // --keep-going: don't abort the whole pass on a single TU failure.
+    const result = spawnSync(
+      this.scanBuildBin,
+      ['-o', reportDir, '--keep-going', '/bin/sh', '-c', buildCommand],
+      { cwd: projectPath, timeout: timeout * 1000, encoding: 'utf-8', maxBuffer: 10 * 1024 * 1024 },
+    );
+    // clang analyzer diagnostics go to stderr; merge with stdout so we parse them.
+    const output = `${result.stdout || ''}${result.stderr || ''}` || result.error?.message || '';
+    this.saveRun(runId, output, projectPath);
+    return { success: result.status === 0, runId, output };
   }
 
   async getReport(runId: string) {

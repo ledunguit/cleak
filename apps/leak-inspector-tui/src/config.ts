@@ -14,6 +14,10 @@ export interface ProviderConfig {
   apiKey: string;
   model: string;
   jsonMode: boolean;
+  /** Pinned sampling temperature (default 0 for reproducible runs). */
+  temperature: number;
+  /** Temperature for the judge role specifically — deterministic verdicts. */
+  judgeTemperature: number;
   timeoutMs: number;
   /** Max silence between streamed chunks before the request is treated as hung. */
   idleTimeoutMs: number;
@@ -68,6 +72,10 @@ export function resolveProvider(provider: Provider): ProviderConfig {
   const connectTimeoutMs = Number(env("LLM_CONNECT_TIMEOUT_MS", "30000"));
   const retries = Number(env("LLM_RETRIES", "2"));
   const maxTokens = Number(env("LLM_MAX_TOKENS", "4096"));
+  // Pin temperature for reproducibility (default 0). The judge stays deterministic
+  // even if the agentic loop is bumped up for exploration.
+  const temperature = Number(env("LLM_TEMPERATURE", "0"));
+  const judgeTemperature = Number(env("JUDGE_LLM_TEMPERATURE", "0"));
   if (provider === "openai") {
     return {
       provider,
@@ -75,6 +83,8 @@ export function resolveProvider(provider: Provider): ProviderConfig {
       apiKey: env("OPENAI_API_KEY"),
       model: env("OPENAI_MODEL", "gpt-4o"),
       jsonMode: bool("OPENAI_JSON_MODE", true),
+      temperature,
+      judgeTemperature,
       timeoutMs,
       idleTimeoutMs,
       connectTimeoutMs,
@@ -89,6 +99,8 @@ export function resolveProvider(provider: Provider): ProviderConfig {
       apiKey: env("ANTHROPIC_API_KEY"),
       model: env("ANTHROPIC_MODEL", "claude-sonnet-4-20250514"),
       jsonMode: false,
+      temperature,
+      judgeTemperature,
       timeoutMs,
       idleTimeoutMs,
       connectTimeoutMs,
@@ -103,6 +115,8 @@ export function resolveProvider(provider: Provider): ProviderConfig {
     apiKey: env("LOCAL_LLM_API_KEY"),
     model: env("LOCAL_LLM_MODEL", "mimo/mimo-v2.5-pro"),
     jsonMode: bool("LOCAL_LLM_JSON_MODE", true),
+    temperature,
+    judgeTemperature,
     timeoutMs,
     idleTimeoutMs,
     connectTimeoutMs,

@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { execSync } from 'child_process';
-import { existsSync, readdirSync, statSync, writeFileSync } from 'fs';
+import { execSync, execFileSync } from 'child_process';
+import { existsSync, readdirSync, statSync, writeFileSync, realpathSync } from 'fs';
 import { join } from 'path';
 
 @Injectable()
@@ -90,17 +90,27 @@ echo "---BUILD_COMPLETE---"
     writeFileSync(join(projectPath, '.mcpvul_docker_build.sh'), scriptContent);
 
     try {
-      // Use a lightweight C/C++ build container
-      const dockerCmd = [
-        'docker', 'run', '--rm',
-        '-v', `${projectPath}:${containerWorkDir}`,
+      // Canonicalize the mount source so a crafted projectPath can't point the
+      // bind-mount somewhere unexpected, and pass docker args as an array (no
+      // shell) so the path can never inject a command.
+      const mountSrc = realpathSync(projectPath);
+      // Confine the build container: no network + bounded memory/processes, so an
+      // untrusted build script can't exfiltrate or fork-bomb. Network is opt-in
+      // (some real builds fetch deps) via DYNAMIC_BUILD_NETWORK.
+      const network = process.env.DYNAMIC_BUILD_NETWORK || 'none';
+      const dockerArgs = [
+        'run', '--rm',
+        '--network', network,
+        '--memory', process.env.DYNAMIC_BUILD_MEMORY || '1g',
+        '--pids-limit', process.env.DYNAMIC_BUILD_PIDS || '512',
+        '-v', `${mountSrc}:${containerWorkDir}`,
         '-w', containerWorkDir,
         'gcc:latest',
-        '/bin/sh', `.mcpvul_docker_build.sh`,
-      ].join(' ');
+        '/bin/sh', '.mcpvul_docker_build.sh',
+      ];
 
-      this.logger.log(`Docker build: ${dockerCmd}`);
-      const output = execSync(dockerCmd, {
+      this.logger.log(`Docker build: docker ${dockerArgs.join(' ')}`);
+      const output = execFileSync('docker', dockerArgs, {
         timeout: timeoutSec * 1000,
         encoding: 'utf-8',
         maxBuffer: 10 * 1024 * 1024,

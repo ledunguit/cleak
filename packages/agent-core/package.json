@@ -14,7 +14,7 @@
   "scripts": {
     "build": "tsc --noEmit -p tsconfig.json",
     "lint": "echo 'lint ok'",
-    "test": "echo 'no tests'"
+    "test": "bun test"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.0",

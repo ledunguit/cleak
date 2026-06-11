@@ -1,7 +1,0 @@
-{"seq":0,"ts":1781113314455,"name":"scan_created","phase":"setup","data":{"scanId":"scan__mq8cvp1y","repoPath":"/","mode":"llm_assisted"}}
-{"seq":1,"ts":1781113314455,"name":"preflight_started","phase":"preflight","data":{}}
-{"seq":2,"ts":1781113314494,"name":"preflight_passed","phase":"preflight","data":{}}
-{"seq":3,"ts":1781113314499,"name":"workspace_started","phase":"workspace","data":{"repoPath":"/"}}
-{"seq":4,"ts":1781113314501,"name":"workspace_finished","phase":"workspace","data":{}}
-{"seq":5,"ts":1781113314502,"name":"discovery_started","phase":"discovery","data":{"repoPath":"/"}}
-{"seq":6,"ts":1781113318228,"name":"candidates_scanning","phase":"discovery","data":{"totalFiles":2000}}

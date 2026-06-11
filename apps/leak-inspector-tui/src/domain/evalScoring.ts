@@ -9,6 +9,7 @@
  */
 
 import type { Sample } from '@mcpvul/common/analysis/metrics';
+import { LEAK_POSITIVE_VERDICTS } from '@mcpvul/common/analysis/judge-shared';
 
 export interface LabeledFlaw {
   file?: string;
@@ -57,11 +58,9 @@ export interface SnapshotFinding {
   confidence?: number;
 }
 
-const LEAK_VERDICTS = new Set(['confirmed_leak', 'likely_leak']);
-
 /** A verdict counts as "flagged as a leak" (the positive prediction). */
 export function isFlagged(verdict?: string): boolean {
-  return !!verdict && LEAK_VERDICTS.has(verdict);
+  return !!verdict && LEAK_POSITIVE_VERDICTS.has(verdict);
 }
 
 /** True when this case carries per-function ground truth (v2), not just a count. */
@@ -73,11 +72,25 @@ function normalize(fn: string): string {
   return fn.trim().toLowerCase();
 }
 
+/**
+ * `long` ends with `short` at an identifier boundary — i.e. the char preceding
+ * the suffix is a name separator (`_`/`:`/`.`), not a letter. This makes the
+ * match tolerant of Juliet testcase prefixes (`CWE401_…__malloc_char_01_bad`
+ * vs `…_bad`) WITHOUT the false hits a bare `endsWith` produces (`domain`
+ * spuriously matching `main`, `badge_alloc` matching `bad`).
+ */
+function suffixAtBoundary(long: string, short: string): boolean {
+  if (long.length <= short.length || !long.endsWith(short)) return false;
+  const sep = long[long.length - short.length - 1];
+  return sep === '_' || sep === ':' || sep === '.';
+}
+
 /** Tolerant function-name match (handles testcase-prefixed Juliet names). */
 function sameFunction(a: string, b: string): boolean {
   const x = normalize(a);
   const y = normalize(b);
-  return x === y || x.endsWith(y) || y.endsWith(x);
+  if (!x || !y) return false;
+  return x === y || suffixAtBoundary(x, y) || suffixAtBoundary(y, x);
 }
 
 function baseName(p?: string): string {
@@ -138,16 +151,50 @@ function flawCovered(findings: SnapshotFinding[], flaw: LabeledFlaw, c: LabeledC
 }
 
 /**
- * Produce classification samples for one case. Each allocation finding becomes a
- * sample; additionally, any labeled flaw that produced NO finding (discovery
- * missed it entirely) is counted as a false negative so recall isn't inflated.
+ * The ground-truth SITE a finding is scored against: its exact allocation line
+ * in line mode, else its enclosing function. Findings that share a site collapse
+ * to one sample so a candidate the scanner reports twice (or once per tool)
+ * can't inflate TP/FP — one real flaw is one confusion-matrix entry.
+ */
+function siteKey(f: SnapshotFinding, lineMode: boolean): string {
+  return lineMode ? `${baseName(f.file)}:${f.line ?? '?'}` : normalize(f.function ?? '');
+}
+
+interface SiteAgg {
+  cls: 'bad' | 'good';
+  /** Flagged if ANY finding at this site was flagged. */
+  flagged: boolean;
+  confidence?: number;
+}
+
+/**
+ * Produce classification samples for one case, ONE per ground-truth site (not
+ * one per finding): findings are grouped by enclosing function (function mode)
+ * or allocation line (line mode), so duplicate/multi-tool findings on the same
+ * site count once. Any labeled flaw that produced NO finding (discovery missed
+ * it entirely) is added as a false negative so recall isn't inflated.
  */
 export function scoreCase(findings: SnapshotFinding[], c: LabeledCase): Sample[] {
-  const samples: Sample[] = [];
+  const lineMode = isLineMode(c);
+  const sites = new Map<string, SiteAgg>();
   for (const f of findings) {
     const cls = classifyFinding(f, c);
     if (cls === 'unknown') continue;
-    samples.push({ actual: cls === 'bad', predicted: isFlagged(f.verdict), confidence: f.confidence });
+    const key = siteKey(f, lineMode);
+    const flagged = isFlagged(f.verdict);
+    const prev = sites.get(key);
+    if (!prev) {
+      sites.set(key, { cls, flagged, confidence: f.confidence });
+    } else if (flagged && !prev.flagged) {
+      // A flagged finding wins the prediction and carries its confidence.
+      prev.flagged = true;
+      prev.confidence = f.confidence;
+    }
+  }
+
+  const samples: Sample[] = [];
+  for (const site of sites.values()) {
+    samples.push({ actual: site.cls === 'bad', predicted: site.flagged, confidence: site.confidence });
   }
   for (const flaw of c.flaws ?? []) {
     if (!flawCovered(findings, flaw, c)) samples.push({ actual: true, predicted: false, confidence: 0 }); // missed → FN

@@ -102,9 +102,13 @@ export class CandidateScanService {
       result.push(sanitized);
     }
 
-    // Remove multi-line comments (simple approach)
+    // Remove multi-line comments — but PRESERVE newlines so line numbers don't
+    // shift. Replacing a `/* … */` block with '' would delete its inner newlines
+    // and collapse every following line upward (Juliet files open with a ~14-line
+    // header comment), mis-anchoring candidate line numbers and breaking the
+    // sanitized↔original index alignment that extractFunctionName relies on.
     let joined = result.join('\n');
-    joined = joined.replace(/\/\*[\s\S]*?\*\//g, '');
+    joined = joined.replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, ' '));
     return joined;
   }
 

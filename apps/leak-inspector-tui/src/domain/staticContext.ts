@@ -9,10 +9,32 @@
  */
 
 import { basename } from 'node:path';
-import type { LeakBundle } from '@mcpvul/common/types';
+import type {
+  LeakBundle,
+  AllocFreePair,
+  FeasibleLeakPath,
+  OwnershipSummary,
+  StaticLeakEvidence,
+} from '@mcpvul/common/types';
 import type { Tool } from '@mcpvul/agent-core';
 
 export type StaticContextStore = Map<string, Record<string, any>>;
+
+/**
+ * Merge a partial into a bundle's typed `staticEvidence`, creating it if absent.
+ * Keeps the rich artifacts (ownership summary, alloc→free pairs, feasible leak
+ * paths) on the bundle so the judge + report can render them, alongside the
+ * loose context record used for legacy scoring keys.
+ */
+function mergeStaticEvidence(bundle: LeakBundle, partial: Partial<StaticLeakEvidence>): void {
+  const cur: StaticLeakEvidence = bundle.staticEvidence ?? {
+    allocFreePairs: [],
+    feasibleLeakPaths: [],
+    earlyReturnCount: 0,
+    leakyExitPaths: 0,
+  };
+  bundle.staticEvidence = { ...cur, ...partial };
+}
 
 function ctxFor(store: StaticContextStore, bundleId: string): Record<string, any> {
   let c = store.get(bundleId);
@@ -70,24 +92,50 @@ export function foldStaticResult(
       } catch {
         /* summary not parseable */
       }
+      const pairs: AllocFreePair[] = Array.isArray(out.pairs) ? out.pairs : [];
       for (const b of targets) {
         const c = ctxFor(store, b.bundleId);
         c.allocations = allocations;
         c.frees = frees;
         c.hasExplicitFree = frees.length > 0;
         if (leaky > 0) c.leakyExitPaths = leaky;
+        if (pairs.length) {
+          c.allocFreePairs = pairs;
+          mergeStaticEvidence(b, { allocFreePairs: pairs, leakyExitPaths: leaky });
+        }
       }
       break;
     }
     case 'pathConstraints': {
-      // result: { constraints, feasiblePaths, exitPaths, earlyReturnCount }
+      // result: { constraints, feasiblePaths, feasibleLeakPaths, exitPaths, earlyReturnCount }
       const exact = inFile.filter((b) => line != null && b.candidate.line_number === line);
       const targets = exact.length ? exact : inFile;
+      const leakPaths: FeasibleLeakPath[] = Array.isArray(out.feasibleLeakPaths) ? out.feasibleLeakPaths : [];
       for (const b of targets) {
         const c = ctxFor(store, b.bundleId);
         if (Array.isArray(out.feasiblePaths)) c.feasiblePaths = out.feasiblePaths;
         if (Array.isArray(out.constraints)) c.constraints = out.constraints;
         if (out.earlyReturnCount != null) c.earlyReturnCount = Number(out.earlyReturnCount);
+        if (leakPaths.length) c.feasibleLeakPaths = leakPaths;
+        mergeStaticEvidence(b, {
+          feasibleLeakPaths: leakPaths,
+          earlyReturnCount: Number(out.earlyReturnCount ?? 0),
+        });
+      }
+      break;
+    }
+    case 'ownershipSummary': {
+      // result: { ownerships: [{ functionName, ..., summary: OwnershipSummary }] }
+      const ownerships: any[] = Array.isArray(out.ownerships) ? out.ownerships : [];
+      for (const o of ownerships) {
+        const summary: OwnershipSummary | undefined = o?.summary;
+        if (!summary) continue;
+        for (const b of inFile.filter((b) => b.candidate.function_name === o.functionName)) {
+          const c = ctxFor(store, b.bundleId);
+          c.ownershipSummary = summary;
+          c.ownership = { ownershipType: summary.ownershipType };
+          mergeStaticEvidence(b, { ownership: summary });
+        }
       }
       break;
     }

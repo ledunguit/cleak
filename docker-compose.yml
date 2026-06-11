@@ -91,9 +91,12 @@ services:
     build:
       context: .
       dockerfile: apps/static-analyzer/Dockerfile
+    # Bound to localhost only: these are internal, UNAUTHENTICATED gRPC/MCP
+    # services the control-plane reaches over the docker network (static-analyzer:50051).
+    # Publishing to 0.0.0.0 would expose untrusted-code execution to the LAN.
     ports:
-      - "50051:50051"
-      - "50061:50061"
+      - "127.0.0.1:50051:50051"
+      - "127.0.0.1:50061:50061"
     env_file:
       - apps/static-analyzer/.env
     environment:
@@ -113,9 +116,10 @@ services:
     build:
       context: .
       dockerfile: apps/dynamic-analyzer/Dockerfile
+    # Localhost-only (see static-analyzer note): internal, unauthenticated services.
     ports:
-      - "50052:50052"
-      - "50062:50062"
+      - "127.0.0.1:50052:50052"
+      - "127.0.0.1:50062:50062"
     env_file:
       - apps/dynamic-analyzer/.env
     environment:

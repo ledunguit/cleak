@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import { readdirSync, statSync } from 'fs';
-import { join, extname } from 'path';
+import { readdirSync, lstatSync, realpathSync } from 'fs';
+import { join, extname, sep } from 'path';
 
 @Injectable()
 export class FileIndexingService {
@@ -13,8 +13,17 @@ export class FileIndexingService {
     const errors: string[] = [];
     const maxFiles = fileLimit || 10000;
 
+    // Canonical root: every indexed path must stay inside it, so a symlink planted
+    // in the scanned repo can't redirect indexing to /etc, ~/.ssh, etc.
+    let root: string;
     try {
-      this.walkDir(rootPath, files, errors, maxFiles);
+      root = realpathSync(rootPath);
+    } catch (err: any) {
+      return { files, totalCount: 0, errors: [`Cannot resolve root ${rootPath}: ${err.message}`] };
+    }
+
+    try {
+      this.walkDir(root, root, files, errors, maxFiles);
     } catch (err: any) {
       errors.push(err.message);
     }
@@ -26,7 +35,13 @@ export class FileIndexingService {
     };
   }
 
+  /** True iff `resolved` is the root itself or strictly inside it. */
+  private within(root: string, resolved: string): boolean {
+    return resolved === root || resolved.startsWith(root + sep);
+  }
+
   private walkDir(
+    root: string,
     dir: string,
     files: string[],
     errors: string[],
@@ -47,17 +62,32 @@ export class FileIndexingService {
       const fullPath = join(dir, entry);
 
       try {
-        const stat = statSync(fullPath);
-        if (stat.isDirectory()) {
+        // lstat (not stat) so we SEE symlinks instead of following them blindly.
+        const lst = lstatSync(fullPath);
+        if (lst.isSymbolicLink()) {
+          // Follow a symlink only if its real target stays within the repo root.
+          const real = realpathSync(fullPath);
+          if (!this.within(root, real)) continue;
+          const target = lstatSync(real);
+          if (target.isDirectory()) {
+            if (!entry.startsWith('.') && entry !== 'node_modules' && entry !== '__pycache__') {
+              this.walkDir(root, real, files, errors, maxFiles);
+            }
+          } else if (target.isFile() && this.isSourceFile(entry)) {
+            files.push(fullPath);
+          }
+          continue;
+        }
+        if (lst.isDirectory()) {
           // Skip common non-source directories
           if (!entry.startsWith('.') && entry !== 'node_modules' && entry !== '__pycache__') {
-            this.walkDir(fullPath, files, errors, maxFiles);
+            this.walkDir(root, fullPath, files, errors, maxFiles);
           }
         } else if (this.isSourceFile(entry)) {
           files.push(fullPath);
         }
       } catch {
-        // permission denied, skip
+        // permission denied, broken symlink, etc. — skip
       }
     }
   }

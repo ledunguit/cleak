@@ -313,6 +313,12 @@ export class PersistenceService implements OnApplicationBootstrap {
     const ws = await this.workspaceRepo.findOneBy({ workspaceId });
     if (!ws) throw new BadRequestException('Workspace not found');
 
+    // Reject anything that isn't a plain https/ssh/git URL before it reaches git
+    // — otherwise a crafted url ("https://x;rm -rf ~") would be shell injection.
+    if (!/^(https:\/\/|ssh:\/\/|git@)[A-Za-z0-9._~:/?#\[\]@!$&'()*+,;=%-]+$/.test(url)) {
+      throw new BadRequestException('Invalid repository URL (expected https://, ssh://, or git@…)');
+    }
+
     const repoName = name || url.split('/').pop()?.replace(/\.git$/, '') || 'repo';
     const cloneDir = join(ws.path, repoName);
 
@@ -323,8 +329,9 @@ export class PersistenceService implements OnApplicationBootstrap {
     mkdirSync(cloneDir, { recursive: true });
 
     try {
-      const { execSync } = require('child_process');
-      execSync(`git clone --depth 1 ${url} ${cloneDir}`, {
+      const { execFileSync } = require('child_process');
+      // Argv array (no shell) + `--` so the URL can't be parsed as a git flag.
+      execFileSync('git', ['clone', '--depth', '1', '--', url, cloneDir], {
         timeout: 120000, // 2 min timeout
         stdio: 'pipe',
         encoding: 'utf-8',

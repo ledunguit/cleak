@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { execSync } from 'child_process';
+import { runConfined } from './safe-exec';
 
 @Injectable()
 export class BinaryRunnerService {
@@ -8,31 +8,13 @@ export class BinaryRunnerService {
     args: string[],
     timeoutSec?: number,
   ) {
-    const timeout = timeoutSec || 60;
-
-    try {
-      const stdout = execSync(
-        `${binaryPath} ${args.join(' ')}`,
-        {
-          timeout: timeout * 1000,
-          encoding: 'utf-8',
-          maxBuffer: 10 * 1024 * 1024,
-        },
-      );
-
-      return {
-        success: true,
-        stdout,
-        stderr: '',
-        exitCode: 0,
-      };
-    } catch (err: any) {
-      return {
-        success: err.status === 0,
-        stdout: err.stdout || '',
-        stderr: err.stderr || err.message,
-        exitCode: err.status || -1,
-      };
-    }
+    // No shell + resource-confined: this runs an untrusted compiled binary.
+    const result = await runConfined(binaryPath, args ?? [], { timeoutSec: timeoutSec || 60 });
+    return {
+      success: result.code === 0 && !result.timedOut,
+      stdout: result.stdout,
+      stderr: result.timedOut ? `${result.stderr}\n[killed: exceeded ${timeoutSec || 60}s / resource limit]` : result.stderr,
+      exitCode: result.code,
+    };
   }
 }

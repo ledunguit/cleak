@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { writeFileSync, readFileSync, existsSync, mkdirSync, readdirSync } from 'fs';
 import { join } from 'path';
 
-interface RunRecord {
+export interface RunRecord {
   runId: string;
   tool: string;
   binaryPath: string;

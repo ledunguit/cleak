@@ -18,6 +18,7 @@ import {
   type LeakEvidence,
 } from '@mcpvul/common/types';
 import { enrichLeakVerdict } from '@mcpvul/common/analysis/heuristic-judge';
+import { deriveDynamicFields, correlateEvidence } from '@mcpvul/common/analysis/dynamic-evidence';
 import { CandidateManager, normalizeCandidate } from './candidateState';
 import type { PathResolver } from './pathResolver';
 
@@ -157,6 +158,7 @@ export function buildDomainTools(deps: DomainToolDeps): Tool[] {
       bytesLost: z.number().nonnegative().optional(),
       blocksLost: z.number().nonnegative().optional(),
       severity: z.string().optional(),
+      leakKind: z.string().optional(),
       stackTrace: z.string().optional(),
       rawOutput: z.string().optional(),
     }),
@@ -164,7 +166,7 @@ export function buildDomainTools(deps: DomainToolDeps): Tool[] {
     call: async (input: any) => {
       const bundle = deps.candidates.getBundle(input.bundleId);
       if (!bundle) return { error: `Unknown bundleId: ${input.bundleId}` };
-      const evidence: LeakEvidence = {
+      const base: LeakEvidence = {
         tool: TOOL_KIND_BY_NAME[input.tool] ?? ToolKind.HEURISTIC,
         runId: '',
         function_name: bundle.candidate.function_name,
@@ -176,8 +178,25 @@ export function buildDomainTools(deps: DomainToolDeps): Tool[] {
         stack_trace: input.stackTrace ?? '',
         raw_output: input.rawOutput ?? '',
       };
+      // Derive structured fields (leakKind / allocStack / allocSite) from the
+      // stack the LLM passed, then record HOW it lines up with the candidate the
+      // LLM chose to attach it to.
+      const enriched = deriveDynamicFields(base, { rawLeakKind: input.leakKind });
+      const corr = correlateEvidence(enriched, bundle.candidate);
+      const evidence: LeakEvidence = {
+        ...enriched,
+        correlatedToCandidate: corr.correlatedToCandidate,
+        correlationMethod: corr.correlationMethod,
+        correlationDistanceLines: corr.correlationDistanceLines,
+      };
       deps.candidates.attachEvidence(input.bundleId, evidence);
-      return { bundleId: input.bundleId, attached: true, evidence_count: bundle.evidence.length };
+      return {
+        bundleId: input.bundleId,
+        attached: true,
+        evidence_count: bundle.evidence.length,
+        leak_kind: evidence.leakKind,
+        correlation: evidence.correlationMethod,
+      };
     },
   });
 

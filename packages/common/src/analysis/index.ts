@@ -7,4 +7,5 @@
 export * from './reporting';
 export * from './heuristic-leak-analysis';
 export * from './heuristic-judge';
+export * from './judge-shared';
 export * from './metrics';

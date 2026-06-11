@@ -79,6 +79,25 @@ function mdMetricTable(title: string, entries: Array<[string, Metrics]>): string
   return [head, ...rows].join('\n');
 }
 
+function provenanceLines(r: EvalResult): string[] {
+  const p = r.provenance;
+  const tools = Object.entries(p.toolVersions ?? {}).map(([k, v]) => `${k}: ${v}`).join('; ');
+  return [
+    '## Reproducibility',
+    '',
+    '| field | value |',
+    '|---|---|',
+    `| Model | ${p.model ?? '— (no_llm)'} |`,
+    `| Provider | ${p.provider ?? '—'} |`,
+    `| Temperature | ${p.temperature ?? '—'} |`,
+    `| Runs | ${p.runs ?? 1} |`,
+    `| Git commit | ${p.gitCommit ?? '—'} |`,
+    `| Tool versions | ${tools || '—'} |`,
+    `| Corpus hash | ${p.corpusHash ?? '—'} |`,
+    '',
+  ];
+}
+
 function reportMarkdown(r: EvalResult): string {
   const m = r.overall;
   const lines: string[] = [
@@ -90,6 +109,7 @@ function reportMarkdown(r: EvalResult): string {
     `- Cost: mean ${r.cost.meanDurationMs} ms/case · ${r.cost.totalTokens} tokens total (${r.cost.meanTokens}/case)`,
     `- Expected Calibration Error: ${f3(r.ece)}`,
     '',
+    ...provenanceLines(r),
     '## Overall',
     '',
     '| metric | value |',

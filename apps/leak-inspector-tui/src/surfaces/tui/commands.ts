@@ -24,6 +24,7 @@ export interface CommandSpec {
 
 export const COMMANDS: CommandSpec[] = [
   { name: '/scan', summary: 'investigate a C/C++ repo', usage: '/scan <repo-path>', kind: 'action' },
+  { name: '/eval', summary: 'benchmark a labeled corpus (live dashboard: P/R/F1)', usage: '/eval <corpus-path> [limit] [c=N] [--resume]', kind: 'action' },
   {
     name: '/mode',
     summary: 'analysis mode',

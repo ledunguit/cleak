@@ -60,7 +60,9 @@ import { JwtAuthGuard } from './guards/jwt-auth.guard';
         password: config.get('POSTGRES_PASSWORD', 'mcpvul'),
         database: config.get('POSTGRES_DB', 'mcpvul'),
         autoLoadEntities: true,
-        synchronize: config.get('DB_SYNC', 'true') === 'true',
+        // Default OFF: auto-sync can silently drop columns/data on a schema change.
+        // Opt in explicitly (DB_SYNC=true) for throwaway dev databases only.
+        synchronize: config.get('DB_SYNC', 'false') === 'true',
       }),
     }),
     TypeOrmModule.forFeature([

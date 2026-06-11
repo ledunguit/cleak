@@ -7,6 +7,11 @@ export interface ProviderSettings {
   apiKey: string;
   model: string;
   maxTokens: number;
+  /**
+   * Sampling temperature. Omit to use the provider default. Pin it (e.g. 0) for
+   * reproducible thesis runs; a per-request `temperature` overrides this.
+   */
+  temperature?: number;
   /** Total-deadline timeout for the legacy non-streaming path (e.g. control-plane judge). */
   timeoutMs: number;
   /** Max gap between streamed chunks before the request is considered hung. */

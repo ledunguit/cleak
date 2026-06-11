@@ -30,6 +30,8 @@ export async function callOpenAiChat(
     stream: true,
     stream_options: { include_usage: true },
   };
+  const temperature = req.temperature ?? settings.temperature;
+  if (temperature != null) body.temperature = temperature;
   if (req.tools.length) {
     body.tools = toOpenAiTools(req.tools);
     body.tool_choice = 'auto';

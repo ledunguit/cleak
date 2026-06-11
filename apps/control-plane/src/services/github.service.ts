@@ -5,7 +5,7 @@ import { Repository } from 'typeorm';
 import { GitHubConnectionEntity, UserEntity } from '@mcpvul/common';
 import { randomBytes } from 'crypto';
 import { createHash } from 'crypto';
-import { execSync } from 'child_process';
+import { execSync, execFileSync } from 'child_process';
 import { existsSync, mkdirSync } from 'fs';
 
 const AUTHORIZE_URL = 'https://github.com/login/oauth/authorize';
@@ -194,18 +194,25 @@ export class GitHubService {
       : await this.getAccessToken();
     if (!token) throw new Error('GitHub not connected');
 
+    // Validate untrusted inputs before they reach git. Without this, a crafted
+    // branch ("main;rm -rf ~") or URL would be argument/command injection.
+    if (!/^[A-Za-z0-9._/-]+$/.test(branch) || branch.includes('..')) {
+      throw new Error(`Invalid branch name: ${branch}`);
+    }
+    if (!/^https:\/\/[A-Za-z0-9._~:/?#\[\]@!$&'()*+,;=%-]+$/.test(cloneUrl)) {
+      throw new Error('Invalid clone URL (must be https://)');
+    }
+
     const localDir = `${this.cloneRoot}/${repoFullName}`;
     const authUrl = cloneUrl.replace('https://', `https://oauth2:${token}@`);
 
     try {
       if (existsSync(`${localDir}/.git`)) {
-        execSync('git fetch origin', { cwd: localDir, timeout: 120000 });
-        execSync(`git reset --hard origin/${branch}`, { cwd: localDir, timeout: 60000 });
+        // Argv arrays (no shell); `--` stops branch/ref from being read as a flag.
+        execFileSync('git', ['fetch', 'origin'], { cwd: localDir, timeout: 120000 });
+        execFileSync('git', ['reset', '--hard', `origin/${branch}`, '--'], { cwd: localDir, timeout: 60000 });
       } else {
-        execSync(
-          `git clone --depth 1 --branch ${branch} ${authUrl} ${localDir}`,
-          { timeout: 300000 },
-        );
+        execFileSync('git', ['clone', '--depth', '1', '--branch', branch, '--', authUrl, localDir], { timeout: 300000 });
       }
     } catch (err: any) {
       // Never surface the embedded OAuth token in the error message / logs.
