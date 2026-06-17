@@ -79,3 +79,15 @@ export function samplesSparkline(samples: { verdict: string }[], finalVerdict: s
   const agree = samples.filter((s) => s.verdict === finalVerdict).length;
   return '▣'.repeat(agree) + '▢'.repeat(Math.max(0, total - agree)) + ` ${agree}/${total}`;
 }
+
+/**
+ * A compact N-cell confidence meter (`▰▰▰▰▱`) — typographic hierarchy for the
+ * confidence number, colored by the caller (severity ramp). Clamped to [0,1].
+ */
+export function confidenceMeter(value: number, cells = 5): string {
+  const v = Math.max(0, Math.min(1, Number.isFinite(value) ? value : 0));
+  // floor (not round) so the meter never overstates — 90% reads 4/5, only a true
+  // 100% fills every cell.
+  const filled = Math.floor(v * cells);
+  return '▰'.repeat(filled) + '▱'.repeat(Math.max(0, cells - filled));
+}
