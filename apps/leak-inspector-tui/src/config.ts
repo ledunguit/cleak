@@ -6,7 +6,7 @@
 
 import type { ConsensusRule } from "@mcpvul/common/analysis/consensus-judge";
 
-export type Provider = "local" | "openai" | "anthropic";
+export type Provider = "local" | "openai" | "anthropic" | "openai-compat";
 export type AnalysisModeOpt = "no_llm" | "llm_assisted";
 export type DynamicModeOpt = "off" | "selective" | "aggressive";
 
@@ -122,6 +122,25 @@ export function resolveProvider(provider: Provider): ProviderConfig {
       maxTokens,
     };
   }
+  if (provider === "openai-compat") {
+    // Any OpenAI-compatible server (LM Studio, vLLM, Ollama, OpenRouter, a private
+    // gateway). No api.openai.com default — the base URL/model are user-supplied
+    // (env here, overridable via prefs/CLI). Routes through the OpenAI chat path.
+    return {
+      provider,
+      baseUrl: hostAwareUrl(env("OPENAI_COMPAT_BASE_URL")),
+      apiKey: env("OPENAI_COMPAT_API_KEY"),
+      model: env("OPENAI_COMPAT_MODEL"),
+      jsonMode: bool("OPENAI_COMPAT_JSON_MODE", true),
+      temperature,
+      judgeTemperature,
+      timeoutMs,
+      idleTimeoutMs,
+      connectTimeoutMs,
+      retries,
+      maxTokens,
+    };
+  }
   // local OpenAI-compatible gateway (thesis default)
   return {
     provider: "local",
@@ -140,7 +159,7 @@ export function resolveProvider(provider: Provider): ProviderConfig {
 }
 
 export function loadConfig(
-  overrides: Partial<RunConfig> & { provider?: Provider } = {},
+  overrides: Omit<Partial<RunConfig>, "llm"> & { provider?: Provider; llm?: Partial<ProviderConfig> } = {},
 ): RunConfig {
   const provider =
     overrides.provider ?? (env("LLM_PROVIDER", "local") as Provider);
@@ -173,15 +192,19 @@ export function loadConfig(
     },
   };
   // Apply only DEFINED overrides so an absent flag (e.g. --provider) never
-  // clobbers a resolved value with undefined. `consensus` is merged field-wise so
-  // a partial override (just `n`) keeps the env-resolved rule/temperature.
-  const { consensus: consensusOverride, ...rest } = overrides;
+  // clobbers a resolved value with undefined. `consensus` and `llm` are merged
+  // FIELD-WISE so a partial override (just `n`, or just `model`) keeps the rest of
+  // the env-resolved block instead of replacing the whole object.
+  const { consensus: consensusOverride, llm: llmOverride, ...rest } = overrides;
   const defined = Object.fromEntries(
     Object.entries(rest).filter(([, value]) => value !== undefined),
   );
   const merged: RunConfig = { ...base, ...defined };
   if (consensusOverride) {
     merged.consensus = { ...base.consensus, ...pruneUndefined(consensusOverride) };
+  }
+  if (llmOverride) {
+    merged.llm = { ...base.llm, ...pruneUndefined(llmOverride) };
   }
   return merged;
 }

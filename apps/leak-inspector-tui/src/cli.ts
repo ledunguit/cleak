@@ -69,7 +69,10 @@ program
   .requiredOption('--repo <path>', 'path to the C/C++ repository to scan')
   .option('--mode <mode>', 'no_llm | llm_assisted', 'llm_assisted')
   .option('--dynamic <mode>', 'off | selective | aggressive', 'off')
-  .option('--provider <provider>', 'local | openai | anthropic')
+  .option('--provider <provider>', 'local | openai | anthropic | openai-compat')
+  .option('--base-url <url>', 'LLM base URL override (e.g. an OpenAI-compatible endpoint)')
+  .option('--model <name>', 'LLM model override')
+  .option('--api-key <key>', 'LLM API key override')
   .option('--format <list>', 'comma list: json,markdown,html,snapshot,csv', 'json,markdown,snapshot')
   .option('--build <cmd>', 'build command for dynamic analysis')
   .option('--file-limit <n>', 'cap on indexed files', (v) => parseInt(v, 10))
@@ -87,6 +90,9 @@ program
         mode: opts.mode,
         dynamic: opts.dynamic,
         provider: opts.provider,
+        baseUrl: opts.baseUrl,
+        model: opts.model,
+        apiKey: opts.apiKey,
         format: opts.format,
         build: opts.build,
         fileLimit: opts.fileLimit,
@@ -102,7 +108,10 @@ program
 program
   .command('tui', { isDefault: true })
   .description('Interactive terminal UI')
-  .option('--provider <provider>', 'local | openai | anthropic')
+  .option('--provider <provider>', 'local | openai | anthropic | openai-compat')
+  .option('--base-url <url>', 'LLM base URL override (e.g. an OpenAI-compatible endpoint)')
+  .option('--model <name>', 'LLM model override')
+  .option('--api-key <key>', 'LLM API key override')
   // No defaults here: a hardcoded default makes commander set opts.mode/opts.dynamic
   // even when the user omits the flag, which would clobber the saved /config
   // preference (launchTui does `opts.dynamic ?? prefs.defaultDynamic`). Leaving
@@ -119,6 +128,9 @@ program
     const { launchTui } = await import('./surfaces/tui/index');
     await launchTui({
       provider: opts.provider,
+      baseUrl: opts.baseUrl,
+      model: opts.model,
+      apiKey: opts.apiKey,
       mode: opts.mode,
       dynamic: opts.dynamic,
       staticUrl: opts.staticUrl,

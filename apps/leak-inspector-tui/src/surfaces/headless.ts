@@ -23,6 +23,10 @@ export interface HeadlessOptions {
   mode: 'no_llm' | 'llm_assisted';
   dynamic: 'off' | 'selective' | 'aggressive';
   provider?: Provider;
+  /** Custom LLM endpoint overrides (e.g. an OpenAI-compatible base URL/model/key). */
+  baseUrl?: string;
+  model?: string;
+  apiKey?: string;
   format: string;
   build?: string;
   fileLimit?: number;
@@ -45,8 +49,10 @@ export interface HeadlessResult extends ScanResult {
 
 export async function runHeadless(opts: HeadlessOptions): Promise<HeadlessResult> {
   loadEnvFiles();
+  const nz = (s?: string) => (s && s.trim() ? s : undefined);
   const cfg = loadConfig({
     provider: opts.provider,
+    llm: { baseUrl: nz(opts.baseUrl), model: nz(opts.model), apiKey: nz(opts.apiKey) },
     ...(opts.staticUrl ? { staticUrl: opts.staticUrl } : {}),
     ...(opts.dynamicUrl ? { dynamicUrl: opts.dynamicUrl } : {}),
     ...(opts.consensus ? { consensus: opts.consensus as ConsensusJudgeConfig } : {}),
@@ -56,6 +62,13 @@ export async function runHeadless(opts: HeadlessOptions): Promise<HeadlessResult
   if (!existsSync(repoPath)) throw new Error(`Repository path not found: ${repoPath}`);
 
   const analysisMode = opts.mode === 'llm_assisted' ? AnalysisMode.LLM_ASSISTED : AnalysisMode.NO_LLM;
+  // Loud guard: a custom OpenAI-compatible endpoint can't run without a base URL + model.
+  if (analysisMode === AnalysisMode.LLM_ASSISTED && cfg.llm.provider === 'openai-compat' && (!cfg.llm.baseUrl || !cfg.llm.model)) {
+    throw new Error(
+      `provider 'openai-compat' needs a base URL AND a model — set OPENAI_COMPAT_BASE_URL + ` +
+        `OPENAI_COMPAT_MODEL or pass --base-url/--model. Got baseUrl='${cfg.llm.baseUrl}', model='${cfg.llm.model}'.`,
+    );
+  }
   const dynamicMode =
     opts.dynamic === 'aggressive'
       ? DynamicMode.AGGRESSIVE

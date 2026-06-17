@@ -161,6 +161,7 @@ const PROVIDER_KEY_ENV: Record<string, string> = {
   anthropic: 'ANTHROPIC_API_KEY',
   openai: 'OPENAI_API_KEY',
   local: 'LOCAL_LLM_API_KEY',
+  'openai-compat': 'OPENAI_COMPAT_API_KEY',
 };
 
 /**
@@ -172,7 +173,18 @@ const PROVIDER_KEY_ENV: Record<string, string> = {
 function assertLlmAvailable(mode: string, allowFallback?: boolean): void {
   if (mode !== 'llm_assisted' || allowFallback) return;
   const cfg = loadConfig({}).llm;
-  if (!cfg.apiKey && cfg.provider !== 'local') {
+  // A custom OpenAI-compatible endpoint needs a base URL + model; a key is often
+  // optional (many local servers accept none), so check completeness, not the key.
+  if (cfg.provider === 'openai-compat' && (!cfg.baseUrl || !cfg.model)) {
+    throw new Error(
+      `llm_assisted with provider 'openai-compat' needs a base URL AND a model ` +
+        `(set OPENAI_COMPAT_BASE_URL + OPENAI_COMPAT_MODEL, or --base-url/--model). ` +
+        `Got baseUrl='${cfg.baseUrl}', model='${cfg.model}'.`,
+    );
+  }
+  // local + openai-compat gateways may legitimately be keyless.
+  const keyOptional = cfg.provider === 'local' || cfg.provider === 'openai-compat';
+  if (!cfg.apiKey && !keyOptional) {
     const env = PROVIDER_KEY_ENV[cfg.provider] ?? 'the provider API key';
     throw new Error(
       `llm_assisted requested but no API key for provider '${cfg.provider}' (set ${env}). ` +

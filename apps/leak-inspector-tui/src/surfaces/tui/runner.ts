@@ -28,8 +28,12 @@ export interface TuiScanRequest {
 }
 
 export async function runTuiScan(store: TuiStore, req: TuiScanRequest): Promise<void> {
+  const snap = store.getSnapshot();
+  const nz = (s?: string) => (s && s.trim() ? s : undefined);
   const cfg = loadConfig({
-    provider: store.getSnapshot().provider as any,
+    provider: snap.provider as any,
+    // Carry the session's active provider/endpoint (set via CLI or /config).
+    llm: { model: nz(snap.model), baseUrl: nz(snap.baseUrl), apiKey: nz(snap.apiKey) },
     ...(req.staticUrl ? { staticUrl: req.staticUrl } : {}),
     ...(req.dynamicUrl ? { dynamicUrl: req.dynamicUrl } : {}),
   });
@@ -41,6 +45,14 @@ export async function runTuiScan(store: TuiStore, req: TuiScanRequest): Promise<
   }
 
   const analysisMode = req.mode === 'llm_assisted' ? AnalysisMode.LLM_ASSISTED : AnalysisMode.NO_LLM;
+  // Loud guard: a custom OpenAI-compatible endpoint can't run without a base URL + model.
+  if (analysisMode === AnalysisMode.LLM_ASSISTED && cfg.llm.provider === 'openai-compat' && (!cfg.llm.baseUrl || !cfg.llm.model)) {
+    store.failRun(
+      `provider 'openai-compat' needs a base URL and a model — set them in /config (Base URL, Model) ` +
+        `or via --base-url/--model. Got baseUrl='${cfg.llm.baseUrl}', model='${cfg.llm.model}'.`,
+    );
+    return;
+  }
   const dynamicMode =
     req.dynamic === 'aggressive'
       ? DynamicMode.AGGRESSIVE

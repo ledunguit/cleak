@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test';
-import { mkdtempSync, rmSync, existsSync } from 'node:fs';
+import { mkdtempSync, rmSync, existsSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { formatDuration } from './theme';
@@ -43,6 +43,21 @@ describe('preferences round-trip', () => {
     expect(loaded.defaultDynamic).toBe('aggressive');
     expect(loaded.autoShowReport).toBe(true);
     expect(loaded.defaultMode).toBe('no_llm');
+  });
+
+  test('persists a provider + per-provider endpoint override, chmod 600', () => {
+    const path = savePreferences({
+      defaultMode: 'llm_assisted',
+      defaultDynamic: 'off',
+      autoShowReport: false,
+      defaultProvider: 'openai-compat',
+      endpoints: { 'openai-compat': { baseUrl: 'http://localhost:1234/v1', model: 'm', apiKey: 'sk-x' } },
+    });
+    const loaded = loadPreferences();
+    expect(loaded.defaultProvider).toBe('openai-compat');
+    expect(loaded.endpoints?.['openai-compat']).toEqual({ baseUrl: 'http://localhost:1234/v1', model: 'm', apiKey: 'sk-x' });
+    // The file may hold a key → must be owner-only (0600).
+    expect(statSync(path).mode & 0o777).toBe(0o600);
   });
 });
 

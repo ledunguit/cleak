@@ -20,7 +20,7 @@ import { snapshotFindingToView } from './findings/findingView';
 import { COMMANDS, matchCommands, findCommand } from './commands';
 import { loadHistory, appendHistory, historyStep } from './history';
 import { color, glyph, formatDuration } from './theme';
-import { savePreferences, type UserPreferences } from './preferences';
+import { savePreferences, loadPreferences, type UserPreferences } from './preferences';
 import { runTuiScan } from './runner';
 import { runTuiEval } from './evalRunner';
 import { visibleMessages, type TuiStore } from './store';
@@ -372,18 +372,32 @@ export function App({ store, staticUrl, dynamicUrl, cwd, resultsDir, recentScans
     histDraft.current = '';
   };
 
-  const saveConfig = (prefs: UserPreferences) => {
+  const saveConfig = async (prefs: UserPreferences) => {
     let savedPath = '';
     try {
       savedPath = savePreferences(prefs);
     } catch (err: any) {
       store.addSystemMessage(`failed to save settings: ${err?.message ?? err}`);
     }
-    store.setOptions({ mode: prefs.defaultMode, dynamic: prefs.defaultDynamic });
+    // Resolve the chosen provider + its endpoint override so the next scan this
+    // session (and the footer/welcome) reflect the change without a restart.
+    const { loadConfig } = await import('../../config');
+    const provider = prefs.defaultProvider;
+    const ep = (provider && prefs.endpoints?.[provider]) || {};
+    const nz = (s?: string) => (s && s.trim() ? s : undefined);
+    const cfg = loadConfig({ provider, llm: { baseUrl: nz(ep.baseUrl), model: nz(ep.model), apiKey: nz(ep.apiKey) } });
+    store.setOptions({
+      mode: prefs.defaultMode,
+      dynamic: prefs.defaultDynamic,
+      provider: cfg.provider,
+      model: cfg.llm.model,
+      baseUrl: cfg.llm.baseUrl,
+      apiKey: cfg.llm.apiKey,
+    });
     store.setAutoShowReport(prefs.autoShowReport);
     store.setView('main');
     store.addSystemMessage(
-      `settings saved${savedPath ? ` → ${savedPath}` : ''} · mode ${prefs.defaultMode}, dynamic ${prefs.defaultDynamic}, auto-report ${prefs.autoShowReport ? 'on' : 'off'}`,
+      `settings saved${savedPath ? ` → ${savedPath}` : ''} · provider ${cfg.provider}${cfg.llm.model ? `:${cfg.llm.model}` : ''} · mode ${prefs.defaultMode}, dynamic ${prefs.defaultDynamic}, auto-report ${prefs.autoShowReport ? 'on' : 'off'}`,
     );
   };
 
@@ -392,6 +406,9 @@ export function App({ store, staticUrl, dynamicUrl, cwd, resultsDir, recentScans
       <Box flexDirection="column">
         <ConfigScreen
           initial={{
+            // Persisted prefs (carry the per-provider `endpoints` map) overlaid with
+            // the live session values for the simple toggles + active provider.
+            ...loadPreferences(),
             defaultMode: state.mode,
             defaultDynamic: state.dynamic,
             autoShowReport: state.autoShowReport,

@@ -154,6 +154,10 @@ export interface UiState {
   dynamic: 'off' | 'selective' | 'aggressive';
   provider: string;
   model: string;
+  /** Active LLM endpoint overrides (custom base URL / API key) applied to the next
+   * scan this session — seeded from prefs/CLI, updated when /config is saved. */
+  baseUrl?: string;
+  apiKey?: string;
   scanId?: string;
   reportDir?: string;
   summary?: { candidates: number; confirmed: number; likely: number };
@@ -604,7 +608,7 @@ export class TuiStore {
     this.push({ kind: 'system', text, ...(color ? { color } : {}) });
   }
 
-  setOptions(opts: Partial<Pick<UiState, 'mode' | 'dynamic' | 'provider' | 'model'>>): void {
+  setOptions(opts: Partial<Pick<UiState, 'mode' | 'dynamic' | 'provider' | 'model' | 'baseUrl' | 'apiKey'>>): void {
     this.set(opts);
   }
 
