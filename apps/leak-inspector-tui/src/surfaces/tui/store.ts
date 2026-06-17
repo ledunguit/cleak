@@ -138,6 +138,8 @@ export interface UiState {
   reportDir?: string;
   summary?: { candidates: number; confirmed: number; likely: number };
   pendingPermission?: PendingPermission;
+  /** Tool-approval mode: 'ask' prompts for heavy tools; 'auto' approves them silently (Shift+Tab toggles). */
+  permissionMode: 'ask' | 'auto';
   startedAt?: number;
   /** Which surface to render. */
   view: 'main' | 'config' | 'eval';
@@ -202,6 +204,7 @@ export class TuiStore {
       model: '',
       view: 'main',
       autoShowReport: false,
+      permissionMode: 'ask',
       ranDynamicTool: false,
       scrollOffset: 0,
       agents: [],
@@ -700,7 +703,24 @@ export class TuiStore {
   }
 
   // ── Permission prompt ──
+  /** Toggle Ask ↔ Auto-accept (Shift+Tab). Session-only — never persisted, so a relaunch defaults back to Ask. */
+  cyclePermissionMode(): 'ask' | 'auto' {
+    const next = this.state.permissionMode === 'auto' ? 'ask' : 'auto';
+    this.set({ permissionMode: next });
+    // Turning auto ON while a prompt is open approves that pending request too.
+    if (next === 'auto' && this.state.pendingPermission) this.resolvePermission('allow');
+    this.addSystemMessage(
+      next === 'auto'
+        ? '⏵ auto-accept ON — tools run without asking · shift+tab to turn off'
+        : 'auto-accept OFF — tools will ask before running',
+      next === 'auto' ? '#C084FC' : undefined, // theme color.violet — store stays theme-free
+    );
+    return next;
+  }
+
   requestPermission(req: { id: string; name: string; input: unknown }): Promise<'allow' | 'deny'> {
+    // Auto-accept: approve heavy tools silently (Shift+Tab armed this).
+    if (this.state.permissionMode === 'auto') return Promise.resolve('allow');
     return new Promise((resolve) => {
       this.set({
         pendingPermission: {

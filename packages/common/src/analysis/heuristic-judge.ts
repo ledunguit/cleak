@@ -16,6 +16,7 @@ import {
   type RepairDiff,
 } from '../types';
 import { analyzeLeakHeuristically } from './heuristic-leak-analysis';
+import { evidenceIndicatesLeak } from './judge-shared';
 
 export function readFullFile(filePath: string): string | null {
   if (!filePath || !existsSync(filePath)) return null;
@@ -44,25 +45,35 @@ export function judgeHeuristically(
   let score = 0;
   const reasons: string[] = [];
 
+  // Source-level structural analysis up front: among other things it determines
+  // whether the function frees the candidate at all, which gates the lexical
+  // suspicion terms below (so a function that demonstrably frees isn't flagged).
+  const analysis = analyzeLeakHeuristically(bundle, staticContext, readFullFile(bundle.candidate.file_path));
+
   // ── Dynamic evidence: correlation- and kind-aware, not a flat credit. We take
-  // the single strongest finding's contribution rather than stacking many. ──
+  // the single strongest finding's contribution rather than stacking many. Only an
+  // ACTUAL leak adds score; a clean/benign run record (Juliet good* under LSan:
+  // severity `info`, no leakKind) instead EXONERATES — see `dynamicallyCleared`. ──
+  let dynamicallyObserved = false;
+  let dynamicLeakObserved = false;
   if (bundle.evidence.length > 0) {
     let dyn = 0;
     let dynReason = '';
     for (const e of bundle.evidence) {
+      dynamicallyObserved = true;
+      if (!evidenceIndicatesLeak(e)) continue; // clean run / still_reachable — not a leak
+      dynamicLeakObserved = true;
       const correlated = e.correlatedToCandidate === true;
       const kind = e.leakKind;
-      let c = 0;
-      if (kind === 'still_reachable') {
-        c = 0; // benign — runtime says memory is still reachable at exit
-      } else if (correlated && (kind === 'definitely_lost' || kind === 'asan_leak' || kind === 'indirectly_lost')) {
+      let c: number;
+      if (correlated && (kind === 'definitely_lost' || kind === 'asan_leak' || kind === 'indirectly_lost')) {
         c = 0.5;
       } else if (correlated && kind === 'possibly_lost') {
         c = 0.2;
       } else if (correlated) {
         c = 0.4; // correlated runtime leak, kind unknown
       } else {
-        c = 0.15; // same-file / uncorrelated finding — weak
+        c = 0.15; // same-file / uncorrelated leak finding — weak
       }
       if (c > dyn) {
         dyn = c;
@@ -74,6 +85,9 @@ export function judgeHeuristically(
       reasons.push(`runtime evidence: ${dynReason}`);
     }
   }
+  // A completed dynamic run that exercised this candidate but found NO leak at this
+  // site is exculpatory — the strongest precision signal for Juliet good* variants.
+  const dynamicallyCleared = dynamicallyObserved && !dynamicLeakObserved;
 
   // ── Alloc→free pairing: an UNPAIRED allocation of the candidate variable. ──
   const candidatePair = (se?.allocFreePairs || []).find(
@@ -85,7 +99,7 @@ export function judgeHeuristically(
   } else if (candidatePair && candidatePair.status === 'conditional') {
     score += 0.15;
     reasons.push(`alloc of '${candidatePair.variable}' is freed on some paths only`);
-  } else if (!hasStaticFree && hasStaticAllocation) {
+  } else if (!hasStaticFree && hasStaticAllocation && !analysis.freedAnywhereInFunction) {
     score += 0.25;
     reasons.push('no free() found in function for this allocation');
   }
@@ -101,7 +115,12 @@ export function judgeHeuristically(
   }
 
   // ── Ownership: allocator that carries no ownership out → likely a local leak. ──
-  if (se?.ownership && (se.ownership.role === 'allocator' || se.ownership.role === 'both') && se.ownership.ownershipCarrier?.kind === 'none') {
+  if (
+    se?.ownership &&
+    (se.ownership.role === 'allocator' || se.ownership.role === 'both') &&
+    se.ownership.ownershipCarrier?.kind === 'none' &&
+    !analysis.freedAnywhereInFunction
+  ) {
     score += 0.15;
     reasons.push('allocator role with no ownership transfer out of the function');
   } else if (se?.ownership && se.ownership.ownershipCarrier?.kind !== 'none') {
@@ -110,7 +129,7 @@ export function judgeHeuristically(
     // is NO correlated runtime leak on this candidate (e.g. Juliet good* funcs
     // hand the buffer to a sink and never run dynamically under -DOMITGOOD).
     const correlatedLeak = bundle.evidence.some(
-      (e) => e.correlatedToCandidate === true && e.leakKind !== 'still_reachable',
+      (e) => e.correlatedToCandidate === true && evidenceIndicatesLeak(e),
     );
     score -= correlatedLeak ? 0.1 : 0.25;
     reasons.push(`ownership transferred (${se.ownership.ownershipCarrier?.kind}) — likely the caller's to free`);
@@ -128,16 +147,12 @@ export function judgeHeuristically(
     score += 0.1;
   }
 
-  // Source-level structural analysis is the primary evidence in no_llm mode,
-  // where the lexical static context above is frequently sparse.
-  const analysis = analyzeLeakHeuristically(bundle, staticContext, readFullFile(bundle.candidate.file_path));
-
   // 1-hop interprocedural free: the allocated pointer is handed to a sink that
   // frees it (e.g. Juliet good*→goodSink). Dismiss with confidence so it is NOT
   // flagged and does NOT escalate to the LLM (which can't see the sink in the
   // ±-line snippet). Unless a runtime tool actually reported a leak at this site.
   const correlatedRuntimeLeak = bundle.evidence.some(
-    (e) => e.correlatedToCandidate === true && e.leakKind !== 'still_reachable',
+    (e) => e.correlatedToCandidate === true && evidenceIndicatesLeak(e),
   );
   if (analysis.freedViaCallee && !correlatedRuntimeLeak) {
     return {
@@ -158,12 +173,47 @@ export function judgeHeuristically(
   }
 
   const clamped = Math.min(1, Math.max(0, score));
-  const verdict =
+  let verdict =
     clamped >= 0.7
       ? InvestigationVerdict.CONFIRMED_LEAK
       : clamped >= 0.4
         ? InvestigationVerdict.LIKELY_LEAK
         : InvestigationVerdict.UNCERTAIN;
+
+  const structuralHigh = analysis.structuralLikelihood === 'high';
+
+  // ── Precision gate 1 — clean dynamic run is exculpatory. A sanitizer exercised
+  // this site and reported no leak, and no decisive static evidence says otherwise
+  // → answer likely_false_positive (non-borderline, so it neither flags NOR escalates
+  // to the LLM, which can't see the whole program). Every Juliet `*_bad` either leaks
+  // at runtime (correlated leak) or frees nowhere (structural 'high'), so this never
+  // fires for a real flaw → recall preserved. ──
+  if (dynamicallyCleared && !correlatedRuntimeLeak && !structuralHigh) {
+    return {
+      verdict: InvestigationVerdict.LIKELY_FALSE_POSITIVE,
+      confidence: 0.8,
+      explanation: `A dynamic run exercised this allocation and reported no leak; the remaining static signals are weak.${reasons.length ? ` (${reasons.join('; ')})` : ''}`,
+      evidence: bundle.evidence.map((e) => `${e.tool}: ${e.function_name}`),
+      tool: ToolKind.HEURISTIC,
+    };
+  }
+
+  // ── Precision gate 2 — require a decisive signal to flag. A flagged verdict must
+  // rest on at least ONE strong signal (correlated runtime leak, a structurally
+  // located missing-free, an unpaired alloc→free, or malloc_without_free ownership);
+  // a pile of weak lexical heuristics alone is downgraded to `uncertain` rather than
+  // asserted as a leak. Bad variants always carry a strong signal → recall preserved. ──
+  const hasStrongSignal =
+    correlatedRuntimeLeak ||
+    structuralHigh ||
+    candidatePair?.status === 'unpaired' ||
+    hasOwnershipIssue;
+  const flagged =
+    verdict === InvestigationVerdict.CONFIRMED_LEAK || verdict === InvestigationVerdict.LIKELY_LEAK;
+  if (flagged && !hasStrongSignal) {
+    verdict = InvestigationVerdict.UNCERTAIN;
+    reasons.push('no decisive leak signal (weak static heuristics only) — not flagged');
+  }
 
   return {
     verdict,

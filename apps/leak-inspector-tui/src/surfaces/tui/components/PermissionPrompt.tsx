@@ -22,7 +22,8 @@ export function PermissionPrompt({ pending }: { pending: PendingPermission }) {
         <Text dimColor>{summarize(pending.input)}</Text>?
       </Text>
       <Text dimColor>
-        <Text color={color.success}>[y]</Text> allow {glyph.bullet} <Text color={color.error}>[n]</Text> deny
+        <Text color={color.success}>[y]</Text> allow {glyph.bullet} <Text color={color.error}>[n]</Text> deny{' '}
+        {glyph.bullet} <Text color={color.violet}>shift+tab</Text> auto-accept
       </Text>
     </Box>
   );

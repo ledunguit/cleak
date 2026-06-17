@@ -16,6 +16,7 @@ import { CommandSuggestions } from './components/CommandSuggestions';
 import { ConfigScreen } from './components/ConfigScreen';
 import { EvalScreen } from './components/EvalScreen';
 import { COMMANDS, matchCommands, findCommand } from './commands';
+import { loadHistory, appendHistory, historyStep } from './history';
 import { color, glyph, formatDuration } from './theme';
 import { savePreferences, type UserPreferences } from './preferences';
 import { runTuiScan } from './runner';
@@ -47,6 +48,21 @@ export function App({ store, staticUrl, dynamicUrl, cwd, resultsDir, recentScans
   const [suggestIndex, setSuggestIndex] = useState(0);
   const [overlay, setOverlay] = useState<Overlay | null>(null);
   const [ctrlCArmed, setCtrlCArmed] = useState(false);
+
+  // ── Prompt history (shell-style ↑/↓, persisted across sessions) ──
+  // `histIndex === -1` is the live draft; `histDraft` stashes it on the first ↑.
+  const history = useRef<string[]>(loadHistory());
+  const histIndex = useRef(-1);
+  const histDraft = useRef('');
+  const recallHistory = (dir: 'prev' | 'next') => {
+    if (dir === 'prev' && histIndex.current === -1) histDraft.current = input;
+    const r = historyStep(history.current, histIndex.current, histDraft.current, dir);
+    if (r.index === histIndex.current) return; // no movement (e.g. ↓ at the live draft) — let other handlers act
+    histIndex.current = r.index;
+    setInput(r.value);
+    setSuggestIndex(0);
+    setInputRev((x) => x + 1); // snap the input cursor to the end of the recalled line
+  };
 
   const showSuggest = input.startsWith('/') && !overlay;
   const matches = showSuggest ? matchCommands(input) : [];
@@ -153,9 +169,35 @@ export function App({ store, staticUrl, dynamicUrl, cwd, resultsDir, recentScans
       if (matches.length === 0) return;
       if (key.downArrow) setSuggestIndex((i) => (i + 1) % matches.length);
       else if (key.upArrow) setSuggestIndex((i) => (i - 1 + matches.length) % matches.length);
-      else if (key.tab) completeCommand(matches[idx].name);
+      else if (key.tab && !key.shift) completeCommand(matches[idx].name); // Shift+Tab toggles permission mode, never completes
     },
     { isActive: showSuggest },
+  );
+
+  // ── Shift+Tab: toggle Ask ↔ Auto-accept for heavy tools (always available on the main view) ──
+  useInput(
+    (_ch, key) => {
+      if (key.tab && key.shift) store.cyclePermissionMode();
+    },
+    { isActive: state.view === 'main' && !overlay },
+  );
+
+  // ── Prompt history: ↑ recalls older prompts, ↓ steps back toward the live draft.
+  // Gated so it never fights command suggestions or agent-list navigation; at the
+  // live empty draft ↓ is a no-op, so the agent-list drop (below) still fires. ──
+  useInput(
+    (_ch, key) => {
+      if (key.upArrow) recallHistory('prev');
+      else if (key.downArrow) recallHistory('next');
+    },
+    {
+      isActive:
+        state.view === 'main' &&
+        !overlay &&
+        !state.pendingPermission &&
+        !showSuggest &&
+        state.navMode === 'normal',
+    },
   );
 
   // ── Option appliers (shared by typed-arg and the select overlay) ──
@@ -335,7 +377,12 @@ export function App({ store, staticUrl, dynamicUrl, cwd, resultsDir, recentScans
     setInput('');
     setSuggestIndex(0);
     const trimmed = raw.trim();
-    if (trimmed) dispatch(trimmed);
+    if (trimmed) {
+      history.current = appendHistory(history.current, trimmed);
+      dispatch(trimmed);
+    }
+    histIndex.current = -1;
+    histDraft.current = '';
   };
 
   const saveConfig = (prefs: UserPreferences) => {
@@ -464,6 +511,7 @@ export function App({ store, staticUrl, dynamicUrl, cwd, resultsDir, recentScans
               onChange={(v) => {
                 setInput(v);
                 setSuggestIndex(0);
+                histIndex.current = -1; // typing forks off any recalled history entry
                 if (ctrlCArmed) setCtrlCArmed(false);
               }}
               onSubmit={submit}

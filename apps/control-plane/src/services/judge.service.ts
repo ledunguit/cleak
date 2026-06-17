@@ -108,8 +108,10 @@ PRODUCE A VERDICT:
 CALIBRATE using the evidence, in priority order:
 - A runtime leak (valgrind/asan/lsan) whose allocation site is LINKED to this candidate is decisive (confirmed_leak, confidence >= 0.9). Weight by leak kind: definitely_lost / asan_leak => decisive; possibly_lost => weak; still_reachable => usually benign, lean false_positive.
 - A runtime finding in the SAME FILE but a DIFFERENT site (not linked) is weak corroboration only.
+- A CLEAN sanitizer/valgrind run that EXERCISED this allocation and reported NO leak here is strong evidence this is NOT a leak => lean false_positive / likely_false_positive (unless a runtime leak is LINKED to this very allocation).
 - Ownership: if the allocation is returned to the caller or its pointer is handed off, freeing it is the caller's job => likely false_positive here. An UNPAIRED alloc->free with a reachable leak path and no ownership transfer => confirmed_leak.
 - Freed on all paths / static-global => false_positive.
+- Control flow is concrete, not hypothetical: a constant or scaffolding global such as if(1)/if(0) or globalReturnsTrue() does NOT change between two checks in the SAME function — if(1) always runs and if(0) is dead code. If the buffer is freed under the same condition it was allocated (or in the else of a constant if), it IS freed. Do NOT call a leak just because the free() sits in a different block, behind a constant condition, or after a break/in a second loop — trace whether it actually executes.
 
 For confirmed_leak and likely_leak, your response MUST include:
 1. The root cause: what pattern caused the leak

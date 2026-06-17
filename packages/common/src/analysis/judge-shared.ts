@@ -32,6 +32,35 @@ export function isLeakVerdictString(v: unknown): v is LeakVerdictString {
 /** The verdicts that count as "flagged as a leak" (a positive prediction). */
 export const LEAK_POSITIVE_VERDICTS: ReadonlySet<string> = new Set(['confirmed_leak', 'likely_leak']);
 
+/** Dynamic leak kinds that denote a real leak (NOT `still_reachable`, which is benign). */
+const LEAK_LEAK_KINDS: ReadonlySet<string> = new Set([
+  'definitely_lost',
+  'indirectly_lost',
+  'possibly_lost',
+  'asan_leak',
+]);
+/** Severities that denote a real leak finding (a clean run reports `info`). */
+const LEAK_SEVERITIES: ReadonlySet<string> = new Set(['medium', 'high', 'critical']);
+
+/**
+ * True when a dynamic evidence entry denotes an ACTUAL leak, as opposed to a clean
+ * or benign run record. Juliet `good*` variants run cleanly under LSan/Valgrind and
+ * produce an `info` / no-`leakKind` entry — that is NOT evidence of a leak and must
+ * never push a verdict toward one (the old judge mis-scored such entries as +0.15).
+ * `still_reachable` (memory reachable at exit) is benign and likewise excluded.
+ */
+export function evidenceIndicatesLeak(e: {
+  leakKind?: string | null;
+  severity?: string | null;
+  bytes_lost?: number;
+  blocks_lost?: number;
+}): boolean {
+  if (e.leakKind === 'still_reachable') return false;
+  if (e.leakKind && LEAK_LEAK_KINDS.has(e.leakKind)) return true;
+  if (e.severity && LEAK_SEVERITIES.has(String(e.severity).toLowerCase())) return true;
+  return (e.bytes_lost ?? 0) > 0 || (e.blocks_lost ?? 0) > 0;
+}
+
 /**
  * Strip C/C++ comments (newline-preserving) so benchmark giveaway labels — Juliet's
  * `/* POTENTIAL FLAW *​/`, `GoodSource`/`GoodSink` — never reach the judge. Letting

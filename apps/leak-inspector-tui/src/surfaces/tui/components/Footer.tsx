@@ -4,10 +4,12 @@ import type { UiState } from '../store';
 
 export function Footer({ state }: { state: UiState }) {
   const { inputTokens, outputTokens, thinkingTokens } = state.usage;
+  const auto = state.permissionMode === 'auto';
   const chips: Array<[string, string]> = [
     [`${state.provider}:${state.model || '?'}`, color.accent],
     [`mode ${state.mode}`, color.subtle],
     [`dyn ${state.dynamic}`, color.subtle],
+    [auto ? 'accept: auto ⏵' : 'accept: ask', auto ? color.violet : color.subtle],
   ];
   if (state.currentPhase) chips.push([state.currentPhase, color.system]);
   if (inputTokens + outputTokens > 0) {

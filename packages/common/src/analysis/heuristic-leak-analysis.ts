@@ -45,6 +45,14 @@ export interface HeuristicAnalysis {
    * for a bad sink that does not free, so real leaks are preserved.
    */
   freedViaCallee?: { callee: string; variable: string };
+  /**
+   * The candidate variable is freed somewhere in its enclosing function (on any
+   * path). The judge uses this to suppress lexical "no free found" / "allocator
+   * with no transfer out" suspicion on functions that demonstrably free the
+   * pointer — e.g. Juliet `good*` dead-code variants (`if(0){}else{free}`) and
+   * single-iteration `while(1){…;break;}` loops that free in a sibling block.
+   */
+  freedAnywhereInFunction: boolean;
 }
 
 const ALLOC_FNS =
@@ -388,6 +396,7 @@ export function analyzeLeakHeuristically(
       // No source to inspect — lean on whatever static signals the context carries.
       structuralLikelihood:
         Number(ctx?.loopsWithAllocations || 0) > 0 || Number(ctx?.earlyReturnCount || 0) > 0 ? 'medium' : 'low',
+      freedAnywhereInFunction: false,
     };
   }
 
@@ -408,6 +417,8 @@ export function analyzeLeakHeuristically(
   const loopHeader = loopEnclosingAlloc(lines, allocIdx, fnBounds);
   const inLoop = loopHeader >= 0;
   const earlyExitIdx = varName ? findEarlyLeakingExit(lines, allocIdx, fnBounds, v) : -1;
+  // Is the candidate variable freed anywhere in its enclosing function?
+  const freedAnywhereInFunction = !!varName && hasFreeOfVar(lines, fnBounds.startIdx, fnBounds.endIdx, v);
 
   const pattern = classifyPattern(candidate, ctx, {
     allocFn,
@@ -480,7 +491,9 @@ export function analyzeLeakHeuristically(
     missingFreeLine = anchor + 1;
     rootCauseDescription = `The loop starting at ${allocFile}:${loopHeader + 1} reassigns \`${v}\` each iteration without freeing the previous allocation.`;
     codeFlow.push(`loop body reassigns \`${v}\` every iteration, orphaning the prior block`);
-    structuralLikelihood = 'high';
+    // Not accumulation if the function frees `v` elsewhere: a single-iteration
+    // Juliet loop (`while(1){…;break;}`) followed by a `free(v)` block is clean.
+    structuralLikelihood = freedAnywhereInFunction ? 'low' : 'high';
   } else if (earlyExitIdx >= 0 && varName) {
     // Early return before cleanup.
     repairDiff = insertFreeBefore(lines, earlyExitIdx, v, allocFile);
@@ -492,14 +505,13 @@ export function analyzeLeakHeuristically(
     // Generic missing free: insert before the function's terminal exit. This is a
     // real leak only if the variable is never freed anywhere in its function.
     const anchor = findFinalExit(lines, fnBounds);
-    const freedAnywhere = hasFreeOfVar(lines, fnBounds.startIdx, fnBounds.endIdx, v);
     repairDiff = insertFreeBefore(lines, anchor, v, allocFile);
     missingFreeLine = anchor + 1;
-    rootCauseDescription = freedAnywhere
+    rootCauseDescription = freedAnywhereInFunction
       ? `\`${v}\` is freed on some paths but may not be released before every exit of ${allocFnName}().`
       : `\`${v}\` allocated at ${allocFile}:${allocLine} is never freed before ${allocFnName}() returns.`;
     codeFlow.push(`${allocFnName}() returns at line ${anchor + 1} without freeing \`${v}\``);
-    structuralLikelihood = freedAnywhere ? 'low' : 'high';
+    structuralLikelihood = freedAnywhereInFunction ? 'low' : 'high';
   }
 
   // Interprocedural free overrides a "missing free" conclusion: the pointer is
@@ -538,6 +550,7 @@ export function analyzeLeakHeuristically(
     explanation,
     codeFlow,
     structuralLikelihood,
+    freedAnywhereInFunction,
     ...(freedViaCalleeHit && structuralLikelihood === 'low'
       ? { freedViaCallee: { callee: freedViaCalleeHit.callee, variable: v } }
       : {}),

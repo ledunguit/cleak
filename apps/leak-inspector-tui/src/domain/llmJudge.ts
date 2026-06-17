@@ -8,7 +8,7 @@
 
 import { readFileSafe } from './fileWalk';
 import { enrichLeakVerdict } from '@mcpvul/common/analysis/heuristic-judge';
-import { enclosingFunctionSnippet, isLeakVerdictString } from '@mcpvul/common/analysis/judge-shared';
+import { enclosingFunctionSnippet, isLeakVerdictString, evidenceIndicatesLeak } from '@mcpvul/common/analysis/judge-shared';
 import { InvestigationVerdict, ToolKind, type LeakBundle, type VerdictResult } from '@mcpvul/common/types';
 import type { CallModel } from '@mcpvul/agent-core';
 
@@ -19,8 +19,10 @@ const SYSTEM_PROMPT = [
   `Calibrate using the EVIDENCE, in this priority order:`,
   `- A runtime leak (sanitizer/valgrind) whose allocation site is LINKED to this candidate is decisive → confirmed_leak (confidence ≥ 0.9). Weight by leak kind: definitely_lost / asan_leak ⇒ decisive; possibly_lost ⇒ weak corroboration; still_reachable ⇒ usually benign, lean false_positive.`,
   `- A runtime finding in the SAME FILE but a DIFFERENT site (not linked) is weak — do not treat it as proof for this allocation. still_reachable with no other evidence → false_positive.`,
+  `- A CLEAN sanitizer/valgrind run that EXERCISED this allocation and reported NO leak here is strong evidence this is NOT a leak → lean false_positive / likely_false_positive (unless a runtime leak is LINKED to this very allocation).`,
   `- Ownership is decisive for false positives: if the allocation is RETURNED to the caller or its pointer is HANDED OFF to a sink/callback/another function (ownership transferred), freeing it is NOT this function's job. When ownership is transferred AND no runtime leak is linked to THIS allocation, answer likely_false_positive or false_positive — do NOT flag it just because you cannot see the free inside this snippet. An UNPAIRED alloc→free with a reachable leak path and NO ownership transfer → confirmed_leak (≥ 0.85).`,
   `- Freed on all paths / static-global → false_positive (high confidence). Use uncertain only when the evidence is genuinely insufficient.`,
+  `- Control flow is concrete, not hypothetical: a constant or scaffolding global such as \`if(1)\`/\`if(0)\` or \`globalReturnsTrue()\` does NOT change between two checks in the SAME function — \`if(1)\` always runs and \`if(0)\` is dead code. If the buffer is freed under the same condition it was allocated (or in the \`else\` of a constant \`if\`), it IS freed. Do NOT call a leak just because the \`free()\` sits in a different block, behind a constant condition, or after a \`break\`/in a second loop — trace whether it actually executes.`,
 ].join('\n');
 
 /**
@@ -82,19 +84,24 @@ function summarizeStatic(ctx: Record<string, any> | undefined): string {
 
 function summarizeEvidence(bundle: LeakBundle): string {
   if (bundle.evidence.length === 0) return '  (none)';
-  return bundle.evidence
-    .map((e) => {
-      const kind = e.leakKind ? ` ${e.leakKind}` : '';
-      const site = e.allocSite ? ` @ ${e.allocSite.file}:${e.allocSite.line}` : '';
-      const link =
-        e.correlatedToCandidate
-          ? ' — LINKED to this candidate'
-          : e.correlationMethod === 'file_only'
-            ? ' — same file, different site'
-            : '';
-      return `  - ${e.tool}:${kind} ${e.bytes_lost ?? 0} bytes / ${e.blocks_lost ?? 0} blocks${e.function_name ? ` in ${e.function_name}` : ''}${site}${link}`;
-    })
-    .join('\n');
+  const anyLeak = bundle.evidence.some((e) => evidenceIndicatesLeak(e));
+  const lines = bundle.evidence.map((e) => {
+    const kind = e.leakKind ? ` ${e.leakKind}` : '';
+    const site = e.allocSite ? ` @ ${e.allocSite.file}:${e.allocSite.line}` : '';
+    const link =
+      e.correlatedToCandidate
+        ? ' — LINKED to this candidate'
+        : e.correlationMethod === 'file_only'
+          ? ' — same file, different site'
+          : '';
+    const clean = evidenceIndicatesLeak(e) ? '' : ' — CLEAN (no leak reported here)';
+    return `  - ${e.tool}:${kind} ${e.bytes_lost ?? 0} bytes / ${e.blocks_lost ?? 0} blocks${e.function_name ? ` in ${e.function_name}` : ''}${site}${link}${clean}`;
+  });
+  // A dynamic run happened but flagged no leak here → strong exculpatory signal.
+  if (!anyLeak) {
+    lines.unshift('  NOTE: a sanitizer/valgrind run exercised this allocation and reported NO leak — strong evidence this is NOT a leak.');
+  }
+  return lines.join('\n');
 }
 
 /** Parse the model's JSON verdict; returns null if unusable. */
