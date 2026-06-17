@@ -14,6 +14,7 @@ import {
   ToolCost,
 } from '@mcpvul/common';
 import { CreateScanDto } from '@mcpvul/common/dto/scan.dto';
+import { DecisionSchema, PlanSchema, parseJsonWith } from './llm-schemas';
 
 /** A next-action decision produced by the orchestrator brain, tagged with its source. */
 export type AgentDecisionDraft = {
@@ -522,57 +523,49 @@ What is the best next action? Respond with JSON only.`;
     raw: string,
     bundles: LeakBundle[],
   ): { actionKind: string; toolName?: string; targetBundleIds: string[]; rationale: string; reasoning: string; args?: Record<string, unknown> } | null {
-    const jsonMatch = raw.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) return null;
-
-    try {
-      const parsed = JSON.parse(jsonMatch[0]);
-      const validKinds = ['run_static_tool', 'run_leakguard', 'run_dynamic', 'judge_bundle', 'request_more_evidence', 'deep_investigate', 'change_strategy', 'finish'];
-      if (!validKinds.includes(parsed.actionKind)) return null;
-
-      const bundleIds = new Set(bundles.map((b) => b.bundleId));
-      const targetBundleIds = Array.isArray(parsed.targetBundleIds)
-        ? parsed.targetBundleIds.filter((id: string) => bundleIds.has(id))
-        : [];
-
-      return {
-        actionKind: parsed.actionKind,
-        toolName: typeof parsed.toolName === 'string' ? parsed.toolName : undefined,
-        targetBundleIds,
-        rationale: typeof parsed.rationale === 'string' ? parsed.rationale : 'LLM-selected action',
-        reasoning: typeof parsed.reasoning === 'string' ? parsed.reasoning : '',
-        args: typeof parsed.args === 'object' && parsed.args ? parsed.args : undefined,
-      };
-    } catch {
+    const r = parseJsonWith(raw, DecisionSchema);
+    if (!r.ok) {
+      this.logger.warn(`[PLANNER] decision rejected: ${r.reason}`);
       return null;
     }
+    const parsed = r.value;
+    const bundleIds = new Set(bundles.map((b) => b.bundleId));
+    return {
+      actionKind: parsed.actionKind,
+      toolName: parsed.toolName,
+      // Drop any hallucinated bundle ids that don't exist in this scan.
+      targetBundleIds: (parsed.targetBundleIds ?? []).filter((id) => bundleIds.has(id)),
+      rationale: parsed.rationale ?? 'LLM-selected action',
+      reasoning: parsed.reasoning ?? '',
+      args: parsed.args,
+    };
   }
 
   private parsePlan(raw: string, bundles: LeakBundle[]): InvestigationPlan | null {
-    const jsonMatch = raw.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) return null;
-
-    try {
-      const parsed = JSON.parse(jsonMatch[0]);
-      const bundleIds = new Set(bundles.map((b) => b.bundleId));
-      const focusBundleIds = Array.isArray(parsed.focusBundleIds)
-        ? parsed.focusBundleIds.filter((id: string) => bundleIds.has(id))
-        : bundles.slice(0, 40).map((b) => b.bundleId);
-
-      return {
-        strategySource: 'llm',
-        focusBundleIds,
-        staticToolSequence: Array.isArray(parsed.staticToolSequence) ? parsed.staticToolSequence : [],
-        runLeakguard: Boolean(parsed.runLeakguard),
-        runDynamic: Boolean(parsed.runDynamic),
-        dynamicToolPreference: typeof parsed.dynamicToolPreference === 'string' ? parsed.dynamicToolPreference : 'auto',
-        bundleLimit: typeof parsed.bundleLimit === 'number' ? parsed.bundleLimit : focusBundleIds.length,
-        rationale: typeof parsed.rationale === 'string' ? parsed.rationale : 'LLM-selected scan strategy',
-        notes: Array.isArray(parsed.notes) ? parsed.notes.map(String) : [],
-      };
-    } catch {
+    const r = parseJsonWith(raw, PlanSchema);
+    if (!r.ok) {
+      this.logger.warn(`[PLANNER] plan rejected: ${r.reason}`);
       return null;
     }
+    const parsed = r.value;
+    const bundleIds = new Set(bundles.map((b) => b.bundleId));
+    // Honor an explicit focus list (filtered to real ids); default to the top 40.
+    const focusBundleIds =
+      parsed.focusBundleIds !== undefined
+        ? parsed.focusBundleIds.filter((id) => bundleIds.has(id))
+        : bundles.slice(0, 40).map((b) => b.bundleId);
+
+    return {
+      strategySource: 'llm',
+      focusBundleIds,
+      staticToolSequence: parsed.staticToolSequence ?? [],
+      runLeakguard: Boolean(parsed.runLeakguard),
+      runDynamic: Boolean(parsed.runDynamic),
+      dynamicToolPreference: parsed.dynamicToolPreference ?? 'auto',
+      bundleLimit: parsed.bundleLimit ?? focusBundleIds.length,
+      rationale: parsed.rationale ?? 'LLM-selected scan strategy',
+      notes: parsed.notes ?? [],
+    };
   }
 
   private buildPlannerPrompt(args: {
