@@ -28,7 +28,8 @@ function stableSubset(r: any) {
     byFlowVariant: byKey(r.byFlowVariant),
     byFunctionalVariant: byKey(r.byFunctionalVariant),
     byCwe: byKey(r.byCwe),
-    judgePathDistribution: r.judgePathDistribution ?? {},
+    // Canonicalize key order so {heuristic:2,llm:2} == {llm:2,heuristic:2}.
+    judgePathDistribution: Object.fromEntries(Object.entries(r.judgePathDistribution ?? {}).sort()),
     rows,
   };
 }
