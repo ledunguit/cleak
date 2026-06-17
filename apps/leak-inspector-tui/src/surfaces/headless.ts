@@ -129,9 +129,13 @@ export async function runHeadless(opts: HeadlessOptions): Promise<HeadlessResult
 
     if (!opts.quiet) {
       const s = result.report.summary;
+      const bundles = result.report.bundles;
+      const coverage = formatTally(tally(bundles.map((b) => b.dynamicCoverage || 'dynamic_off')));
+      const judge = formatTally(tally(bundles.map((b) => b.verdict?.tool || 'none')));
       process.stdout.write(
         `\n✓ scan ${scanId} complete — ${s.totalCandidates} candidates, ` +
-          `${s.confirmedLeaks} confirmed, ${s.likelyLeaks} likely. Reports in ${dir}\n`,
+          `${s.confirmedLeaks} confirmed, ${s.likelyLeaks} likely. Reports in ${dir}\n` +
+          `  coverage: ${coverage} · judge: ${judge}\n`,
       );
     }
     return { ...result, scanId, dir, files };
@@ -139,6 +143,18 @@ export async function runHeadless(opts: HeadlessOptions): Promise<HeadlessResult
     await staticClient.close();
     await dynamicClient?.close();
   }
+}
+
+/** Count occurrences of each value (for the coverage / judge-path distributions). */
+function tally(values: string[]): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const v of values) out[v] = (out[v] || 0) + 1;
+  return out;
+}
+/** `k=n k=n …` sorted by count desc — a compact one-line distribution. */
+function formatTally(t: Record<string, number>): string {
+  const entries = Object.entries(t).sort((a, b) => b[1] - a[1]);
+  return entries.length ? entries.map(([k, n]) => `${k}=${n}`).join(' ') : 'none';
 }
 
 function parseFormats(spec: string): ReportFormatOpt[] {
