@@ -40,15 +40,22 @@ const dynamic = (flag('dynamic') as 'off' | 'selective' | 'aggressive') ?? 'off'
 const corpusDir = flag('corpus') ?? process.env.CORPUS_DIR ?? 'demo/juliet_cwe401';
 const staticUrl = process.env.EVAL_STATIC_URL ?? 'http://127.0.0.1:50071/mcp';
 const dynamicUrl = process.env.EVAL_DYNAMIC_URL ?? 'http://127.0.0.1:50072/mcp';
+// Consensus-judge ablation: n=1 is the single-LLM baseline; n>1 activates
+// multi-agent consensus (llm_assisted only). Falls back to CONSENSUS_N so it can
+// be driven by env too.
+const consensusN = (flag('consensus-n') ?? process.env.CONSENSUS_N)
+  ? Math.max(1, parseInt((flag('consensus-n') ?? process.env.CONSENSUS_N)!, 10))
+  : undefined;
+const consensusRule = flag('consensus-rule') as 'majority' | 'weighted' | 'unanimous-to-flag' | undefined;
 
 const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
 const outDir = join(process.env.RESULTS_DIR ?? 'results', `eval-${mode}-${stamp}`);
 mkdirSync(outDir, { recursive: true });
 
-const baseOpts = { corpusDir, mode, dynamic, limit, concurrency: undefined, resume: false, staticUrl, dynamicUrl };
+const baseOpts = { corpusDir, mode, dynamic, limit, concurrency: undefined, resume: false, staticUrl, dynamicUrl, consensusN, consensusRule };
 const pct = (x: number) => `${(x * 100).toFixed(1)}%`;
 
-console.log(`Evaluating corpus=${corpusDir} mode=${mode} dynamic=${dynamic} runs=${runs}${limit ? ` limit=${limit}` : ''}\n`);
+console.log(`Evaluating corpus=${corpusDir} mode=${mode} dynamic=${dynamic} runs=${runs}${limit ? ` limit=${limit}` : ''}${consensusN ? ` consensus-n=${consensusN}` : ''}\n`);
 
 if (runs <= 1) {
   const result: EvalResult = await runEval({ ...baseOpts, outDir });
