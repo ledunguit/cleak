@@ -9,10 +9,19 @@
  *
  *   bun scripts/assert-determinism.ts <runA>/metrics.json <runB>/metrics.json
  *
- * Exits 0 if deterministic, 1 with a diff otherwise.
+ * Exit codes: 0 = deterministic · 1 = non-deterministic (diff shown) · 2 = INVALID
+ * gate (refused to certify — see below).
+ *
+ * A determinism gate is only meaningful if the runs actually DID something distinct.
+ * Two failure modes silently produce a bogus "✓ deterministic" and are explicitly
+ * rejected here (each was hit for real while bringing this gate up):
+ *   - self-compare: both paths resolve to the same file (e.g. a coarse second-
+ *     granularity output stamp collided for two fast runs) → a dir compared to itself.
+ *   - degenerate run: zero cases, an all-zero confusion matrix, or ANY errored case
+ *     (e.g. "analyzer unreachable") → two identical piles of nothing.
  */
 
-import { readFileSync } from 'node:fs';
+import { readFileSync, realpathSync } from 'node:fs';
 
 const cm = (m: any) => (m ? { tp: m.tp, fp: m.fp, fn: m.fn, tn: m.tn } : null);
 
@@ -40,8 +49,46 @@ if (!pathA || !pathB) {
   process.exit(2);
 }
 
-const a = stableSubset(JSON.parse(readFileSync(pathA, 'utf-8')));
-const b = stableSubset(JSON.parse(readFileSync(pathB, 'utf-8')));
+/** Refuse the gate (exit 2) — distinct from a real non-deterministic FAIL (exit 1). */
+function invalid(msg: string): never {
+  console.error(`✗ INVALID GATE — refusing to certify determinism.\n  ${msg}`);
+  process.exit(2);
+}
+
+// Guard 1: a dir compared to itself always "passes". Reject same-file inputs.
+try {
+  if (realpathSync(pathA) === realpathSync(pathB)) {
+    invalid(
+      `both inputs resolve to the SAME file:\n    ${realpathSync(pathA)}\n` +
+        `  The two runs must write to DISTINCT output dirs (point RESULTS_DIR at separate paths).`,
+    );
+  }
+} catch {
+  /* if realpath fails, fall through — the read below will surface a clearer error */
+}
+
+const rawA = JSON.parse(readFileSync(pathA, 'utf-8'));
+const rawB = JSON.parse(readFileSync(pathB, 'utf-8'));
+
+// Guard 2: a degenerate run (no cases / all-zero / any errored case) is not
+// evidence of determinism — two identical piles of nothing trivially match.
+function assertHealthy(r: any, label: string): void {
+  const rows: any[] = r.rows ?? [];
+  if (rows.length === 0) invalid(`${label} scored 0 cases — nothing to certify.`);
+  const errored = rows.filter((x) => x.status === 'error');
+  if (errored.length > 0) {
+    invalid(
+      `${label} has ${errored.length}/${rows.length} ERRORED case(s) — e.g. "${(errored[0].error ?? 'unknown').slice(0, 90)}".\n` +
+        `  Fix the environment (are the analyzer MCP servers reachable?) before asserting determinism.`,
+    );
+  }
+  if ((r.overall?.total ?? 0) === 0) invalid(`${label} produced an all-zero confusion matrix (total=0) — degenerate run.`);
+}
+assertHealthy(rawA, 'run A');
+assertHealthy(rawB, 'run B');
+
+const a = stableSubset(rawA);
+const b = stableSubset(rawB);
 const sa = JSON.stringify(a, null, 2);
 const sb = JSON.stringify(b, null, 2);
 
