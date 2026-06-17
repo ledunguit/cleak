@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { isBorderline, judgeBundleWithLlm } from './llmJudge';
+import { isBorderline, shouldEscalate, judgeBundleWithLlm } from './llmJudge';
 import { InvestigationVerdict, ToolKind, type LeakBundle, type VerdictResult } from '@mcpvul/common/types';
 import type { CallModel } from '@mcpvul/agent-core';
 
@@ -22,6 +22,54 @@ describe('isBorderline', () => {
   });
   test('mid-confidence confirmed/false_positive ARE borderline', () => {
     expect(isBorderline(verdict(InvestigationVerdict.CONFIRMED_LEAK, 0.5))).toBe(true);
+  });
+});
+
+const ev = (over: Record<string, any> = {}): any => ({
+  tool: 'lsan',
+  function_name: 'f',
+  file_path: 'x.c',
+  line_number: 1,
+  bytes_lost: 0,
+  blocks_lost: 0,
+  severity: 'info',
+  leakKind: null,
+  ...over,
+});
+const leakEv = (correlated: boolean) => ev({ leakKind: 'definitely_lost', severity: 'high', bytes_lost: 100, correlatedToCandidate: correlated });
+const cleanEv = () => ev({ leakKind: null, severity: 'info' });
+
+function bundleWith(v: VerdictResult | undefined, evidence: any[] = []): LeakBundle {
+  const b = bundle();
+  b.verdict = v;
+  b.evidence = evidence;
+  return b;
+}
+
+describe('shouldEscalate', () => {
+  test('no verdict → false', () => {
+    expect(shouldEscalate(bundleWith(undefined))).toBe(false);
+  });
+  test('a borderline verdict always escalates (delegates to isBorderline)', () => {
+    expect(shouldEscalate(bundleWith(verdict(InvestigationVerdict.UNCERTAIN, 0.3)))).toBe(true);
+  });
+  test('dyn-off: a confident flag with NO evidence does NOT escalate (path unchanged)', () => {
+    expect(shouldEscalate(bundleWith(verdict(InvestigationVerdict.CONFIRMED_LEAK, 0.92)))).toBe(false);
+  });
+  test('a confident flag resting on an UN-correlated leak escalates (coarse evidence)', () => {
+    expect(shouldEscalate(bundleWith(verdict(InvestigationVerdict.CONFIRMED_LEAK, 0.92), [leakEv(false)]))).toBe(true);
+  });
+  test('a confident flag contradicted by a CLEAN dynamic run escalates', () => {
+    expect(shouldEscalate(bundleWith(verdict(InvestigationVerdict.CONFIRMED_LEAK, 0.92), [cleanEv()]))).toBe(true);
+  });
+  test('a confident flag backed by a CORRELATED leak does NOT escalate (well-supported)', () => {
+    expect(shouldEscalate(bundleWith(verdict(InvestigationVerdict.CONFIRMED_LEAK, 0.92), [leakEv(true)]))).toBe(false);
+  });
+  test('a confident false_positive contradicted by a CORRELATED leak escalates', () => {
+    expect(shouldEscalate(bundleWith(verdict(InvestigationVerdict.FALSE_POSITIVE, 0.9), [leakEv(true)]))).toBe(true);
+  });
+  test('a confident false_positive with only a clean run does NOT escalate', () => {
+    expect(shouldEscalate(bundleWith(verdict(InvestigationVerdict.FALSE_POSITIVE, 0.9), [cleanEv()]))).toBe(false);
   });
 });
 
