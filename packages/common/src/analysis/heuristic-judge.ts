@@ -245,7 +245,8 @@ export function enrichLeakVerdict(
 
   const fileContent = readFullFile(bundle.candidate.file_path);
   const analysis = analyzeLeakHeuristically(bundle, staticContext, fileContent);
-  const fromLlm = verdict.tool === ToolKind.LLM;
+  // Consensus verdicts are LLM-derived too — keep their (combined) explanation.
+  const fromLlm = verdict.tool === ToolKind.LLM || verdict.tool === ToolKind.CONSENSUS;
 
   const llmDiffUsable =
     !!verdict.repairDiff &&
