@@ -411,6 +411,7 @@ function toggleDetail(idx) {
         allocation_type: bundle.candidate.allocation_type,
         verdict: bundle.verdict?.verdict || 'pending',
         verdict_tool: bundle.verdict?.tool || '',
+        dynamic_coverage: bundle.dynamicCoverage || 'dynamic_off',
         confidence: bundle.verdict?.confidence || 0,
         explanation: bundle.verdict?.explanation || '',
         repair_suggestion: bundle.verdict?.repair_suggestion || '',

@@ -27,7 +27,7 @@ import {
   type Tool,
   type ToolCtx,
 } from '@mcpvul/agent-core';
-import { AgentActionKind, DynamicMode, type AgentDecision } from '@mcpvul/common/types';
+import { AgentActionKind, DynamicMode, type AgentDecision, type LeakBundle } from '@mcpvul/common/types';
 import type { RunConfig } from '../config';
 import type { AgentMeta, InvestigationContext, InvestigationOutcome, InvestigationPhase } from './investigation';
 import { mcpToolFlags, CONTENT_CAPABLE_TOOLS } from '../domain/mcpToolPlan';
@@ -56,10 +56,33 @@ import {
 import { judgeBundleWithLlm, shouldEscalate } from '../domain/llmJudge';
 import { judgeByConsensus, type ConsensusVerdict } from '@mcpvul/common/analysis/consensus-judge';
 
-function chunk<T>(items: T[], size: number): T[][] {
-  const out: T[][] = [];
-  for (let i = 0; i < items.length; i += Math.max(1, size)) out.push(items.slice(i, i + Math.max(1, size)));
-  return out;
+/**
+ * Group candidates by FILE affinity (a file is never split across sub-agents), then
+ * pack files into size-capped groups. Keeping same-file candidates together lets one
+ * static sub-agent observe interprocedural patterns (allocator + freeing sink in the
+ * same file) that arbitrary size-only chunking splits apart. Deterministic — files
+ * are sorted, so grouping never adds run-to-run variance.
+ */
+export function groupByFileAffinity(bundles: LeakBundle[], size: number): LeakBundle[][] {
+  const cap = Math.max(1, size);
+  const byFile = new Map<string, LeakBundle[]>();
+  for (const b of bundles) {
+    const f = b.candidate.file_path || '';
+    if (!byFile.has(f)) byFile.set(f, []);
+    byFile.get(f)!.push(b);
+  }
+  const groups: LeakBundle[][] = [];
+  let cur: LeakBundle[] = [];
+  for (const file of [...byFile.keys()].sort()) {
+    const fb = byFile.get(file)!;
+    if (cur.length > 0 && cur.length + fb.length > cap) {
+      groups.push(cur);
+      cur = [];
+    }
+    cur.push(...fb); // a single file larger than `cap` stays whole (its own over-size group)
+  }
+  if (cur.length > 0) groups.push(cur);
+  return groups;
 }
 
 export function buildWorkflowInvestigationPhase(cfg: RunConfig, dynamicMode: DynamicMode): InvestigationPhase {
@@ -149,7 +172,7 @@ export function buildWorkflowInvestigationPhase(cfg: RunConfig, dynamicMode: Dyn
       };
 
       // ── Stage A: static evidence (bounded fan-out) ──
-      const groups = chunk(allBundles, cfg.workflow.staticGroupSize);
+      const groups = groupByFileAffinity(allBundles, cfg.workflow.staticGroupSize);
       onNotice(`Stage A · static evidence: ${groups.length} sub-agent(s), concurrency ${cfg.workflow.staticConcurrency}`);
       const staticFanout = mapWithLimit(groups, cfg.workflow.staticConcurrency, async (group, gi) => {
         if (ctx.abortSignal?.aborted) return;

@@ -8,6 +8,7 @@
 
 import { readFileSafe } from './fileWalk';
 import { enrichLeakVerdict } from '@mcpvul/common/analysis/heuristic-judge';
+import { deriveFusion } from '@mcpvul/common/analysis/consensus-judge';
 import { enclosingFunctionSnippet, isLeakVerdictString, evidenceIndicatesLeak } from '@mcpvul/common/analysis/judge-shared';
 import { InvestigationVerdict, ToolKind, type LeakBundle, type VerdictResult } from '@mcpvul/common/types';
 import type { CallModel } from '@mcpvul/agent-core';
@@ -204,7 +205,10 @@ export function shouldEscalate(bundle: LeakBundle): boolean {
   const flagged = v.verdict === InvestigationVerdict.CONFIRMED_LEAK || v.verdict === InvestigationVerdict.LIKELY_LEAK;
   const correlatedLeak = bundle.evidence.some((e) => e.correlatedToCandidate === true && evidenceIndicatesLeak(e));
   const anyLeakEvidence = bundle.evidence.some((e) => evidenceIndicatesLeak(e));
-  const dynamicRanClean = bundle.evidence.length > 0 && !anyLeakEvidence;
+  // Prefer the explicit deterministic coverage; fall back to evidence (back-compat).
+  const dynamicRanClean =
+    bundle.dynamicCoverage === 'exercised_clean' ||
+    (bundle.dynamicCoverage === undefined && bundle.evidence.length > 0 && !anyLeakEvidence);
 
   if (flagged) {
     // A confident flag whose runtime support is only an UN-correlated leak (coarse
@@ -216,5 +220,12 @@ export function shouldEscalate(bundle: LeakBundle): boolean {
     // The heuristic did NOT flag, but a correlated runtime leak says it should.
     if (correlatedLeak) return true;
   }
+
+  // Confident-vs-confident static↔verdict contradiction: a non-borderline verdict
+  // that the fused STATIC evidence opposes is exactly the case the consensus exists
+  // to reconcile, yet (being confident) it would otherwise bypass the LLM.
+  const fusion = deriveFusion(bundle);
+  if (flagged && fusion.static === 'clean') return true; // flags a leak, but ownership is handed out
+  if (!flagged && fusion.static === 'leak') return true; // clears it, but static says unpaired/reachable
   return false;
 }
