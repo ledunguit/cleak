@@ -21,6 +21,8 @@ export enum ToolKind {
   LEAKGUARD = 'leakguard',
   HEURISTIC = 'heuristic',
   LLM = 'llm',
+  /** A multi-sample LLM verdict combined by the consensus judge (self-consistency). */
+  CONSENSUS = 'consensus',
 }
 
 export enum AnalysisMode {
