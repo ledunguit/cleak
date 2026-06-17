@@ -144,10 +144,26 @@ describe('judgeHeuristically — precision fixes', () => {
     expect(flagged(v.verdict)).toBe(true);
   });
 
-  test('clean dynamic run on a dead-code good variant → likely_false_positive (exonerated, not escalated)', () => {
-    const v = judgeHeuristically(bundle('GOOD_DEADCODE', 'goodB2G1', [cleanRun('goodB2G1')]));
+  test('exercised_clean coverage on a dead-code good variant → likely_false_positive (exonerated)', () => {
+    // Exoneration now keys off the EXPLICIT deterministic coverage status, not a
+    // clean evidence entry. A genuinely-exercised-clean run exonerates.
+    const b = bundle('GOOD_DEADCODE', 'goodB2G1', [cleanRun('goodB2G1')]);
+    b.dynamicCoverage = 'exercised_clean';
+    const v = judgeHeuristically(b);
     expect(v.verdict).toBe('likely_false_positive');
     expect(flagged(v.verdict)).toBe(false);
+  });
+
+  test('exercised_clean with ZERO evidence still exonerates (impossible under the old evidence.length proxy)', () => {
+    const b = bundle('GOOD_DEADCODE', 'goodB2G1', []);
+    b.dynamicCoverage = 'exercised_clean';
+    expect(judgeHeuristically(b).verdict).toBe('likely_false_positive');
+  });
+
+  test('not_exercised does NOT exonerate (no honest dynamic signal)', () => {
+    const b = bundle('GOOD_DEADCODE', 'goodB2G1', []);
+    b.dynamicCoverage = 'not_exercised';
+    expect(judgeHeuristically(b).verdict).not.toBe('likely_false_positive');
   });
 
   test('a correlated runtime leak keeps a bad variant flagged even alongside other evidence', () => {

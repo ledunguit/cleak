@@ -10,7 +10,7 @@ export const InvestigationVerdictSchema = z.enum([
   'likely_false_positive',
   'false_positive',
 ]);
-export const ToolKindSchema = z.enum(['valgrind', 'asan', 'lsan', 'leakguard', 'heuristic', 'llm']);
+export const ToolKindSchema = z.enum(['valgrind', 'asan', 'lsan', 'leakguard', 'heuristic', 'llm', 'consensus']);
 export const AnalysisModeSchema = z.enum(['no_llm', 'llm_assisted']);
 export const DynamicModeSchema = z.enum(['off', 'selective', 'aggressive']);
 export const DynamicToolPreferenceSchema = z.enum(['auto', 'valgrind', 'lsan', 'asan']);
@@ -44,6 +44,13 @@ export const CorrelationMethodSchema = z.enum([
   'function_match',
   'file_only',
   'none',
+]);
+
+export const DynamicCoverageSchema = z.enum([
+  'exercised_clean',
+  'exercised_leak',
+  'not_exercised',
+  'dynamic_off',
 ]);
 
 export const StackFrameRefSchema = z.object({
@@ -157,6 +164,7 @@ export const LeakBundleSchema = z.object({
   verdict: VerdictResultSchema.optional(),
   evidence: z.array(LeakEvidenceSchema),
   staticEvidence: StaticLeakEvidenceSchema.optional(),
+  dynamicCoverage: DynamicCoverageSchema.optional(),
   status: z.enum(['pending', 'investigating', 'confirmed', 'dismissed']),
   createdAt: z.string(),
   updatedAt: z.string(),

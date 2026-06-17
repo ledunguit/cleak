@@ -66,24 +66,24 @@ export function staticSubAgentUserMessage(bundles: LeakBundle[]): string {
 
 export function dynamicWorkerSystemPrompt(repoPath: string, buildCommand?: string): string {
   return [
-    `You are a DYNAMIC-ANALYSIS sub-agent for C/C++ memory leaks. Build the project ONCE with a sanitizer, run it to collect runtime leak evidence, attach that evidence to the matching candidates, then call \`${DONE_DYNAMIC}\`.`,
+    `You are a DYNAMIC-ANALYSIS sub-agent for C/C++ memory leaks. Build the project ONCE with a sanitizer, run it under a sanitizer, then call \`${DONE_DYNAMIC}\`.`,
     ``,
     `1. \`read_file\` the Makefile / CMakeLists.txt / build script under ${repoPath} to learn how it builds.${buildCommand ? ` A hint build command was provided: \`${buildCommand}\`.` : ''}`,
-    `2. \`buildTarget\` (projectPath=${repoPath}, buildCommand = a clang command with sanitizer flags), e.g. \`make CC=clang CFLAGS="-g -O0 -fsanitize=address"\` or \`-fsanitize=leak\` for LeakSanitizer.`,
-    `3. Run the binary with \`lsanRun\` or \`asanRun\` (or \`valgrindMemcheck\`) to collect runtime leaks.`,
-    `4. For EACH runtime leak, call \`record_evidence\` (bundleId of the matching candidate, tool = asan|lsan|valgrind, bytesLost).`,
+    `2. \`buildTarget\` (projectPath=${repoPath}, buildCommand = a clang command with sanitizer flags). Prefer LeakSanitizer (\`-fsanitize=leak -g -O0\`) — it reports at exit and never aborts mid-run.`,
+    `3. Run the binary with \`lsanRun\` (or \`asanRun\` / \`valgrindMemcheck\`).`,
     ``,
-    `Build at most ONCE and run each dynamic tool at most once. If a build or sanitizer fails twice, stop and call \`${DONE_DYNAMIC}\`. When done collecting evidence, call \`${DONE_DYNAMIC}\`. Do NOT reply with prose.`,
+    `The system CAPTURES every finding from your sanitizer runs AUTOMATICALLY and attaches it to the matching candidate — you do NOT record evidence yourself. Your only job is to get a successful sanitizer run.`,
+    `Build at most ONCE and run each dynamic tool at most once. If a build or sanitizer fails twice, stop and call \`${DONE_DYNAMIC}\`. When a sanitizer has run, call \`${DONE_DYNAMIC}\`. Do NOT reply with prose.`,
   ].join('\n');
 }
 
 export function dynamicWorkerUserMessage(bundles: LeakBundle[]): string {
   return [
-    `Collect runtime leak evidence for these ${bundles.length} candidate(s):`,
+    `Run a sanitizer once over the build that covers these ${bundles.length} candidate(s):`,
     candidateList(bundles.slice(0, 100)),
     bundles.length > 100 ? `… and ${bundles.length - 100} more.` : '',
     ``,
-    `Build once, run a sanitizer, record_evidence for each leak, then call ${DONE_DYNAMIC}.`,
+    `Build once, run a sanitizer (the system captures the findings), then call ${DONE_DYNAMIC}.`,
   ]
     .filter(Boolean)
     .join('\n');
