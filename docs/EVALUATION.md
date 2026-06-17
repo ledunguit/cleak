@@ -164,10 +164,16 @@ same config twice for each judge arm and compares flip rate:
 K=3 LIMIT=30 scripts/consensus-ablation.sh   # single-LLM (n=1) vs consensus (n=K)
 ```
 
-| Judge arm | verdict flip rate (lower is better) |
-|---|---|
-| single-LLM (`--consensus-n 1`) | 26.7% (8/30) |
-| consensus (`--consensus-n 3`) | _run in progress — `scripts/consensus-ablation.sh`_ |
+Measured on the same 30 cases, same analyzer, two runs per arm:
 
-The claim under test: the consensus arm shows a materially lower flip rate, turning
-the LLM's nondeterminism from an indefensibility into a measured, mitigated property.
+| Judge arm | case stability | verdict flip rate (lower is better) | modal agreement |
+|---|---|---|---|
+| single-LLM (`--consensus-n 1`) | 73.3% | 26.7% (8/30) | 86.7% |
+| consensus (`--consensus-n 3`) | **93.3%** | **6.7% (2/30)** | **96.7%** |
+
+**Result: consensus voting cut the run-to-run verdict flip rate ~4× (26.7% → 6.7%)**
+and raised case-level stability from 73% to 93%. The self-consistency vote over K
+samples damps exactly the borderline-case churn that the single LLM exhibits —
+turning the LLM's nondeterminism from an indefensibility into a measured, mitigated
+property. (Absolute P/R/F1 still come with the Tier-2 mean ± CI; this table isolates
+*stability*, the reproducibility axis.)
