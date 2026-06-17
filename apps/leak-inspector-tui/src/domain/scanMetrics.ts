@@ -16,6 +16,7 @@ interface SnapshotLike {
   findings?: Array<{
     verdict?: string;
     verdict_tool?: string;
+    dynamic_coverage?: string;
     confidence?: number;
     root_cause?: { patternType?: string } | null;
     evidence?: unknown[];
@@ -50,6 +51,7 @@ export interface ScanMetrics {
   confidence: { min: number; mean: number; max: number };
   root_cause_counts: Record<string, number>;
   verdict_tool_counts: Record<string, number>;
+  dynamic_coverage_counts: Record<string, number>;
   evidence_count: number;
   tools_used: string[];
   turns?: number;
@@ -69,11 +71,13 @@ export function computeScanMetrics(snapshot: SnapshotLike, ctx: ScanMetricsConte
   const verdicts: Record<string, number> = {};
   const rootCauses: Record<string, number> = {};
   const verdictTools: Record<string, number> = {};
+  const dynamicCoverage: Record<string, number> = {};
   const confidences: number[] = [];
   for (const f of findings) {
     tally(verdicts, f.verdict ?? 'pending');
     tally(rootCauses, f.root_cause?.patternType);
     tally(verdictTools, f.verdict_tool);
+    tally(dynamicCoverage, f.dynamic_coverage);
     if (typeof f.confidence === 'number') confidences.push(f.confidence);
   }
   const confidence =
@@ -101,6 +105,7 @@ export function computeScanMetrics(snapshot: SnapshotLike, ctx: ScanMetricsConte
     confidence,
     root_cause_counts: rootCauses,
     verdict_tool_counts: verdictTools,
+    dynamic_coverage_counts: dynamicCoverage,
     evidence_count: snapshot.evidence_count ?? findings.reduce((a, f) => a + (f.evidence?.length ?? 0), 0),
     tools_used: snapshot.tools_used ?? [],
     turns: ctx.turns,

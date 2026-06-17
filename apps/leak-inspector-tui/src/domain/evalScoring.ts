@@ -59,6 +59,9 @@ export interface SnapshotFinding {
   /** Which judge produced this verdict (`llm` | `heuristic` | `consensus`). Used to
    * prove an `llm_assisted` run actually used the LLM (provenance integrity). */
   verdict_tool?: string;
+  /** What the dynamic stage established (`exercised_clean` | `exercised_leak` |
+   * `not_exercised` | `dynamic_off`). Diagnostic — not used by scoring. */
+  dynamic_coverage?: string;
 }
 
 /** A verdict counts as "flagged as a leak" (the positive prediction). */

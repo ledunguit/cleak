@@ -71,6 +71,18 @@ describe('shouldEscalate', () => {
   test('a confident false_positive with only a clean run does NOT escalate', () => {
     expect(shouldEscalate(bundleWith(verdict(InvestigationVerdict.FALSE_POSITIVE, 0.9), [cleanEv()]))).toBe(false);
   });
+
+  test('confident flag contradicted by static "clean" (ownership handed out) escalates', () => {
+    const b = bundleWith(verdict(InvestigationVerdict.CONFIRMED_LEAK, 0.92));
+    (b as any).staticEvidence = { ownership: { ownershipCarrier: { kind: 'return_value' } } };
+    expect(shouldEscalate(b)).toBe(true);
+  });
+
+  test('confident false_positive contradicted by static "leak" (unpaired alloc→free) escalates', () => {
+    const b = bundleWith(verdict(InvestigationVerdict.FALSE_POSITIVE, 0.9));
+    (b as any).staticEvidence = { allocFreePairs: [{ variable: 'p', allocLine: 1, status: 'unpaired' }] };
+    expect(shouldEscalate(b)).toBe(true);
+  });
 });
 
 function bundle(): LeakBundle {
