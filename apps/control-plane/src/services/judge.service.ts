@@ -14,7 +14,8 @@ import {
 } from '@mcpvul/common';
 import { existsSync, readFileSync } from 'fs';
 import { judgeHeuristically, enrichLeakVerdict } from '@mcpvul/common/analysis/heuristic-judge';
-import { enclosingFunctionSnippet, isLeakVerdictString } from '@mcpvul/common/analysis/judge-shared';
+import { enclosingFunctionSnippet } from '@mcpvul/common/analysis/judge-shared';
+import { VerdictSchema, parseJsonWith } from './llm-schemas';
 
 @Injectable()
 export class JudgeService {
@@ -359,28 +360,22 @@ Analyze this potential leak and provide your expert verdict.`;
    * Parse LLM response into a VerdictResult.
    */
   private parseVerdict(raw: string, bundle: LeakBundle): VerdictResult | null {
-    const jsonMatch = raw.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) return null;
-
-    try {
-      const parsed = JSON.parse(jsonMatch[0]);
-
-      // Validate verdict against the shared taxonomy (@mcpvul/common).
-      if (!isLeakVerdictString(parsed.verdict)) return null;
-
-      return {
-        verdict: parsed.verdict as InvestigationVerdict,
-        confidence: typeof parsed.confidence === 'number' ? Math.min(1, Math.max(0, parsed.confidence)) : 0.5,
-        explanation: typeof parsed.explanation === 'string' ? parsed.explanation : 'LLM analysis completed',
-        evidence: Array.isArray(parsed.evidence) ? parsed.evidence : bundle.evidence.map((e) => `${e.tool}: ${e.function_name}`),
-        tool: ToolKind.LLM,
-        repair_suggestion: typeof parsed.repair_suggestion === 'string' ? parsed.repair_suggestion : undefined,
-        rootCause: this.parseRootCause(parsed.rootCause, bundle),
-        repairDiff: this.parseRepairDiff(parsed.repairDiff, bundle),
-      };
-    } catch {
+    const r = parseJsonWith(raw, VerdictSchema);
+    if (!r.ok) {
+      this.logger.warn(`[JUDGE] verdict rejected for ${bundle.bundleId}: ${r.reason}`);
       return null;
     }
+    const parsed = r.value;
+    return {
+      verdict: parsed.verdict as InvestigationVerdict,
+      confidence: typeof parsed.confidence === 'number' ? Math.min(1, Math.max(0, parsed.confidence)) : 0.5,
+      explanation: parsed.explanation ?? 'LLM analysis completed',
+      evidence: parsed.evidence ? parsed.evidence.map(String) : bundle.evidence.map((e) => `${e.tool}: ${e.function_name}`),
+      tool: ToolKind.LLM,
+      repair_suggestion: parsed.repair_suggestion,
+      rootCause: this.parseRootCause(parsed.rootCause, bundle),
+      repairDiff: this.parseRepairDiff(parsed.repairDiff, bundle),
+    };
   }
 
   /** Validate the LLM's structured root-cause object (previously discarded). */
