@@ -184,3 +184,37 @@ export function isBorderline(verdict: VerdictResult): boolean {
   // confident confirmed / false-positive → skip the LLM
   return verdict.confidence >= 0.35 && verdict.confidence <= 0.7;
 }
+
+/**
+ * When the staged judge should take an LLM (consensus) second opinion. Beyond the
+ * heuristic being unsure (`isBorderline`), escalate when STATIC and DYNAMIC evidence
+ * point different ways — that is exactly where a single deterministic pass is least
+ * reliable. This matters most with dynamic analysis ON: runtime evidence makes the
+ * heuristic MORE confident, which would otherwise push a verdict OUT of the borderline
+ * band and silently BYPASS the consensus (observed: with `--dynamic selective` the
+ * consensus stopped firing and false positives rose). Routing conflicts to the LLM
+ * re-engages the consensus precisely when it is most needed. With dynamic OFF a bundle
+ * has no evidence, so only `isBorderline` applies — the dyn-off path is unchanged.
+ */
+export function shouldEscalate(bundle: LeakBundle): boolean {
+  const v = bundle.verdict;
+  if (!v) return false;
+  if (isBorderline(v)) return true;
+
+  const flagged = v.verdict === InvestigationVerdict.CONFIRMED_LEAK || v.verdict === InvestigationVerdict.LIKELY_LEAK;
+  const correlatedLeak = bundle.evidence.some((e) => e.correlatedToCandidate === true && evidenceIndicatesLeak(e));
+  const anyLeakEvidence = bundle.evidence.some((e) => evidenceIndicatesLeak(e));
+  const dynamicRanClean = bundle.evidence.length > 0 && !anyLeakEvidence;
+
+  if (flagged) {
+    // A confident flag whose runtime support is only an UN-correlated leak (coarse
+    // correlation — the main false-positive source), or that a CLEAN dynamic run
+    // contradicts, deserves reconciliation by the LLM.
+    if (anyLeakEvidence && !correlatedLeak) return true;
+    if (dynamicRanClean) return true;
+  } else {
+    // The heuristic did NOT flag, but a correlated runtime leak says it should.
+    if (correlatedLeak) return true;
+  }
+  return false;
+}

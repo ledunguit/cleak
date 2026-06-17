@@ -47,7 +47,7 @@ import {
   dynamicWorkerSystemPrompt,
   dynamicWorkerUserMessage,
 } from '../domain/subAgentPrompts';
-import { judgeBundleWithLlm, isBorderline } from '../domain/llmJudge';
+import { judgeBundleWithLlm, shouldEscalate } from '../domain/llmJudge';
 import { judgeByConsensus, type ConsensusVerdict } from '@mcpvul/common/analysis/consensus-judge';
 
 function chunk<T>(items: T[], size: number): T[][] {
@@ -202,7 +202,7 @@ export function buildWorkflowInvestigationPhase(cfg: RunConfig, dynamicMode: Dyn
         if (b.verdict) continue;
         b.verdict = heuristicVerdict(b, staticStore.get(b.bundleId) ?? {});
       }
-      const borderline = allBundles.filter((b) => b.verdict && isBorderline(b.verdict));
+      const borderline = allBundles.filter((b) => b.verdict && shouldEscalate(b));
       // n>1 ⇒ multi-agent consensus (self-consistency); n=1 ⇒ the single-LLM judge
       // (unchanged regression baseline). Both feed the same downstream pipeline.
       const useConsensus = cfg.consensus.n > 1;
