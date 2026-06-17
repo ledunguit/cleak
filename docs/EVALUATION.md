@@ -48,8 +48,8 @@ Metric formulas (`computeMetrics`) are unit-tested in
 
 | Mode | What runs | Determinism |
 |---|---|---|
-| `no_llm` | discovery + static heuristics + **heuristic judge** | deterministic |
-| `llm_assisted` | agentic LLM orchestration + LLM judge (borderline) | stochastic (LLM sampling) |
+| `no_llm` | discovery + static heuristics + **heuristic judge** | deterministic (bitwise — see §7) |
+| `llm_assisted` | agentic LLM orchestration + LLM judge (borderline) | stochastic; variance quantified, not hidden (§7) |
 | `--dynamic off/selective/aggressive` | adds Valgrind/ASan/LSan evidence | depends on build |
 
 The `no_llm` vs `llm_assisted` contrast **is** the LLM-agent ablation (same
@@ -98,3 +98,76 @@ alone, or a published system such as LAMeD/MemHint — see `researchs/`):
 
 This keeps every system on one scoring definition and one corpus version, which
 is what makes the comparison defensible.
+
+## 7. Determinism: a two-tier protocol
+
+A reported number is only defensible if it is reproducible. But the two modes have
+fundamentally different determinism profiles, so the thesis reports each on its own
+terms rather than pretending both are bitwise-reproducible.
+
+**The problem.** An `llm_assisted` run flips borderline verdicts run-to-run — the
+LLM is not bit-deterministic even at `temperature=0` (provider-side batching,
+floating-point, scheduling). Crucially, the **aggregate** confusion matrix can be
+*identical across two runs by luck* while individual cases churn underneath (the
+flips cancel in the sum). Reporting only the aggregate would therefore overstate
+reproducibility. Two independent 30-case `llm_assisted` runs:
+
+```
+case-level stability : 22/30 (73.3%)
+verdict flip rate    : 8/30  (26.7%)
+aggregate confusion  : 27,8,5,37 IDENTICAL in both runs  ⚠ stable-by-luck
+```
+
+### Tier 1 — `no_llm` is bitwise-deterministic (the reproducible baseline)
+
+The non-LLM pipeline (static heuristic judge + the **pinned dynamic recipe** —
+deterministic build+run, no LLM in the loop — + deterministic evidence capture +
+scoring) is byte-identical across runs. This is enforced as a gate:
+
+```bash
+scripts/determinism-gate.sh            # two no_llm runs → assert identical scoring
+```
+
+It runs the config twice into **distinct** output dirs and calls
+`scripts/assert-determinism.ts`, which compares the scoring-relevant subset
+(confusion matrix + per-variant metrics + per-case rows + judge-path distribution,
+ignoring timestamps/tokens). A real run certifies e.g. `TP29 FP7 FN3 TN38`
+identical across both runs.
+
+The gate **refuses to certify** (exit 2) the two ways it can silently lie — both
+hit for real while bringing it up:
+- **self-compare**: a coarse second-granularity output stamp collided two fast runs
+  into the same dir (a dir compared to itself always "passes");
+- **degenerate run**: an unreachable analyzer made all cases error, so two identical
+  piles of errors trivially matched.
+
+### Tier 2 — `llm_assisted` reports variance, and consensus reduces it
+
+Because Tier-1 identity is unattainable for the LLM judge, `llm_assisted` numbers
+are reported as a distribution, not a point:
+
+```bash
+bun scripts/evaluate-corpus.ts llm_assisted --runs 5      # mean ± std (variance.json/md)
+bun scripts/verdict-stability.ts <runA> <runB> [<runC> …]  # case-level flip rate
+```
+
+`verdict-stability.ts` makes the churn explicit (case-level stability, flip rate,
+modal agreement, and the stable-by-luck flag) instead of letting a lucky aggregate
+hide it.
+
+**The consensus judge is the fix.** The thesis novelty — a static+dynamic consensus
+judge that votes over *K* independent samples (self-consistency) — exists precisely
+to damp this run-to-run variance on borderline cases. The headline ablation runs the
+same config twice for each judge arm and compares flip rate:
+
+```bash
+K=3 LIMIT=30 scripts/consensus-ablation.sh   # single-LLM (n=1) vs consensus (n=K)
+```
+
+| Judge arm | verdict flip rate (lower is better) |
+|---|---|
+| single-LLM (`--consensus-n 1`) | 26.7% (8/30) |
+| consensus (`--consensus-n 3`) | _run in progress — `scripts/consensus-ablation.sh`_ |
+
+The claim under test: the consensus arm shows a materially lower flip rate, turning
+the LLM's nondeterminism from an indefensibility into a measured, mitigated property.
