@@ -13,6 +13,8 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Box, Text, useInput } from 'ink';
 import { color, glyph } from '../theme';
+import { VerdictCard } from './VerdictCard';
+import { snapshotFindingToView } from '../findings/findingView';
 import { classifyFinding, isFlagged, type LabeledCase, type SnapshotFinding } from '../../../domain/evalScoring';
 import type { TuiStore } from '../store';
 import type { EvalUiState, EvalCaseUi } from '../store';
@@ -293,6 +295,10 @@ function Detail({
   const findings = c.findings ?? [];
   const m = prf({ tp: c.tp, fp: c.fp, fn: c.fn, tn: c.tn });
   const caught = findings.some((f) => classifyFinding(f, labeled) === 'bad' && isFlagged(f.verdict));
+  // Show the structured verdict for the flagged finding(s) — or the top finding when
+  // nothing was flagged (so a missed leak still shows the verdict it received). Capped.
+  const flagged = findings.filter((f) => isFlagged(f.verdict));
+  const cardFindings = (flagged.length ? flagged : findings).slice(0, 2);
 
   const classify = (f: SnapshotFinding): { mark: string; col: string } => {
     const predicted = isFlagged(f.verdict);
@@ -324,6 +330,18 @@ function Detail({
         <Text color={caught ? color.success : color.error}>{caught ? 'caught' : 'missed'}</Text> {glyph.bullet} findings:{' '}
         {findings.map((f) => `${classify(f).mark} ${f.function ?? '?'}@${f.line ?? '?'}`).slice(0, 4).join('  ') || '(none)'}
       </Text>
+
+      {/* structured verdict detail (reuses the findings-browser card) */}
+      {cardFindings.length ? (
+        <Box flexDirection="column" marginTop={1}>
+          <Text color={color.system}>Verdict detail</Text>
+          {cardFindings.map((f) => (
+            <Box key={`${f.function ?? '?'}@${f.line ?? '?'}`} marginTop={1}>
+              <VerdictCard f={snapshotFindingToView(f)} width={Math.min(110, (process.stdout.columns ?? 100) - 2)} />
+            </Box>
+          ))}
+        </Box>
+      ) : null}
 
       {/* investigation log (steps.md) */}
       <Box flexDirection="column" marginTop={1}>

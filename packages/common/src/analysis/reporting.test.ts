@@ -69,3 +69,32 @@ describe('toSnapshot — novelty fields (additive, guarded)', () => {
     expect(f1.dynamic_coverage).toBe('exercised_clean'); // still carries coverage
   });
 });
+
+describe('toMarkdown — coverage/judge/correlation/static surfaced', () => {
+  const md = reporting.toMarkdown(report([consensusBundle, heuristicBundle]));
+
+  test('per-finding dynamic coverage + judge provenance', () => {
+    expect(md).toContain('Dynamic coverage');
+    expect(md).toContain('exercised — leak observed');
+    expect(md).toContain('agreement 67%'); // consensus summary (2/3 agreed)
+  });
+  test('evidence correlation + feasible-leak-path narrative + ownership', () => {
+    expect(md).toContain('LINKED');
+    expect(md).toContain('without free(p)'); // the feasible-path narrative
+    expect(md).toContain('Ownership');
+  });
+});
+
+describe('toHtml — coverage/judge columns + correlation + static block', () => {
+  const html = reporting.toHtml(report([consensusBundle, heuristicBundle]));
+
+  test('findings table gains Coverage + Judge columns', () => {
+    expect(html).toContain('<th>Coverage</th>');
+    expect(html).toContain('<th>Judge</th>');
+  });
+  test('detail surfaces consensus agreement, LINKED evidence, and a static narrative', () => {
+    expect(html).toContain('agreement 67%');
+    expect(html).toContain('LINKED');
+    expect(html).toContain('without free(p)');
+  });
+});

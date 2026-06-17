@@ -98,6 +98,8 @@ export class LeakReporting {
         lines.push(`- **Verdict**: ${bundle.verdict.verdict}`);
         lines.push(`- **Confidence**: ${(bundle.verdict.confidence * 100).toFixed(0)}% (${severity})`);
         lines.push(`- **Allocation type**: ${bundle.candidate.allocation_type}`);
+        lines.push(`- **Dynamic coverage**: ${coverageText(bundle.dynamicCoverage)}`);
+        lines.push(`- **Judge**: ${judgeSummary(bundle.verdict)}`);
         lines.push(`- ${bundle.verdict.explanation}`);
         if (bundle.verdict.repair_suggestion) {
           lines.push(`- **Suggested fix**: ${bundle.verdict.repair_suggestion}`);
@@ -130,7 +132,21 @@ export class LeakReporting {
         if (bundle.evidence.length > 0) {
           lines.push(`- **Evidence (${bundle.evidence.length})**:`);
           for (const e of bundle.evidence) {
-            lines.push(`  - ${e.tool}: ${e.function_name} (${e.bytes_lost} bytes lost)`);
+            const corr = correlationText(e.correlationMethod);
+            lines.push(`  - ${e.tool}: ${e.function_name} (${e.bytes_lost} bytes lost) — ${corr}${e.leakKind ? `, ${e.leakKind}` : ''}`);
+          }
+        }
+        const se = bundle.staticEvidence;
+        if (se) {
+          if (se.ownership) {
+            lines.push(`- **Ownership**: ${se.ownership.role}${se.ownership.rationale ? ` — ${se.ownership.rationale}` : ''}`);
+          }
+          const paths = se.feasibleLeakPaths || [];
+          if (paths.length > 0) {
+            lines.push(`- **Feasible leak paths**:`);
+            for (const fp of paths.slice(0, 5)) {
+              lines.push(`  - ${(fp.narrative || '').slice(0, 280)}${fp.reachable === false ? ' (unreachable)' : ''}`);
+            }
           }
         }
         if (bundle.candidate.context) {
@@ -168,6 +184,8 @@ export class LeakReporting {
         <td><span class="severity-dot" style="background:${severityColor(b.verdict!.confidence)}"></span></td>
         <td>${verdictIcon(b.verdict!.verdict)} ${b.verdict!.verdict}</td>
         <td>${(b.verdict!.confidence * 100).toFixed(0)}%</td>
+        <td>${escapeHtml(coverageText(b.dynamicCoverage))}</td>
+        <td>${escapeHtml(judgeSummary(b.verdict))}</td>
         <td><code>${escapeHtml(b.candidate.function_name)}</code></td>
         <td><code>${escapeHtml(b.candidate.file_path)}:${b.candidate.line_number}</code></td>
         <td><code>${escapeHtml(b.candidate.allocation_type)}</code></td>
@@ -200,6 +218,8 @@ export class LeakReporting {
             <tr><td>File</td><td><code>${escapeHtml(b.candidate.file_path)}:${b.candidate.line_number}</code></td></tr>
             <tr><td>Allocation</td><td><code>${escapeHtml(b.candidate.allocation_type)}</code> at line ${b.candidate.line_number}</td></tr>
             <tr><td>Confidence</td><td>${(b.verdict!.confidence * 100).toFixed(0)}%</td></tr>
+            <tr><td>Dynamic coverage</td><td>${escapeHtml(coverageText(b.dynamicCoverage))}</td></tr>
+            <tr><td>Judge</td><td>${escapeHtml(judgeSummary(b.verdict))}</td></tr>
           </table>
           <div class="explanation">
             <strong>Explanation:</strong>
@@ -232,6 +252,28 @@ export class LeakReporting {
                 )
                 .join('\n')
             }</pre>
+          </div>` : ''}
+          ${b.evidence.length ? `
+          <div class="runtime-evidence">
+            <strong>Runtime Evidence:</strong>
+            <ul style="margin:4px 0 0 18px;font-size:13px">
+              ${b.evidence
+                .slice(0, 10)
+                .map(
+                  (e) =>
+                    `<li><code>${escapeHtml(e.tool)}</code> · ${e.bytes_lost} bytes · ${correlationText(e.correlationMethod)}${e.leakKind ? ` · ${escapeHtml(String(e.leakKind))}` : ''}${e.allocSite ? ` · <code>${escapeHtml(e.allocSite.file)}:${e.allocSite.line}</code>` : ''}</li>`,
+                )
+                .join('')}
+            </ul>
+          </div>` : ''}
+          ${b.staticEvidence ? `
+          <div class="static-evidence">
+            <strong>Static Analysis:</strong>
+            ${b.staticEvidence.ownership ? `<p style="font-size:13px;margin:4px 0">Ownership: <code>${escapeHtml(b.staticEvidence.ownership.role)}</code>${b.staticEvidence.ownership.rationale ? ` — ${escapeHtml(b.staticEvidence.ownership.rationale)}` : ''}</p>` : ''}
+            ${(b.staticEvidence.feasibleLeakPaths || []).length ? `<ul style="margin:4px 0 0 18px;font-size:13px">${(b.staticEvidence.feasibleLeakPaths || [])
+              .slice(0, 5)
+              .map((fp) => `<li>${escapeHtml((fp.narrative || '').slice(0, 280))}${fp.reachable === false ? ' (unreachable)' : ''}</li>`)
+              .join('')}</ul>` : ''}
           </div>` : ''}
           ${b.candidate.context ? `
           <div class="code-snippet">
@@ -352,6 +394,8 @@ export class LeakReporting {
         <th style="width:20px"></th>
         <th>Verdict</th>
         <th>Conf.</th>
+        <th>Coverage</th>
+        <th>Judge</th>
         <th>Function</th>
         <th>Location</th>
         <th>Alloc</th>
@@ -360,7 +404,7 @@ export class LeakReporting {
       </tr>
     </thead>
     <tbody>
-      ${findingsRows || '<tr><td colspan="8" style="text-align:center;color:#999">No findings to display</td></tr>'}
+      ${findingsRows || '<tr><td colspan="10" style="text-align:center;color:#999">No findings to display</td></tr>'}
     </tbody>
   </table>
 
@@ -649,4 +693,37 @@ function escapeCsv(value: string | number): string {
     return `"${s.replace(/"/g, '""')}"`;
   }
   return s;
+}
+
+// ── Shared verdict-provenance helpers (markdown + html), mirroring the TUI card ──
+
+/** One line of judge provenance: the deciding tool plus, for a consensus verdict,
+ *  its agreement %, how many samples matched the final verdict, and any override. */
+function judgeSummary(v: any): string {
+  if (!v) return 'unknown';
+  const tool = v.tool || 'unknown';
+  if (Array.isArray(v.samples) && v.samples.length) {
+    const total = v.samples.length;
+    const agree = v.samples.filter((s: any) => s.verdict === v.verdict).length;
+    return `${tool} (agreement ${((v.agreement ?? 0) * 100).toFixed(0)}%, ${agree}/${total} samples${v.overridden ? ', overridden' : ''})`;
+  }
+  return tool;
+}
+
+/** Human label for how a runtime leak correlated to its candidate. */
+function correlationText(method?: string): string {
+  if (method === 'file_line_exact' || method === 'file_line_near' || method === 'function_match') return 'LINKED';
+  if (method === 'file_only') return 'file-only';
+  return 'unlinked';
+}
+
+const COVERAGE_TEXT: Record<string, string> = {
+  exercised_leak: 'exercised — leak observed',
+  exercised_clean: 'exercised — clean',
+  not_exercised: 'not exercised',
+  dynamic_off: 'dynamic off',
+};
+/** Honest dynamic-coverage label (what the runtime stage actually established). */
+function coverageText(cov?: string): string {
+  return COVERAGE_TEXT[cov || 'dynamic_off'] || cov || 'dynamic off';
 }

@@ -62,6 +62,16 @@ export interface SnapshotFinding {
   /** What the dynamic stage established (`exercised_clean` | `exercised_leak` |
    * `not_exercised` | `dynamic_off`). Diagnostic — not used by scoring. */
   dynamic_coverage?: string;
+  // ── Rich detail (present in Phase-0+ snapshots) — surfaced by the eval Detail
+  //    VerdictCard, never read by `scoreCase`. All optional for back-compat. ──
+  allocation_type?: string;
+  explanation?: string;
+  repair_suggestion?: string;
+  root_cause?: unknown;
+  repair_diff?: unknown;
+  evidence?: unknown[];
+  static_evidence?: unknown;
+  consensus?: unknown;
 }
 
 /** A verdict counts as "flagged as a leak" (the positive prediction). */
