@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { bestCorrelation, samplesSparkline, coverageBadge, judgeChip, correlationLabel } from './verdictStyle';
+import { bestCorrelation, samplesSparkline, confidenceMeter, coverageBadge, judgeChip, correlationLabel } from './verdictStyle';
 
 describe('bestCorrelation', () => {
   test('any LINKED method wins over file-only', () => {
@@ -24,6 +24,19 @@ describe('samplesSparkline', () => {
   });
   test('empty string when no samples (heuristic-only)', () => {
     expect(samplesSparkline([], 'confirmed_leak')).toBe('');
+  });
+});
+
+describe('confidenceMeter', () => {
+  test('fills cells proportionally and stays fixed-width', () => {
+    expect(confidenceMeter(0.9)).toBe('▰▰▰▰▱');
+    expect(confidenceMeter(1)).toBe('▰▰▰▰▰');
+    expect(confidenceMeter(0)).toBe('▱▱▱▱▱');
+    expect(confidenceMeter(0.5).length).toBe(5);
+  });
+  test('clamps out-of-range + non-finite', () => {
+    expect(confidenceMeter(2)).toBe('▰▰▰▰▰');
+    expect(confidenceMeter(NaN)).toBe('▱▱▱▱▱');
   });
 });
 

@@ -5,6 +5,8 @@
  *   detail — the structured `VerdictCard` for one finding, steppable prev/next
  * Owns the keyboard while view === 'findings'. Renders identically for a live
  * post-scan bundle set and a historical snapshot (both arrive as `FindingView[]`).
+ * Visual language matches the rest of the TUI: a star-marked header, a chip-strip
+ * summary, an EvalScreen-style tab bar, and color-coded key hints.
  */
 import { Box, Text, useInput } from 'ink';
 import { join } from 'node:path';
@@ -23,10 +25,53 @@ function verdictCounts(findings: FindingsUiState['findings']) {
   return { confirmed, likely };
 }
 
+/** A row of chips joined by ` · ` (the Footer idiom). */
+function Chips({ items }: { items: Array<{ text: string; color?: string }> }) {
+  return (
+    <Text>
+      {items.map((c, i) => (
+        <Text key={i}>
+          {i > 0 ? <Text color={color.subtle}> {glyph.bullet} </Text> : null}
+          <Text color={c.color ?? color.subtle}>{c.text}</Text>
+        </Text>
+      ))}
+    </Text>
+  );
+}
+
+/** A `key label` hint with the key in accent (the Welcome idiom). */
+function Hint({ keys, label }: { keys: string; label: string }) {
+  return (
+    <Text>
+      <Text color={color.accent}>{keys}</Text>
+      <Text dimColor> {label}</Text>
+    </Text>
+  );
+}
+
+function TabBar({ tab }: { tab: FindingsUiState['tab'] }) {
+  const tabs: Array<[FindingsUiState['tab'], string]> = [
+    ['table', 'Table'],
+    ['detail', 'Detail'],
+  ];
+  return (
+    <Text>
+      {tabs.map(([key, label], i) => (
+        <Text key={key}>
+          {i > 0 ? <Text dimColor> | </Text> : null}
+          <Text color={key === tab ? color.accent : color.subtle} bold={key === tab} underline={key === tab}>
+            {label}
+          </Text>
+        </Text>
+      ))}
+    </Text>
+  );
+}
+
 export function FindingsScreen({ store, state, resultsDir }: { store: TuiStore; state: UiState; resultsDir: string }) {
   const fs = state.findings;
   const visible = visibleFindings(state);
-  const tableRows = Math.max(5, (process.stdout.rows ?? 30) - 12);
+  const tableRows = Math.max(5, (process.stdout.rows ?? 30) - 13);
 
   useInput((input, key) => {
     if (!fs) return;
@@ -53,20 +98,30 @@ export function FindingsScreen({ store, state, resultsDir }: { store: TuiStore; 
   const selected = visible[fs.cursor];
   const filtered = visible.length !== fs.findings.length;
 
+  const summary: Array<{ text: string; color?: string }> = [
+    { text: fs.source },
+    { text: `${fs.findings.length} findings` },
+    { text: `${counts.confirmed} confirmed`, color: color.error },
+    { text: `${counts.likely} likely`, color: color.warning },
+    { text: `sort ${fs.sort}` },
+  ];
+  if (fs.filter.verdict) summary.push({ text: `verdict=${fs.filter.verdict}`, color: color.accent });
+  if (fs.filter.coverage) summary.push({ text: `cover=${fs.filter.coverage}`, color: color.accent });
+  if (filtered) summary.push({ text: `${visible.length} shown`, color: color.accent });
+
   return (
     <Box flexDirection="column">
       {/* header */}
-      <Text color={color.accent} bold>
-        {glyph.star} FINDINGS {fs.scanId}
+      <Text>
+        <Text color={color.accent} bold>
+          {glyph.star} FINDINGS{' '}
+        </Text>
+        <Text color={color.subtle}>{fs.scanId}</Text>
       </Text>
-      <Text dimColor>
-        {fs.source} {glyph.bullet} {fs.findings.length} findings {glyph.bullet}{' '}
-        <Text color={color.error}>{counts.confirmed} confirmed</Text> {glyph.bullet}{' '}
-        <Text color={color.warning}>{counts.likely} likely</Text> {glyph.bullet} sort {fs.sort}
-        {fs.filter.verdict ? <Text> {glyph.bullet} verdict={fs.filter.verdict}</Text> : null}
-        {fs.filter.coverage ? <Text> {glyph.bullet} cover={fs.filter.coverage}</Text> : null}
-        {filtered ? <Text> {glyph.bullet} {visible.length} shown</Text> : null}
-      </Text>
+      <Chips items={summary} />
+      <Box marginTop={1}>
+        <TabBar tab={fs.tab} />
+      </Box>
 
       <Box flexDirection="column" marginTop={1}>
         {fs.tab === 'table' ? (
@@ -74,7 +129,7 @@ export function FindingsScreen({ store, state, resultsDir }: { store: TuiStore; 
         ) : selected ? (
           <Box flexDirection="column">
             <Text dimColor>
-              finding {fs.cursor + 1} of {visible.length} {glyph.bullet} report {join(resultsDir, fs.scanId, 'report.html')}
+              finding {fs.cursor + 1} of {visible.length} {glyph.bullet} {join(resultsDir, fs.scanId, 'report.html')}
             </Text>
             <Box marginTop={1}>
               <VerdictCard f={selected} width={Math.min(110, (process.stdout.columns ?? 100) - 2)} />
@@ -85,19 +140,29 @@ export function FindingsScreen({ store, state, resultsDir }: { store: TuiStore; 
         )}
       </Box>
 
+      {/* footer key hints */}
       <Box marginTop={1}>
-        <Text dimColor>
-          {fs.tab === 'table' ? (
-            <>
-              ↑/↓ move {glyph.bullet} Enter detail {glyph.bullet} s sort {glyph.bullet} f verdict {glyph.bullet} c coverage{' '}
-              {glyph.bullet} Esc exit
-            </>
-          ) : (
-            <>
-              ↑/↓ prev/next finding {glyph.bullet} ←/Esc back to table
-            </>
-          )}
-        </Text>
+        {fs.tab === 'table' ? (
+          <Text>
+            <Hint keys="↑/↓" label="move" />
+            <Text color={color.subtle}> {glyph.bullet} </Text>
+            <Hint keys="↵" label="detail" />
+            <Text color={color.subtle}> {glyph.bullet} </Text>
+            <Hint keys="s" label="sort" />
+            <Text color={color.subtle}> {glyph.bullet} </Text>
+            <Hint keys="f" label="verdict" />
+            <Text color={color.subtle}> {glyph.bullet} </Text>
+            <Hint keys="c" label="coverage" />
+            <Text color={color.subtle}> {glyph.bullet} </Text>
+            <Hint keys="esc" label="exit" />
+          </Text>
+        ) : (
+          <Text>
+            <Hint keys="↑/↓" label="prev/next finding" />
+            <Text color={color.subtle}> {glyph.bullet} </Text>
+            <Hint keys="←/esc" label="back to table" />
+          </Text>
+        )}
       </Box>
     </Box>
   );
