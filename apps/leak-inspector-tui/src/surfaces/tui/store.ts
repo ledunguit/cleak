@@ -18,6 +18,7 @@ import type { AgentMeta } from '../../orchestrator/investigation';
 import { toolSource, type ToolSource } from '../../domain/mcpToolPlan';
 import type { EvalResult } from '../../domain/evalHarness';
 import type { SnapshotFinding, LabeledFlaw, CleanSite } from '../../domain/evalScoring';
+import { verdictSeverityRank, type FindingView } from './findings/findingView';
 
 export type PhaseStatus = 'pending' | 'active' | 'done' | 'skipped' | 'failed';
 export type RunStatus = 'idle' | 'running' | 'paused' | 'done' | 'error';
@@ -121,6 +122,25 @@ export interface EvalUiState {
   outDir?: string;
 }
 
+export type FindingsTab = 'table' | 'detail';
+export type FindingsSort = 'severity' | 'confidence' | 'file';
+
+/** Findings/verdict browser state (when view === 'findings'). */
+export interface FindingsUiState {
+  scanId: string;
+  /** Whether the rows came from the live in-memory bundles or a persisted snapshot.json. */
+  source: 'live' | 'snapshot';
+  /** The full, unsorted/unfiltered master list — `visibleFindings` derives what renders. */
+  findings: FindingView[];
+  /** Cursor into the VISIBLE (sorted+filtered) list, not the master list. */
+  cursor: number;
+  sort: FindingsSort;
+  filter: { verdict?: string; coverage?: string };
+  tab: FindingsTab;
+  /** Finding id pinned to the Detail tab. */
+  detailId?: string;
+}
+
 export interface UiState {
   messages: UiMessage[];
   phases: Record<ScanPhase, PhaseStatus>;
@@ -142,9 +162,11 @@ export interface UiState {
   permissionMode: 'ask' | 'auto';
   startedAt?: number;
   /** Which surface to render. */
-  view: 'main' | 'config' | 'eval';
+  view: 'main' | 'config' | 'eval' | 'findings';
   /** Benchmark evaluation state (when view === 'eval'). */
   eval?: EvalUiState;
+  /** Findings/verdict browser state (when view === 'findings'). */
+  findings?: FindingsUiState;
   /** Auto-open the report findings picker when a scan finishes. */
   autoShowReport: boolean;
   /** Whether the agent invoked any dynamic-analysis tool this scan. */
@@ -166,6 +188,25 @@ export interface UiState {
 /** Messages belonging to the currently-viewed agent (main = the 'main' flow). */
 export function visibleMessages(state: UiState): UiMessage[] {
   return state.messages.filter((m) => m.agentId === state.viewAgentId);
+}
+
+/**
+ * The findings rows that actually render — the master list with the active
+ * filter applied and the active sort imposed. Centralised here so the screen,
+ * the cursor math, and the detail stepper all agree on order + membership.
+ */
+export function visibleFindings(state: UiState): FindingView[] {
+  const f = state.findings;
+  if (!f) return [];
+  let list = f.findings;
+  if (f.filter.verdict) list = list.filter((x) => x.verdict === f.filter.verdict);
+  if (f.filter.coverage) list = list.filter((x) => x.dynamicCoverage === f.filter.coverage);
+  const sorted = [...list];
+  if (f.sort === 'severity')
+    sorted.sort((a, b) => verdictSeverityRank(b.verdict) - verdictSeverityRank(a.verdict) || b.confidence - a.confidence);
+  else if (f.sort === 'confidence') sorted.sort((a, b) => b.confidence - a.confidence);
+  else if (f.sort === 'file') sorted.sort((a, b) => a.file.localeCompare(b.file) || a.line - b.line);
+  return sorted;
 }
 
 /** Keep the in-memory log bounded — only truncate when it grows very large. */
@@ -460,6 +501,93 @@ export class TuiStore {
 
   /** Leave the eval screen back to the main flow. */
   evalExit(): void {
+    this.set({ view: 'main' });
+  }
+
+  // ── Findings/verdict browser ──
+  private patchFindings(patch: Partial<FindingsUiState>): void {
+    if (!this.state.findings) return;
+    this.set({ findings: { ...this.state.findings, ...patch } });
+  }
+
+  /**
+   * Apply a slice change that may reorder/shrink the visible list (sort/filter),
+   * keeping the cursor on the SAME finding when it survives — else clamp to range.
+   */
+  private repointCursor(next: FindingsUiState): FindingsUiState {
+    const prevId = visibleFindings(this.state)[this.state.findings?.cursor ?? 0]?.id;
+    const nextVisible = visibleFindings({ ...this.state, findings: next } as UiState);
+    let cursor = prevId ? nextVisible.findIndex((f) => f.id === prevId) : 0;
+    if (cursor < 0) cursor = 0;
+    cursor = Math.max(0, Math.min(Math.max(0, nextVisible.length - 1), cursor));
+    return { ...next, cursor };
+  }
+
+  /** Open the findings browser over a set of normalized views (live or from a snapshot). */
+  openFindings(scanId: string, source: 'live' | 'snapshot', findings: FindingView[]): void {
+    this.set({
+      view: 'findings',
+      findings: { scanId, source, findings, cursor: 0, sort: 'severity', filter: {}, tab: 'table' },
+    });
+  }
+
+  /** Move the table cursor within the VISIBLE list bounds. */
+  findingsMove(delta: number): void {
+    if (!this.state.findings) return;
+    const n = visibleFindings(this.state).length;
+    if (n === 0) return;
+    this.patchFindings({ cursor: Math.max(0, Math.min(n - 1, this.state.findings.cursor + delta)) });
+  }
+
+  /** Cycle sort order (severity → confidence → file), keeping the cursor on its finding. */
+  findingsCycleSort(dir: 1 | -1 = 1): void {
+    if (!this.state.findings) return;
+    const order: FindingsSort[] = ['severity', 'confidence', 'file'];
+    const i = order.indexOf(this.state.findings.sort);
+    const sort = order[(i + dir + order.length) % order.length];
+    this.set({ findings: this.repointCursor({ ...this.state.findings, sort }) });
+  }
+
+  /**
+   * Cycle a filter dimension through `all → each distinct value present → all`.
+   * Only values that actually occur are offered, so filtering never empties the
+   * list by accident. Keeps the cursor on its finding when it survives the filter.
+   */
+  findingsCycleFilter(kind: 'verdict' | 'coverage', dir: 1 | -1 = 1): void {
+    if (!this.state.findings) return;
+    const fs = this.state.findings;
+    const present = kind === 'verdict' ? fs.findings.map((f) => f.verdict) : fs.findings.map((f) => f.dynamicCoverage);
+    const values: (string | undefined)[] = [undefined, ...Array.from(new Set(present))];
+    const cur = kind === 'verdict' ? fs.filter.verdict : fs.filter.coverage;
+    const idx = Math.max(0, values.findIndex((v) => v === cur));
+    const nextVal = values[(idx + dir + values.length) % values.length];
+    const filter = { ...fs.filter, [kind]: nextVal };
+    this.set({ findings: this.repointCursor({ ...fs, filter }) });
+  }
+
+  /** Pin the finding under the cursor to the Detail tab and switch to it. */
+  findingsOpenDetail(): void {
+    if (!this.state.findings) return;
+    const f = visibleFindings(this.state)[this.state.findings.cursor];
+    if (f) this.patchFindings({ detailId: f.id, tab: 'detail' });
+  }
+
+  /** Step prev/next through findings while in the Detail tab (cursor + pinned id move together). */
+  findingsDetailStep(delta: number): void {
+    if (!this.state.findings) return;
+    const visible = visibleFindings(this.state);
+    if (visible.length === 0) return;
+    const cursor = Math.max(0, Math.min(visible.length - 1, this.state.findings.cursor + delta));
+    this.patchFindings({ cursor, detailId: visible[cursor]?.id });
+  }
+
+  /** Back from Detail to the table. */
+  findingsBackToTable(): void {
+    this.patchFindings({ tab: 'table' });
+  }
+
+  /** Leave the findings browser back to the main flow. */
+  findingsExit(): void {
     this.set({ view: 'main' });
   }
 

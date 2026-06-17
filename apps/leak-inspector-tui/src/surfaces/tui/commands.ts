@@ -44,7 +44,7 @@ export const COMMANDS: CommandSpec[] = [
       { label: 'aggressive', value: 'aggressive', description: 'always attempt a dynamic run' },
     ],
   },
-  { name: '/report', summary: 'view a past scan (pick a finding)', usage: '/report [scanId]', kind: 'action' },
+  { name: '/report', summary: 'open the findings browser for a scan', usage: '/report [scanId]', kind: 'action' },
   { name: '/metrics', summary: 'show metrics for a scan', usage: '/metrics [scanId]', kind: 'action' },
   { name: '/scans', summary: 'list recent scans', kind: 'action' },
   { name: '/config', summary: 'settings — defaults & auto-show report', kind: 'action' },

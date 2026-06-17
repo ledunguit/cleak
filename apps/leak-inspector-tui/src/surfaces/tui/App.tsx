@@ -15,6 +15,8 @@ import { Select, type SelectOption } from './components/Select';
 import { CommandSuggestions } from './components/CommandSuggestions';
 import { ConfigScreen } from './components/ConfigScreen';
 import { EvalScreen } from './components/EvalScreen';
+import { FindingsScreen } from './components/FindingsScreen';
+import { snapshotFindingToView } from './findings/findingView';
 import { COMMANDS, matchCommands, findCommand } from './commands';
 import { loadHistory, appendHistory, historyStep } from './history';
 import { color, glyph, formatDuration } from './theme';
@@ -236,24 +238,9 @@ export function App({ store, staticUrl, dynamicUrl, cwd, resultsDir, recentScans
     }
     const findings: any[] = snap.findings ?? [];
     if (findings.length === 0) return store.addSystemMessage(`${id}: no findings`);
-    store.addSystemMessage(
-      `── ${id} ${glyph.bullet} ${snap.confirmed_leak_count ?? 0} confirmed / ${snap.likely_leak_count ?? 0} likely of ${snap.finding_count ?? 0} ──`,
-    );
-    const options: SelectOption[] = findings.map((f, i) => {
-      const st = verdictStyle(f.verdict);
-      const conf = typeof f.confidence === 'number' ? ` (${(f.confidence * 100).toFixed(0)}%)` : '';
-      return {
-        label: `${st.icon} ${f.function ?? '?'}@${f.line ?? '?'}  ${f.verdict ?? 'pending'}${conf}`,
-        value: String(i),
-        color: st.color,
-        description: basename(String(f.file ?? '')),
-      };
-    });
-    setOverlay({
-      title: `findings in ${id} — pick one`,
-      options,
-      onSubmit: (vals) => showFindingDetail(store, findings[Number(vals[0])], id, resultsDir),
-    });
+    // Open the interactive findings/verdict browser over the snapshot (the single
+    // `snapshotFindingToView` adapter guarantees parity with the live path).
+    store.openFindings(id, 'snapshot', findings.map(snapshotFindingToView));
   };
 
   const dispatch = (raw: string) => {
@@ -425,6 +412,14 @@ export function App({ store, staticUrl, dynamicUrl, cwd, resultsDir, recentScans
     );
   }
 
+  if (state.view === 'findings' && state.findings) {
+    return (
+      <Box flexDirection="column">
+        <FindingsScreen store={store} state={state} resultsDir={resultsDir} />
+      </Box>
+    );
+  }
+
   return (
     <Box flexDirection="column">
       <Welcome
@@ -472,6 +467,7 @@ export function App({ store, staticUrl, dynamicUrl, cwd, resultsDir, recentScans
               <Text color={color.warning}>{state.summary.likely} likely</Text>
             </Text>
             {state.reportDir ? <Text dimColor> {glyph.bullet} {state.reportDir}</Text> : null}
+            <Text dimColor> {glyph.bullet} /report to browse findings</Text>
           </Text>
         </Box>
       ) : null}
@@ -524,48 +520,6 @@ export function App({ store, staticUrl, dynamicUrl, cwd, resultsDir, recentScans
       </Box>
     </Box>
   );
-}
-
-const VERDICT_STYLE: Record<string, { icon: string; color: string }> = {
-  confirmed_leak: { icon: '🔴', color: color.error },
-  likely_leak: { icon: '🟠', color: color.warning },
-  uncertain: { icon: '🟡', color: color.warning },
-  likely_false_positive: { icon: '🟢', color: color.success },
-  false_positive: { icon: '🟢', color: color.success },
-};
-function verdictStyle(verdict: string): { icon: string; color: string } {
-  return VERDICT_STYLE[verdict] ?? { icon: '⚪', color: color.subtle };
-}
-
-/** Render a single finding's full detail (explanation, root cause, fix diff, evidence). */
-function showFindingDetail(store: TuiStore, f: any, scanId: string, resultsDir: string): void {
-  if (!f) return;
-  const st = verdictStyle(f.verdict);
-  const conf = typeof f.confidence === 'number' ? `${(f.confidence * 100).toFixed(0)}%` : '?';
-  store.addSystemMessage(`${st.icon} ${f.function ?? '?'}@${f.line ?? '?'} — ${f.verdict ?? 'pending'} (${conf})`, st.color);
-  if (f.allocation_type) store.addSystemMessage(`  alloc: ${f.allocation_type} at ${basename(String(f.file ?? ''))}:${f.line ?? '?'}`);
-  if (f.explanation) store.addSystemMessage(`  why: ${f.explanation}`);
-  if (f.repair_suggestion) store.addSystemMessage(`  fix: ${f.repair_suggestion}`, color.success);
-
-  const rc = f.root_cause;
-  if (rc) {
-    store.addSystemMessage(`  root cause: ${rc.patternType ?? 'unknown'}${rc.rootCauseDescription ? ` — ${rc.rootCauseDescription}` : ''}`);
-    if (rc.missingFreeFunction || rc.missingFreeLine)
-      store.addSystemMessage(`    missing free near ${rc.missingFreeFunction ?? '?'}@${rc.missingFreeLine ?? '?'}`);
-  }
-
-  const diff = f.repair_diff;
-  if (diff && (diff.originalLines?.length || diff.suggestedLines?.length)) {
-    store.addSystemMessage(`  fix diff (${basename(String(diff.filePath ?? f.file ?? ''))}:${diff.startLine ?? f.line ?? '?'}):`);
-    for (const l of diff.originalLines ?? []) store.addSystemMessage(`  ─ ${l}`, color.error);
-    for (const l of diff.suggestedLines ?? []) store.addSystemMessage(`  + ${l}`, color.success);
-  }
-
-  const evidence: any[] = f.evidence ?? [];
-  for (const e of evidence)
-    store.addSystemMessage(`  evidence: ${e.tool} ${glyph.bullet} ${e.bytes_lost ?? 0} bytes lost${e.function ? ` in ${e.function}` : ''}`, color.system);
-
-  store.addSystemMessage(`  full report: ${join(resultsDir, scanId, 'report.html')} ${glyph.bullet} steps.md`);
 }
 
 /** Show the descriptive metrics for a scan (results/<id>/metrics.json). */

@@ -4,7 +4,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { formatDuration } from './theme';
 import { loadPreferences, savePreferences, DEFAULT_PREFERENCES } from './preferences';
-import { TuiStore } from './store';
+import { TuiStore, visibleFindings } from './store';
+import type { FindingView } from './findings/findingView';
 import type { AgentEvent } from '@mcpvul/agent-core';
 
 describe('formatDuration', () => {
@@ -100,5 +101,63 @@ describe('TuiStore per-scan reset', () => {
       .getSnapshot()
       .messages.some((m) => m.kind === 'system' && (m.text ?? '').includes('ran no dynamic tools'));
     expect(warned).toBe(false);
+  });
+});
+
+describe('TuiStore findings browser', () => {
+  const fv = (id: string, verdict: string, confidence: number, file: string, line: number, coverage = 'dynamic_off'): FindingView => ({
+    id, function: id, file, line, allocationType: 'malloc', verdict, confidence,
+    verdictTool: 'consensus', dynamicCoverage: coverage, explanation: '', evidence: [],
+  });
+  // severity order: confirmed(5) > likely(4) > fp(1)
+  const sample = () => [
+    fv('a', 'false_positive', 0.4, 'z.c', 5, 'exercised_clean'),
+    fv('b', 'confirmed_leak', 0.9, 'a.c', 30, 'exercised_leak'),
+    fv('c', 'likely_leak', 0.7, 'a.c', 10, 'exercised_leak'),
+  ];
+
+  test('openFindings enters the view; default sort is severity (confirmed first)', () => {
+    const store = new TuiStore();
+    store.openFindings('scan1', 'snapshot', sample());
+    expect(store.getSnapshot().view).toBe('findings');
+    expect(visibleFindings(store.getSnapshot()).map((f) => f.id)).toEqual(['b', 'c', 'a']);
+  });
+
+  test('findingsMove clamps to the visible range', () => {
+    const store = new TuiStore();
+    store.openFindings('s', 'snapshot', sample());
+    store.findingsMove(-1);
+    expect(store.getSnapshot().findings!.cursor).toBe(0);
+    store.findingsMove(99);
+    expect(store.getSnapshot().findings!.cursor).toBe(2);
+  });
+
+  test('cycling the coverage filter shrinks the visible set; cursor stays valid', () => {
+    const store = new TuiStore();
+    store.openFindings('s', 'snapshot', sample());
+    // all → exercised_clean (first distinct present)
+    store.findingsCycleFilter('coverage', 1);
+    const vis = visibleFindings(store.getSnapshot());
+    expect(vis.map((f) => f.id)).toEqual(['a']);
+    expect(store.getSnapshot().findings!.cursor).toBeLessThan(vis.length);
+  });
+
+  test('changing sort keeps the cursor on the SAME finding id', () => {
+    const store = new TuiStore();
+    store.openFindings('s', 'snapshot', sample());
+    store.findingsMove(1); // cursor on 'c' (severity order b,c,a)
+    expect(visibleFindings(store.getSnapshot())[store.getSnapshot().findings!.cursor].id).toBe('c');
+    store.findingsCycleSort(1); // severity → confidence: order b(.9),c(.7),a(.4) — 'c' still index 1
+    expect(visibleFindings(store.getSnapshot())[store.getSnapshot().findings!.cursor].id).toBe('c');
+  });
+
+  test('openDetail pins the finding; exit returns to main', () => {
+    const store = new TuiStore();
+    store.openFindings('s', 'snapshot', sample());
+    store.findingsOpenDetail();
+    expect(store.getSnapshot().findings!.tab).toBe('detail');
+    expect(store.getSnapshot().findings!.detailId).toBe('b');
+    store.findingsExit();
+    expect(store.getSnapshot().view).toBe('main');
   });
 });
