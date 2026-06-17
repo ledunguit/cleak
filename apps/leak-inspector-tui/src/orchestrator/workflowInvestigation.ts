@@ -39,6 +39,12 @@ import { makeAgentEventHandler } from './toAgentEvents';
 import { withHostContent, withHostPathMapping, toProviderSettings } from './toolWrappers';
 import { type StaticContextStore, withStaticContextCapture } from '../domain/staticContext';
 import {
+  createDynamicRunStore,
+  withDynamicEvidenceCapture,
+  reconcileDynamicEvidence,
+  computeDynamicCoverage,
+} from '../domain/dynamicEvidence';
+import {
   DONE_STATIC,
   DONE_DYNAMIC,
   buildDoneTool,
@@ -72,6 +78,7 @@ export function buildWorkflowInvestigationPhase(cfg: RunConfig, dynamicMode: Dyn
 
       const allBundles = candidates.getAllBundles();
       const staticStore: StaticContextStore = new Map();
+      const dynStore = createDynamicRunStore();
       const decisions: AgentDecision[] = [];
       const usage = { inputTokens: 0, outputTokens: 0 };
       const transcripts: Message[] = [];
@@ -91,7 +98,6 @@ export function buildWorkflowInvestigationPhase(cfg: RunConfig, dynamicMode: Dyn
         pathResolver: ctx.pathResolver,
       });
       const readFileTool = domainTools.find((t) => t.name === 'read_file')!;
-      const recordEvidenceTool = domainTools.find((t) => t.name === 'record_evidence')!;
 
       ctx.emitter.emit(ScanEventName.INVESTIGATION_STARTED, {
         candidates: allBundles.length,
@@ -176,10 +182,13 @@ export function buildWorkflowInvestigationPhase(cfg: RunConfig, dynamicMode: Dyn
           return;
         }
         onNotice('Stage B · dynamic evidence: 1 worker (build once + sanitizers)');
+        // The sanitizer tools are wrapped so their findings are captured into
+        // `dynStore` DETERMINISTICALLY — the LLM only drives build/run; it can no
+        // longer add or omit evidence that changes a verdict. `record_evidence` is
+        // intentionally NOT in this toolset (the wrapper is the sole source).
         const tools: Tool[] = [
-          ...dynamicRaw.map((t) => withHostPathMapping(t, ctx.pathResolver)),
+          ...dynamicRaw.map((t) => withDynamicEvidenceCapture(withHostPathMapping(t, ctx.pathResolver), dynStore)),
           readFileTool,
-          recordEvidenceTool,
           buildDoneTool(DONE_DYNAMIC, 'Finish dynamic evidence collection.'),
         ];
         await runSubAgent({ id: 'dynamic', label: 'dynamic', kind: 'dynamic' }, {
@@ -188,10 +197,22 @@ export function buildWorkflowInvestigationPhase(cfg: RunConfig, dynamicMode: Dyn
           tools,
           maxTurns: cfg.maxTurns + 10,
           terminalTools: new Set([DONE_DYNAMIC]),
+          // Mirror the static worker's completion guard: don't let the worker quit
+          // before a sanitizer has actually run (no run ⇒ no coverage for anyone).
+          checkCompletion: () => {
+            if (dynStore.runs.some((r) => r.success)) return null;
+            return `No successful sanitizer run yet. buildTarget (with a sanitizer flag), then run lsanRun/asanRun/valgrindMemcheck, then call ${DONE_DYNAMIC}. Only tool calls advance the work.`;
+          },
         });
       })();
 
       await Promise.all([staticFanout, dynamicWorker]);
+
+      // ── Deterministic reconciliation: fold every captured dynamic finding into the
+      // best-correlated bundle, then stamp each bundle's honest coverage status. This
+      // replaces the LLM's discretionary record_evidence as the source of truth. ──
+      reconcileDynamicEvidence(dynStore, allBundles, ctx.pathResolver);
+      for (const b of allBundles) b.dynamicCoverage = computeDynamicCoverage(dynStore, b, wantDynamic);
 
       // ── Stage C: synthesize (deterministic — context + evidence already merged) ──
       onNotice(`Stage C · synthesize: ${staticStore.size}/${allBundles.length} candidates have static context`);

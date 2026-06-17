@@ -67,13 +67,23 @@ function isFlag(verdict: string): boolean {
  * out (the caller's to free).
  */
 export function deriveFusion(bundle: LeakBundle): EvidenceFusion {
+  // Prefer the EXPLICIT deterministic coverage status; fall back to evidence
+  // inference for bundles that predate it (back-compat).
+  const cov = bundle.dynamicCoverage;
   const correlatedLeak = bundle.evidence.some((e) => e.correlatedToCandidate === true && evidenceIndicatesLeak(e));
   const anyLeakIndicated = bundle.evidence.some((e) => evidenceIndicatesLeak(e));
-  const dynamic: EvidenceFusion['dynamic'] = correlatedLeak
-    ? 'confirmed'
-    : bundle.evidence.length > 0 && !anyLeakIndicated
-      ? 'cleared'
-      : 'none';
+  const dynamic: EvidenceFusion['dynamic'] =
+    cov === 'exercised_leak'
+      ? 'confirmed'
+      : cov === 'exercised_clean'
+        ? 'cleared'
+        : cov === 'not_exercised' || cov === 'dynamic_off'
+          ? 'none'
+          : correlatedLeak // back-compat (no coverage field set)
+            ? 'confirmed'
+            : bundle.evidence.length > 0 && !anyLeakIndicated
+              ? 'cleared'
+              : 'none';
 
   const se = bundle.staticEvidence;
   let stat: EvidenceFusion['static'] = 'ambiguous';

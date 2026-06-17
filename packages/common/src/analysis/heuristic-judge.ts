@@ -54,15 +54,11 @@ export function judgeHeuristically(
   // the single strongest finding's contribution rather than stacking many. Only an
   // ACTUAL leak adds score; a clean/benign run record (Juliet good* under LSan:
   // severity `info`, no leakKind) instead EXONERATES — see `dynamicallyCleared`. ──
-  let dynamicallyObserved = false;
-  let dynamicLeakObserved = false;
   if (bundle.evidence.length > 0) {
     let dyn = 0;
     let dynReason = '';
     for (const e of bundle.evidence) {
-      dynamicallyObserved = true;
       if (!evidenceIndicatesLeak(e)) continue; // clean run / still_reachable — not a leak
-      dynamicLeakObserved = true;
       const correlated = e.correlatedToCandidate === true;
       const kind = e.leakKind;
       let c: number;
@@ -73,7 +69,10 @@ export function judgeHeuristically(
       } else if (correlated) {
         c = 0.4; // correlated runtime leak, kind unknown
       } else {
-        c = 0.15; // same-file / uncorrelated leak finding — weak
+        // Uncorrelated (file_only/none) finding — a leak at a DIFFERENT site in the
+        // same file is not evidence for THIS allocation. It neither inflates the
+        // score nor (below) exonerates. (Was +0.15 — a precision bug.)
+        continue;
       }
       if (c > dyn) {
         dyn = c;
@@ -85,9 +84,15 @@ export function judgeHeuristically(
       reasons.push(`runtime evidence: ${dynReason}`);
     }
   }
-  // A completed dynamic run that exercised this candidate but found NO leak at this
-  // site is exculpatory — the strongest precision signal for Juliet good* variants.
-  const dynamicallyCleared = dynamicallyObserved && !dynamicLeakObserved;
+  // Exoneration is driven by the EXPLICIT, deterministic coverage status — a clean
+  // run that genuinely exercised this candidate — NOT inferred from `evidence.length`
+  // (which conflates "ran clean" with "never ran"). Fall back to evidence inference
+  // only for bundles that predate the field (e.g. the control-plane web path).
+  const dynamicallyCleared =
+    bundle.dynamicCoverage === 'exercised_clean' ||
+    (bundle.dynamicCoverage === undefined &&
+      bundle.evidence.length > 0 &&
+      bundle.evidence.every((e) => !evidenceIndicatesLeak(e)));
 
   // ── Alloc→free pairing: an UNPAIRED allocation of the candidate variable. ──
   const candidatePair = (se?.allocFreePairs || []).find(

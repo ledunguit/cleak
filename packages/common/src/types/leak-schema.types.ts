@@ -53,6 +53,19 @@ export type CorrelationMethod =
   | 'file_only'
   | 'none';
 
+/**
+ * What a dynamic run actually established for a candidate — set DETERMINISTICALLY
+ * after the dynamic stage (not inferred from `evidence.length`, which conflates
+ * "ran clean" with "never ran"). `exercised_clean` requires a successful run that
+ * covered the candidate's code and produced no correlated leak — the honest signal
+ * the judge's precision gate needs.
+ */
+export type DynamicCoverage =
+  | 'exercised_clean'
+  | 'exercised_leak'
+  | 'not_exercised'
+  | 'dynamic_off';
+
 export enum DynamicMode {
   OFF = 'off',
   SELECTIVE = 'selective',
@@ -119,6 +132,12 @@ export interface LeakBundle {
    * existed remain valid.
    */
   staticEvidence?: StaticLeakEvidence;
+  /**
+   * What the dynamic stage established for this candidate (deterministic, set after
+   * the dynamic run reconciles). Optional so pre-existing reports still parse and
+   * `no_llm`/dynamic-off bundles stay valid.
+   */
+  dynamicCoverage?: DynamicCoverage;
   status: FindingStatus;
   createdAt: string;
   updatedAt: string;
