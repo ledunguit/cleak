@@ -5,10 +5,17 @@ import {
   metricsOf,
   calibrationBins,
   expectedCalibrationError,
+  bootstrapCI,
+  mcnemar,
+  makeRng,
+  type ConfusionMatrix,
   type Sample,
 } from './metrics';
 
 const s = (actual: boolean, predicted: boolean, confidence?: number): Sample => ({ actual, predicted, confidence });
+const f1Of = (cm: ConfusionMatrix): number => computeMetrics(cm).f1;
+/** A site sample carrying an id, for paired tests. */
+const site = (id: string, actual: boolean, predicted: boolean): Sample => ({ siteId: id, actual, predicted });
 
 describe('accumulate', () => {
   test('counts each quadrant of the confusion matrix', () => {
@@ -114,5 +121,120 @@ describe('calibration', () => {
 
   test('ECE is 0 for empty samples', () => {
     expect(expectedCalibrationError([], 10)).toBe(0);
+  });
+});
+
+describe('makeRng', () => {
+  test('is deterministic for a given seed and spans [0,1)', () => {
+    const a = makeRng(42);
+    const b = makeRng(42);
+    for (let i = 0; i < 100; i++) {
+      const x = a();
+      expect(x).toBe(b()); // same seed → identical stream
+      expect(x).toBeGreaterThanOrEqual(0);
+      expect(x).toBeLessThan(1);
+    }
+    expect(makeRng(1)()).not.toBe(makeRng(2)()); // different seeds diverge
+  });
+});
+
+describe('bootstrapCI', () => {
+  test('a large perfect classifier has a degenerate [1,1] interval around F1', () => {
+    // Many tp/tn so a resample drawing zero true-positives is astronomically
+    // unlikely → every resample's F1 is 1. (Small perfect sets legitimately dip
+    // to 0 in the tail, which is the bootstrap behaving correctly, not a bug.)
+    const samples = [
+      ...Array.from({ length: 40 }, () => s(true, true)),
+      ...Array.from({ length: 40 }, () => s(false, false)),
+    ];
+    const ci = bootstrapCI(samples, f1Of, { iters: 500, rng: makeRng(7) });
+    expect(ci.point).toBe(1);
+    expect(ci.lo).toBe(1);
+    expect(ci.hi).toBe(1);
+  });
+
+  test('a small perfect set legitimately dips in the lower tail (resampling, not a bug)', () => {
+    const samples = [s(true, true), s(true, true), s(false, false), s(false, false)];
+    const ci = bootstrapCI(samples, f1Of, { iters: 500, rng: makeRng(7) });
+    expect(ci.point).toBe(1);
+    expect(ci.hi).toBe(1);
+    expect(ci.lo).toBeLessThanOrEqual(1); // tail can be 0 when no tp is drawn
+  });
+
+  test('point equals the metric on the full set and lo ≤ point ≤ hi', () => {
+    const samples = [
+      s(true, true), s(true, true), s(true, false), s(false, true), s(false, false), s(false, false),
+    ];
+    const ci = bootstrapCI(samples, f1Of, { iters: 1000, rng: makeRng(123) });
+    expect(ci.point).toBeCloseTo(f1Of(accumulate(samples)), 6);
+    expect(ci.lo).toBeLessThanOrEqual(ci.point);
+    expect(ci.hi).toBeGreaterThanOrEqual(ci.point);
+    expect(ci.lo).toBeGreaterThanOrEqual(0);
+    expect(ci.hi).toBeLessThanOrEqual(1);
+  });
+
+  test('is reproducible for a fixed seed', () => {
+    const samples = [s(true, true), s(false, true), s(true, false), s(false, false)];
+    const a = bootstrapCI(samples, f1Of, { iters: 300, rng: makeRng(99) });
+    const b = bootstrapCI(samples, f1Of, { iters: 300, rng: makeRng(99) });
+    expect(a).toEqual(b);
+  });
+
+  test('empty samples → interval collapses to the point', () => {
+    const ci = bootstrapCI([], f1Of, { iters: 100, rng: makeRng(1) });
+    expect(ci.lo).toBe(ci.point);
+    expect(ci.hi).toBe(ci.point);
+  });
+});
+
+describe('mcnemar', () => {
+  test('identical classifiers → no discordance, χ²=0, p=1', () => {
+    const a = [site('x1', true, true), site('x2', false, false), site('x3', true, false)];
+    const b = [site('x1', true, true), site('x2', false, false), site('x3', true, false)];
+    const r = mcnemar(a, b);
+    expect(r.b01).toBe(0);
+    expect(r.b10).toBe(0);
+    expect(r.chi2).toBe(0);
+    expect(r.pValue).toBe(1);
+  });
+
+  test('B strictly dominates A on every site → significant (p < 0.01)', () => {
+    // 10 sites: A always wrong, B always right → b01=10, b10=0.
+    const ids = Array.from({ length: 10 }, (_, i) => `s${i}`);
+    const a = ids.map((id) => site(id, true, false)); // actual leak, A says no → wrong
+    const b = ids.map((id) => site(id, true, true)); // actual leak, B says yes → right
+    const r = mcnemar(a, b);
+    expect(r.b01).toBe(10);
+    expect(r.b10).toBe(0);
+    // χ² = (|10-0|-1)² / 10 = 81/10 = 8.1
+    expect(r.chi2).toBeCloseTo(8.1, 6);
+    expect(r.pValue).toBeLessThan(0.01);
+  });
+
+  test('aligns by siteId regardless of order', () => {
+    const a = [site('p', true, true), site('q', false, false)];
+    const b = [site('q', false, false), site('p', true, false)]; // p: B wrong, q: agree
+    const r = mcnemar(a, b);
+    expect(r.n).toBe(2);
+    expect(r.b10).toBe(1); // A right, B wrong on site p
+    expect(r.b01).toBe(0);
+  });
+
+  test('|b01−b10| ≤ 1 yields χ²=0 (continuity correction floor)', () => {
+    const a = [site('a', true, false), site('b', true, true)];
+    const b = [site('a', true, true), site('b', true, false)]; // b01=1, b10=1
+    const r = mcnemar(a, b);
+    expect(r.b01).toBe(1);
+    expect(r.b10).toBe(1);
+    expect(r.chi2).toBe(0);
+    expect(r.pValue).toBe(1);
+  });
+
+  test('falls back to positional alignment when ids are absent', () => {
+    const a = [s(true, false), s(false, false)];
+    const b = [s(true, true), s(false, false)];
+    const r = mcnemar(a, b);
+    expect(r.n).toBe(2);
+    expect(r.b01).toBe(1); // first pair: A wrong, B right
   });
 });
