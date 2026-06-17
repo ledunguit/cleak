@@ -18,7 +18,32 @@ is how to obtain/rebuild them. See `.gitignore` for the exact ignored paths and
    This materializes `demo/juliet_cwe401/` (git-ignored) with a `corpus_manifest.json`
    and a self-contained, buildable project per testcase. See `scripts/juliet/README.md`.
 
-## Demo memory-leak corpus
+   **Statistics** (full CWE-401 ingest): **1984 cases**, 49 flow variants (`01`–`17`+),
+   functional variants — `new` 672, `int` 360, `char`/`strdup`/`struct`/`twoIntsStruct`/`wchar`
+   180 each, `malloc` 108, `destructor`/`virtual` 2. Build: `make CC=clang CXX=clang++`.
+   Evals typically run a slice (`--limit 30`) for turnaround.
+
+   **Labeling = function mode.** Ground truth comes from Juliet's naming: `<testcase>_bad`
+   is the flaw; `goodG2B`/`goodB2G` are clean. The generated `Makefile` **drops `-DOMITGOOD`**
+   and uses `-fsanitize=leak`, so the binary runs **both** the good and bad paths → good
+   functions are genuinely `exercised_clean` (and LSan reports only the real leak).
+
+## Real-project corpus (leak-fix commit oracle)
+
+`demo/real_projects/` (git-ignored) is built from upstream **leak-fix commits**: the pre-fix
+revision is the flaw (`actual:true`), the post-fix revision is clean (`actual:false`) — a
+**line-mode** corpus (matched by `(file, line)`, not function name). Current: **4 cases** =
+2 cJSON leak-fix pairs (`cjson-printbuffered`, `cjson-mergepatch`, each `-bad` + `-fixed`).
+
+```bash
+bun scripts/real-projects/ingest.ts \
+  --ground-truth demo/real_projects/ground-truth.json --out demo/real_projects
+```
+`ground-truth.json` (the oracle: project repo + fixCommit + file/function/flawLine/fixedLine)
+**is committed**; clones + materialized cases are git-ignored. See [EVALUATION.md](EVALUATION.md)
+§2 for function-mode vs line-mode scoring.
+
+## Demo memory-leak corpus (legacy, hand-labeled)
 
 `demo/memory_leak_corpus/` holds the hand-labeled cases (sources + per-case
 `Makefile`/build instructions are committed; compiled binaries and `results/` are

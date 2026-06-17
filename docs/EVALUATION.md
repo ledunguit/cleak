@@ -87,6 +87,10 @@ Reproducibility block), and `tables.tex`.
 
 ## 6. Baseline comparison protocol
 
+> **Runbook + live numbers:** [BASELINE-COMPARISON.md](BASELINE-COMPARISON.md) (how to run
+> `compare-baselines.ts`, the fairness rules, and the actual clang-vs-system table). **The
+> baseline papers** (MemHint, LAMeD, FuzzingBrain V2, …): [RELATED-WORK.md](RELATED-WORK.md).
+
 To compare against an external baseline (e.g. `clang scan-build` alone, Valgrind
 alone, or a published system such as LAMeD/MemHint — see `researchs/`):
 

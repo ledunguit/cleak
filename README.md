@@ -6,6 +6,9 @@ investigation for C/C++ repositories.
 This repository is an umbrella workspace, not a single implementation repo. It
 keeps the thesis components together at one top level.
 
+> 📄 **Thesis documentation:** start at **[docs/THESIS.md](docs/THESIS.md)** (read-first
+> overview) — full index at **[docs/README.md](docs/README.md)**.
+
 ## Components
 
 ### `apps/control-plane` — Control Plane (NestJS)
@@ -116,9 +119,17 @@ bun run scan:smoke -- --case early_return_leak
 The smoke runner checks PostgreSQL, the static analyzer, the dynamic analyzer,
 and key toolchain binaries before attempting to boot the control plane.
 
-## Architecture Docs
+## Documentation
 
+Start at **[docs/THESIS.md](docs/THESIS.md)**; full index at **[docs/README.md](docs/README.md)**.
+
+- [docs/THESIS.md](docs/THESIS.md) — read-first thesis overview
+- [docs/CONTRIBUTION.md](docs/CONTRIBUTION.md) — academic contribution + results
+- [docs/RELATED-WORK.md](docs/RELATED-WORK.md) — baselines & related work (papers compared against)
+- [docs/EVALUATION.md](docs/EVALUATION.md) — evaluation methodology + reproducibility
+- [docs/BASELINE-COMPARISON.md](docs/BASELINE-COMPARISON.md) — runbook for running baseline comparisons
+- [docs/OPERATIONS.md](docs/OPERATIONS.md) — run/reproduce end-to-end
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — components, protocols, diagrams, the two orchestration paths
 - [docs/PROMPTS.md](docs/PROMPTS.md) — catalog of every LLM prompt + tool description
 - [docs/sequence-diagrams.md](docs/sequence-diagrams.md) — runtime sequence flows
-- [docs/GOAL.md](docs/GOAL.md) — thesis goals + success criteria
+- [docs/GLOSSARY.md](docs/GLOSSARY.md) · [docs/DATASETS.md](docs/DATASETS.md) · [docs/SECURITY.md](docs/SECURITY.md) · [docs/GOAL.md](docs/GOAL.md)
