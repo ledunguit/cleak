@@ -56,10 +56,13 @@ export function withHostPathMapping(
   };
 }
 
-/** Map the app's resolved LLM config to the agent-core provider settings shape. */
+/** Map the app's resolved LLM config to the agent-core provider settings shape.
+ * `openai-compat` is an app-level label for an arbitrary OpenAI-compatible endpoint;
+ * agent-core only knows local|openai|anthropic, so it routes through the `openai`
+ * chat-completions path (same transport + tool-calling), driven by the custom baseUrl. */
 export function toProviderSettings(cfg: RunConfig): ProviderSettings {
   return {
-    provider: cfg.llm.provider,
+    provider: cfg.llm.provider === 'openai-compat' ? 'openai' : cfg.llm.provider,
     baseUrl: cfg.llm.baseUrl,
     apiKey: cfg.llm.apiKey,
     model: cfg.llm.model,

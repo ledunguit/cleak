@@ -14,11 +14,18 @@ import { loadPreferences } from './preferences';
 
 export interface LaunchTuiOptions {
   provider?: Provider;
+  /** Custom LLM endpoint overrides (CLI flags; win over saved prefs + env). */
+  baseUrl?: string;
+  model?: string;
+  apiKey?: string;
   staticUrl?: string;
   dynamicUrl?: string;
   mode?: 'no_llm' | 'llm_assisted';
   dynamic?: 'off' | 'selective' | 'aggressive';
 }
+
+/** Treat blank/whitespace as "unset" so an empty override never clobbers env/default. */
+const nonEmpty = (s?: string): string | undefined => (s && s.trim() ? s : undefined);
 
 export async function launchTui(opts: LaunchTuiOptions = {}): Promise<void> {
   if (!process.stdin.isTTY) {
@@ -32,10 +39,20 @@ export async function launchTui(opts: LaunchTuiOptions = {}): Promise<void> {
   loadEnvFiles();
   const prefs = loadPreferences();
   // Precedence: explicit CLI flag > saved preference > built-in default.
-  const cfg = loadConfig({ provider: opts.provider ?? prefs.defaultProvider });
+  const provider = opts.provider ?? prefs.defaultProvider;
+  const ep = (provider && prefs.endpoints?.[provider]) || {};
+  // CLI flag wins over the saved per-provider endpoint; blanks fall through to env.
+  const llm = {
+    baseUrl: nonEmpty(opts.baseUrl) ?? nonEmpty(ep.baseUrl),
+    model: nonEmpty(opts.model) ?? nonEmpty(ep.model),
+    apiKey: nonEmpty(opts.apiKey) ?? nonEmpty(ep.apiKey),
+  };
+  const cfg = loadConfig({ provider, llm });
   const store = new TuiStore({
     provider: cfg.provider,
     model: cfg.llm.model,
+    baseUrl: cfg.llm.baseUrl,
+    apiKey: cfg.llm.apiKey,
     mode: opts.mode ?? prefs.defaultMode,
     dynamic: opts.dynamic ?? prefs.defaultDynamic,
     autoShowReport: prefs.autoShowReport,
