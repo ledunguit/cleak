@@ -4,6 +4,7 @@ import {
   withDynamicEvidenceCapture,
   reconcileDynamicEvidence,
   computeDynamicCoverage,
+  runDeterministicDynamic,
   type DynamicRunStore,
 } from './dynamicEvidence';
 import { PathResolver } from './pathResolver';
@@ -111,5 +112,36 @@ describe('computeDynamicCoverage', () => {
     reconcileDynamicEvidence(store, [good], idResolver);
     expect(good.evidence).toHaveLength(0);
     expect(computeDynamicCoverage(store, good, true)).toBe('exercised_clean');
+  });
+});
+
+describe('runDeterministicDynamic (fixed recipe, no LLM)', () => {
+  test('calls buildTarget then lsanRun, captures findings, returns true', async () => {
+    const calls: string[] = [];
+    const tools = [
+      { name: 'buildTarget', description: '', call: async (i: any) => { calls.push('build:' + i.buildCommand); return { success: true, binaryPath: '/w/a.out' }; } },
+      { name: 'lsanRun', description: '', call: async (i: any) => { calls.push('lsan:' + i.binaryPath); return { success: true, runId: 'r', findings: [leakFinding('a.c', 10, 'bad')] }; } },
+    ] as any[];
+    const store = createDynamicRunStore();
+    const ok = await runDeterministicDynamic({ tools, store, repoPath: '/w', buildCommand: 'make', pathResolver: idResolver, toolCtx: {} });
+    expect(ok).toBe(true);
+    expect(calls).toEqual(['build:make', 'lsan:/w/a.out']); // build first, then lsan on the built binary
+    expect(store.runs).toHaveLength(1); // the lsan findings were captured deterministically
+    expect(store.runs[0].findings).toHaveLength(1);
+  });
+
+  test('a failed build returns false (caller falls back to the LLM worker)', async () => {
+    const tools = [
+      { name: 'buildTarget', description: '', call: async () => ({ success: false, errors: ['boom'] }) },
+      { name: 'lsanRun', description: '', call: async () => ({ success: true, findings: [] }) },
+    ] as any[];
+    const store = createDynamicRunStore();
+    expect(await runDeterministicDynamic({ tools, store, repoPath: '/w', buildCommand: 'make', pathResolver: idResolver, toolCtx: {} })).toBe(false);
+    expect(store.runs).toHaveLength(0); // lsan never ran
+  });
+
+  test('missing buildTarget/lsanRun tool → false', async () => {
+    const store = createDynamicRunStore();
+    expect(await runDeterministicDynamic({ tools: [], store, repoPath: '/w', buildCommand: 'make', pathResolver: idResolver, toolCtx: {} })).toBe(false);
   });
 });

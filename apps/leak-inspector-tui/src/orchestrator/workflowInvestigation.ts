@@ -43,6 +43,7 @@ import {
   withDynamicEvidenceCapture,
   reconcileDynamicEvidence,
   computeDynamicCoverage,
+  runDeterministicDynamic,
 } from '../domain/dynamicEvidence';
 import {
   DONE_STATIC,
@@ -204,7 +205,24 @@ export function buildWorkflowInvestigationPhase(cfg: RunConfig, dynamicMode: Dyn
           onNotice('dynamic enabled but no dynamic tools loaded — analyzer unreachable; running static-only');
           return;
         }
-        onNotice('Stage B · dynamic evidence: 1 worker (build once + sanitizers)');
+        // DETERMINISTIC PATH: a known build_command → run a FIXED recipe (buildTarget →
+        // lsanRun) with no LLM, so the run — and therefore coverage/verdicts — is
+        // reproducible. The LLM only drives the run when the build system is unknown.
+        if (ctx.buildCommand) {
+          onNotice('Stage B · dynamic evidence: deterministic recipe (buildTarget → lsanRun, no LLM)');
+          const ok = await runDeterministicDynamic({
+            tools: dynamicRaw,
+            store: dynStore,
+            repoPath: ctx.repoPath,
+            buildCommand: ctx.buildCommand,
+            pathResolver: ctx.pathResolver,
+            toolCtx,
+            onNotice,
+          });
+          if (ok) return;
+          onNotice('Stage B · deterministic recipe produced no run — falling back to the LLM worker');
+        }
+        onNotice('Stage B · dynamic evidence: 1 LLM worker (build once + sanitizers)');
         // The sanitizer tools are wrapped so their findings are captured into
         // `dynStore` DETERMINISTICALLY — the LLM only drives build/run; it can no
         // longer add or omit evidence that changes a verdict. `record_evidence` is

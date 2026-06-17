@@ -165,6 +165,57 @@ export function reconcileDynamicEvidence(store: DynamicRunStore, bundles: LeakBu
  * AND no correlated leak — the signal the judge's precision gate needs and that
  * `evidence.length` could never represent (a clean run emits nothing).
  */
+/**
+ * Run the dynamic stage DETERMINISTICALLY with a fixed recipe — no LLM in the loop.
+ * When the case carries a known `buildCommand`, the only honest way to get a
+ * reproducible run (and thus reproducible coverage/verdicts) is to fix WHAT gets
+ * built and run: `buildTarget(buildCommand) → lsanRun(a.out)`. The LLM driving the
+ * run is the remaining nondeterminism source even after deterministic CAPTURE — it
+ * picks different sanitizers/flags across runs. This removes that. Findings are
+ * captured into `store` by the same wrapper, so the rest of the pipeline is unchanged.
+ * Returns true if a successful run was recorded (caller falls back to the LLM worker
+ * otherwise — e.g. an unknown build system with no buildCommand).
+ */
+export async function runDeterministicDynamic(opts: {
+  tools: Tool[];
+  store: DynamicRunStore;
+  repoPath: string;
+  buildCommand: string;
+  pathResolver: PathResolver;
+  toolCtx: any;
+  onNotice?: (text: string) => void;
+}): Promise<boolean> {
+  const { tools, store, repoPath, buildCommand, pathResolver, toolCtx } = opts;
+  const buildTool = tools.find((t) => t.name === 'buildTarget');
+  const lsanTool = tools.find((t) => t.name === 'lsanRun');
+  if (!buildTool || !lsanTool) {
+    opts.onNotice?.('deterministic dynamic: buildTarget/lsanRun unavailable — falling back');
+    return false;
+  }
+  const analyzerRepo = pathResolver.toAnalyzerPath(repoPath);
+  let build: any;
+  try {
+    build = asObject(await buildTool.call({ projectPath: analyzerRepo, buildCommand }, toolCtx));
+  } catch (err: any) {
+    opts.onNotice?.(`deterministic build threw: ${err?.message ?? err} — falling back`);
+    return false;
+  }
+  if (build.success === false) {
+    opts.onNotice?.(`deterministic build failed: ${(build.errors || []).join('; ').slice(0, 200)} — falling back`);
+    return false;
+  }
+  // buildTarget returns an absolute (analyzer-side) binary path; default to the
+  // conventional a.out in the project dir when discovery came up empty.
+  const binaryPath = String(build.binaryPath || '').trim() || `${analyzerRepo}/a.out`;
+  const lsanCaptured = withDynamicEvidenceCapture(lsanTool, store);
+  try {
+    await lsanCaptured.call({ binaryPath }, toolCtx);
+  } catch (err: any) {
+    opts.onNotice?.(`deterministic lsanRun threw: ${err?.message ?? err}`);
+  }
+  return store.runs.some((r) => r.success);
+}
+
 export function computeDynamicCoverage(store: DynamicRunStore, bundle: LeakBundle, wantDynamic: boolean): DynamicCoverage {
   if (!wantDynamic) return 'dynamic_off';
   const ranOk = store.runs.some((r) => r.success);
