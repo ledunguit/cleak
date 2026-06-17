@@ -46,6 +46,12 @@ temp/
 *.zip
 /demo/juliet_cwe401/
 
+# Real-project corpus: materialized cases + cloned repos are regenerable via
+# scripts/real-projects/ingest.ts; only ground-truth.json is committed (the source).
+/demo/real_projects/cases/
+/demo/real_projects/.clones/
+/demo/real_projects/corpus_manifest.json
+
 # Compiled demo-corpus binaries (rebuild from source via each case's Makefile)
 /demo/memory_leak_corpus/*/array_leak
 /demo/memory_leak_corpus/*/array_leak_*

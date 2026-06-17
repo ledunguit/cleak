@@ -1,0 +1,33 @@
+{
+  "name": "real-projects-leak",
+  "description": "Real C memory-leak cases mined from upstream leak-fix commits. The leak-fix-commit oracle: the pre-fix revision at the changed allocation site is a flaw (actual:true); the post-fix revision is clean (actual:false). Paired positive/negative at the same location — the cleanest possible ground truth. Materialized cases are git-ignored (regenerable via scripts/real-projects/ingest.ts).",
+  "projects": {
+    "cjson": { "repo": "https://github.com/DaveGamble/cJSON" }
+  },
+  "records": [
+    {
+      "id": "cjson-printbuffered",
+      "project": "cjson",
+      "file": "cJSON.c",
+      "headers": ["cJSON.h"],
+      "fixCommit": "2a3a313",
+      "function": "cJSON_PrintBuffered",
+      "flawLine": 1100,
+      "fixedLine": 1100,
+      "cwe": "CWE-401",
+      "description": "p.buffer (global_hooks.allocate) leaks on the `!print_value` early-return path; fix 2a3a313 adds global_hooks.deallocate(p.buffer) before `return NULL`."
+    },
+    {
+      "id": "cjson-mergepatch",
+      "project": "cjson",
+      "file": "cJSON_Utils.c",
+      "headers": ["cJSON.h", "cJSON_Utils.h"],
+      "fixCommit": "f50dafc",
+      "function": "merge_patch",
+      "flawLine": 1335,
+      "fixedLine": 1335,
+      "cwe": "CWE-401",
+      "description": "target (cJSON_CreateObject) leaks when a recursive merge returns NULL (`replacement == NULL` path); fix f50dafc adds cJSON_Delete(target) before `return NULL`."
+    }
+  ]
+}
