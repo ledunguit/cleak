@@ -48,6 +48,7 @@ import {
   dynamicWorkerUserMessage,
 } from '../domain/subAgentPrompts';
 import { judgeBundleWithLlm, isBorderline } from '../domain/llmJudge';
+import { judgeByConsensus, type ConsensusVerdict } from '@mcpvul/common/analysis/consensus-judge';
 
 function chunk<T>(items: T[], size: number): T[][] {
   const out: T[][] = [];
@@ -202,23 +203,43 @@ export function buildWorkflowInvestigationPhase(cfg: RunConfig, dynamicMode: Dyn
         b.verdict = heuristicVerdict(b, staticStore.get(b.bundleId) ?? {});
       }
       const borderline = allBundles.filter((b) => b.verdict && isBorderline(b.verdict));
-      onNotice(`Stage D · ${borderline.length}/${allBundles.length} borderline → LLM judge (concurrency ${cfg.workflow.judgeConcurrency})`);
+      // n>1 ⇒ multi-agent consensus (self-consistency); n=1 ⇒ the single-LLM judge
+      // (unchanged regression baseline). Both feed the same downstream pipeline.
+      const useConsensus = cfg.consensus.n > 1;
+      const judgeLabel = useConsensus ? `consensus×${cfg.consensus.n} (${cfg.consensus.rule})` : 'LLM judge';
+      onNotice(`Stage D · ${borderline.length}/${allBundles.length} borderline → ${judgeLabel} (concurrency ${cfg.workflow.judgeConcurrency})`);
       await mapWithLimit(borderline, cfg.workflow.judgeConcurrency, async (b) => {
         if (ctx.abortSignal?.aborted) return;
-        const llm = await judgeBundleWithLlm(b, staticStore.get(b.bundleId), callModel, ctx.abortSignal, cfg.llm.judgeTemperature);
-        if (!llm) return;
-        b.verdict = llm;
+        const sctx = staticStore.get(b.bundleId);
+        let verdict: ConsensusVerdict | Awaited<ReturnType<typeof judgeBundleWithLlm>>;
+        if (useConsensus) {
+          // Sample the per-bundle LLM judge N times at the consensus temperature,
+          // then combine + apply the heuristic precision-override (in @mcpvul/common).
+          verdict = await judgeByConsensus(
+            b,
+            sctx,
+            () => judgeBundleWithLlm(b, sctx, callModel, ctx.abortSignal, cfg.consensus.temperature),
+            cfg.consensus,
+          );
+        } else {
+          verdict = await judgeBundleWithLlm(b, sctx, callModel, ctx.abortSignal, cfg.llm.judgeTemperature);
+        }
+        if (!verdict) return;
+        b.verdict = verdict;
         b.updatedAt = new Date().toISOString();
+        const agree = (verdict as ConsensusVerdict).agreement;
         decisions.push({
           turn: decisions.length + 1,
           actionKind: AgentActionKind.JUDGE_BUNDLE,
-          rationale: (llm.explanation || '').slice(0, 200),
+          rationale: (verdict.explanation || '').slice(0, 200),
           strategySource: 'llm',
-          toolName: 'llm_judge',
+          toolName: useConsensus ? 'consensus_judge' : 'llm_judge',
           targetBundleIds: [b.bundleId],
           reasoning: '',
           decidedAt: new Date().toISOString(),
-          resultSummary: `${llm.verdict} (${(llm.confidence * 100).toFixed(0)}%)`,
+          resultSummary:
+            `${verdict.verdict} (${(verdict.confidence * 100).toFixed(0)}%)` +
+            (useConsensus && typeof agree === 'number' ? ` · agree ${(agree * 100).toFixed(0)}%` : ''),
         });
       });
 

@@ -9,7 +9,7 @@ import { resolve, basename, join } from 'node:path';
 import { existsSync, readFileSync } from 'node:fs';
 import { McpClient } from '@mcpvul/agent-core';
 import { AnalysisMode, DynamicMode } from '@mcpvul/common/types';
-import { loadConfig, type Provider } from '../config';
+import { loadConfig, type Provider, type ConsensusJudgeConfig } from '../config';
 import { loadEnvFiles } from '../domain/env';
 import { buildPathResolver } from '../domain/pathResolver';
 import { ScanEmitter, JsonlFileSink, MultiSink, CallbackSink, type EventSink, type ScanEvent } from '../orchestrator/events';
@@ -29,6 +29,8 @@ export interface HeadlessOptions {
   staticUrl?: string;
   dynamicUrl?: string;
   quiet?: boolean;
+  /** Consensus-judge override (ablation): partial knobs merged over env defaults. */
+  consensus?: Partial<ConsensusJudgeConfig>;
   /** Live ScanEvent stream (used by the eval harness to show per-case phase). */
   onEvent?: (ev: ScanEvent) => void;
   /** Interrupt discovery + the agentic loop (e.g. eval cancel). */
@@ -47,6 +49,7 @@ export async function runHeadless(opts: HeadlessOptions): Promise<HeadlessResult
     provider: opts.provider,
     ...(opts.staticUrl ? { staticUrl: opts.staticUrl } : {}),
     ...(opts.dynamicUrl ? { dynamicUrl: opts.dynamicUrl } : {}),
+    ...(opts.consensus ? { consensus: opts.consensus as ConsensusJudgeConfig } : {}),
   });
 
   const repoPath = resolve(opts.repo);

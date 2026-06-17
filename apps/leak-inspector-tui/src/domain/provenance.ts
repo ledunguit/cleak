@@ -21,6 +21,8 @@ export interface EvalProvenance {
   toolVersions: Record<string, string>;
   /** sha256 of the corpus_manifest.json, so corpus drift is detectable. */
   corpusHash?: string;
+  /** Consensus-judge configuration for this run (records the ablation condition). */
+  consensus?: { n: number; rule: string };
 }
 
 /** Run a version command without a shell; never throws (returns undefined). */
@@ -72,6 +74,7 @@ export function captureProvenance(opts: {
   dynamicEnabled: boolean;
   manifestPath?: string;
   runs?: number;
+  consensus?: { n: number; rule: string };
 }): EvalProvenance {
   return {
     provider: opts.provider,
@@ -81,6 +84,7 @@ export function captureProvenance(opts: {
     gitCommit: gitCommit(),
     toolVersions: toolVersions(opts.dynamicEnabled),
     ...(opts.manifestPath ? { corpusHash: corpusHash(opts.manifestPath) } : {}),
+    ...(opts.consensus ? { consensus: opts.consensus } : {}),
   };
 }
 

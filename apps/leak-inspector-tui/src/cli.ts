@@ -135,6 +135,9 @@ program
   .option('--limit <n>', 'evaluate only the first N cases (dev runs)', (v) => parseInt(v, 10))
   .option('--concurrency <n>', 'parallel scans', (v) => parseInt(v, 10))
   .option('--resume', 'reuse cached per-case results in the out dir', false)
+  .option('--allow-heuristic-fallback', 'permit llm_assisted to fall back to the heuristic judge when no LLM key is set (results will NOT reflect the LLM)', false)
+  .option('--consensus-n <n>', 'multi-agent consensus: number of independent LLM samples (1 = single-LLM baseline)', (v) => parseInt(v, 10))
+  .option('--consensus-rule <rule>', 'consensus rule: majority | weighted | unanimous-to-flag')
   .option('--out <dir>', 'output dir (default results/eval-<corpus>-<mode>-<ts>)')
   .option('--static-url <url>', 'static analyzer MCP url')
   .option('--dynamic-url <url>', 'dynamic analyzer MCP url')
@@ -156,6 +159,9 @@ program
       limit: opts.limit,
       concurrency: opts.concurrency,
       resume: opts.resume,
+      allowHeuristicFallback: opts.allowHeuristicFallback,
+      consensusN: opts.consensusN,
+      consensusRule: opts.consensusRule,
       staticUrl: opts.staticUrl,
       dynamicUrl: opts.dynamicUrl,
       onProgress: (done, total, id) => process.stdout.write(`  [${done}/${total}] ${id}\n`),

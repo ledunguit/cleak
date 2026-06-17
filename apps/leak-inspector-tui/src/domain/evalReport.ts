@@ -94,12 +94,26 @@ function provenanceLines(r: EvalResult): string[] {
     `| Git commit | ${p.gitCommit ?? '—'} |`,
     `| Tool versions | ${tools || '—'} |`,
     `| Corpus hash | ${p.corpusHash ?? '—'} |`,
+    `| Judge | ${p.consensus ? (p.consensus.n > 1 ? `consensus×${p.consensus.n} (${p.consensus.rule})` : 'single-LLM') : 'heuristic'} |`,
     '',
   ];
 }
 
+/** "0.850–0.930" — the 95% bootstrap interval bounds. */
+const ciStr = (ci?: { lo: number; hi: number }) => (ci ? `${f3(ci.lo)}–${f3(ci.hi)}` : '—');
+
+function judgePathLine(r: EvalResult): string {
+  const dist = r.judgePathDistribution ?? {};
+  const entries = Object.entries(dist);
+  if (entries.length === 0) return '- Judge path: — (no flagged verdicts)';
+  const total = entries.reduce((a, [, n]) => a + n, 0) || 1;
+  const parts = entries.sort((a, b) => b[1] - a[1]).map(([k, n]) => `${k} ${n} (${pct(n / total)}%)`);
+  return `- Judge path (flagged verdicts): ${parts.join(' · ')}`;
+}
+
 function reportMarkdown(r: EvalResult): string {
   const m = r.overall;
+  const ci = r.overallCI;
   const lines: string[] = [
     `# Evaluation report — ${r.mode}${r.dynamic !== 'off' ? ` +dynamic(${r.dynamic})` : ''}`,
     '',
@@ -107,20 +121,22 @@ function reportMarkdown(r: EvalResult): string {
     `- Generated: ${r.generatedAt}`,
     `- Cases: ${r.ranOk}/${r.caseCount} ran ok`,
     `- Cost: mean ${r.cost.meanDurationMs} ms/case · ${r.cost.totalTokens} tokens total (${r.cost.meanTokens}/case)`,
+    `- FP density: ${f3(r.cost.fpPerKloc)} FP / KLOC (${m.fp} FP over ${r.cost.totalLoc} non-blank LOC)`,
+    judgePathLine(r),
     `- Expected Calibration Error: ${f3(r.ece)}`,
     '',
     ...provenanceLines(r),
     '## Overall',
     '',
-    '| metric | value |',
-    '|---|--:|',
-    `| Precision | ${f3(m.precision)} (${pct(m.precision)}%) |`,
-    `| Recall | ${f3(m.recall)} (${pct(m.recall)}%) |`,
-    `| F1 | ${f3(m.f1)} |`,
-    `| Accuracy | ${f3(m.accuracy)} |`,
-    `| Specificity (TNR) | ${f3(m.specificity)} |`,
-    `| FPR | ${f3(m.fpr)} |`,
-    `| MCC | ${f3(m.mcc)} |`,
+    '| metric | value | 95% CI |',
+    '|---|--:|--:|',
+    `| Precision | ${f3(m.precision)} (${pct(m.precision)}%) | ${ciStr(ci?.precision)} |`,
+    `| Recall | ${f3(m.recall)} (${pct(m.recall)}%) | ${ciStr(ci?.recall)} |`,
+    `| F1 | ${f3(m.f1)} | ${ciStr(ci?.f1)} |`,
+    `| Accuracy | ${f3(m.accuracy)} | — |`,
+    `| Specificity (TNR) | ${f3(m.specificity)} | — |`,
+    `| FPR | ${f3(m.fpr)} | — |`,
+    `| MCC | ${f3(m.mcc)} | — |`,
     '',
     '### Confusion matrix',
     '',
