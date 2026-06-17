@@ -139,3 +139,50 @@ describe('hasGroundTruth', () => {
     expect(hasGroundTruth({ id: 'x', repo_path: 'p', expected_leak_count: 2 })).toBe(false);
   });
 });
+
+describe('scoreCase — siteId for paired (McNemar) tests', () => {
+  test('every sample carries a globally-unique <caseId>::<siteKey> id', () => {
+    const findings = [
+      finding({ function: 'CWE401_Memory_Leak__malloc_char_01_bad', verdict: 'confirmed_leak' }),
+      finding({ function: 'goodG2B', verdict: 'false_positive' }),
+    ];
+    const samples = scoreCase(findings, julietCase);
+    for (const s of samples) {
+      expect(s.siteId).toBeDefined();
+      expect(s.siteId!.startsWith('CWE401_Memory_Leak__malloc_char_01::')).toBe(true);
+    }
+    // all distinct
+    const ids = samples.map((s) => s.siteId);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  test('a missed flaw (synthetic FN) gets the SAME siteId a finding would have produced', () => {
+    // Function-mode: the flaw site key is the normalized function name.
+    const missed = scoreCase([], julietCase).find((s) => s.actual && !s.predicted);
+    expect(missed?.siteId).toBe('CWE401_Memory_Leak__malloc_char_01::cwe401_memory_leak__malloc_char_01_bad');
+  });
+
+  test('two modes on the same corpus align site-by-site by siteId', () => {
+    // mode A flags the flaw; mode B misses it → paired on the same siteId.
+    const a = scoreCase([finding({ function: 'CWE401_Memory_Leak__malloc_char_01_bad', verdict: 'confirmed_leak' })], julietCase);
+    const b = scoreCase([], julietCase); // discovery missed it
+    const aFlaw = a.find((s) => s.actual)!;
+    const bFlaw = b.find((s) => s.actual)!;
+    expect(aFlaw.siteId).toBe(bFlaw.siteId); // same site, different prediction
+    expect(aFlaw.predicted).toBe(true);
+    expect(bFlaw.predicted).toBe(false);
+  });
+});
+
+describe('classifyFunction — precedence is pinned (adversarial names)', () => {
+  test('explicit flaw label beats a name that also contains "good"', () => {
+    const c: LabeledCase = { id: 'c', repo_path: 'p', flaws: [{ function: 'badData_goodSink' }], clean: [] };
+    expect(classifyFunction('badData_goodSink', c)).toBe('bad'); // explicit label wins over naming
+  });
+  test('in the NAMING fallback only, "good" is checked before "bad"', () => {
+    // No explicit label for this name → falls through to the convention, where the
+    // current rule returns "good" first. Pinned so a future reorder is a conscious choice.
+    const c: LabeledCase = { id: 'c', repo_path: 'p', flaws: [{ function: 'other' }], clean: [] };
+    expect(classifyFunction('helper_bad_good', c)).toBe('good');
+  });
+});

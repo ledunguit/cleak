@@ -48,7 +48,20 @@ export class JudgeService {
     // Heuristic judging (and the only judge path in no_llm mode). Shared with
     // the leak-inspector-tui via @mcpvul/common/analysis so both produce
     // byte-identical verdicts.
-    if (!verdict) verdict = judgeHeuristically(bundle, staticContext);
+    if (!verdict) {
+      // In llm_assisted mode a heuristic verdict means the LLM never produced one
+      // (missing key / dead gateway / parse failure). Warn LOUDLY so an evaluation
+      // can't silently report heuristic numbers under the llm_assisted label —
+      // the verdict's `tool: HEURISTIC` is the machine-readable signal of this.
+      if (analysisMode === 'llm_assisted') {
+        this.logger.warn(
+          `[JUDGE] llm_assisted fell back to HEURISTIC for ${bundle.bundleId} ` +
+            `(no LLM verdict produced; check ${this.config.get('JUDGE_LLM_PROVIDER', this.config.get('LLM_PROVIDER', 'anthropic'))} key/gateway). ` +
+            `This verdict does NOT reflect the LLM.`,
+        );
+      }
+      verdict = judgeHeuristically(bundle, staticContext);
+    }
 
     // Every leak verdict that leaves the judge carries a root-cause explanation
     // AND an applicable (source-anchored) repair diff — filling whatever the

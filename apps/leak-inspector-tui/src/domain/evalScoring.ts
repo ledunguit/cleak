@@ -56,6 +56,9 @@ export interface SnapshotFinding {
   line?: number;
   verdict?: string;
   confidence?: number;
+  /** Which judge produced this verdict (`llm` | `heuristic` | `consensus`). Used to
+   * prove an `llm_assisted` run actually used the LLM (provenance integrity). */
+  verdict_tool?: string;
 }
 
 /** A verdict counts as "flagged as a leak" (the positive prediction). */
@@ -160,6 +163,13 @@ function siteKey(f: SnapshotFinding, lineMode: boolean): string {
   return lineMode ? `${baseName(f.file)}:${f.line ?? '?'}` : normalize(f.function ?? '');
 }
 
+/** The same site key derived from a labeled flaw (so a missed flaw's synthetic FN
+ * sample aligns with the site a finding would have produced — needed for paired
+ * cross-mode tests via `Sample.siteId`). */
+function flawSiteKey(flaw: LabeledFlaw, lineMode: boolean): string {
+  return lineMode ? `${baseName(flaw.file)}:${flaw.line ?? '?'}` : normalize(flaw.function);
+}
+
 interface SiteAgg {
   cls: 'bad' | 'good';
   /** Flagged if ANY finding at this site was flagged. */
@@ -193,11 +203,19 @@ export function scoreCase(findings: SnapshotFinding[], c: LabeledCase): Sample[]
   }
 
   const samples: Sample[] = [];
-  for (const site of sites.values()) {
-    samples.push({ actual: site.cls === 'bad', predicted: site.flagged, confidence: site.confidence });
+  for (const [key, site] of sites.entries()) {
+    samples.push({
+      actual: site.cls === 'bad',
+      predicted: site.flagged,
+      confidence: site.confidence,
+      siteId: `${c.id}::${key}`,
+    });
   }
   for (const flaw of c.flaws ?? []) {
-    if (!flawCovered(findings, flaw, c)) samples.push({ actual: true, predicted: false, confidence: 0 }); // missed → FN
+    // missed entirely → false negative
+    if (!flawCovered(findings, flaw, c)) {
+      samples.push({ actual: true, predicted: false, confidence: 0, siteId: `${c.id}::${flawSiteKey(flaw, lineMode)}` });
+    }
   }
   return samples;
 }

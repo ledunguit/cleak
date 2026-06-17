@@ -4,9 +4,21 @@
  * with CLI-flag overrides layered on top.
  */
 
+import type { ConsensusRule } from "@mcpvul/common/analysis/consensus-judge";
+
 export type Provider = "local" | "openai" | "anthropic";
 export type AnalysisModeOpt = "no_llm" | "llm_assisted";
 export type DynamicModeOpt = "off" | "selective" | "aggressive";
+
+/** Multi-agent consensus judging knobs (the thesis novelty). n=1 ⇒ the single-LLM
+ * judge (default), so consensus is strictly opt-in and the single-LLM path is the
+ * unchanged regression baseline. */
+export interface ConsensusJudgeConfig {
+  n: number;
+  rule: ConsensusRule;
+  temperature: number;
+  concurrency: number;
+}
 
 export interface ProviderConfig {
   provider: Provider;
@@ -41,6 +53,8 @@ export interface RunConfig {
   compaction: { thresholdTokens: number; keepRecentTurns: number };
   /** Staged-workflow investigation knobs (bounded to protect the single LLM gateway). */
   workflow: { staticConcurrency: number; staticGroupSize: number; judgeConcurrency: number };
+  /** Consensus judge (self-consistency) configuration for the borderline judge stage. */
+  consensus: ConsensusJudgeConfig;
 }
 
 function env(name: string, fallback = ""): string {
@@ -149,11 +163,35 @@ export function loadConfig(
       staticGroupSize: Math.max(1, Number(env("WORKFLOW_STATIC_GROUP_SIZE", "4"))),
       judgeConcurrency: Math.max(1, Number(env("WORKFLOW_JUDGE_CONCURRENCY", "3"))),
     },
+    consensus: {
+      // n=1 ⇒ single-LLM judge (default). The eval ablation bumps this to 3/5.
+      n: Math.max(1, Number(env("CONSENSUS_N", "1"))),
+      rule: parseConsensusRule(env("CONSENSUS_RULE", "weighted")),
+      // Sampling diversity for self-consistency: >0 so the N samples differ.
+      temperature: Number(env("CONSENSUS_TEMPERATURE", "0.7")),
+      concurrency: Math.max(1, Number(env("CONSENSUS_CONCURRENCY", "3"))),
+    },
   };
   // Apply only DEFINED overrides so an absent flag (e.g. --provider) never
-  // clobbers a resolved value with undefined.
+  // clobbers a resolved value with undefined. `consensus` is merged field-wise so
+  // a partial override (just `n`) keeps the env-resolved rule/temperature.
+  const { consensus: consensusOverride, ...rest } = overrides;
   const defined = Object.fromEntries(
-    Object.entries(overrides).filter(([, value]) => value !== undefined),
+    Object.entries(rest).filter(([, value]) => value !== undefined),
   );
-  return { ...base, ...defined };
+  const merged: RunConfig = { ...base, ...defined };
+  if (consensusOverride) {
+    merged.consensus = { ...base.consensus, ...pruneUndefined(consensusOverride) };
+  }
+  return merged;
+}
+
+const CONSENSUS_RULES: ReadonlySet<string> = new Set(["majority", "weighted", "unanimous-to-flag"]);
+function parseConsensusRule(v: string): ConsensusRule {
+  return (CONSENSUS_RULES.has(v) ? v : "weighted") as ConsensusRule;
+}
+
+/** Drop undefined-valued keys so a partial override never clobbers a default. */
+function pruneUndefined<T extends object>(obj: T): Partial<T> {
+  return Object.fromEntries(Object.entries(obj).filter(([, v]) => v !== undefined)) as Partial<T>;
 }

@@ -16,12 +16,17 @@ import {
   computeMetrics,
   calibrationBins,
   expectedCalibrationError,
+  bootstrapCI,
+  makeRng,
   type ConfusionMatrix,
   type Metrics,
   type CalibrationBin,
+  type ConfidenceInterval,
   type Sample,
 } from '@mcpvul/common/analysis/metrics';
 import { mapWithLimit } from '@mcpvul/agent-core';
+import type { ConsensusRule } from '@mcpvul/common/analysis/consensus-judge';
+import { walkCFiles, readFileSafe } from './fileWalk';
 import { EVENT_PHASE, EVENT_KIND, type ScanEventName } from '@mcpvul/common/flow/scan-flow-contract';
 import { runHeadless } from '../surfaces/headless';
 import { loadConfig } from '../config';
@@ -58,6 +63,17 @@ export interface EvalOptions {
   dynamicUrl?: string;
   /** Independent repetitions for variance reporting (multi-run); set by runEvalRepeated. */
   runs?: number;
+  /**
+   * Permit `llm_assisted` to silently fall back to the heuristic judge when no LLM
+   * key is configured. Default false: the harness throws up-front so an empty-key
+   * run can't masquerade as an LLM ablation (the Δ=0 confound). Opt in only for
+   * deliberate "heuristic under llm_assisted plumbing" runs.
+   */
+  allowHeuristicFallback?: boolean;
+  /** Consensus-judge ablation knobs (only meaningful in llm_assisted mode). n>1
+   * activates multi-agent consensus; n=1 (default) is the single-LLM baseline. */
+  consensusN?: number;
+  consensusRule?: ConsensusRule;
   /** Cancel the run: in-flight cases are aborted, not-yet-started ones are skipped. */
   signal?: AbortSignal;
   onProgress?: (done: number, total: number, id: string) => void;
@@ -81,6 +97,10 @@ export interface CaseRow {
   tn: number;
   candidates: number;
   flagged: number;
+  /** Non-blank source lines in the case (for FP-rate-per-KLOC). */
+  loc: number;
+  /** Per-case judge-path tally (`llm` / `heuristic` / `consensus`) from verdict_tool. */
+  judgePathCounts: Record<string, number>;
   durationMs: number;
   tokens: number;
   scanId?: string;
@@ -102,7 +122,23 @@ export interface EvalResult {
   byCwe: Record<string, Metrics>;
   calibration: CalibrationBin[];
   ece: number;
-  cost: { cases: number; meanDurationMs: number; totalTokens: number; meanTokens: number };
+  /** 95% percentile-bootstrap confidence intervals on the headline metrics (seeded,
+   * reproducible). The sampling-uncertainty companion to the across-run variance. */
+  overallCI: { precision: ConfidenceInterval; recall: ConfidenceInterval; f1: ConfidenceInterval };
+  /** Which judge decided the verdicts, aggregated across cases. In `llm_assisted`
+   * mode a healthy run is dominated by `llm`; a heuristic-heavy distribution means
+   * the LLM silently fell back (integrity signal). */
+  judgePathDistribution: Record<string, number>;
+  cost: {
+    cases: number;
+    meanDurationMs: number;
+    totalTokens: number;
+    meanTokens: number;
+    /** Total non-blank source lines scored, and false positives per 1k of them
+     * (the LAMeD-style FP-density headline). */
+    totalLoc: number;
+    fpPerKloc: number;
+  };
   rows: CaseRow[];
 }
 
@@ -120,7 +156,54 @@ function metricsByKey(groups: Map<string, Sample[]>): Record<string, Metrics> {
   return out;
 }
 
+/** The env var that supplies the API key for each provider (for clear errors). */
+const PROVIDER_KEY_ENV: Record<string, string> = {
+  anthropic: 'ANTHROPIC_API_KEY',
+  openai: 'OPENAI_API_KEY',
+  local: 'LOCAL_LLM_API_KEY',
+};
+
+/**
+ * Guard against the silent `llm_assisted == no_llm` confound: if an LLM run is
+ * requested but no key is configured for a cloud provider, throw BEFORE any case
+ * runs. (A keyless `local` gateway is legitimate, so it's allowed through; the
+ * post-run assertion in `runEval` still catches a dead local gateway.)
+ */
+function assertLlmAvailable(mode: string, allowFallback?: boolean): void {
+  if (mode !== 'llm_assisted' || allowFallback) return;
+  const cfg = loadConfig({}).llm;
+  if (!cfg.apiKey && cfg.provider !== 'local') {
+    const env = PROVIDER_KEY_ENV[cfg.provider] ?? 'the provider API key';
+    throw new Error(
+      `llm_assisted requested but no API key for provider '${cfg.provider}' (set ${env}). ` +
+        `Results would silently fall back to the heuristic judge (Δ=0 vs no_llm). ` +
+        `Fix the key, or pass allowHeuristicFallback / --allow-heuristic-fallback to run anyway.`,
+    );
+  }
+}
+
+/**
+ * Non-blank lines of the case's IMPLEMENTATION files — the FP/KLOC denominator.
+ * Counts only `.c/.cc/.cpp/.cxx` (headers excluded): FPs are flagged at allocation
+ * sites in implementation code, so header declaration lines only dilute the rate.
+ * Must match the baseline harness's `caseLoc` (baselines/runBaselineEval.ts) so
+ * FP/KLOC is one consistent definition for our system and every baseline.
+ */
+function countSourceLoc(repoDir: string): number {
+  let loc = 0;
+  for (const file of walkCFiles(repoDir)) {
+    if (!/\.(c|cc|cpp|cxx)$/.test(file)) continue; // implementation files only
+    const src = readFileSafe(file);
+    if (!src) continue;
+    for (const line of src.split('\n')) if (line.trim() !== '') loc++;
+  }
+  return loc;
+}
+
 export async function runEval(opts: EvalOptions): Promise<EvalResult> {
+  // Integrity gate: never let an LLM run quietly degrade to the heuristic baseline.
+  assertLlmAvailable(opts.mode, opts.allowHeuristicFallback);
+
   const manifestPath = join(opts.corpusDir, 'corpus_manifest.json');
   const manifest = JSON.parse(readFileSync(manifestPath, 'utf-8')) as LabeledManifest;
   const cases = (manifest.cases ?? []).slice(0, opts.limit ?? Infinity);
@@ -134,6 +217,9 @@ export async function runEval(opts: EvalOptions): Promise<EvalResult> {
     dynamicEnabled: opts.dynamic !== 'off',
     manifestPath,
     runs: opts.runs ?? 1,
+    ...(opts.mode === 'llm_assisted'
+      ? { consensus: { n: Math.max(1, opts.consensusN ?? 1), rule: opts.consensusRule ?? 'weighted' } }
+      : {}),
   });
   const caseCacheDir = join(opts.outDir, 'cases');
   mkdirSync(caseCacheDir, { recursive: true });
@@ -164,6 +250,8 @@ export async function runEval(opts: EvalOptions): Promise<EvalResult> {
     tn: 0,
     candidates: 0,
     flagged: 0,
+    loc: 0,
+    judgePathCounts: {},
     durationMs: 0,
     tokens: 0,
   });
@@ -201,6 +289,9 @@ export async function runEval(opts: EvalOptions): Promise<EvalResult> {
         dynamicUrl: opts.dynamicUrl,
         quiet: true,
         signal: opts.signal,
+        ...(opts.consensusN != null || opts.consensusRule != null
+          ? { consensus: { ...(opts.consensusN != null ? { n: opts.consensusN } : {}), ...(opts.consensusRule ? { rule: opts.consensusRule } : {}) } }
+          : {}),
         // Stream phase transitions so the UI can show each case's live progress.
         onEvent: opts.onCasePhase
           ? (ev) => {
@@ -223,6 +314,12 @@ export async function runEval(opts: EvalOptions): Promise<EvalResult> {
       const samples = scoreCase(findings, c);
       const cm = accumulate(samples);
       const tokens = (r.investigation?.usage?.inputTokens ?? 0) + (r.investigation?.usage?.outputTokens ?? 0);
+      // Per-case judge-path tally from verdict_tool (only for findings that were
+      // actually flagged — those are the verdicts whose provenance matters).
+      const judgePathCounts: Record<string, number> = {};
+      for (const f of findings) {
+        if (isFlagged(f.verdict) && f.verdict_tool) judgePathCounts[f.verdict_tool] = (judgePathCounts[f.verdict_tool] ?? 0) + 1;
+      }
       const row: CaseRow = {
         id: c.id,
         cwe: c.cwe,
@@ -235,6 +332,8 @@ export async function runEval(opts: EvalOptions): Promise<EvalResult> {
         tn: cm.tn,
         candidates: findings.length,
         flagged: findings.filter((f) => isFlagged(f.verdict)).length,
+        loc: countSourceLoc(repo),
+        judgePathCounts,
         durationMs,
         tokens,
         scanId: r.scanId,
@@ -260,6 +359,8 @@ export async function runEval(opts: EvalOptions): Promise<EvalResult> {
         tn: 0,
         candidates: 0,
         flagged: 0,
+        loc: 0,
+        judgePathCounts: {},
         durationMs: Date.now() - started,
         tokens: 0,
         ...(aborted ? {} : { error: err?.message ?? String(err) }),
@@ -296,6 +397,37 @@ export async function runEval(opts: EvalOptions): Promise<EvalResult> {
   const okRows = rows.filter((r) => r.status === 'ok');
   const totalTokens = okRows.reduce((a, r) => a + r.tokens, 0);
   const totalDuration = okRows.reduce((a, r) => a + r.durationMs, 0);
+  const totalLoc = okRows.reduce((a, r) => a + r.loc, 0);
+
+  // Which judge actually decided the flagged verdicts, across all ok cases.
+  const judgePathDistribution: Record<string, number> = {};
+  for (const r of okRows) {
+    for (const [tool, n] of Object.entries(r.judgePathCounts)) {
+      judgePathDistribution[tool] = (judgePathDistribution[tool] ?? 0) + n;
+    }
+  }
+  // Integrity signal: an llm_assisted run that produced ZERO llm/consensus verdicts
+  // is AMBIGUOUS — either the LLM never fired (dead gateway / bad key, the silent-
+  // fallback confound) OR the heuristic was confident on every case so nothing was
+  // borderline enough to escalate (legitimate). We can't distinguish here (the
+  // harness doesn't see escalation attempts), so WARN loudly rather than throw; the
+  // recorded judgePathDistribution lets the reader see the truth. The deterministic
+  // guard against a misconfigured provider is the up-front assertLlmAvailable().
+  if (opts.mode === 'llm_assisted' && okRows.length > 0) {
+    const llmVerdicts = (judgePathDistribution['llm'] ?? 0) + (judgePathDistribution['consensus'] ?? 0);
+    if (llmVerdicts === 0) {
+      process.stderr.write(
+        `\n⚠️  llm_assisted produced 0 LLM/consensus verdicts across ${okRows.length} cases ` +
+          `(judge paths: ${JSON.stringify(judgePathDistribution)}). Either nothing was borderline ` +
+          `(heuristic confident — fine) or the LLM never fired (dead gateway/key — these numbers are ` +
+          `the heuristic baseline mislabeled). Verify the provider/gateway before trusting an LLM Δ.\n`,
+      );
+    }
+  }
+
+  const cm = accumulate(allSamples);
+  // Seeded so the reported interval is reproducible across re-aggregations.
+  const ci = (sel: (m: Metrics) => number) => bootstrapCI(allSamples, (c) => sel(computeMetrics(c)), { iters: 1000, rng: makeRng(0xc0ffee) });
 
   return {
     corpus: opts.corpusDir,
@@ -305,17 +437,21 @@ export async function runEval(opts: EvalOptions): Promise<EvalResult> {
     provenance,
     caseCount: cases.length,
     ranOk: okRows.length,
-    overall: computeMetrics(accumulate(allSamples)),
+    overall: computeMetrics(cm),
     byFlowVariant: metricsByKey(byFlow),
     byFunctionalVariant: metricsByKey(byFunc),
     byCwe: metricsByKey(byCwe),
     calibration: calibrationBins(allSamples, 10),
     ece: expectedCalibrationError(allSamples, 10),
+    overallCI: { precision: ci((m) => m.precision), recall: ci((m) => m.recall), f1: ci((m) => m.f1) },
+    judgePathDistribution,
     cost: {
       cases: okRows.length,
       meanDurationMs: okRows.length ? Math.round(totalDuration / okRows.length) : 0,
       totalTokens,
       meanTokens: okRows.length ? Math.round(totalTokens / okRows.length) : 0,
+      totalLoc,
+      fpPerKloc: totalLoc > 0 ? (cm.fp / totalLoc) * 1000 : 0,
     },
     rows,
   };
