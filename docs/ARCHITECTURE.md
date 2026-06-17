@@ -193,12 +193,21 @@ flowchart TB
 ## 6. Kết nối LLM
 
 - **Provider dispatch:** `local` (gateway OpenAI-compatible, mặc định
-  `mimo/mimo-v2.5-pro` @ `host.docker.internal:20128/v1`) · `openai` · `anthropic`. Khoá
-  tách biệt theo provider.
+  `mimo/mimo-v2.5-pro` @ `host.docker.internal:20128/v1`) · `openai` · `anthropic` ·
+  **`openai-compat`** (endpoint OpenAI-tương-thích tuỳ chỉnh: base URL + model + key, route
+  qua đường `/chat/completions`). Khoá tách biệt theo provider.
 - **Web path:** `judge.service` + `investigation-planner` + `llm-analyzer` gọi
   chat-completions (JSON mode cho local). `JUDGE_LLM_PROVIDER` chọn backend.
 - **TUI path:** `agent-core/providers` (`openaiChat`/`anthropic`) — streaming SSE, idle-timeout,
-  function-calling thật.
+  function-calling thật. Provider/endpoint chọn được qua `/config`, CLI (`--provider/--base-url/
+  --model/--api-key`), hoặc env (`OPENAI_COMPAT_*`).
+
+> **Tầng judge** có 3 cấu hình so-sánh-được: **heuristic** (thuần, tất định) · **single-LLM**
+> (`--consensus-n 1`) · **consensus** (bỏ phiếu k mẫu + hợp nhất static/dynamic,
+> `packages/common/.../consensus-judge.ts`). Tầng **dynamic** dùng **capture tất định**
+> (`leak-inspector-tui/.../dynamicEvidence.ts`: `runDeterministicDynamic`,
+> `withDynamicEvidenceCapture`) để loại bỏ dao động run-to-run của bằng chứng động. Xem
+> [CONTRIBUTION.md](CONTRIBUTION.md) và [EVALUATION.md](EVALUATION.md) §7.
 
 ## 7. Dữ liệu & artifacts
 
