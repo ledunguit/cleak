@@ -11,6 +11,14 @@ const ALLOC_PATTERNS = [
   /\bxrealloc\s*\(/g,
   /\bxstrdup\s*\(/g,
   /\bnew\s+/g,
+  // Allocator-aware discovery for REAL projects, which routinely wrap libc behind
+  // custom allocators (e.g. cJSON's `global_hooks.allocate(...)`, `pool_alloc()`).
+  // A lexical scan that knows only malloc/calloc misses these, so the leak is never
+  // even discovered as a candidate. These match an allocator NAMED "alloc…" or
+  // "…_alloc…" — `\balloc` requires a word boundary, so `deallocate`/`free` are NOT
+  // matched (the "alloc" in "deallocate" is mid-word), keeping it precise.
+  /\balloc\w*\s*\(/gi,
+  /\b\w+_alloc\w*\s*\(/gi,
 ];
 
 const FREE_PATTERNS = [
@@ -18,6 +26,12 @@ const FREE_PATTERNS = [
   /\bxfree\s*\(/g,
   /\bdelete\s+/g,
   /\bdelete\s*\[\s*\]/g,
+  // Symmetric custom-deallocator awareness so a custom-allocated pointer that IS
+  // freed (cJSON_free / cJSON_Delete / global_hooks.deallocate / pool_free) is not
+  // mistaken for a leak. `free` must abut `(` so "freeze(" is not a free.
+  /\b\w*free\s*\(/gi,
+  /\bdealloc\w*\s*\(/gi,
+  /\b\w+_delete\s*\(/gi,
 ];
 
 const RETURN_PATTERN = /\breturn\b/g;
