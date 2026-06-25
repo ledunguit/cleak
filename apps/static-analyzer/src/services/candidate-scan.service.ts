@@ -43,9 +43,30 @@ const FREE_PATTERNS = [
 
 const RETURN_PATTERN = /\breturn\b/g;
 
+/**
+ * Project-specific allocator FUNCTIONS supplied via `EXTRA_ALLOCATOR_NAMES`
+ * (comma-separated). Real projects expose FACTORY allocators whose names carry no
+ * malloc/alloc token — cJSON's leaks flow through `cJSON_Duplicate` /
+ * `cJSON_CreateObject` (→ `cJSON_New_Item`), g_lib uses `g_strdup`/`g_strconcat`.
+ * These are invisible to the lexical patterns, which running on the real LAMeD
+ * corpus showed to be the single biggest real-project DISCOVERY gap (no candidate
+ * at the leak site → neither the heuristic nor the LLM can flag it). This is the
+ * same signal LAMeD generates as AllocSource annotations; here it is supplied as a
+ * per-project list. Each name → a precise `\bNAME\s*\(` matcher; only safe
+ * identifiers are accepted. Parsed per scan so a per-corpus value takes effect.
+ */
+function extraAllocatorPatterns(): RegExp[] {
+  return (process.env.EXTRA_ALLOCATOR_NAMES || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter((s) => /^[A-Za-z_]\w*$/.test(s))
+    .map((n) => new RegExp(`\\b${n}\\s*\\(`, 'g'));
+}
+
 @Injectable()
 export class CandidateScanService {
   scan(filePath: string, content?: string) {
+    const allocPatterns = [...ALLOC_PATTERNS, ...extraAllocatorPatterns()];
     const source = content || readFileSync(filePath, 'utf-8');
     const sanitized = this.sanitizeSource(source);
     const lines = source.split('\n');
@@ -76,7 +97,7 @@ export class CandidateScanService {
       const line = sanitizedLines[i];
       const lineNumber = i + 1;
 
-      for (const pattern of ALLOC_PATTERNS) {
+      for (const pattern of allocPatterns) {
         pattern.lastIndex = 0;
         const match = pattern.exec(line);
         if (match) {
