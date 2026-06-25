@@ -142,22 +142,6 @@ export class ResultParserService {
     return isNaN(n) ? null : n;
   }
 
-  summarizeValgrind(findings: Finding[]): string {
-    const definitelyLost = findings.filter(
-      (f) => f.aux?.leak?.kind === 'DefinitelyLost' || f.kind === 'DefinitelyLost',
-    );
-    const possiblyLost = findings.filter(
-      (f) => f.aux?.leak?.kind === 'PossiblyLost' || f.kind === 'PossiblyLost',
-    );
-
-    const totalBytes = definitelyLost.reduce(
-      (sum, f) => sum + (f.aux?.leak?.bytes || 0),
-      0,
-    );
-
-    return `Definitely lost: ${definitelyLost.length} blocks, ${totalBytes} bytes. Possibly lost: ${possiblyLost.length}.`;
-  }
-
   // ── ASan Parser ──
 
   parseAsanOutput(output: string): Finding[] {
