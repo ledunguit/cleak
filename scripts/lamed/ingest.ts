@@ -188,7 +188,8 @@ function main(): void {
 
     cases.push({
       id: e.id,
-      repo_path: caseDir,
+      // RELATIVE to the corpus dir — the eval harness does join(corpusDir, repo_path).
+      repo_path: join('cases', e.id),
       flaws,
       clean: [],
       cwe: 'CWE-401',
