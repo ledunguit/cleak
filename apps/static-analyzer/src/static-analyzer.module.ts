@@ -1,5 +1,4 @@
 import { Module } from '@nestjs/common';
-import { StaticAnalyzerController } from './static-analyzer.controller';
 import { CParserService } from './services/c-parser.service';
 import { FileIndexingService } from './services/file-indexing.service';
 import { CandidateScanService } from './services/candidate-scan.service';
@@ -12,7 +11,6 @@ import { OwnershipAnalysisService } from './services/ownership-analysis.service'
 import { LeakGuardAdapterService } from './services/leakguard-adapter.service';
 
 @Module({
-  controllers: [StaticAnalyzerController],
   providers: [
     CParserService,
     FileIndexingService,

@@ -41,9 +41,11 @@ judging → reporting`.
 
 Hai analyzer nối qua Docker bridge network `mcpvul-net` (`docker-compose.yml`).
 
-> Code gRPC server (proto :50051/:50052) vẫn còn trong cả hai analyzer nhưng **không còn
-> consumer** sau khi gỡ web path; `docker-compose.yml` mặc định analyzer chạy
-> `TRANSPORT_MODE=mcp`.
+> **MCP/HTTP là transport DUY NHẤT.** Một gRPC server (proto :50051/:50052) từng tồn tại để
+> phục vụ web control-plane (đã gỡ). Vì không còn consumer (TUI chỉ gọi MCP), toàn bộ code
+> gRPC — controller, bootstrap `createMicroservice`, thư mục `proto/`, và các dep
+> `@grpc/*` + `@nestjs/microservices` — đã được **xoá** khỏi `master`. Analyzer giờ chỉ
+> dựng một DI context và phục vụ MCP/HTTP.
 
 ## 3. Sơ đồ triển khai / topology
 
@@ -81,8 +83,9 @@ Ví dụ request:
   "params": { "name": "candidateScan", "arguments": { "filePath": "a.c", "content": "..." } } }
 ```
 
-Tập tool được định nghĩa trong `proto/static-analyzer.proto` và `proto/dynamic-analyzer.proto`
-(code gRPC server vẫn tồn tại nhưng không còn consumer — xem §2):
+Tập tool được khai báo bằng **Zod `inputSchema`** ngay trong các MCP server
+`apps/static-analyzer/src/mcp/static-mcp-server.ts` và
+`apps/dynamic-analyzer/src/mcp/dynamic-mcp-server.ts` (không còn `.proto`):
 
 - **static** — 11 tool: `IndexFiles, CandidateScan, AstScan, CallGraph, FunctionSummary,
   InterproceduralFlow, PathConstraints, OwnershipSummary, OwnershipConventions, LeakguardRun,
@@ -166,11 +169,10 @@ flowchart LR
 
 - **static-analyzer** (NestJS + Tree-sitter): mỗi service → một tool MCP (file indexing,
   candidate scan, AST, call graph, function summary, interprocedural flow, path constraints,
-  ownership, **Clang scan-build**). Phục vụ MCP :50061 cho TUI (code gRPC :50051 còn nhưng
-  không có consumer).
+  ownership, **Clang scan-build**). Phục vụ MCP :50061 cho TUI.
 - **dynamic-analyzer** (NestJS + child_process): build target (sanitizer flags), Valgrind
-  Memcheck, ASan, LSan, run binary, so sánh run. Phục vụ MCP :50062 (code gRPC :50052 còn nhưng
-  không có consumer). **Chỉ chạy trên Linux/Docker** (valgrind/LSan không chạy native trên macOS).
+  Memcheck, ASan, LSan, run binary, so sánh run. Phục vụ MCP :50062. **Chỉ chạy trên
+  Linux/Docker** (valgrind/LSan không chạy native trên macOS).
 
 ## 9. Hiện trạng vs. cũ (đính chính)
 
@@ -178,5 +180,8 @@ flowchart LR
   nén context) và `apps/leak-inspector-tui` (path HYBRID standalone, **orchestrator duy nhất**).
 - ✅ **leakguard slot = Clang Static Analyzer (scan-build)** self-contained, chạy trong image
   static-analyzer. **LeakGuard bên thứ ba đã bị gỡ** — không thêm lại.
+- ✅ **gRPC + `proto/` đã gỡ hẳn.** MCP/HTTP là transport duy nhất; controller gRPC,
+  bootstrap `createMicroservice`, thư mục `proto/`, và dep `@grpc/*` + `@nestjs/microservices`
+  đều đã xoá (không còn consumer sau khi gỡ web path).
 - ℹ️ **Web path đã gỡ khỏi `master`** (control-plane NestJS + React SPA + Postgres/Redis +
   GitHub OAuth/SSE), bảo tồn trên nhánh git `web-implementation`.

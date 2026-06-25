@@ -9,8 +9,8 @@
 - **agent-core** (`packages/agent-core`) — vòng lặp tool-calling không-framework: MCP client,
   `callModel` đa-provider (streaming), idle-timeout, nén ngữ cảnh.
 - **common** (`packages/common`) — types/Zod schema/`scoreCase`/judges/reporting dùng chung.
-- **static-analyzer / dynamic-analyzer** — hai app NestJS phục vụ **MCP** cho TUI (mã gRPC vẫn
-  còn nhưng hiện không còn consumer): phân tích tĩnh (index, candidate/AST scan, call-graph,
+- **static-analyzer / dynamic-analyzer** — hai app NestJS phục vụ **MCP** cho TUI (transport
+  duy nhất; mã gRPC/`proto` đã gỡ): phân tích tĩnh (index, candidate/AST scan, call-graph,
   interprocedural flow, Clang `scan-build`) và động (build sanitizer + chạy Valgrind/ASan/LSan).
 - **MCP** (Model Context Protocol) — giao thức JSON-RPC 2.0 streamable-HTTP để LLM/agent gọi
   tool của analyzer.

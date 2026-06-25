@@ -56,9 +56,10 @@ program
     }
     if (failures) {
       process.stdout.write(
-        `\nHint: start the analyzers with TRANSPORT_MODE=mcp, e.g.\n` +
-          `  (cd apps/static-analyzer  && TRANSPORT_MODE=mcp MCP_HTTP_PORT=50061 bun run dev)\n` +
-          `  (cd apps/dynamic-analyzer && TRANSPORT_MODE=mcp MCP_HTTP_PORT=50062 bun run dev)\n`,
+        `\nHint: start the analyzers (they serve MCP/HTTP), e.g.\n` +
+          `  (cd apps/static-analyzer  && MCP_HTTP_PORT=50061 bun run dev)\n` +
+          `  (cd apps/dynamic-analyzer && MCP_HTTP_PORT=50062 bun run dev)\n` +
+          `  or: docker compose up --build\n`,
       );
       process.exitCode = 1;
     }

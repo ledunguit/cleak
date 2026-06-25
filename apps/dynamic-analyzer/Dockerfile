@@ -24,7 +24,6 @@ RUN bun install
 # 2. Copy source code
 COPY apps/dynamic-analyzer/src ./apps/dynamic-analyzer/src
 COPY packages/common/src ./packages/common/src
-COPY proto ./proto
 
 # 3. Build via turbo
 RUN bunx turbo run build --filter=dynamic-analyzer
@@ -51,8 +50,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 COPY --from=build /app/dist/apps/dynamic-analyzer ./dist
 COPY --from=build /app/node_modules ./node_modules
-COPY --from=build /app/proto ./proto
 
-EXPOSE 50052 50062
+EXPOSE 50062
 
 CMD ["node", "dist/main.js"]
