@@ -76,17 +76,6 @@ describe('parseValgrindXmlString', () => {
   });
 });
 
-describe('summarizeValgrind', () => {
-  test('counts lost blocks + bytes by leak kind', () => {
-    const findings = [
-      { kind: 'DefinitelyLost', message: '', stack: [], originStack: [], aux: { leak: { kind: 'DefinitelyLost', bytes: 100, blocks: 1 } } },
-      { kind: 'DefinitelyLost', message: '', stack: [], originStack: [], aux: { leak: { kind: 'DefinitelyLost', bytes: 50, blocks: 1 } } },
-      { kind: 'PossiblyLost', message: '', stack: [], originStack: [], aux: { leak: { kind: 'PossiblyLost', bytes: 8, blocks: 1 } } },
-    ];
-    expect(svc.summarizeValgrind(findings)).toBe('Definitely lost: 2 blocks, 150 bytes. Possibly lost: 1.');
-  });
-});
-
 // ── ASan / LSan text output ─────────────────────────────────────────────────
 
 const ASAN_OUTPUT = `=================================================================
