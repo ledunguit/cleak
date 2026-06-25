@@ -6,6 +6,7 @@
  * it still ships a root cause + source-anchored repair diff.
  */
 
+import { z } from 'zod';
 import { readFileSafe } from './fileWalk';
 import { enrichLeakVerdict } from '@cleak/common/analysis/heuristic-judge';
 import { deriveFusion } from '@cleak/common/analysis/consensus-judge';
@@ -105,29 +106,59 @@ function summarizeEvidence(bundle: LeakBundle): string {
   return lines.join('\n');
 }
 
-/** Parse the model's JSON verdict; returns null if unusable. */
-function parseVerdict(text: string): { verdict: string; confidence: number; explanation: string; evidence: string[] } | null {
-  let raw = text?.trim() ?? '';
-  if (!raw) return null;
-  let obj: any;
+export interface ParsedVerdict {
+  verdict: string;
+  confidence: number;
+  explanation: string;
+  evidence: string[];
+}
+
+/** Shape we accept from the model before the verdict-string check. */
+const VerdictResponseSchema = z.object({
+  verdict: z.string(),
+  confidence: z.number().optional(),
+  explanation: z.string().optional(),
+  evidence: z.array(z.unknown()).optional(),
+});
+
+/**
+ * Parse the model's JSON verdict. Returns a discriminated result so the caller can
+ * LOG *why* a verdict was unusable instead of silently degrading to the heuristic
+ * (the failure mode this hardening targets). Tolerates a JSON object embedded in
+ * surrounding prose; validates the shape with Zod, then checks the verdict string.
+ */
+export function parseVerdict(text: string): { ok: true; value: ParsedVerdict } | { ok: false; reason: string } {
+  const raw = text?.trim() ?? '';
+  if (!raw) return { ok: false, reason: 'empty model response' };
+  let json: unknown;
   try {
-    obj = JSON.parse(raw);
+    json = JSON.parse(raw);
   } catch {
     const m = raw.match(/\{[\s\S]*\}/);
-    if (!m) return null;
+    if (!m) return { ok: false, reason: 'no JSON object in response' };
     try {
-      obj = JSON.parse(m[0]);
+      json = JSON.parse(m[0]);
     } catch {
-      return null;
+      return { ok: false, reason: 'malformed JSON in response' };
     }
   }
-  if (!obj || !isLeakVerdictString(obj.verdict)) return null;
+  const parsed = VerdictResponseSchema.safeParse(json);
+  if (!parsed.success) {
+    return { ok: false, reason: `schema mismatch: ${parsed.error.issues[0]?.message ?? 'invalid object'}` };
+  }
+  const obj = parsed.data;
+  if (!isLeakVerdictString(obj.verdict)) {
+    return { ok: false, reason: `unknown verdict "${obj.verdict}"` };
+  }
   const confidence = typeof obj.confidence === 'number' ? Math.min(1, Math.max(0, obj.confidence)) : 0.5;
   return {
-    verdict: obj.verdict,
-    confidence,
-    explanation: typeof obj.explanation === 'string' ? obj.explanation : '',
-    evidence: Array.isArray(obj.evidence) ? obj.evidence.map(String) : [],
+    ok: true,
+    value: {
+      verdict: obj.verdict,
+      confidence,
+      explanation: typeof obj.explanation === 'string' ? obj.explanation : '',
+      evidence: Array.isArray(obj.evidence) ? obj.evidence.map(String) : [],
+    },
   };
 }
 
@@ -141,6 +172,9 @@ export async function judgeBundleWithLlm(
   callModel: CallModel,
   signal?: AbortSignal,
   temperature?: number,
+  /** Reports WHY the LLM verdict was unusable (so the silent heuristic fallback is
+   * visible). Called with a short reason on a call error or an unparseable verdict. */
+  onNotice?: (reason: string) => void,
 ): Promise<VerdictResult | null> {
   const c = bundle.candidate;
   const user = [
@@ -163,16 +197,20 @@ export async function judgeBundleWithLlm(
   let resp;
   try {
     resp = await callModel({ systemPrompt: SYSTEM_PROMPT, messages: [{ role: 'user', content: user }], tools: [], signal, temperature });
-  } catch {
+  } catch (err: any) {
+    onNotice?.(`judge ${c.file_path}:${c.line_number} — model call failed (${err?.message ?? err}); keeping heuristic`);
     return null;
   }
   const parsed = parseVerdict(resp.text ?? '');
-  if (!parsed) return null;
+  if (!parsed.ok) {
+    onNotice?.(`judge ${c.file_path}:${c.line_number} — ${parsed.reason}; keeping heuristic`);
+    return null;
+  }
   const base: VerdictResult = {
-    verdict: parsed.verdict as InvestigationVerdict,
-    confidence: parsed.confidence,
-    explanation: parsed.explanation,
-    evidence: parsed.evidence,
+    verdict: parsed.value.verdict as InvestigationVerdict,
+    confidence: parsed.value.confidence,
+    explanation: parsed.value.explanation,
+    evidence: parsed.value.evidence,
     tool: ToolKind.LLM,
   };
   return enrichLeakVerdict(bundle, staticContext ?? {}, base);

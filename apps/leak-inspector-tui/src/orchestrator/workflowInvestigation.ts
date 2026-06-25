@@ -275,11 +275,11 @@ export function buildWorkflowInvestigationPhase(cfg: RunConfig, dynamicMode: Dyn
           verdict = await judgeByConsensus(
             b,
             sctx,
-            () => judgeBundleWithLlm(b, sctx, callModel, ctx.abortSignal, cfg.consensus.temperature),
+            () => judgeBundleWithLlm(b, sctx, callModel, ctx.abortSignal, cfg.consensus.temperature, onNotice),
             cfg.consensus,
           );
         } else {
-          verdict = await judgeBundleWithLlm(b, sctx, callModel, ctx.abortSignal, cfg.llm.judgeTemperature);
+          verdict = await judgeBundleWithLlm(b, sctx, callModel, ctx.abortSignal, cfg.llm.judgeTemperature, onNotice);
         }
         if (!verdict) return;
         b.verdict = verdict;

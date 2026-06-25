@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { isBorderline, shouldEscalate, judgeBundleWithLlm } from './llmJudge';
+import { isBorderline, shouldEscalate, judgeBundleWithLlm, parseVerdict } from './llmJudge';
 import { InvestigationVerdict, ToolKind, type LeakBundle, type VerdictResult } from '@cleak/common/types';
 import type { CallModel } from '@cleak/agent-core';
 
@@ -139,5 +139,45 @@ describe('judgeBundleWithLlm', () => {
       throw new Error('gateway down');
     };
     expect(await judgeBundleWithLlm(bundle(), {}, callModel)).toBeNull();
+  });
+
+  test('onNotice fires with a reason when the verdict is unparseable (no silent fallback)', async () => {
+    const notices: string[] = [];
+    const callModel: CallModel = async () => ({ text: 'no json here', toolUses: [], stopReason: 'stop' });
+    const v = await judgeBundleWithLlm(bundle(), {}, callModel, undefined, undefined, (r) => notices.push(r));
+    expect(v).toBeNull();
+    expect(notices.length).toBe(1);
+    expect(notices[0]).toContain('keeping heuristic');
+  });
+});
+
+describe('parseVerdict (discriminated result)', () => {
+  test('valid verdict → ok with clamped confidence', () => {
+    const r = parseVerdict('{"verdict":"likely_leak","confidence":1.4,"explanation":"x","evidence":["a",1]}');
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.value.verdict).toBe('likely_leak');
+      expect(r.value.confidence).toBe(1); // clamped to [0,1]
+      expect(r.value.evidence).toEqual(['a', '1']); // coerced to strings
+    }
+  });
+  test('JSON embedded in prose is recovered', () => {
+    const r = parseVerdict('verdict: {"verdict":"false_positive","confidence":0.7} ok');
+    expect(r.ok).toBe(true);
+  });
+  test('empty / no-JSON / malformed each report a distinct reason', () => {
+    expect(parseVerdict('')).toEqual({ ok: false, reason: 'empty model response' });
+    expect(parseVerdict('just prose')).toMatchObject({ ok: false, reason: 'no JSON object in response' });
+    expect(parseVerdict('{verdict: oops}')).toMatchObject({ ok: false, reason: 'malformed JSON in response' });
+  });
+  test('an unknown verdict string is rejected with its value in the reason', () => {
+    const r = parseVerdict('{"verdict":"definitely_maybe","confidence":0.5}');
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.reason).toContain('definitely_maybe');
+  });
+  test('missing confidence defaults to 0.5', () => {
+    const r = parseVerdict('{"verdict":"uncertain"}');
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.value.confidence).toBe(0.5);
   });
 });
