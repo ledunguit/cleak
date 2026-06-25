@@ -1,5 +1,5 @@
 import { describe, expect, test, afterEach } from 'bun:test';
-import { resolveProvider, loadConfig } from './config';
+import { resolveProvider, loadConfig, clampConfig } from './config';
 import { toProviderSettings } from './orchestrator/toolWrappers';
 import { getEndpointField, setEndpointField } from './surfaces/tui/components/ConfigScreen';
 
@@ -46,6 +46,45 @@ describe('loadConfig field-wise llm override', () => {
     process.env.OPENAI_COMPAT_MODEL = 'env-model';
     const c = loadConfig({ provider: 'openai-compat', llm: { model: undefined, baseUrl: undefined } });
     expect(c.llm.model).toBe('env-model');
+  });
+});
+
+describe('clampConfig — hard bounds on fan-out / sampling', () => {
+  const baseCfg = () =>
+    loadConfig({}); // env-resolved defaults (n=1, temp 0.7, concurrency 3, …)
+
+  test('a runaway consensus.n is clamped to the max', () => {
+    const c = baseCfg();
+    c.consensus.n = 1000;
+    clampConfig(c);
+    expect(c.consensus.n).toBe(9);
+  });
+
+  test('out-of-range temperature and non-numeric values fall back safely', () => {
+    const c = baseCfg();
+    c.consensus.temperature = 5;
+    c.workflow.staticConcurrency = Number('abc'); // NaN
+    clampConfig(c);
+    expect(c.consensus.temperature).toBe(2);
+    expect(c.workflow.staticConcurrency).toBe(3); // NaN → fallback
+  });
+
+  test('in-range values pass through untouched', () => {
+    const c = baseCfg();
+    c.consensus.n = 3;
+    c.consensus.temperature = 0.5;
+    c.workflow.judgeConcurrency = 4;
+    clampConfig(c);
+    expect(c.consensus.n).toBe(3);
+    expect(c.consensus.temperature).toBe(0.5);
+    expect(c.workflow.judgeConcurrency).toBe(4);
+  });
+
+  test('loadConfig already returns clamped values (env CONSENSUS_N respected within bounds)', () => {
+    process.env.CONSENSUS_N = '500';
+    const c = loadConfig({});
+    expect(c.consensus.n).toBe(9);
+    delete process.env.CONSENSUS_N;
   });
 });
 

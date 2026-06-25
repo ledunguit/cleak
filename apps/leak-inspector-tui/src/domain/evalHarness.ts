@@ -140,6 +140,10 @@ export interface EvalResult {
     fpPerKloc: number;
   };
   rows: CaseRow[];
+  /** Every per-site classification sample (with `siteId`), so two runs of the same
+   * corpus can be aligned site-by-site for a PAIRED McNemar test (`mcnemar-compare`).
+   * This is the data the aggregate confusion matrix is built from. */
+  samples: Sample[];
 }
 
 interface CachedCase {
@@ -466,6 +470,7 @@ export async function runEval(opts: EvalOptions): Promise<EvalResult> {
       fpPerKloc: totalLoc > 0 ? (cm.fp / totalLoc) * 1000 : 0,
     },
     rows,
+    samples: allSamples,
   };
 }
 

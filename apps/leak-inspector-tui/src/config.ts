@@ -206,7 +206,45 @@ export function loadConfig(
   if (llmOverride) {
     merged.llm = { ...base.llm, ...pruneUndefined(llmOverride) };
   }
-  return merged;
+  return clampConfig(merged);
+}
+
+/**
+ * Hard bounds so a stray env var or CLI flag (e.g. `CONSENSUS_N=1000`, a negative
+ * temperature, `WORKFLOW_STATIC_CONCURRENCY=500`) cannot spawn a runaway fan-out
+ * that floods the gateway, or pass an out-of-range sampling temperature to the
+ * provider. Out-of-range / non-numeric values are CLAMPED (not fatal) with a
+ * one-line stderr warning, so the run still proceeds with safe values. Exported
+ * for unit testing.
+ */
+export function clampConfig(cfg: RunConfig): RunConfig {
+  const warnings: string[] = [];
+  const clamp = (label: string, v: number, min: number, max: number, fallback: number): number => {
+    if (!Number.isFinite(v)) {
+      warnings.push(`${label}=${v} is not a number → ${fallback}`);
+      return fallback;
+    }
+    if (v < min) {
+      warnings.push(`${label}=${v} < ${min} → ${min}`);
+      return min;
+    }
+    if (v > max) {
+      warnings.push(`${label}=${v} > ${max} → ${max}`);
+      return max;
+    }
+    return v;
+  };
+  cfg.maxTurns = Math.round(clamp("maxTurns", cfg.maxTurns, 1, 200, 15));
+  cfg.workflow.staticConcurrency = Math.round(clamp("workflow.staticConcurrency", cfg.workflow.staticConcurrency, 1, 16, 3));
+  cfg.workflow.staticGroupSize = Math.round(clamp("workflow.staticGroupSize", cfg.workflow.staticGroupSize, 1, 64, 4));
+  cfg.workflow.judgeConcurrency = Math.round(clamp("workflow.judgeConcurrency", cfg.workflow.judgeConcurrency, 1, 16, 3));
+  cfg.consensus.n = Math.round(clamp("consensus.n", cfg.consensus.n, 1, 9, 1));
+  cfg.consensus.temperature = clamp("consensus.temperature", cfg.consensus.temperature, 0, 2, 0.7);
+  cfg.consensus.concurrency = Math.round(clamp("consensus.concurrency", cfg.consensus.concurrency, 1, 16, 3));
+  if (warnings.length) {
+    process.stderr.write(`⚠ config out of range, clamped:\n${warnings.map((w) => `  - ${w}`).join("\n")}\n`);
+  }
+  return cfg;
 }
 
 const CONSENSUS_RULES: ReadonlySet<string> = new Set(["majority", "weighted", "unanimous-to-flag"]);
