@@ -25,19 +25,16 @@
  *   bun scripts/lamed/ingest.ts                          # materialize (clones repos)
  *   bun scripts/lamed/ingest.ts --manifest-only          # write the manifest only (no clone)
  *   bun scripts/lamed/ingest.ts --benchmark <path> --out demo/lamed --clones /tmp/lamed-clones
+ *
+ * The pure mapping helpers are exported (and unit-tested in ingest.test.ts);
+ * execution is guarded by `import.meta.main` so importing them runs nothing.
  */
 
 import { execFileSync } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
-function arg(name: string, fallback?: string): string | undefined {
-  const i = process.argv.indexOf(`--${name}`);
-  return i >= 0 && i + 1 < process.argv.length ? process.argv[i + 1] : fallback;
-}
-const has = (name: string) => process.argv.includes(`--${name}`);
-
-interface LamedEntry {
+export interface LamedEntry {
   project: string;
   bug_repo_link: string;
   file: string;
@@ -47,16 +44,16 @@ interface LamedEntry {
   id: string;
 }
 
-const benchmarkPath = resolve(arg('benchmark', 'demo/lamed/memleak_benchmark.json')!);
-const outDir = resolve(arg('out', 'demo/lamed')!);
-const clonesDir = resolve(arg('clones', join(outDir, '.clones'))!);
-const manifestOnly = has('manifest-only');
+export interface LabeledFlaw {
+  file: string;
+  function: string;
+  cwe: string;
+}
 
-const entries = Object.values(JSON.parse(readFileSync(benchmarkPath, 'utf-8')) as Record<string, LamedEntry>);
-console.log(`LAMeD: ${entries.length} leak entries from ${benchmarkPath}`);
+// ── Pure mapping helpers (unit-tested) ──────────────────────────────────────
 
-/** `https://github.com/{org}/{repo}/(tree|commit)/{sha}` → {repo, sha}. */
-function parseGithubRef(url: string): { repoUrl: string; sha: string } | null {
+/** `https://github.com/{org}/{repo}/(tree|commit)/{sha}` → {repoUrl, sha}. */
+export function parseGithubRef(url: string): { repoUrl: string; sha: string } | null {
   const m = url.match(/github\.com\/([^/]+)\/([^/]+)\/(?:tree|commit)\/([0-9a-f]+)/i);
   if (!m) return null;
   return { repoUrl: `https://github.com/${m[1]}/${m[2]}.git`, sha: m[3] };
@@ -67,9 +64,9 @@ function parseGithubRef(url: string): { repoUrl: string; sha: string } | null {
  * the identifier before its `(`; LAMeD signatures often start with an ALL-CAPS
  * return-type macro (`CJSON_PUBLIC(char *) realFn(...)`), so we take the FIRST
  * callee that contains a lowercase letter (skipping the macro), then fall back to
- * the first/last callee, then the last identifier (e.g. a bare `main`).
+ * the first callee, then the last identifier (e.g. a bare `main`).
  */
-function bareFunctionName(sig: string): string {
+export function bareFunctionName(sig: string): string {
   const calls = [...sig.matchAll(/([A-Za-z_]\w*)\s*\(/g)].map((m) => m[1]);
   const nonMacro = calls.filter((n) => /[a-z]/.test(n));
   if (nonMacro.length) return nonMacro[0];
@@ -84,7 +81,7 @@ function bareFunctionName(sig: string): string {
  * void f(void)`), and truncates mid-signature — so a depth-aware split is required
  * to avoid slicing a parameter list into bogus "functions".
  */
-function splitTopLevelSemicolons(s: string): string[] {
+export function splitTopLevelSemicolons(s: string): string[] {
   const out: string[] = [];
   let depth = 0;
   let cur = '';
@@ -103,7 +100,7 @@ function splitTopLevelSemicolons(s: string): string[] {
 }
 
 /** `target_function` → de-duplicated bare function names (drops empties). */
-function functionsOf(targetFunction: string): string[] {
+export function functionsOf(targetFunction: string): string[] {
   const names = splitTopLevelSemicolons(targetFunction ?? '')
     .map((s) => s.trim())
     .filter(Boolean)
@@ -112,12 +109,28 @@ function functionsOf(targetFunction: string): string[] {
   return [...new Set(names)];
 }
 
+/**
+ * Flaws for one entry. With function labels → one flaw per function; with an empty
+ * `target_function` (6 of the 41 entries) → a single file-level flaw with an empty
+ * function (scoreable only in line mode, which LAMeD lacks — recorded honestly,
+ * flagged via `fileLevelOnly`, rather than dropped).
+ */
+export function entryToFlaws(e: LamedEntry): { flaws: LabeledFlaw[]; fileLevelOnly: boolean } {
+  const fns = functionsOf(e.target_function);
+  if (fns.length === 0) {
+    return { flaws: [{ file: e.file, function: '', cwe: 'CWE-401' }], fileLevelOnly: true };
+  }
+  return { flaws: fns.map((fn) => ({ file: e.file, function: fn, cwe: 'CWE-401' })), fileLevelOnly: false };
+}
+
+// ── Side-effecting helpers (materialization) ────────────────────────────────
+
 function git(repoDir: string, args: string[]): string {
   return execFileSync('git', ['-C', repoDir, ...args], { encoding: 'utf-8', maxBuffer: 128 * 1024 * 1024 });
 }
 
 /** Clone a repo once (full history so any SHA resolves), cached under clonesDir. */
-function ensureClone(project: string, repoUrl: string): string {
+function ensureClone(project: string, repoUrl: string, clonesDir: string): string {
   const dir = join(clonesDir, project);
   if (existsSync(join(dir, '.git'))) return dir;
   mkdirSync(clonesDir, { recursive: true });
@@ -126,71 +139,81 @@ function ensureClone(project: string, repoUrl: string): string {
   return dir;
 }
 
-const cases: any[] = [];
-let fileLevelOnly = 0;
-let materialized = 0;
-const skipped: string[] = [];
+function arg(name: string, fallback?: string): string | undefined {
+  const i = process.argv.indexOf(`--${name}`);
+  return i >= 0 && i + 1 < process.argv.length ? process.argv[i + 1] : fallback;
+}
+const has = (name: string) => process.argv.includes(`--${name}`);
 
-for (const e of entries) {
-  const ref = parseGithubRef(e.bug_repo_link) ?? parseGithubRef(e.commit);
-  const fns = functionsOf(e.target_function);
-  if (fns.length === 0) fileLevelOnly++;
+function main(): void {
+  const benchmarkPath = resolve(arg('benchmark', 'demo/lamed/memleak_benchmark.json')!);
+  const outDir = resolve(arg('out', 'demo/lamed')!);
+  const clonesDir = resolve(arg('clones', join(outDir, '.clones'))!);
+  const manifestOnly = has('manifest-only');
 
-  const flaws =
-    fns.length > 0
-      ? fns.map((fn) => ({ file: e.file, function: fn, cwe: 'CWE-401' }))
-      // No function label → a single file-level flaw (scored only in line mode; we
-      // have no line, so this entry is effectively unscoreable in function mode —
-      // recorded honestly rather than dropped).
-      : [{ file: e.file, function: '', cwe: 'CWE-401' }];
+  const entries = Object.values(JSON.parse(readFileSync(benchmarkPath, 'utf-8')) as Record<string, LamedEntry>);
+  console.log(`LAMeD: ${entries.length} leak entries from ${benchmarkPath}`);
 
-  const caseDir = join(outDir, 'cases', e.id);
-  if (!manifestOnly) {
-    if (!ref) {
-      skipped.push(`${e.id} (unparseable repo ref)`);
-      continue;
+  const cases: any[] = [];
+  let fileLevelOnly = 0;
+  let materialized = 0;
+  const skipped: string[] = [];
+
+  for (const e of entries) {
+    const ref = parseGithubRef(e.bug_repo_link) ?? parseGithubRef(e.commit);
+    const { flaws, fileLevelOnly: isFileLevel } = entryToFlaws(e);
+    if (isFileLevel) fileLevelOnly++;
+
+    const caseDir = join(outDir, 'cases', e.id);
+    if (!manifestOnly) {
+      if (!ref) {
+        skipped.push(`${e.id} (unparseable repo ref)`);
+        continue;
+      }
+      try {
+        const clone = ensureClone(e.project, ref.repoUrl, clonesDir);
+        git(clone, ['checkout', '--quiet', ref.sha]);
+        rmSync(caseDir, { recursive: true, force: true });
+        mkdirSync(caseDir, { recursive: true });
+        // Copy the working tree (sans .git) to a stable, per-case snapshot.
+        cpSync(clone, caseDir, { recursive: true, filter: (src) => !src.includes(`${clone}/.git`) });
+        materialized++;
+      } catch (err: any) {
+        skipped.push(`${e.id} (${String(err?.message ?? err).slice(0, 80)})`);
+        continue;
+      }
     }
-    try {
-      const clone = ensureClone(e.project, ref.repoUrl);
-      git(clone, ['checkout', '--quiet', ref.sha]);
-      rmSync(caseDir, { recursive: true, force: true });
-      mkdirSync(caseDir, { recursive: true });
-      // Copy the working tree (sans .git) to a stable, per-case snapshot.
-      cpSync(clone, caseDir, { recursive: true, filter: (src) => !src.includes(`${clone}/.git`) });
-      materialized++;
-    } catch (err: any) {
-      skipped.push(`${e.id} (${String(err?.message ?? err).slice(0, 80)})`);
-      continue;
-    }
+
+    cases.push({
+      id: e.id,
+      repo_path: caseDir,
+      flaws,
+      clean: [],
+      cwe: 'CWE-401',
+      functionalVariant: e.project,
+      // Provenance (not read by the scorer, but keeps the label traceable to LAMeD).
+      _lamed: { bugRef: e.bug_repo_link, fixCommit: e.commit, file: e.file, targetFunction: e.target_function },
+    });
   }
 
-  cases.push({
-    id: e.id,
-    repo_path: caseDir,
-    flaws,
-    clean: [],
-    cwe: 'CWE-401',
-    functionalVariant: e.project,
-    // Provenance (not read by the scorer, but keeps the label traceable to LAMeD).
-    _lamed: { bugRef: e.bug_repo_link, fixCommit: e.commit, file: e.file, targetFunction: e.target_function },
-  });
+  const manifest = {
+    schema_version: 'memory-leak-corpus/v2',
+    name: 'lamed-memleak-benchmark',
+    source: 'LAMeD (EASE 2025) — Zenodo 10.5281/zenodo.15089703, BSD-3',
+    positive_only: true,
+    cases,
+  };
+  mkdirSync(outDir, { recursive: true });
+  const manifestPath = join(outDir, 'corpus_manifest.json');
+  writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
+
+  console.log(`\nwrote ${cases.length} cases → ${manifestPath}`);
+  console.log(`  flaws total       : ${cases.reduce((n, c) => n + c.flaws.length, 0)}`);
+  console.log(`  file-level-only   : ${fileLevelOnly} (empty target_function — unscoreable in function mode)`);
+  if (!manifestOnly) console.log(`  materialized      : ${materialized}/${entries.length} case source trees`);
+  else console.log(`  (manifest-only: repo_path points at cases/<id>; run without --manifest-only to clone + materialize)`);
+  if (skipped.length) console.log(`  skipped           : ${skipped.length}\n    - ${skipped.slice(0, 10).join('\n    - ')}`);
+  console.log('\nLAMeD is POSITIVE-ONLY → score RECALL + FP count (not specificity/MCC). See docs/BASELINE-COMPARISON.md.');
 }
 
-const manifest = {
-  schema_version: 'memory-leak-corpus/v2',
-  name: 'lamed-memleak-benchmark',
-  source: 'LAMeD (EASE 2025) — Zenodo 10.5281/zenodo.15089703, BSD-3',
-  positive_only: true,
-  cases,
-};
-mkdirSync(outDir, { recursive: true });
-const manifestPath = join(outDir, 'corpus_manifest.json');
-writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
-
-console.log(`\nwrote ${cases.length} cases → ${manifestPath}`);
-console.log(`  flaws total       : ${cases.reduce((n, c) => n + c.flaws.length, 0)}`);
-console.log(`  file-level-only   : ${fileLevelOnly} (empty target_function — unscoreable in function mode)`);
-if (!manifestOnly) console.log(`  materialized      : ${materialized}/${entries.length} case source trees`);
-else console.log(`  (manifest-only: repo_path points at cases/<id>; run without --manifest-only to clone + materialize)`);
-if (skipped.length) console.log(`  skipped           : ${skipped.length}\n    - ${skipped.slice(0, 10).join('\n    - ')}`);
-console.log('\nLAMeD is POSITIVE-ONLY → score RECALL + FP count (not specificity/MCC). See docs/BASELINE-COMPARISON.md.');
+if (import.meta.main) main();
