@@ -122,25 +122,102 @@ export function isCorrelated(method: CorrelationMethod): boolean {
   return CORR_RANK[method] >= CORR_RANK.function_match;
 }
 
+/** A path matches another iff equal OR a suffix on a PATH-SEGMENT boundary. */
+function normalizePath(p: string): string {
+  return p.replace(/\\/g, '/').replace(/\/{2,}/g, '/');
+}
+
+/** True when `long` ends with `short` AND the break is a directory boundary. */
+function isSuffixPath(long: string, short: string): boolean {
+  if (long.length <= short.length || !long.endsWith(short)) return false;
+  return long[long.length - short.length - 1] === '/';
+}
+
+/**
+ * True when two file paths plausibly denote the same file: equal, or one is a
+ * suffix of the other on a path-segment boundary (so `src/foo.c` ~ `foo.c`, but
+ * `barfoo.c` does NOT match `foo.c`). The old raw `endsWith` matched any string
+ * suffix and cross-linked unrelated files that shared a filename tail — a real
+ * precision bug that mis-attributed dynamic findings on multi-file repos.
+ */
 function fileMatches(a: string, b: string): boolean {
   if (!a || !b) return false;
-  return a === b || a.endsWith(b) || b.endsWith(a);
+  const na = normalizePath(a);
+  const nb = normalizePath(b);
+  if (na === nb) return true;
+  // basename guard: a suffix match must at least agree on the file name itself.
+  if (na.split('/').pop() !== nb.split('/').pop()) return false;
+  return isSuffixPath(na, nb) || isSuffixPath(nb, na);
+}
+
+/** libc/C++ allocator names collapsed to a canonical family for cross-checking. */
+const ALLOC_FN_RE =
+  /^(x?malloc|x?calloc|x?realloc|x?strn?dup|g_malloc\w*|g_realloc\w*|memalign|posix_memalign|aligned_alloc|operator new|_Zn[wa])/i;
+
+const ALLOCATOR_FAMILY: Record<string, string> = {
+  malloc: 'malloc', xmalloc: 'malloc', g_malloc: 'malloc',
+  calloc: 'calloc', xcalloc: 'calloc',
+  realloc: 'realloc', xrealloc: 'realloc', g_realloc: 'realloc',
+  strdup: 'strdup', xstrdup: 'strdup', strndup: 'strdup',
+  memalign: 'aligned', posix_memalign: 'aligned', aligned_alloc: 'aligned',
+  new: 'new', 'operator new': 'new',
+};
+
+/**
+ * Canonical allocator family for an allocation-type string or stack frame name.
+ * libc families collapse (`xmalloc`→`malloc`); a custom allocator keeps its own
+ * name as its family so two *different* custom allocators don't match. `null`
+ * when nothing allocator-like is recognizable (signal simply isn't applied).
+ */
+export function allocatorFamily(name: string | null | undefined): string | null {
+  if (!name) return null;
+  const n = name.toLowerCase().replace(/\(.*$/, '').replace(/\s+/g, ' ').trim();
+  if (!n) return null;
+  if (ALLOCATOR_FAMILY[n]) return ALLOCATOR_FAMILY[n];
+  for (const key of Object.keys(ALLOCATOR_FAMILY)) {
+    if (n === key || n.startsWith(key)) return ALLOCATOR_FAMILY[key];
+  }
+  if (/(^|_)alloc/.test(n) || /alloc(\w+)?$/.test(n)) return n; // custom allocator
+  return null;
+}
+
+/** The allocator frame of a finding's backtrace (first frame that allocates). */
+export function evidenceAllocatorName(evidence: LeakEvidence): string | null {
+  for (const fr of evidence.allocStack || []) {
+    if (fr.function && ALLOC_FN_RE.test(fr.function)) return fr.function;
+  }
+  return null;
+}
+
+const NEAR_BASE_CONFIDENCE = 0.75;
+const METHOD_BASE_CONFIDENCE: Record<CorrelationMethod, number> = {
+  file_line_exact: 1.0,
+  file_line_near: NEAR_BASE_CONFIDENCE,
+  function_match: 0.5,
+  file_only: 0.25,
+  none: 0,
+};
+
+export interface EvidenceCorrelation {
+  correlationMethod: CorrelationMethod;
+  correlationDistanceLines?: number;
+  correlatedToCandidate: boolean;
+  /** Graded 0..1 link strength (method + line distance + allocator agreement). */
+  correlationConfidence: number;
 }
 
 /**
  * Best correlation between a dynamic finding's candidate alloc sites and a
  * static candidate. Considers `allocSite`, user frames of `allocStack`, and the
- * evidence's own reported location.
+ * evidence's own reported location, and returns a graded `correlationConfidence`
+ * (method + line distance + allocator-family agreement) so a caller can break
+ * ties when a finding could attach to more than one nearby candidate.
  */
 export function correlateEvidence(
   evidence: LeakEvidence,
   candidate: LeakCandidate,
   nearThreshold = 5,
-): {
-  correlationMethod: CorrelationMethod;
-  correlationDistanceLines?: number;
-  correlatedToCandidate: boolean;
-} {
+): EvidenceCorrelation {
   const sites: { file: string; line: number; function: string }[] = [];
   if (evidence.allocSite) sites.push(evidence.allocSite);
   for (const fr of evidence.allocStack || []) {
@@ -163,6 +240,12 @@ export function correlateEvidence(
     if (CORR_RANK[method] > CORR_RANK[bestMethod]) {
       bestMethod = method;
       bestDist = dist;
+    } else if (
+      CORR_RANK[method] === CORR_RANK[bestMethod] &&
+      dist != null &&
+      (bestDist == null || dist < bestDist)
+    ) {
+      bestDist = dist; // same method, nearer site — keep the closer distance
     }
   };
 
@@ -182,10 +265,31 @@ export function correlateEvidence(
     }
   }
 
+  // ── Graded confidence: decay `file_line_near` with distance, then nudge by
+  // allocator-family agreement (a calloc finding attaching to a malloc candidate
+  // 4 lines away is weaker than a same-allocator match). Never flips
+  // `correlatedToCandidate` — that stays the method-rank decision. ──
+  // Compare by RANK, not the literal union: `bestMethod` is reassigned only inside
+  // the `consider` closure, so the compiler narrows it back to `'none'` and would
+  // reject a direct `=== 'file_line_near'` comparison.
+  const rank = CORR_RANK[bestMethod];
+  let confidence = METHOD_BASE_CONFIDENCE[bestMethod];
+  if (rank === CORR_RANK.file_line_near && bestDist != null) {
+    confidence = Math.max(0.5, NEAR_BASE_CONFIDENCE - 0.05 * bestDist);
+  }
+  if (rank > CORR_RANK.none) {
+    const candFam = allocatorFamily(candidate.allocation_type);
+    const evFam = allocatorFamily(evidenceAllocatorName(evidence));
+    if (candFam && evFam) {
+      confidence = candFam === evFam ? Math.min(1, confidence + 0.05) : Math.max(0, confidence - 0.15);
+    }
+  }
+
   return {
     correlationMethod: bestMethod,
     correlationDistanceLines: bestDist,
     correlatedToCandidate: isCorrelated(bestMethod),
+    correlationConfidence: Number(confidence.toFixed(3)),
   };
 }
 

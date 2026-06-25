@@ -21,6 +21,7 @@ import {
   deriveDynamicFields,
   computeEvidenceSignature,
   isCorrelated,
+  type EvidenceCorrelation,
 } from '@cleak/common/analysis/dynamic-evidence';
 import { evidenceIndicatesLeak } from '@cleak/common/analysis/judge-shared';
 import { ToolKind, type DynamicCoverage, type LeakBundle, type LeakEvidence } from '@cleak/common/types';
@@ -123,14 +124,29 @@ function findingToEvidence(finding: any, run: DynamicRunRecord, pathResolver: Pa
   return deriveDynamicFields(base, { rawLeakKind, rawStack: finding.stack });
 }
 
+/** Higher correlation rank wins; ties break by graded confidence, then nearer line.
+ * A strict comparison (never true on full equality) keeps the first matching bundle
+ * deterministically — order-independent reconcile. */
+function isBetterCorrelation(a: EvidenceCorrelation, b: EvidenceCorrelation): boolean {
+  const ra = correlationRank(a.correlationMethod);
+  const rb = correlationRank(b.correlationMethod);
+  if (ra !== rb) return ra > rb;
+  if (a.correlationConfidence !== b.correlationConfidence) {
+    return a.correlationConfidence > b.correlationConfidence;
+  }
+  const da = a.correlationDistanceLines ?? Number.POSITIVE_INFINITY;
+  const db = b.correlationDistanceLines ?? Number.POSITIVE_INFINITY;
+  return da < db;
+}
+
 /** Attach one piece of evidence to the best-correlated bundle (port of attachEvidence),
  * skipping if an identical (same-signature) evidence is already present. */
 function attachToBest(bundles: LeakBundle[], evidence: LeakEvidence): boolean {
-  let best: { bundle: LeakBundle; method: ReturnType<typeof correlateEvidence> } | null = null;
+  let best: { bundle: LeakBundle; method: EvidenceCorrelation } | null = null;
   for (const bundle of bundles) {
     const corr = correlateEvidence(evidence, bundle.candidate);
     if (correlationRank(corr.correlationMethod) === 0) continue;
-    if (!best || correlationRank(corr.correlationMethod) > correlationRank(best.method.correlationMethod)) {
+    if (!best || isBetterCorrelation(corr, best.method)) {
       best = { bundle, method: corr };
     }
   }
@@ -142,6 +158,7 @@ function attachToBest(bundles: LeakBundle[], evidence: LeakEvidence): boolean {
     correlatedToCandidate: best.method.correlatedToCandidate,
     correlationMethod: best.method.correlationMethod,
     correlationDistanceLines: best.method.correlationDistanceLines,
+    correlationConfidence: best.method.correlationConfidence,
   });
   return true;
 }
