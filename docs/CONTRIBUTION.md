@@ -144,6 +144,18 @@ FN3 TN38. Gate `determinism-gate.sh` chứng nhận; đồng thời từ chối 
   phần còn lại là preprint/tech-report (xem caveat ở [RELATED-WORK.md](RELATED-WORK.md)).
 - **Quy mô:** corpus chính là Juliet tổng hợp; real_projects mới 4 ca (2 cặp cJSON) → kết
   luận trên dự án thực cần mở rộng corpus.
+- **PHÁT HIỆN QUAN TRỌNG trên LAMeD thật (cjson 6 ca, đã materialize + chạy live):** **cả
+  `no_llm` lẫn `llm_assisted` đều recall 0%** — và LLM judge ĐÃ chạy (17 verdict LLM). Nút cổ
+  chai **KHÔNG phải tầng judge mà là KHÂU DISCOVERY**: leak cJSON nằm ở các **factory function**
+  (`cJSON_Duplicate`, `cJSON_CreateObject/Array/String` → bên trong gọi `cJSON_New_Item`). Tên
+  hàm KHÔNG chứa token `malloc/alloc`, nên candidate-scan (kể cả allocator-aware) **không phát
+  hiện site cấp phát** → không có candidate ở chỗ leak → cả heuristic lẫn LLM đều không thể flag
+  cái không tồn tại. (Đã sửa được khâu phụ: thêm pattern wrapper `cJSON_malloc` nâng discovery
+  40→60 candidate, nhưng leak thật là factory-alloc nên recall vẫn 0.) **Hệ quả/định hướng:** để
+  bắt leak dự án thực cần **allocator annotation theo từng project** — đúng y mô hình LAMeD
+  (LLM sinh AllocSource/FreeSink). Đây là việc còn mở quan trọng nhất, và nó *biện minh* cho
+  hướng đi của LAMeD. (Quá trình này cũng lộ + sửa 3 bug thật: ingest repo_path tuyệt đối,
+  pattern `cJSON_malloc`, và Docker build vỡ do thiếu COPY `tsup.config.ts`.)
 
 ---
 
