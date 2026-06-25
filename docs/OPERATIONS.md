@@ -9,11 +9,15 @@
 ## 1. Khởi động stack
 
 ```bash
-# Từ repo root — dựng toàn bộ (Postgres, Redis, control-plane, analyzers, UI)
+# Từ repo root — dựng hai analyzer (static + dynamic, chế độ MCP)
 docker compose up --build
 ```
-- UI web: http://localhost:5173 · API control-plane: http://localhost:8090
-- **Cổng MCP của analyzer (Docker): static `50061`, dynamic `50062`.**
+- **Cổng MCP của analyzer (Docker): static `50061`, dynamic `50062`.** TUI (orchestrator)
+  chạy ngoài Docker và gọi vào hai cổng này.
+
+> Stack chỉ gồm `static-analyzer` + `dynamic-analyzer` (MCP). Đường web cũ
+> (control-plane + UI React) đã được gỡ khỏi master, còn lưu trên nhánh
+> `web-implementation`.
 
 > ⚠️ **GOTCHA cổng MCP.** `scripts/evaluate-corpus.ts` **mặc định** trỏ `50071/50072`
 > (một setup dev-server cũ). Khi dùng stack Docker, **luôn đặt**:

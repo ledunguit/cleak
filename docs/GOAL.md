@@ -87,8 +87,12 @@ Every scan must deliver all five of the following:
 
 ## Architecture at a glance
 
-NestJS microservices: **control-plane** (orchestrator, HTTP `:8090`) drives a
-**static-analyzer** (`:50051`) and a **dynamic-analyzer** (`:50052`) over gRPC
-or real MCP; a **React** UI (`:5173`) renders the scan timeline and workflow
-DAG over SSE. See [THESIS.md](THESIS.md), [ARCHITECTURE.md](ARCHITECTURE.md), and
-`CLAUDE.md` for the full architecture.
+A standalone **`leak-inspector-tui`** (Ink CLI/TUI) is **the orchestrator**: it
+runs the agentic loop via `packages/agent-core` (native tool-calling) and drives
+a **static-analyzer** (`:50061`) and a **dynamic-analyzer** (`:50062`) over real
+**MCP**, then writes report artifacts to `results/<scanId>/`. See
+[THESIS.md](THESIS.md), [ARCHITECTURE.md](ARCHITECTURE.md), and `CLAUDE.md` for
+the full architecture.
+
+> The earlier web orchestration path (NestJS control-plane + React UI) is
+> preserved on git branch `web-implementation`; `master` is TUI-only.

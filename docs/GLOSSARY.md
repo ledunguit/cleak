@@ -3,16 +3,15 @@
 Định nghĩa ngắn các thuật ngữ dùng xuyên suốt tài liệu & mã nguồn.
 
 ## Kiến trúc & thành phần
-- **control-plane** — microservice NestJS (`:8090`) điều phối đường **web** bằng mô hình
-  JSON-action; lưu lịch sử quét trong Postgres.
-- **leak-inspector-tui** — app CLI/TUI (Ink/React) điều phối đường **CLI** bằng **native
-  tool-calling**; dùng cho quét nhanh + eval/benchmark.
+- **leak-inspector-tui** — app CLI/TUI (Ink/React) — **bộ điều phối duy nhất** của hệ thống,
+  dùng **native tool-calling**; quét nhanh + eval/benchmark. (Đường **web** cũ — control-plane
+  NestJS + UI React — được lưu trên nhánh git `web-implementation`, không còn trên master.)
 - **agent-core** (`packages/agent-core`) — vòng lặp tool-calling không-framework: MCP client,
   `callModel` đa-provider (streaming), idle-timeout, nén ngữ cảnh.
 - **common** (`packages/common`) — types/Zod schema/`scoreCase`/judges/reporting dùng chung.
-- **static-analyzer / dynamic-analyzer** — hai app phục vụ **cả gRPC lẫn MCP**: phân tích
-  tĩnh (index, candidate/AST scan, call-graph, interprocedural flow, Clang `scan-build`) và
-  động (build sanitizer + chạy Valgrind/ASan/LSan).
+- **static-analyzer / dynamic-analyzer** — hai app NestJS phục vụ **MCP** cho TUI (mã gRPC vẫn
+  còn nhưng hiện không còn consumer): phân tích tĩnh (index, candidate/AST scan, call-graph,
+  interprocedural flow, Clang `scan-build`) và động (build sanitizer + chạy Valgrind/ASan/LSan).
 - **MCP** (Model Context Protocol) — giao thức JSON-RPC 2.0 streamable-HTTP để LLM/agent gọi
   tool của analyzer.
 

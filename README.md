@@ -11,31 +11,28 @@ keeps the thesis components together at one top level.
 
 ## Components
 
-### `apps/control-plane` — Control Plane (NestJS)
-- NestJS microservice, HTTP API gateway at port 8090
-- Scan orchestration, judging, reporting, GitHub OAuth
-- PostgreSQL persistence via TypeORM
+### `apps/leak-inspector-tui` — Standalone scanner (Ink CLI/TUI) — THE orchestrator
+- Headless/interactive agentic scanner; the single orchestration entrypoint.
+  Native tool-calling via `packages/agent-core`.
+- 4-stage HYBRID workflow: (A) static fan-out sub-agents gather evidence;
+  (B) a dynamic worker builds + runs sanitizers, or follows a deterministic
+  recipe (`buildTarget → lsanRun`, no LLM); (C) synthesize; (D) hybrid judge
+  (heuristic for all bundles + LLM judge for borderline cases + optional
+  consensus over k samples)
+- Connects to the analyzers over MCP; writes report artifacts
+  (JSON/Markdown/HTML/snapshot) to `results/<scanId>/`
 
 ### `apps/static-analyzer` — Static Analysis (NestJS)
-- Serves gRPC (port 50051) and MCP Streamable-HTTP (port 50061)
+- Serves MCP Streamable-HTTP (port 50061) to the TUI
 - Tree-sitter AST, lexical scan, call graph, ownership analysis
 - Clang Static Analyzer (`scan-build`), self-contained (the third-party
   LeakGuard submodule has been removed)
+- gRPC server code still exists but currently has no consumer
 
 ### `apps/dynamic-analyzer` — Dynamic Analysis (NestJS)
-- Serves gRPC (port 50052) and MCP Streamable-HTTP (port 50062)
+- Serves MCP Streamable-HTTP (port 50062) to the TUI
 - Valgrind Memcheck, AddressSanitizer, LeakSanitizer (Linux/Docker only)
-
-### `apps/leak-inspector-ui` — Frontend (React + Vite)
-- React 19 + TypeScript SPA with Ant Design 5
-- Zustand 5 state management, React Router 7 routing
-- Real-time scan progress via SSE
-- @xyflow/react workflow graph visualization
-
-### `apps/leak-inspector-tui` — Standalone scanner (Ink CLI/TUI)
-- Headless/interactive scanner driving the HYBRID pipeline directly
-  (discovery → agentic investigation → judging → reporting)
-- Connects to the analyzers over MCP; writes artifacts to `results/<scanId>/`
+- gRPC server code still exists but currently has no consumer
 
 ### `packages/agent-core` — Agentic loop (TS library)
 - Framework-free native tool-calling loop, MCP client, multi-provider
@@ -52,19 +49,21 @@ keeps the thesis components together at one top level.
 
 ## System Flow
 
-There are two orchestration paths sharing the same analyzers and schemas:
-- **Web path** (`control-plane`): a JSON-action orchestrator drives the analyzers
-  over gRPC/MCP, with PostgreSQL + a BullMQ queue and an SSE stream to the SPA.
-- **CLI/TUI path** (`leak-inspector-tui`): `agent-core`'s native tool-calling loop
-  drives the analyzers over MCP directly, writing report artifacts to disk.
+A single orchestration path: the TUI (`leak-inspector-tui`) drives `agent-core`'s
+native tool-calling loop, which talks to the analyzers over MCP directly and
+writes report artifacts to disk.
 
-Both run the HYBRID pipeline:
-1. Static and dynamic analyzers expose gRPC and/or MCP tools
-2. The orchestrator coordinates investigation across a target C/C++ repo
+The HYBRID pipeline:
+1. Static and dynamic analyzers expose MCP tools
+2. The TUI orchestrator coordinates investigation across a target C/C++ repo
 3. Findings are normalized into shared leak bundles
 4. The system returns leak verdicts, explanations, and repair guidance
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for components/protocols/diagrams.
+
+> The earlier web orchestration path (`control-plane` + `leak-inspector-ui` React
+> SPA) has been removed from `master`; it is preserved on branch
+> `web-implementation`.
 
 ## Demo Corpus
 
@@ -72,26 +71,22 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for components/protocols/diagra
 - Multiple cases: `simple_leak`, `complex_leak_lab`, `early_return_leak`, etc.
 - Each case compilable with `make CC=clang`
 
-## Quick Start (Full Docker Stack)
+## Quick Start
+
+1. Start the analyzers (static + dynamic, MCP) via Docker Compose:
 
 ```bash
 docker compose up --build
 ```
 
-Access the web UI at http://localhost:5173 (dev) or http://localhost:8090 (production).
+This brings up `static-analyzer` (MCP on port 50061) and `dynamic-analyzer`
+(MCP on port 50062).
 
-## Frontend Dev
-
-```bash
-cd apps/leak-inspector-ui
-bun install
-bun run dev
-```
-
-## Backend Dev
+2. Configure the LLM key in `<root>/.env` or `apps/leak-inspector-tui/.env`, then
+   run the TUI scanner:
 
 ```bash
-cd apps/control-plane
+cd apps/leak-inspector-tui
 bun install
 bun run dev
 ```
@@ -101,23 +96,6 @@ bun run dev
 ```bash
 bun run build
 ```
-
-## Runtime Preflight
-
-Use this before end-to-end scans to verify that the local stack is actually reachable:
-
-```bash
-curl http://localhost:8090/api/runtime/preflight
-```
-
-For a local corpus smoke run without the UI:
-
-```bash
-bun run scan:smoke -- --case early_return_leak
-```
-
-The smoke runner checks PostgreSQL, the static analyzer, the dynamic analyzer,
-and key toolchain binaries before attempting to boot the control plane.
 
 ## Documentation
 
@@ -129,7 +107,7 @@ Start at **[docs/THESIS.md](docs/THESIS.md)**; full index at **[docs/README.md](
 - [docs/EVALUATION.md](docs/EVALUATION.md) — evaluation methodology + reproducibility
 - [docs/BASELINE-COMPARISON.md](docs/BASELINE-COMPARISON.md) — runbook for running baseline comparisons
 - [docs/OPERATIONS.md](docs/OPERATIONS.md) — run/reproduce end-to-end
-- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — components, protocols, diagrams, the two orchestration paths
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — components, protocols, diagrams
 - [docs/PROMPTS.md](docs/PROMPTS.md) — catalog of every LLM prompt + tool description
 - [docs/sequence-diagrams.md](docs/sequence-diagrams.md) — runtime sequence flows
 - [docs/GLOSSARY.md](docs/GLOSSARY.md) · [docs/DATASETS.md](docs/DATASETS.md) · [docs/SECURITY.md](docs/SECURITY.md) · [docs/GOAL.md](docs/GOAL.md)

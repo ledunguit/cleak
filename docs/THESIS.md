@@ -27,14 +27,15 @@ cảnh báo. Vòng lặp 3 pha: **discovery → investigation loop → judging/r
 
 ## 2. Hệ thống trong một trang
 
-Monorepo (Turborepo) với **hai đường điều phối** dùng chung bộ phân tích + scorer:
+Monorepo (Turborepo) với **một đường điều phối** (CLI/TUI) dùng chung bộ phân tích + scorer:
 
 | Đường | Thành phần | Mô hình LLM | Dùng khi |
 |---|---|---|---|
-| **Web** | `apps/control-plane` (NestJS, :8090) + React UI | Orchestrator JSON-action | Demo có UI, lịch sử quét trong Postgres |
 | **CLI/TUI** | `apps/leak-inspector-tui` + `packages/agent-core` | Native tool-calling | Quét nhanh, **eval/benchmark**, tái lập |
 
-Bộ phân tích (dùng chung, phục vụ cả gRPC lẫn MCP):
+> Bản hiện thực web (control-plane + React UI) được lưu trên nhánh git `web-implementation`; master nay chỉ còn đường TUI.
+
+Bộ phân tích (phục vụ MCP cho TUI; mã gRPC vẫn còn nhưng không còn consumer):
 - **`apps/static-analyzer`** — index file, candidate/AST scan, call-graph, interprocedural
   flow, và một lượt **Clang `scan-build`** (slot "deep static", tự chứa — *không* còn
   submodule LeakGuard).
@@ -44,7 +45,7 @@ Tầng tri thức chung: **`packages/common`** (types/Zod schema/`scoreCase`/jud
 Tầng judge có **3 cấu hình** so sánh được như-nhau: **heuristic** (thuần, tất định) ·
 **single-LLM** · **consensus** (bỏ phiếu k mẫu, hợp nhất static+dynamic).
 
-→ Chi tiết: [ARCHITECTURE.md](ARCHITECTURE.md) (thành phần, giao thức, 2 pipeline),
+→ Chi tiết: [ARCHITECTURE.md](ARCHITECTURE.md) (thành phần, giao thức, pipeline),
 [sequence-diagrams.md](sequence-diagrams.md) (luồng runtime), [PROMPTS.md](PROMPTS.md)
 (mọi prompt LLM).
 
