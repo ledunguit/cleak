@@ -150,9 +150,11 @@ function main(): void {
   const outDir = resolve(arg('out', 'demo/lamed')!);
   const clonesDir = resolve(arg('clones', join(outDir, '.clones'))!);
   const manifestOnly = has('manifest-only');
+  const onlyProject = arg('project'); // materialize/emit a single project (e.g. cjson)
 
-  const entries = Object.values(JSON.parse(readFileSync(benchmarkPath, 'utf-8')) as Record<string, LamedEntry>);
-  console.log(`LAMeD: ${entries.length} leak entries from ${benchmarkPath}`);
+  const all = Object.values(JSON.parse(readFileSync(benchmarkPath, 'utf-8')) as Record<string, LamedEntry>);
+  const entries = onlyProject ? all.filter((e) => e.project === onlyProject) : all;
+  console.log(`LAMeD: ${entries.length}${onlyProject ? `/${all.length} (project=${onlyProject})` : ''} leak entries from ${benchmarkPath}`);
 
   const cases: any[] = [];
   let fileLevelOnly = 0;
