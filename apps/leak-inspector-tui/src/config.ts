@@ -4,7 +4,7 @@
  * with CLI-flag overrides layered on top.
  */
 
-import type { ConsensusRule } from "@mcpvul/common/analysis/consensus-judge";
+import type { ConsensusRule } from "@cleak/common/analysis/consensus-judge";
 
 export type Provider = "local" | "openai" | "anthropic" | "openai-compat";
 export type AnalysisModeOpt = "no_llm" | "llm_assisted";

@@ -31,7 +31,7 @@ export async function launchTui(opts: LaunchTuiOptions = {}): Promise<void> {
   if (!process.stdin.isTTY) {
     process.stderr.write(
       'The interactive TUI requires a terminal (TTY). For non-interactive runs use:\n' +
-        '  leak-tui scan --repo <path> --mode llm_assisted\n',
+        '  cleak scan --repo <path> --mode llm_assisted\n',
     );
     process.exitCode = 1;
     return;

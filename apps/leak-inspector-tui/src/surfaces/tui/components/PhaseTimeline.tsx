@@ -1,5 +1,5 @@
 import { Box, Text } from 'ink';
-import { SCAN_PHASE_ORDER, PHASE_META, ScanPhase } from '@mcpvul/common/flow/scan-flow-contract';
+import { SCAN_PHASE_ORDER, PHASE_META, ScanPhase } from '@cleak/common/flow/scan-flow-contract';
 import { color, glyph } from '../theme';
 import type { PhaseStatus, UiState } from '../store';
 

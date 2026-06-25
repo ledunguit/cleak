@@ -7,8 +7,8 @@
  */
 
 import { z } from 'zod';
-import { buildTool, type Tool } from '@mcpvul/agent-core';
-import type { LeakBundle } from '@mcpvul/common/types';
+import { buildTool, type Tool } from '@cleak/agent-core';
+import type { LeakBundle } from '@cleak/common/types';
 
 export const DONE_STATIC = 'done_static';
 export const DONE_DYNAMIC = 'done_dynamic';

@@ -236,7 +236,7 @@ Return your JSON verdict.
 `parseVerdict` (`llmJudge.ts:109-132`): `JSON.parse`, fallback regex `/\{[\s\S]*\}/`; chỉ nhận
 nếu `verdict` là 1 trong 5 nhãn hợp lệ (`isLeakVerdictString`), `confidence` clamp `[0,1]`;
 hỏng → `null` → giữ verdict heuristic. Verdict hợp lệ chạy qua `enrichLeakVerdict`
-(`@mcpvul/common/analysis/heuristic-judge`) để gắn `rootCause` + repair diff source-anchored.
+(`@cleak/common/analysis/heuristic-judge`) để gắn `rootCause` + repair diff source-anchored.
 
 ---
 

@@ -6,7 +6,7 @@
  * investigation: gather evidence, reason, record a verdict per candidate, finish.
  */
 
-import type { LeakBundle } from '@mcpvul/common/types';
+import type { LeakBundle } from '@cleak/common/types';
 
 export interface SystemPromptInput {
   repoPath: string;

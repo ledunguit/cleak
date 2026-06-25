@@ -6,7 +6,7 @@
  * record lives in transcript.json).
  */
 
-import type { AgentEvent } from '@mcpvul/agent-core';
+import type { AgentEvent } from '@cleak/agent-core';
 import { toolSource } from './mcpToolPlan';
 
 const SOURCE_LABEL: Record<string, string> = {

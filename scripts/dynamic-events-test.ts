@@ -6,11 +6,11 @@
  *  (2) the dynamic analyzer's tools load and the heavy ones are flagged `ask`.
  */
 
-import type { AgentEvent } from '@mcpvul/agent-core';
-import { McpClient } from '@mcpvul/agent-core';
+import type { AgentEvent } from '@cleak/agent-core';
+import { McpClient } from '@cleak/agent-core';
 import { ScanEmitter, type EventSink, type ScanEvent } from '../apps/leak-inspector-tui/src/orchestrator/events';
 import { makeAgentEventHandler } from '../apps/leak-inspector-tui/src/orchestrator/toAgentEvents';
-import { loadMcpTools, wrapMcpTool } from '@mcpvul/agent-core';
+import { loadMcpTools, wrapMcpTool } from '@cleak/agent-core';
 import { mcpToolFlags } from '../apps/leak-inspector-tui/src/domain/mcpToolPlan';
 
 const fail = (m: string) => {

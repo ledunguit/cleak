@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 /** Verifies fetchWithRetry: clear timeout message, onRetry fires, caller-abort → 'interrupted'. */
 
-import { fetchWithRetry } from '@mcpvul/agent-core';
+import { fetchWithRetry } from '@cleak/agent-core';
 
 const hang = Bun.serve({ port: 0, fetch: () => new Promise<Response>(() => {}) });
 const url = `http://localhost:${hang.port}/`;

@@ -9,7 +9,7 @@
  */
 
 import { z } from 'zod';
-import { queryLoop, buildTool, buildCallModel, type AgentEvent, type Tool, type ProviderSettings } from '@mcpvul/agent-core';
+import { queryLoop, buildTool, buildCallModel, type AgentEvent, type Tool, type ProviderSettings } from '@cleak/agent-core';
 import { loadConfig } from '../apps/leak-inspector-tui/src/config';
 
 const cfg = loadConfig({ provider: 'local' });

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { foldStaticResult, type StaticContextStore } from './staticContext';
-import type { LeakBundle } from '@mcpvul/common/types';
+import type { LeakBundle } from '@cleak/common/types';
 
 function bundle(id: string, file: string, fn: string, line: number): LeakBundle {
   return {

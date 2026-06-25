@@ -16,8 +16,8 @@ import {
   type Metrics,
   type Sample,
   type ConfidenceInterval,
-} from '@mcpvul/common/analysis/metrics';
-import { mapWithLimit } from '@mcpvul/agent-core';
+} from '@cleak/common/analysis/metrics';
+import { mapWithLimit } from '@cleak/agent-core';
 import { readFileSafe } from '../fileWalk';
 import { scoreCase, isFlagged, type LabeledCase, type LabeledManifest, type SnapshotFinding } from '../evalScoring';
 import type { BaselineAdapter } from './adapter';

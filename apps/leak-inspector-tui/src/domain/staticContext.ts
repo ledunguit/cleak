@@ -15,8 +15,8 @@ import type {
   FeasibleLeakPath,
   OwnershipSummary,
   StaticLeakEvidence,
-} from '@mcpvul/common/types';
-import type { Tool } from '@mcpvul/agent-core';
+} from '@cleak/common/types';
+import type { Tool } from '@cleak/agent-core';
 
 export type StaticContextStore = Map<string, Record<string, any>>;
 

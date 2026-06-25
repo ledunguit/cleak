@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { isBorderline, shouldEscalate, judgeBundleWithLlm } from './llmJudge';
-import { InvestigationVerdict, ToolKind, type LeakBundle, type VerdictResult } from '@mcpvul/common/types';
-import type { CallModel } from '@mcpvul/agent-core';
+import { InvestigationVerdict, ToolKind, type LeakBundle, type VerdictResult } from '@cleak/common/types';
+import type { CallModel } from '@cleak/agent-core';
 
 const verdict = (v: InvestigationVerdict, confidence: number): VerdictResult => ({
   verdict: v,

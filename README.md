@@ -41,7 +41,7 @@ keeps the thesis components together at one top level.
 ### `packages/common` — Shared Types
 - TypeScript types, DTOs, entities, Zod validation schemas
 - Shared heuristic judge + leak analysis + report renderers
-- Shared across all apps via `@mcpvul/common`
+- Shared across all apps via `@cleak/common`
 
 ### `proto/` — gRPC service definitions
 - Shared .proto files for inter-service communication

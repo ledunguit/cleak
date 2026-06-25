@@ -1,13 +1,36 @@
-# leak-inspector-tui
+# cleak
 
-An agentic terminal investigator for C/C++ memory leaks. It drives the project's
-static/dynamic analysis MCP servers with a native tool-calling loop — the model
-decides which analyses to run on each allocation candidate, gathers evidence, and
-records a verdict — then renders the same report formats the control plane does,
-so its outputs are directly comparable for thesis experiments.
+An agentic terminal investigator for C/C++ memory leaks. It drives static/dynamic
+analysis MCP servers with a native tool-calling loop — the model decides which
+analyses to run on each allocation candidate, gathers evidence, and records a
+verdict — then renders JSON / Markdown / HTML / snapshot reports. One binary, two
+surfaces (interactive TUI + headless batch), reproducible artifacts per scan.
 
-It is a lighter, experiment-friendly alternative to the web UI: one binary, two
-surfaces (interactive TUI + headless batch), and reproducible artifacts per scan.
+## Install
+
+```bash
+npm i -g cleak          # or: bun add -g cleak  ·  pnpm add -g cleak
+```
+
+Then:
+
+```bash
+cleak tui                                        # interactive terminal UI
+cleak scan --repo <path> --mode llm_assisted     # headless scan → results/<scanId>/
+cleak tools                                      # check analyzer MCP connectivity
+cleak eval --corpus <path>                       # batch-evaluate a labeled corpus
+```
+
+`cleak` needs the two analyzer MCP servers reachable (default `localhost:50061` /
+`50062`) — start them with `docker compose up` from the repo, or point at remote
+ones via `--static-url` / `--dynamic-url`. The LLM key/provider is read from
+`<cwd>/.env` or env vars (`LLM_PROVIDER`, `LOCAL_LLM_API_KEY` / `OPENAI_API_KEY` / …).
+
+### From source (this monorepo)
+
+```bash
+bun run cleak:install     # build the self-contained bundle + npm i -g it
+```
 
 ## Architecture
 
@@ -25,8 +48,8 @@ apps/leak-inspector-tui
   surfaces/headless.ts      batch runner → results/<scanId>/ + JSONL event log
   surfaces/tui/             Ink UI (timeline, tool cards, spinner, permission overlay)
 
-packages/common/analysis    shared (with the control plane) report renderers + heuristic
-                            analysis + heuristic judge → byte-identical verdicts/snapshots
+packages/common/analysis    shared report renderers + heuristic analysis + heuristic
+                            judge + consensus judge (the leak-vs-clean decision boundary)
 ```
 
 ### HYBRID orchestration

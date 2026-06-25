@@ -5,8 +5,8 @@
  * CandidateManager so both produce the same bundle ids and dedup behaviour.
  */
 
-import type { LeakBundle, LeakCandidate, LeakEvidence } from '@mcpvul/common/types';
-import { FindingStatus } from '@mcpvul/common/types';
+import type { LeakBundle, LeakCandidate, LeakEvidence } from '@cleak/common/types';
+import { FindingStatus } from '@cleak/common/types';
 
 export class CandidateManager {
   private bundles = new Map<string, LeakBundle>();

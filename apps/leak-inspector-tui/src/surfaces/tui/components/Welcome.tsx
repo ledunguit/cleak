@@ -1,8 +1,8 @@
 import { Box, Text } from 'ink';
 import { color, glyph } from '../theme';
-import { renderBanner } from '../logo';
+import { CLEAK_LOGO } from '../logo';
 
-const BANNER = renderBanner('LEAK INVESTIGATOR');
+const BANNER = CLEAK_LOGO;
 
 export interface WelcomeProps {
   provider: string;

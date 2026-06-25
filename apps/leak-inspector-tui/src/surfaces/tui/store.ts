@@ -5,14 +5,14 @@
  * the React/Ink components render.
  */
 
-import type { AgentEvent } from '@mcpvul/agent-core';
+import type { AgentEvent } from '@cleak/agent-core';
 import {
   SCAN_PHASE_ORDER,
   ScanPhase,
   EVENT_KIND,
   EVENT_PHASE,
   type ScanEventName,
-} from '@mcpvul/common/flow/scan-flow-contract';
+} from '@cleak/common/flow/scan-flow-contract';
 import type { ScanEvent } from '../../orchestrator/events';
 import type { AgentMeta } from '../../orchestrator/investigation';
 import { toolSource, type ToolSource } from '../../domain/mcpToolPlan';

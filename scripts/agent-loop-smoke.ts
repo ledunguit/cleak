@@ -14,7 +14,7 @@ import {
   type CallModel,
   type NormalizedResponse,
   type Tool,
-} from '@mcpvul/agent-core';
+} from '@cleak/agent-core';
 
 let seq = 0;
 const uuid = () => `id-${++seq}`;

@@ -5,9 +5,9 @@
  */
 
 import { isAbsolute, resolve } from 'node:path';
-import type { Tool } from '@mcpvul/agent-core';
+import type { Tool } from '@cleak/agent-core';
 import type { RunConfig } from '../config';
-import type { ProviderSettings } from '@mcpvul/agent-core';
+import type { ProviderSettings } from '@cleak/agent-core';
 import { readFileSafe } from '../domain/fileWalk';
 
 /**

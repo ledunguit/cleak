@@ -9,7 +9,7 @@
  *   DYNAMIC_ANALYZER_MCP_URL=http://127.0.0.1:50072/mcp bun scripts/mcp-contract-test.ts
  */
 
-import { McpClient } from '@mcpvul/agent-core';
+import { McpClient } from '@cleak/agent-core';
 import { STATIC_TOOL_NAMES, DYNAMIC_TOOL_NAMES } from '../apps/leak-inspector-tui/src/domain/mcpToolPlan';
 
 const STATIC_URL = process.env.STATIC_ANALYZER_MCP_URL ?? 'http://127.0.0.1:50071/mcp';

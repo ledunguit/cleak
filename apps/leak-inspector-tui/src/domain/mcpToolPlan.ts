@@ -7,8 +7,8 @@
  * a ScanPhase for event tagging on the timeline.
  */
 
-import { ScanPhase } from '@mcpvul/common/flow/scan-flow-contract';
-import type { McpToolFlags } from '@mcpvul/agent-core';
+import { ScanPhase } from '@cleak/common/flow/scan-flow-contract';
+import type { McpToolFlags } from '@cleak/agent-core';
 
 /** Tools that are fast, pure, side-effect-free → safe to batch concurrently. */
 const CONCURRENCY_SAFE = new Set<string>([

@@ -11,7 +11,7 @@
     "test": "echo 'no tests'"
   },
   "dependencies": {
-    "@mcpvul/common": "workspace:*",
+    "@cleak/common": "workspace:*",
     "dotenv": "^16.4.7"
   }
 }

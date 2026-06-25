@@ -6,7 +6,7 @@ import { formatDuration } from './theme';
 import { loadPreferences, savePreferences, DEFAULT_PREFERENCES } from './preferences';
 import { TuiStore, visibleFindings } from './store';
 import type { FindingView } from './findings/findingView';
-import type { AgentEvent } from '@mcpvul/agent-core';
+import type { AgentEvent } from '@cleak/agent-core';
 
 describe('formatDuration', () => {
   test('seconds under a minute', () => {

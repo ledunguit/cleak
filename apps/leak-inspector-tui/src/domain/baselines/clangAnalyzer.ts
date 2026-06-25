@@ -15,7 +15,7 @@
 import { spawnSync } from 'node:child_process';
 import { readdirSync } from 'node:fs';
 import { basename, join } from 'node:path';
-import { findEnclosingFunction } from '@mcpvul/common/analysis/heuristic-leak-analysis';
+import { findEnclosingFunction } from '@cleak/common/analysis/heuristic-leak-analysis';
 import type { BaselineAdapter } from './adapter';
 import type { SnapshotFinding, LabeledCase } from '../evalScoring';
 import { readFileSafe } from '../fileWalk';

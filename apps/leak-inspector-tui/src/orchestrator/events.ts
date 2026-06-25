@@ -4,7 +4,7 @@
  * all speak the same vocabulary as the rest of the system.
  */
 
-import { ScanEventName, type ScanPhase, phaseForEvent } from '@mcpvul/common/flow/scan-flow-contract';
+import { ScanEventName, type ScanPhase, phaseForEvent } from '@cleak/common/flow/scan-flow-contract';
 import { appendFileSync } from 'node:fs';
 
 export interface ScanEvent {

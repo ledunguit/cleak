@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { groupByFileAffinity } from './workflowInvestigation';
-import type { LeakBundle } from '@mcpvul/common/types';
+import type { LeakBundle } from '@cleak/common/types';
 
 const b = (id: string, file: string): LeakBundle =>
   ({ bundleId: id, candidate: { file_path: file, function_name: 'f', line_number: 1 } } as any);

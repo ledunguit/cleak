@@ -4,11 +4,14 @@
     "build": {
       "dependsOn": ["^build"],
       "outputs": ["dist/**"],
-      "inputs": ["src/**", "tsconfig*.json"]
+      "inputs": ["src/**", "tsconfig*.json", "tsup.config.ts"]
     },
     "dev": {
       "cache": false,
       "persistent": true
+    },
+    "typecheck": {
+      "outputs": []
     },
     "lint": {
       "outputs": []

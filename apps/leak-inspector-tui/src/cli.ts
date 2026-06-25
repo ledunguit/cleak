@@ -1,6 +1,7 @@
-#!/usr/bin/env bun
 /**
- * leak-tui — an agentic terminal investigator for C/C++ memory leaks.
+ * cleak — an agentic terminal investigator for C/C++ memory leaks.
+ * (The executable shebang is injected by tsup at build time; `bun src/cli.ts`
+ * is used for local dev.)
  *
  * Commands:
  *   tools                 discover and list the analyzer MCP tools (connectivity check)
@@ -10,14 +11,14 @@
  */
 
 import { Command } from 'commander';
-import { McpClient, loadMcpTools } from '@mcpvul/agent-core';
+import { McpClient, loadMcpTools } from '@cleak/agent-core';
 import { loadConfig, type Provider } from './config';
 import { mcpToolFlags, phaseForMcpTool } from './domain/mcpToolPlan';
 
 const program = new Command();
 
 program
-  .name('leak-tui')
+  .name('cleak')
   .description('Agentic terminal investigator for C/C++ memory leaks')
   .version('0.1.0');
 

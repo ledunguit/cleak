@@ -4,7 +4,7 @@
  * (emitter) and the leak-inspector-ui (realtime workflow nodes).
  *
  * MUST stay pure TypeScript: no NestJS / TypeORM / Node imports, so the Vite UI
- * can bundle it via the @mcpvul/common alias.
+ * can bundle it via the @cleak/common alias.
  *
  * The NestJS backend runs a DYNAMIC agentic loop (discovery → investigation loop
  * → judging/reporting), not the original Python linear 10-phase pipeline. We map

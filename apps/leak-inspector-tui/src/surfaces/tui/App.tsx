@@ -577,7 +577,7 @@ function mostRecentScanId(resultsDir: string): string | undefined {
 
 /** Standalone connectivity check (the scan does its own, but this lets you verify before scanning). */
 async function doPreflight(store: TuiStore, staticUrl?: string, dynamicUrl?: string) {
-  const { McpClient } = await import('@mcpvul/agent-core');
+  const { McpClient } = await import('@cleak/agent-core');
   const { loadConfig } = await import('../../config');
   const cfg = loadConfig({
     ...(staticUrl ? { staticUrl } : {}),
@@ -630,7 +630,7 @@ function listScans(store: TuiStore, resultsDir: string) {
 }
 
 async function listTools(store: TuiStore, staticUrl?: string, dynamicUrl?: string) {
-  const { McpClient } = await import('@mcpvul/agent-core');
+  const { McpClient } = await import('@cleak/agent-core');
   const { loadConfig } = await import('../../config');
   const cfg = loadConfig({
     ...(staticUrl ? { staticUrl } : {}),
