@@ -71,6 +71,25 @@ Chạy thật trong dự án (analyzer Docker; Infer không cài → bỏ qua):
 hệ thống enumerate 77 site (gồm cả site sạch → đo được FP trên code sạch). Đây là corpus
 *dễ* nơi heuristic mạnh; xem [CONTRIBUTION.md §Bàn luận](CONTRIBUTION.md) cho threats-to-validity.
 
+## 5b. Chạy trên benchmark LAMeD (baseline peer-review, ca KHÓ)
+
+LAMeD (EASE'25) là baseline leak C/C++ peer-review duy nhất, và là **dự án thật**
+(curl/libtiff/cjson/…) — nơi giá trị của LLM/consensus + correlation siết kỳ vọng thể hiện
+(ngược với Juliet *dễ*). Lấy + ingest theo [DATASETS.md](DATASETS.md):
+
+```bash
+bun scripts/lamed/ingest.ts                 # clone 7 repo tại bug commit → demo/lamed/cases/
+bun scripts/evaluate-corpus.ts no_llm        --corpus demo/lamed   # → metrics.json
+bun scripts/evaluate-corpus.ts llm_assisted  --corpus demo/lamed --consensus-n 3
+```
+
+**Luật công bằng cho LAMeD = giống §3 (positive-only):** benchmark **không có nhãn sạch**
+(41 ca toàn leak đã xác nhận, mức *function*), nên **chỉ báo Recall + FP count + FP/KLOC**,
+**bỏ** specificity/MCC/accuracy (TN=0 theo cấu trúc — như clang/infer). 6/41 ca chỉ có nhãn
+mức-file (không scoreable ở function mode → báo rõ, không drop). So với LAMeD: họ báo P/R (no
+F1) và đếm bug/43 qua CodeQL/Cooddy/Infer — đối chiếu trên **Recall + số bug bắt được**, không
+phải F1. (Số liệu sẽ điền sau khi materialize + chạy; tooling đã sẵn.)
+
 ## 6. Các script đánh giá liên quan
 
 | Script | Mục đích | Lệnh |
