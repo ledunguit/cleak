@@ -1,0 +1,371 @@
+{
+  "libtiff_04118f8a42a1d6c5d0c0d50d9e0404927ada4417": {
+    "project": "libtiff",
+    "bug_repo_link": "https://github.com/libsdl-org/libtiff/tree/e924dd999f85489f2729755fd8b6ab5bae40493b",
+    "file": "tools/tiffmedian.c",
+    "target_function": "main; static void map_colortable(void)",
+    "commit": "https://github.com/libsdl-org/libtiff/tree/04118f8a42a1d6c5d0c0d50d9e0404927ada4417",
+    "fixed_repo_link": "https://github.com/libsdl-org/libtiff/tree/04118f8a42a1d6c5d0c0d50d9e0404927ada4417",
+    "id": "libtiff_04118f8a42a1d6c5d0c0d50d9e0404927ada4417"
+  },
+  "libtiff_462f1f475f86417bec5baf18a9edf008f33b6770": {
+    "project": "libtiff",
+    "bug_repo_link": "https://github.com/libsdl-org/libtiff/tree/f3d5c259a5139037b48977a1cee4dfb1357b0893",
+    "file": "libtiff/tif_fax3.c; tools/fax2ps.c; tools/fax2tiff.c",
+    "target_function": "",
+    "commit": "https://github.com/libsdl-org/libtiff/commit/462f1f475f86417bec5baf18a9edf008f33b6770",
+    "fixed_repo_link": "https://github.com/libsdl-org/libtiff/tree/462f1f475f86417bec5baf18a9edf008f33b6770",
+    "id": "libtiff_462f1f475f86417bec5baf18a9edf008f33b6770"
+  },
+  "libtiff_881a070194783561fd209b7c789a4e75566f7f37": {
+    "project": "libtiff",
+    "bug_repo_link": "https://github.com/libsdl-org/libtiff/tree/6bb0f1171adfcccde2cd7931e74317cccb7db845",
+    "file": "tools/tiffcrop.c",
+    "target_function": "static int createCroppedImage",
+    "commit": "https://github.com/libsdl-org/libtiff/commit/881a070194783561fd209b7c789a4e75566f7f37",
+    "fixed_repo_link": "https://github.com/libsdl-org/libtiff/tree/881a070194783561fd209b7c789a4e75566f7f37",
+    "id": "libtiff_881a070194783561fd209b7c789a4e75566f7f37"
+  },
+  "libtiff_376916d25f39bab69a3ed16963fd3f186870942c": {
+    "project": "libtiff",
+    "bug_repo_link": "https://github.com/libsdl-org/libtiff/tree/0c74f424b1c0e6451d2a5c83428ade77674de046",
+    "file": "libtiff/tif_dir.c",
+    "target_function": "int TIFFCreateDirectory(TIFF *tif)",
+    "commit": "https://github.com/libsdl-org/libtiff/commit/376916d25f39bab69a3ed16963fd3f186870942c",
+    "fixed_repo_link": "https://github.com/libsdl-org/libtiff/tree/376916d25f39bab69a3ed16963fd3f186870942c",
+    "id": "libtiff_376916d25f39bab69a3ed16963fd3f186870942c"
+  },
+  "libtiff_b6480e872abc920f0157f8fed354a966df581c2f": {
+    "project": "libtiff",
+    "bug_repo_link": "https://github.com/libsdl-org/libtiff/tree/e920f4fee37f556b4844a67712ad6a3d050ff654",
+    "file": "tools/tiffcp.c",
+    "target_function": "static TIFF* openSrcImage (char **imageSpec)",
+    "commit": "https://github.com/libsdl-org/libtiff/commit/b6480e872abc920f0157f8fed354a966df581c2f",
+    "fixed_repo_link": "https://github.com/libsdl-org/libtiff/tree/b6480e872abc920f0157f8fed354a966df581c2f",
+    "id": "libtiff_b6480e872abc920f0157f8fed354a966df581c2f"
+  },
+  "libtiff_0bb2247ec49cb48cd93db11d6b5e8efa638f4888": {
+    "project": "libtiff",
+    "bug_repo_link": "https://github.com/libsdl-org/libtiff/tree/5d039cf47c1f7c91be2f2932a15b1ba4a4cfdf9c",
+    "file": "tools/tiff2pdf.c",
+    "target_function": "tsize_t t2p_readwrite_pdf_image",
+    "commit": "https://github.com/libsdl-org/libtiff/commit/0bb2247ec49cb48cd93db11d6b5e8efa638f4888",
+    "fixed_repo_link": "https://github.com/libsdl-org/libtiff/tree/0bb2247ec49cb48cd93db11d6b5e8efa638f4888",
+    "id": "libtiff_0bb2247ec49cb48cd93db11d6b5e8efa638f4888"
+  },
+  "libsolv_1f29f76343ffbadd24ad9d376be61528948dda00": {
+    "project": "libsolv",
+    "bug_repo_link": "https://github.com/openSUSE/libsolv/tree/526a931e62b448cc4ee57c751d93e2e8f31d727e",
+    "file": "src/rules.c",
+    "target_function": "solver_disablechoicerules(Solver *solv; Rule *r)",
+    "commit": "https://github.com/openSUSE/libsolv/commit/1f29f76343ffbadd24ad9d376be61528948dda00",
+    "fixed_repo_link": "https://github.com/openSUSE/libsolv/tree/1f29f76343ffbadd24ad9d376be61528948dda00",
+    "id": "libsolv_1f29f76343ffbadd24ad9d376be61528948dda00"
+  },
+  "libsolv_71c6b26096086926f48d8fced1a03ca52a1eb745": {
+    "project": "libsolv",
+    "bug_repo_link": "https://github.com/openSUSE/libsolv/tree/35e172e9fb99594b49c630cb188dab9d2b2c4dc7",
+    "file": "ext/repo_deb.c; ext/testcase.c",
+    "target_function": "testcase_solverresult(Solver *solv; int resultflags); pool_deb_get_autoinstalled(Pool *pool; FILE *fp; Queue *q; int flags)",
+    "commit": "https://github.com/openSUSE/libsolv/commit/71c6b26096086926f48d8fced1a03ca52a1eb745",
+    "fixed_repo_link": "https://github.com/openSUSE/libsolv/tree/71c6b26096086926f48d8fced1a03ca52a1eb745",
+    "id": "libsolv_71c6b26096086926f48d8fced1a03ca52a1eb745"
+  },
+  "libsolv_9a361f5248557e032f15890aac54c0db53c52098": {
+    "project": "libsolv",
+    "bug_repo_link": "https://github.com/openSUSE/libsolv/tree/5e1ac6aaa91c6db34ff82ddc604a4c2483c3aaac",
+    "file": "ext/testcase.c",
+    "target_function": "testcase_read(Pool *pool; FILE *fp; const char *testcase; Queue *job; char **res",
+    "commit": "https://github.com/openSUSE/libsolv/commit/9a361f5248557e032f15890aac54c0db53c52098",
+    "fixed_repo_link": "https://github.com/openSUSE/libsolv/tree/9a361f5248557e032f15890aac54c0db53c52098",
+    "id": "libsolv_9a361f5248557e032f15890aac54c0db53c52098"
+  },
+  "libsolv_98a75959e13699e2ef35b0b011a88a6d224f227e": {
+    "project": "libsolv",
+    "bug_repo_link": "https://github.com/openSUSE/libsolv/tree/8e1dba061d7962441f7e06b9a94d0ff24b158c6a",
+    "file": "ext/repo_rpmdb.c; ext/testcase.c; tools/repo2solv.c",
+    "target_function": "",
+    "commit": "https://github.com/openSUSE/libsolv/commit/98a75959e13699e2ef35b0b011a88a6d224f227e",
+    "fixed_repo_link": "https://github.com/openSUSE/libsolv/tree/98a75959e13699e2ef35b0b011a88a6d224f227e",
+    "id": "libsolv_98a75959e13699e2ef35b0b011a88a6d224f227e"
+  },
+  "libsolv_062c0f3c8c2b1348bd22973258048b5a0687024a": {
+    "project": "libsolv",
+    "bug_repo_link": "https://github.com/openSUSE/libsolv/tree/062c0f3c8c2b1348bd22973258048b5a0687024a",
+    "file": "src/conda.c",
+    "target_function": "",
+    "commit": "https://github.com/openSUSE/libsolv/commit/062c0f3c8c2b1348bd22973258048b5a0687024a",
+    "fixed_repo_link": "https://github.com/openSUSE/libsolv/tree/062c0f3c8c2b1348bd22973258048b5a0687024a",
+    "id": "libsolv_062c0f3c8c2b1348bd22973258048b5a0687024a"
+  },
+  "cjson_f50dafc7d0bfd4f45449ab5665bfea831a82f2eb": {
+    "project": "cjson",
+    "bug_repo_link": "https://github.com/DaveGamble/cJSON/tree/d348621ca93571343a56862df7de4ff3bc9b5667",
+    "file": "cJSON_Utils.c",
+    "target_function": "static cJSON *merge_patch(cJSON *target; const cJSON * const patch; const cJSON_",
+    "commit": "https://github.com/DaveGamble/cJSON/commit/f50dafc7d0bfd4f45449ab5665bfea831a82f2eb",
+    "fixed_repo_link": "https://github.com/DaveGamble/cJSON/tree/f50dafc7d0bfd4f45449ab5665bfea831a82f2eb",
+    "id": "cjson_f50dafc7d0bfd4f45449ab5665bfea831a82f2eb"
+  },
+  "cjson_500a9db81bca54027ce8de2ce42b48fa89782e78": {
+    "project": "cjson",
+    "bug_repo_link": "https://github.com/DaveGamble/cJSON/tree/95368da1a13c1ced5507bb5b0a457729af34837c",
+    "file": "cJSON_Utils.c",
+    "target_function": "CJSON_PUBLIC(char *) cJSONUtils_FindPointerFromObjectTo(const cJSON * const obje",
+    "commit": "https://github.com/DaveGamble/cJSON/commit/500a9db81bca54027ce8de2ce42b48fa89782e78",
+    "fixed_repo_link": "https://github.com/DaveGamble/cJSON/tree/500a9db81bca54027ce8de2ce42b48fa89782e78",
+    "id": "cjson_500a9db81bca54027ce8de2ce42b48fa89782e78"
+  },
+  "cjson_58bc383b28f281148a8c9918e758827ada450bfe": {
+    "project": "cjson",
+    "bug_repo_link": "https://github.com/DaveGamble/cJSON/tree/1a20eb8494b60ad5b6a388fb0f65a0c53b8362e7",
+    "file": "cJSON_Utils.c; test_utils.c",
+    "target_function": "",
+    "commit": "https://github.com/DaveGamble/cJSON/commit/58bc383b28f281148a8c9918e758827ada450bfe",
+    "fixed_repo_link": "https://github.com/DaveGamble/cJSON/tree/58bc383b28f281148a8c9918e758827ada450bfe",
+    "id": "cjson_58bc383b28f281148a8c9918e758827ada450bfe"
+  },
+  "cjson_5b4420298fa318534ff8271cfa82d913869b67e3": {
+    "project": "cjson",
+    "bug_repo_link": "https://github.com/DaveGamble/cJSON/tree/e1eb06fae0365d1bb05a3297befe50a0e7e2811a",
+    "file": "cJSON.c",
+    "target_function": "cJSON *cJSON_Duplicate(const cJSON *item; cjbool recurse)",
+    "commit": "https://github.com/DaveGamble/cJSON/commit/5b4420298fa318534ff8271cfa82d913869b67e3",
+    "fixed_repo_link": "https://github.com/DaveGamble/cJSON/tree/5b4420298fa318534ff8271cfa82d913869b67e3",
+    "id": "cjson_5b4420298fa318534ff8271cfa82d913869b67e3"
+  },
+  "cjson_0d10e279c8b604f71829b5d49d092719f4ae96b6": {
+    "project": "cjson",
+    "bug_repo_link": "https://github.com/DaveGamble/cJSON/tree/9e310491597151fcf783191fd5df05c363b09b50",
+    "file": "cJSON.c",
+    "target_function": "void cJSON_ReplaceItemInObject(cJSON *object; const char *string; cJSON *newitem",
+    "commit": "https://github.com/DaveGamble/cJSON/commit/0d10e279c8b604f71829b5d49d092719f4ae96b6",
+    "fixed_repo_link": "https://github.com/DaveGamble/cJSON/tree/0d10e279c8b604f71829b5d49d092719f4ae96b6",
+    "id": "cjson_0d10e279c8b604f71829b5d49d092719f4ae96b6"
+  },
+  "cjson_90ff72c8bbec3786816ca07d4cb8df7fb8a1c0de": {
+    "project": "cjson",
+    "bug_repo_link": "https://github.com/DaveGamble/cJSON/tree/e9d1de24cf69e046b683fc0ae24469231e5249c7",
+    "file": "cJSON.c",
+    "target_function": "static void suffix_object(cJSON *prev; cJSON *item)",
+    "commit": "https://github.com/DaveGamble/cJSON/commit/90ff72c8bbec3786816ca07d4cb8df7fb8a1c0de",
+    "fixed_repo_link": "https://github.com/DaveGamble/cJSON/tree/90ff72c8bbec3786816ca07d4cb8df7fb8a1c0de",
+    "id": "cjson_90ff72c8bbec3786816ca07d4cb8df7fb8a1c0de"
+  },
+  "curl_df1d08ec0daf06b0bf2fdebe2411631e08967a98": {
+    "project": "curl",
+    "bug_repo_link": "https://github.com/curl/curl/tree/017e6440ce22b4ce57a2e7d2eb3367ab4c8e5999",
+    "file": "lib/vtls/sectransp.c",
+    "target_function": "static CURLcode append_cert_to_array(struct Curl_easy *data;",
+    "commit": "https://github.com/curl/curl/commit/df1d08ec0daf06b0bf2fdebe2411631e08967a98",
+    "fixed_repo_link": "https://github.com/curl/curl/tree/df1d08ec0daf06b0bf2fdebe2411631e08967a98",
+    "id": "curl_df1d08ec0daf06b0bf2fdebe2411631e08967a98"
+  },
+  "curl_399ca56be5a66b783476a367a97b256dd5e4c71c": {
+    "project": "curl",
+    "bug_repo_link": "https://github.com/curl/curl/tree/f6da27052e72e7e3db7bf9754336aac1d42842a0",
+    "file": "lib/vquic/curl_ngtcp2.c",
+    "target_function": "static void cf_ngtcp2_ctx_init(struct cf_ngtcp2_ctx *ctx)",
+    "commit": "https://github.com/curl/curl/commit/399ca56be5a66b783476a367a97b256dd5e4c71c",
+    "fixed_repo_link": "https://github.com/curl/curl/tree/399ca56be5a66b783476a367a97b256dd5e4c71c",
+    "id": "curl_399ca56be5a66b783476a367a97b256dd5e4c71c"
+  },
+  "curl_e854166472cc6a32be0e9d486bf8cc76ce52fb61": {
+    "project": "curl",
+    "bug_repo_link": "https://github.com/curl/curl/tree/c61dd5fed23525726270044f3baae2e767d87bcf",
+    "file": "lib/c-hyper.c",
+    "target_function": "CURLcode Curl_http(struct Curl_easy *data; bool *done)",
+    "commit": "https://github.com/curl/curl/commit/e854166472cc6a32be0e9d486bf8cc76ce52fb61",
+    "fixed_repo_link": "https://github.com/curl/curl/tree/e854166472cc6a32be0e9d486bf8cc76ce52fb61",
+    "id": "curl_e854166472cc6a32be0e9d486bf8cc76ce52fb61"
+  },
+  "curl_139ecfb869f3ea115601d75aa1ba211aa6f13de4": {
+    "project": "curl",
+    "bug_repo_link": "https://github.com/curl/curl/tree/c17bf311f1f28f0c22e38af335fd20cb2f0ab3c6",
+    "file": "src/tool_operate.c",
+    "target_function": "static CURLcode transfer_per_config(struct GlobalConfig *global;",
+    "commit": "https://github.com/curl/curl/commit/139ecfb869f3ea115601d75aa1ba211aa6f13de4",
+    "fixed_repo_link": "https://github.com/curl/curl/tree/139ecfb869f3ea115601d75aa1ba211aa6f13de4",
+    "id": "curl_139ecfb869f3ea115601d75aa1ba211aa6f13de4"
+  },
+  "curl_c61dd5fed23525726270044f3baae2e767d87bcf": {
+    "project": "curl",
+    "bug_repo_link": "https://github.com/curl/curl/tree/7e371dc9944790f18c55e12c8797fb6ba012cfc3",
+    "file": "lib/c-hyper.c",
+    "target_function": "CURLcode Curl_http(struct Curl_easy *data; bool *done)",
+    "commit": "https://github.com/curl/curl/commit/c61dd5fed23525726270044f3baae2e767d87bcf",
+    "fixed_repo_link": "https://github.com/curl/curl/tree/c61dd5fed23525726270044f3baae2e767d87bcf",
+    "id": "curl_c61dd5fed23525726270044f3baae2e767d87bcf"
+  },
+  "curl_75b31ce6267e42416a5a27fd1cf4eea60c420cb7": {
+    "project": "curl",
+    "bug_repo_link": "https://github.com/curl/curl/tree/a40160aee83acae504fd4b30e39c28ff8dbab24c",
+    "file": "src/tool_operate.c",
+    "target_function": "static long url_proto(char *url)",
+    "commit": "https://github.com/curl/curl/commit/75b31ce6267e42416a5a27fd1cf4eea60c420cb7",
+    "fixed_repo_link": "https://github.com/curl/curl/tree/75b31ce6267e42416a5a27fd1cf4eea60c420cb7",
+    "id": "curl_75b31ce6267e42416a5a27fd1cf4eea60c420cb7"
+  },
+  "curl_f9d1b2501186800f83c254663f64e7d08daa5c15": {
+    "project": "curl",
+    "bug_repo_link": "https://github.com/curl/curl/tree/d9c61a9792cc4961dbc5258693843983b87ae485",
+    "file": "lib/mqtt.c",
+    "target_function": "static CURLcode mqtt_connect(struct Curl_easy *data)",
+    "commit": "https://github.com/curl/curl/commit/f9d1b2501186800f83c254663f64e7d08daa5c15",
+    "fixed_repo_link": "https://github.com/curl/curl/tree/f9d1b2501186800f83c254663f64e7d08daa5c15",
+    "id": "curl_f9d1b2501186800f83c254663f64e7d08daa5c15"
+  },
+  "curl_e87ad71d1ba00519bc96dd67b9621911aefcdb84": {
+    "project": "curl",
+    "bug_repo_link": "https://github.com/curl/curl/tree/70c4fad73420d34e15234408ce26f59f04d99b3b",
+    "file": "lib/vtls/schannel_verify.c",
+    "target_function": " static CURLcode verify_host(struct Curl_easy *data;",
+    "commit": "https://github.com/curl/curl/commit/e87ad71d1ba00519bc96dd67b9621911aefcdb84",
+    "fixed_repo_link": "https://github.com/curl/curl/tree/e87ad71d1ba00519bc96dd67b9621911aefcdb84",
+    "id": "curl_e87ad71d1ba00519bc96dd67b9621911aefcdb84"
+  },
+  "curl_acf91ff75ea5bcca39c8c1be709d5a712ebb6d64": {
+    "project": "curl",
+    "bug_repo_link": "https://github.com/curl/curl/tree/19291f7fb4cf9810208ac5cd2ae3d3705c273f64",
+    "file": "lib/version.c",
+    "target_function": "char *curl_version(void)",
+    "commit": "https://github.com/curl/curl/commit/acf91ff75ea5bcca39c8c1be709d5a712ebb6d64",
+    "fixed_repo_link": "https://github.com/curl/curl/tree/acf91ff75ea5bcca39c8c1be709d5a712ebb6d64",
+    "id": "curl_acf91ff75ea5bcca39c8c1be709d5a712ebb6d64"
+  },
+  "curl_8bcb23593eac83501b6fa5b2bcae18ce011103c7": {
+    "project": "curl",
+    "bug_repo_link": "https://github.com/curl/curl/tree/95d30409becbcc45bba2488fdc9cceef9b32a2a5",
+    "file": "lib/vtls/gtls.c",
+    "target_function": "gtls_connect_step3(struct connectdata *conn;",
+    "commit": "https://github.com/curl/curl/commit/8bcb23593eac83501b6fa5b2bcae18ce011103c7",
+    "fixed_repo_link": "https://github.com/curl/curl/tree/8bcb23593eac83501b6fa5b2bcae18ce011103c7",
+    "id": "curl_8bcb23593eac83501b6fa5b2bcae18ce011103c7"
+  },
+  "curl_95d30409becbcc45bba2488fdc9cceef9b32a2a5": {
+    "project": "curl",
+    "bug_repo_link": "https://github.com/curl/curl/tree/6da7a7e5ce9a54ee577403b1f38ed80c0c527988",
+    "file": "tests/libtest/lib1523.c; tests/libtest/lib1911.c; tests/unit/unit1654.c",
+    "target_function": "",
+    "commit": "https://github.com/curl/curl/commit/95d30409becbcc45bba2488fdc9cceef9b32a2a5",
+    "fixed_repo_link": "https://github.com/curl/curl/tree/95d30409becbcc45bba2488fdc9cceef9b32a2a5",
+    "id": "curl_95d30409becbcc45bba2488fdc9cceef9b32a2a5"
+  },
+  "curl_378e331e92ab0db0fb64891a46b1da18121b01a4": {
+    "project": "curl",
+    "bug_repo_link": "https://github.com/curl/curl/tree/797bacf9c5a39f68d337d13f488407eeb507a9fc",
+    "file": "lib/asyn-ares.c",
+    "target_function": "static void addrinfo_cb(void *arg; int status; int timeouts;",
+    "commit": "https://github.com/curl/curl/commit/378e331e92ab0db0fb64891a46b1da18121b01a4",
+    "fixed_repo_link": "https://github.com/curl/curl/tree/378e331e92ab0db0fb64891a46b1da18121b01a4",
+    "id": "curl_378e331e92ab0db0fb64891a46b1da18121b01a4"
+  },
+  "curl_4967109ffc7380278099d48c3bf78a2468978d98": {
+    "project": "curl",
+    "bug_repo_link": "https://github.com/curl/curl/tree/a68aa81320aca4d376fe2a43ee8c76a6eb6b8f01",
+    "file": "lib/ldap.c",
+    "target_function": "static CURLcode Curl_ldap(struct connectdata *conn; bool *done)",
+    "commit": "https://github.com/curl/curl/commit/4967109ffc7380278099d48c3bf78a2468978d98",
+    "fixed_repo_link": "https://github.com/curl/curl/tree/4967109ffc7380278099d48c3bf78a2468978d98",
+    "id": "curl_4967109ffc7380278099d48c3bf78a2468978d98"
+  },
+  "curl_650281ed5ba335d16a932ccba53665551197880f": {
+    "project": "curl",
+    "bug_repo_link": "https://github.com/curl/curl/tree/8e2549b86c4022cdad272c265a66c88f06fc3560",
+    "file": "src/tool_getparam.c",
+    "target_function": "ParameterError getparameter(const char *flag; /* f or -long-flag */",
+    "commit": "https://github.com/curl/curl/commit/650281ed5ba335d16a932ccba53665551197880f",
+    "fixed_repo_link": "https://github.com/curl/curl/tree/650281ed5ba335d16a932ccba53665551197880f",
+    "id": "curl_650281ed5ba335d16a932ccba53665551197880f"
+  },
+  "curl_650036633ffdc95c8c2181ce85582bbf3939582e": {
+    "project": "curl",
+    "bug_repo_link": "https://github.com/curl/curl/tree/78aee26be61a3375dba40583c1233f39e941c803",
+    "file": "lib/curl_sasl.c",
+    "target_function": "CURLcode Curl_sasl_create_xoauth2_message(struct SessionHandle *data;",
+    "commit": "https://github.com/curl/curl/commit/650036633ffdc95c8c2181ce85582bbf3939582e",
+    "fixed_repo_link": "https://github.com/curl/curl/tree/650036633ffdc95c8c2181ce85582bbf3939582e",
+    "id": "curl_650036633ffdc95c8c2181ce85582bbf3939582e"
+  },
+  "libssh2_3ac32253f98a66e7e55f5657bfe259d286e33edc": {
+    "project": "libssh2",
+    "bug_repo_link": "https://github.com/libssh2/libssh2/tree/c45ba4d62402038b278b6231effbd9f732a7bc39",
+    "file": "src/wincng.c",
+    "target_function": "_libssh2_dh_key_pair(_libssh2_dh_ctx *dhctx; _libssh2_bn *public;",
+    "commit": "https://github.com/libssh2/libssh2/commit/3ac32253f98a66e7e55f5657bfe259d286e33edc",
+    "fixed_repo_link": "https://github.com/libssh2/libssh2/tree/3ac32253f98a66e7e55f5657bfe259d286e33edc",
+    "id": "libssh2_3ac32253f98a66e7e55f5657bfe259d286e33edc"
+  },
+  "libssh2_8abc686f0e97c6739e0ce6d6bcb1a1ce028af1bd": {
+    "project": "libssh2",
+    "bug_repo_link": "https://github.com/libssh2/libssh2/tree/498a5f5b3fb78cf1daaec5d01c9b93b18cc00c39",
+    "file": "src/mbedtls.h",
+    "target_function": "",
+    "commit": "https://github.com/libssh2/libssh2/commit/8abc686f0e97c6739e0ce6d6bcb1a1ce028af1bd",
+    "fixed_repo_link": "https://github.com/libssh2/libssh2/tree/8abc686f0e97c6739e0ce6d6bcb1a1ce028af1bd",
+    "id": "libssh2_8abc686f0e97c6739e0ce6d6bcb1a1ce028af1bd"
+  },
+  "libssh2_d0ffeba72e7100ea5af8a099660e90e74a4f1619": {
+    "project": "libssh2",
+    "bug_repo_link": "https://github.com/libssh2/libssh2/tree/9bf32da607c7df47f51f7eb1debc59bd63dbf89a",
+    "file": "src/wincng.c",
+    "target_function": "_libssh2_wincng_hash(unsigned char *data; unsigned long datalen;",
+    "commit": "https://github.com/libssh2/libssh2/commit/d0ffeba72e7100ea5af8a099660e90e74a4f1619",
+    "fixed_repo_link": "https://github.com/libssh2/libssh2/tree/d0ffeba72e7100ea5af8a099660e90e74a4f1619",
+    "id": "libssh2_d0ffeba72e7100ea5af8a099660e90e74a4f1619"
+  },
+  "rabbitmq-c_cb04afb806447d509e7722776e8533c5069571a3": {
+    "project": "rabbitmq-c",
+    "bug_repo_link": "https://github.com/alanxz/rabbitmq-c/tree/c3550e7accda82a55f7c142284de65f117b30977",
+    "file": "fuzz/fuzz_table.c",
+    "target_function": "extern int LLVMFuzzerTestOneInput(const char *data; size_t size) {",
+    "commit": "https://github.com/alanxz/rabbitmq-c/commit/cb04afb806447d509e7722776e8533c5069571a3",
+    "fixed_repo_link": "https://github.com/alanxz/rabbitmq-c/tree/cb04afb806447d509e7722776e8533c5069571a3",
+    "id": "rabbitmq-c_cb04afb806447d509e7722776e8533c5069571a3"
+  },
+  "rabbitmq-c_effe284fbfd9c88eb05c6b939051bb2f56c001e6": {
+    "project": "rabbitmq-c",
+    "bug_repo_link": "https://github.com/alanxz/rabbitmq-c/tree/3cde0bb1afa3315227890324dd62d5d6c5376be2",
+    "file": "examples/amqp_consumer.c; examples/amqp_listen.c",
+    "target_function": "int main(int argc; char const *const *argv) {",
+    "commit": "https://github.com/alanxz/rabbitmq-c/commit/effe284fbfd9c88eb05c6b939051bb2f56c001e6",
+    "fixed_repo_link": "https://github.com/alanxz/rabbitmq-c/tree/effe284fbfd9c88eb05c6b939051bb2f56c001e6",
+    "id": "rabbitmq-c_effe284fbfd9c88eb05c6b939051bb2f56c001e6"
+  },
+  "libxml2_d39e5714b0481204a16f2a904913cc6dc568ff1c": {
+    "project": "libxml2",
+    "bug_repo_link": "https://github.com/GNOME/libxml2/tree/0f4d36e0551cd9261dc7eaddb748e08c7e65f11a",
+    "file": "xmllint.c",
+    "target_function": "static void doXPathQuery(xmlDocPtr doc; const char *query) {",
+    "commit": "https://github.com/GNOME/libxml2/commit/d39e5714b0481204a16f2a904913cc6dc568ff1c",
+    "fixed_repo_link": "https://github.com/GNOME/libxml2/tree/d39e5714b0481204a16f2a904913cc6dc568ff1c",
+    "id": "libxml2_d39e5714b0481204a16f2a904913cc6dc568ff1c"
+  },
+  "libxml2_36ea881b9d92166568b1d107181a05f673fd4ab1": {
+    "project": "libxml2",
+    "bug_repo_link": "https://github.com/GNOME/libxml2/tree/02fcb1effbd97cdb8aead18690a2d880f66ff312",
+    "file": "xmlIO.c",
+    "target_function": "__xmlOutputBufferCreateFilename(const char *URI;",
+    "commit": "https://github.com/GNOME/libxml2/commit/36ea881b9d92166568b1d107181a05f673fd4ab1",
+    "fixed_repo_link": "https://github.com/GNOME/libxml2/tree/36ea881b9d92166568b1d107181a05f673fd4ab1",
+    "id": "libxml2_36ea881b9d92166568b1d107181a05f673fd4ab1"
+  },
+  "libxml2_d2755cdb6fe288782257dd82fe007d484a4df9f4": {
+    "project": "libxml2",
+    "bug_repo_link": "https://github.com/GNOME/libxml2/tree/322e733b84a1bdea0aa49799bfbb126a61c7afe7",
+    "file": "buf.c",
+    "target_function": "xmlBufFromBuffer(xmlBufferPtr buffer) {",
+    "commit": "https://github.com/GNOME/libxml2/commit/d2755cdb6fe288782257dd82fe007d484a4df9f4",
+    "fixed_repo_link": "https://github.com/GNOME/libxml2/tree/d2755cdb6fe288782257dd82fe007d484a4df9f4",
+    "id": "libxml2_d2755cdb6fe288782257dd82fe007d484a4df9f4"
+  },
+  "libxml2_fee0006a06e6e044974e9ec09ebeaaa8bcad4390": {
+    "project": "libxml2",
+    "bug_repo_link": "https://github.com/GNOME/libxml2/tree/69f12d6d476fc542744613e86a97f82be9ca5599",
+    "file": "parser.c",
+    "target_function": "xmlIOParseDTD(xmlSAXHandlerPtr sax; xmlParserInputBufferPtr input;",
+    "commit": "https://github.com/GNOME/libxml2/commit/fee0006a06e6e044974e9ec09ebeaaa8bcad4390",
+    "fixed_repo_link": "https://github.com/GNOME/libxml2/tree/fee0006a06e6e044974e9ec09ebeaaa8bcad4390",
+    "id": "libxml2_fee0006a06e6e044974e9ec09ebeaaa8bcad4390"
+  }
+}

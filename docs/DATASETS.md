@@ -43,6 +43,37 @@ bun scripts/real-projects/ingest.ts \
 **is committed**; clones + materialized cases are git-ignored. See [EVALUATION.md](EVALUATION.md)
 §2 for function-mode vs line-mode scoring.
 
+## LAMeD benchmark (peer-reviewed external baseline)
+
+LAMeD (EASE 2025) is the only peer-reviewed C/C++ leak benchmark. Its released
+artifact (Zenodo **10.5281/zenodo.15089703**, BSD-3) ships `memleak_benchmark.json`
+— **41 developer-confirmed leaks** across 7 C projects (curl, libtiff, cjson,
+libsolv, libxml2, libssh2, rabbitmq-c), **positive-only and function-level** (no
+line numbers, no negative labels). The source JSON + the cJSON annotation CSV are
+**committed** under `demo/lamed/`; the v2 manifest + cloned/materialized sources
+are git-ignored (regenerable).
+
+```bash
+# 1. Manifest only (fast, no network) — inspect the 41-case → 43-flaw mapping
+bun scripts/lamed/ingest.ts --manifest-only
+
+# 2. Full materialize — clone each project at its bug commit into demo/lamed/cases/
+bun scripts/lamed/ingest.ts            # needs network + git; ~7 repos
+
+# 3. Evaluate (positive-only → report RECALL + FP count, NOT specificity/MCC)
+bun scripts/evaluate-corpus.ts no_llm  --corpus demo/lamed
+bun scripts/evaluate-corpus.ts llm_assisted --corpus demo/lamed --consensus-n 3
+```
+
+The ingest handles LAMeD's quirks: `target_function` overloads `;` as **both** a
+parameter separator (inside the signature) and a multi-function separator, and
+truncates mid-signature with ALL-CAPS return-type macros — so names are extracted
+with a paren-depth-aware split + macro skip. 6 entries have an empty
+`target_function` (file-level only → unscoreable in function mode; reported, not
+dropped). Fairness: LAMeD has no clean labels, so compare on **recall + FP/KLOC**,
+the same rule as the other positive-only baselines (see
+[BASELINE-COMPARISON.md](BASELINE-COMPARISON.md)).
+
 ## Demo memory-leak corpus (legacy, hand-labeled)
 
 `demo/memory_leak_corpus/` holds the hand-labeled cases (sources + per-case

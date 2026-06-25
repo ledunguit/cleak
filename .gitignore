@@ -52,6 +52,12 @@ dist/
 /demo/real_projects/.clones/
 /demo/real_projects/corpus_manifest.json
 
+# LAMeD benchmark corpus: regenerable via scripts/lamed/ingest.ts; only the
+# committed source (memleak_benchmark.json + cJSON-annotated.csv) is tracked.
+/demo/lamed/cases/
+/demo/lamed/.clones/
+/demo/lamed/corpus_manifest.json
+
 # Compiled demo-corpus binaries (rebuild from source via each case's Makefile)
 /demo/memory_leak_corpus/*/array_leak
 /demo/memory_leak_corpus/*/array_leak_*
