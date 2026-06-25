@@ -89,6 +89,45 @@ describe('reconcileDynamicEvidence', () => {
   });
 });
 
+describe('findingToEvidence — MCP finding-shape tolerance (via reconcile)', () => {
+  // MCP analyzers return findings in several shapes (camelCase, snake_case, nested
+  // `location`, byte counts under `aux.leak`). Lock the field extraction so a shape
+  // drift surfaces as a failing test instead of silently zeroing a field.
+  const reconcileOne = (finding: any) => {
+    const b = bundle({ file: 'a.c', line: 10, fn: 'bad' });
+    reconcileDynamicEvidence({ runs: [{ tool: 'lsan', runId: 'r', success: true, findings: [finding] }] }, [b], idResolver);
+    return b.evidence[0];
+  };
+
+  test('snake_case fields are read + correlated', () => {
+    const e = reconcileOne({ function_name: 'bad', file_path: 'a.c', line_number: 10, bytes_lost: 50, blocks_lost: 2, allocation_type: 'definitely_lost' });
+    expect(e).toBeDefined();
+    expect(e.file_path).toBe('a.c');
+    expect(e.line_number).toBe(10);
+    expect(e.bytes_lost).toBe(50);
+    expect(e.correlatedToCandidate).toBe(true);
+  });
+
+  test('nested location.{file,line,function} is read', () => {
+    const e = reconcileOne({ location: { file: 'a.c', line: 10, function: 'bad' }, kind: 'definitely_lost', bytesLost: 8 });
+    expect(e).toBeDefined();
+    expect(e.line_number).toBe(10);
+    expect(e.bytes_lost).toBe(8);
+    expect(e.correlatedToCandidate).toBe(true);
+  });
+
+  test('byte counts recovered from aux.leak when no top-level field', () => {
+    const e = reconcileOne({ filePath: 'a.c', lineNumber: 10, functionName: 'bad', kind: 'definitely_lost', aux: { leak: { bytes: 256, blocks: 3 } } });
+    expect(e.bytes_lost).toBe(256);
+    expect(e.blocks_lost).toBe(3);
+  });
+
+  test('a stack[] array is rendered into the stack_trace string', () => {
+    const e = reconcileOne({ functionName: 'bad', filePath: 'a.c', lineNumber: 10, kind: 'definitely_lost', stack: [{ function: 'malloc', file: 'libc', line: 0 }, { function: 'bad', file: 'a.c', line: 10 }] });
+    expect(e.stack_trace).toContain('bad at a.c:10');
+  });
+});
+
 describe('computeDynamicCoverage', () => {
   test('dynamic disabled → dynamic_off', () => {
     expect(computeDynamicCoverage(createDynamicRunStore(), bundle(), false)).toBe('dynamic_off');
