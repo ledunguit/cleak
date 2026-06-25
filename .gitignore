@@ -32,11 +32,11 @@ temp/
 
 # Build outputs and caches
 /dist/
+dist/
+*.tsbuildinfo
 /output/
 /coverage/
-/apps/leak-inspector-ui/dist/
 /.turbo/
-/apps/leak-inspector-ui/node_modules/
 
 # Scan/eval outputs (generated) anywhere in the tree
 **/results/

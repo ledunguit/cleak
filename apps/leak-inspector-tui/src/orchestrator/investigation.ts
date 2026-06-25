@@ -5,8 +5,8 @@
  * controller stays decoupled and discovery/judging can run without it.
  */
 
-import type { AgentEvent, McpClient } from '@mcpvul/agent-core';
-import type { AgentDecision } from '@mcpvul/common/types';
+import type { AgentEvent, McpClient } from '@cleak/agent-core';
+import type { AgentDecision } from '@cleak/common/types';
 import type { ScanEmitter } from './events';
 import type { PathResolver } from '../domain/pathResolver';
 import type { CandidateManager } from '../domain/candidateState';

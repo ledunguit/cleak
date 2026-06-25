@@ -14,16 +14,16 @@
  * `evidence.length`.
  */
 
-import type { Tool } from '@mcpvul/agent-core';
+import type { Tool } from '@cleak/agent-core';
 import {
   correlateEvidence,
   correlationRank,
   deriveDynamicFields,
   computeEvidenceSignature,
   isCorrelated,
-} from '@mcpvul/common/analysis/dynamic-evidence';
-import { evidenceIndicatesLeak } from '@mcpvul/common/analysis/judge-shared';
-import { ToolKind, type DynamicCoverage, type LeakBundle, type LeakEvidence } from '@mcpvul/common/types';
+} from '@cleak/common/analysis/dynamic-evidence';
+import { evidenceIndicatesLeak } from '@cleak/common/analysis/judge-shared';
+import { ToolKind, type DynamicCoverage, type LeakBundle, type LeakEvidence } from '@cleak/common/types';
 import type { PathResolver } from './pathResolver';
 
 /** Which sanitizer produced a run (derived from the MCP tool NAME, not the LLM). */

@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { FeasibleLeakPath } from '@mcpvul/common';
+import { FeasibleLeakPath } from '@cleak/common';
 import { CParserService, FunctionInfo } from './c-parser.service';
 
 @Injectable()

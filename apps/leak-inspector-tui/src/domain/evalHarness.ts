@@ -23,11 +23,11 @@ import {
   type CalibrationBin,
   type ConfidenceInterval,
   type Sample,
-} from '@mcpvul/common/analysis/metrics';
-import { mapWithLimit } from '@mcpvul/agent-core';
-import type { ConsensusRule } from '@mcpvul/common/analysis/consensus-judge';
+} from '@cleak/common/analysis/metrics';
+import { mapWithLimit } from '@cleak/agent-core';
+import type { ConsensusRule } from '@cleak/common/analysis/consensus-judge';
 import { walkCFiles, readFileSafe } from './fileWalk';
-import { EVENT_PHASE, EVENT_KIND, type ScanEventName } from '@mcpvul/common/flow/scan-flow-contract';
+import { EVENT_PHASE, EVENT_KIND, type ScanEventName } from '@cleak/common/flow/scan-flow-contract';
 import { runHeadless } from '../surfaces/headless';
 import { loadConfig } from '../config';
 import { captureProvenance, summarizeStat, type EvalProvenance, type Stat } from './provenance';

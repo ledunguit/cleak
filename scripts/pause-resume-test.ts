@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 /** Verifies the loop pauses on model failure and resumes (retries) on user input. */
 
-import { queryLoop, type AgentEvent, type CallModel } from '@mcpvul/agent-core';
+import { queryLoop, type AgentEvent, type CallModel } from '@cleak/agent-core';
 
 function run(decision: 'resume' | 'abort') {
   let calls = 0;

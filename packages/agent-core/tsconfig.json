@@ -5,6 +5,7 @@
     "moduleResolution": "bundler",
     "noEmit": true,
     "declaration": false,
+    "incremental": false,
     "lib": ["ES2023"],
     "types": ["node"]
   },

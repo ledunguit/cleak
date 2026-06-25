@@ -34,7 +34,7 @@ Findings are scored **one sample per ground-truth site**, not one per finding
 - A labeled flaw with **no** finding is a false negative (missed entirely).
 
 A verdict counts as "flagged" (positive prediction) iff it is `confirmed_leak`
-or `likely_leak` (`LEAK_POSITIVE_VERDICTS` in `@mcpvul/common`).
+or `likely_leak` (`LEAK_POSITIVE_VERDICTS` in `@cleak/common`).
 
 > **Note on TN/accuracy/specificity/MCC.** True negatives are counted only over
 > *discovered* candidate sites at clean functions/lines. Precision/Recall/F1 are

@@ -5,7 +5,7 @@
  * branches on source. Fields are optional where the data may be absent (older
  * snapshots, heuristic-only verdicts) so the card degrades gracefully.
  */
-import type { LeakBundle } from '@mcpvul/common/types';
+import type { LeakBundle } from '@cleak/common/types';
 
 export interface FindingEvidenceView {
   tool: string;

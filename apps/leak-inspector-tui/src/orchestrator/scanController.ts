@@ -13,8 +13,8 @@
  */
 
 import { basename } from 'node:path';
-import { mapWithLimit } from '@mcpvul/agent-core';
-import type { AgentEvent, McpClient } from '@mcpvul/agent-core';
+import { mapWithLimit } from '@cleak/agent-core';
+import type { AgentEvent, McpClient } from '@cleak/agent-core';
 import {
   AnalysisMode,
   DynamicMode,
@@ -22,8 +22,8 @@ import {
   type LeakBundle,
   type ScanMetadata,
   type ScanReport,
-} from '@mcpvul/common/types';
-import { LeakReporting } from '@mcpvul/common/analysis/reporting';
+} from '@cleak/common/types';
+import { LeakReporting } from '@cleak/common/analysis/reporting';
 import { ScanEmitter, ScanEventName } from './events';
 import { CandidateManager, normalizeCandidate } from '../domain/candidateState';
 import { PathResolver } from '../domain/pathResolver';

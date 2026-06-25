@@ -7,11 +7,11 @@
  */
 
 import { readFileSafe } from './fileWalk';
-import { enrichLeakVerdict } from '@mcpvul/common/analysis/heuristic-judge';
-import { deriveFusion } from '@mcpvul/common/analysis/consensus-judge';
-import { enclosingFunctionSnippet, isLeakVerdictString, evidenceIndicatesLeak } from '@mcpvul/common/analysis/judge-shared';
-import { InvestigationVerdict, ToolKind, type LeakBundle, type VerdictResult } from '@mcpvul/common/types';
-import type { CallModel } from '@mcpvul/agent-core';
+import { enrichLeakVerdict } from '@cleak/common/analysis/heuristic-judge';
+import { deriveFusion } from '@cleak/common/analysis/consensus-judge';
+import { enclosingFunctionSnippet, isLeakVerdictString, evidenceIndicatesLeak } from '@cleak/common/analysis/judge-shared';
+import { InvestigationVerdict, ToolKind, type LeakBundle, type VerdictResult } from '@cleak/common/types';
+import type { CallModel } from '@cleak/agent-core';
 
 const SYSTEM_PROMPT = [
   `You are an expert C/C++ memory-leak analyst. Decide whether ONE allocation is a real leak, using the code, static context, and any runtime evidence provided.`,
@@ -29,7 +29,7 @@ const SYSTEM_PROMPT = [
 /**
  * The code the judge sees: the FULL enclosing function (capped), with C/C++
  * comments stripped (so benchmark giveaway labels never reach the model). Shared
- * with the control-plane judge via @mcpvul/common; this path keeps its historical
+ * with the control-plane judge via @cleak/common; this path keeps its historical
  * ±(6,5)-line fallback window and omits line-number prefixes.
  */
 function sourceSnippet(bundle: LeakBundle): string {

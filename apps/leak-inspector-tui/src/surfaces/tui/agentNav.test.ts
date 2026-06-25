@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { TuiStore, visibleMessages } from './store';
 import type { AgentMeta } from '../../orchestrator/investigation';
-import type { AgentEvent } from '@mcpvul/agent-core';
+import type { AgentEvent } from '@cleak/agent-core';
 
 const STATIC0: AgentMeta = { id: 'static-0', label: 'static 1/2', kind: 'static' };
 const DYN: AgentMeta = { id: 'dynamic', label: 'dynamic', kind: 'dynamic' };

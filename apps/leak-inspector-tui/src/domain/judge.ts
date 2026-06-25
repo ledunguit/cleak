@@ -6,8 +6,8 @@
  * a root cause + applicable repair diff on every leak verdict.
  */
 
-import type { LeakBundle, VerdictResult } from '@mcpvul/common/types';
-import { judgeHeuristically, enrichLeakVerdict } from '@mcpvul/common/analysis/heuristic-judge';
+import type { LeakBundle, VerdictResult } from '@cleak/common/types';
+import { judgeHeuristically, enrichLeakVerdict } from '@cleak/common/analysis/heuristic-judge';
 
 export function heuristicVerdict(
   bundle: LeakBundle,

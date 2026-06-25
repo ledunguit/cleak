@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 /** Verifies the classification-metrics math against a hand-computed matrix. */
 
-import { computeMetrics, metricsOf, calibrationBins, type Sample } from '@mcpvul/common/analysis/metrics';
+import { computeMetrics, metricsOf, calibrationBins, type Sample } from '@cleak/common/analysis/metrics';
 
 const approx = (a: number, b: number, eps = 0.001) => Math.abs(a - b) < eps;
 const fail = (m: string) => {

@@ -1,5 +1,5 @@
 /**
- * Host-side file enumeration. The orchestrator (leak-tui) owns the workspace on
+ * Host-side file enumeration. The orchestrator (cleak) owns the workspace on
  * the host; the MCP analyzers are stateless analysis services that receive file
  * CONTENT, never a shared filesystem path. So discovery walks the repo here and
  * reads each file locally — this works identically whether the analyzers run in

@@ -7,8 +7,8 @@
 
 import { resolve, basename, join } from 'node:path';
 import { existsSync, readFileSync } from 'node:fs';
-import { McpClient } from '@mcpvul/agent-core';
-import { AnalysisMode, DynamicMode } from '@mcpvul/common/types';
+import { McpClient } from '@cleak/agent-core';
+import { AnalysisMode, DynamicMode } from '@cleak/common/types';
 import { loadConfig, type Provider, type ConsensusJudgeConfig } from '../config';
 import { loadEnvFiles } from '../domain/env';
 import { buildPathResolver } from '../domain/pathResolver';

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { accumulate } from '@mcpvul/common/analysis/metrics';
+import { accumulate } from '@cleak/common/analysis/metrics';
 import {
   classifyFunction,
   classifyFinding,

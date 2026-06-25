@@ -10,7 +10,7 @@
  * stripped crossing gRPC (only `stack_trace` string + `allocation_type` survive
  * the proto) — we recover `allocStack`/`allocSite`/`leakKind` from those.
  *
- * Imported via the sub-path `@mcpvul/common/analysis/dynamic-evidence`.
+ * Imported via the sub-path `@cleak/common/analysis/dynamic-evidence`.
  */
 import { createHash } from 'crypto';
 import {

@@ -26,8 +26,8 @@ import {
   type Message,
   type Tool,
   type ToolCtx,
-} from '@mcpvul/agent-core';
-import { AgentActionKind, DynamicMode, type AgentDecision, type LeakBundle } from '@mcpvul/common/types';
+} from '@cleak/agent-core';
+import { AgentActionKind, DynamicMode, type AgentDecision, type LeakBundle } from '@cleak/common/types';
 import type { RunConfig } from '../config';
 import type { AgentMeta, InvestigationContext, InvestigationOutcome, InvestigationPhase } from './investigation';
 import { mcpToolFlags, CONTENT_CAPABLE_TOOLS } from '../domain/mcpToolPlan';
@@ -55,7 +55,7 @@ import {
   dynamicWorkerUserMessage,
 } from '../domain/subAgentPrompts';
 import { judgeBundleWithLlm, shouldEscalate } from '../domain/llmJudge';
-import { judgeByConsensus, type ConsensusVerdict } from '@mcpvul/common/analysis/consensus-judge';
+import { judgeByConsensus, type ConsensusVerdict } from '@cleak/common/analysis/consensus-judge';
 
 /**
  * Group candidates by FILE affinity (a file is never split across sub-agents), then
@@ -276,7 +276,7 @@ export function buildWorkflowInvestigationPhase(cfg: RunConfig, dynamicMode: Dyn
         let verdict: ConsensusVerdict | Awaited<ReturnType<typeof judgeBundleWithLlm>>;
         if (useConsensus) {
           // Sample the per-bundle LLM judge N times at the consensus temperature,
-          // then combine + apply the heuristic precision-override (in @mcpvul/common).
+          // then combine + apply the heuristic precision-override (in @cleak/common).
           verdict = await judgeByConsensus(
             b,
             sctx,

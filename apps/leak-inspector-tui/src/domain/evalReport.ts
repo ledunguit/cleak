@@ -7,7 +7,7 @@
 
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { Metrics } from '@mcpvul/common/analysis/metrics';
+import type { Metrics } from '@cleak/common/analysis/metrics';
 import type { EvalResult, CaseRow } from './evalHarness';
 
 const pct = (x: number) => (x * 100).toFixed(1);

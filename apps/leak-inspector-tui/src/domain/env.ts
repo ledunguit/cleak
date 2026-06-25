@@ -9,6 +9,7 @@
 
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 /** Locate the monorepo root from a starting dir by walking up to a marker. */
 function findMarkerRoot(start: string): string | undefined {
@@ -27,7 +28,15 @@ function findMarkerRoot(start: string): string | undefined {
 function repoRoots(cwd: string): string[] {
   const roots = new Set<string>();
   // This file is at <root>/apps/leak-inspector-tui/src/domain/env.ts → up 4 = root.
-  const moduleDir = (import.meta as unknown as { dir?: string }).dir;
+  // `import.meta.url` works in both Node ESM and Bun (Bun-only `import.meta.dir`
+  // is undefined under Node and breaks the published bundle).
+  const moduleDir = ((): string | undefined => {
+    try {
+      return dirname(fileURLToPath(import.meta.url));
+    } catch {
+      return undefined;
+    }
+  })();
   if (moduleDir) {
     const fromModule = findMarkerRoot(moduleDir) ?? resolve(moduleDir, '../../../..');
     roots.add(fromModule);

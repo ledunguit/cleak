@@ -5,8 +5,8 @@
  * their tools (and are finished when the investigation ends).
  */
 
-import type { AgentEvent } from '@mcpvul/agent-core';
-import { ScanPhase } from '@mcpvul/common/flow/scan-flow-contract';
+import type { AgentEvent } from '@cleak/agent-core';
+import { ScanPhase } from '@cleak/common/flow/scan-flow-contract';
 import { ScanEmitter, ScanEventName } from './events';
 import { phaseForMcpTool } from '../domain/mcpToolPlan';
 

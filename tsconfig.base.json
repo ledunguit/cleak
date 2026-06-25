@@ -20,10 +20,10 @@
     "esModuleInterop": true,
     "resolveJsonModule": true,
     "paths": {
-      "@mcpvul/common": ["packages/common/src"],
-      "@mcpvul/common/*": ["packages/common/src/*"],
-      "@mcpvul/agent-core": ["packages/agent-core/src"],
-      "@mcpvul/agent-core/*": ["packages/agent-core/src/*"]
+      "@cleak/common": ["packages/common/src"],
+      "@cleak/common/*": ["packages/common/src/*"],
+      "@cleak/agent-core": ["packages/agent-core/src"],
+      "@cleak/agent-core/*": ["packages/agent-core/src/*"]
     }
   },
   "include": ["apps/**/*", "packages/**/*"]

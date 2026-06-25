@@ -8,7 +8,7 @@ import {
   type DynamicRunStore,
 } from './dynamicEvidence';
 import { PathResolver } from './pathResolver';
-import type { LeakBundle } from '@mcpvul/common/types';
+import type { LeakBundle } from '@cleak/common/types';
 
 const idResolver = new PathResolver(); // identity (no host↔analyzer mapping)
 

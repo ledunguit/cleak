@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { readFileSync } from 'fs';
-import { OwnershipSummary } from '@mcpvul/common';
+import { OwnershipSummary } from '@cleak/common';
 import { CParserService, FunctionInfo } from './c-parser.service';
 
 @Injectable()

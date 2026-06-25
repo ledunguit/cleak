@@ -58,7 +58,7 @@ The workspace consists of these main components:
 - Framework-free native tool-calling loop, MCP client, multi-provider
   `callModel` (local / openai / anthropic / openai-compat), context compaction.
 
-### packages/common (@mcpvul/common)
+### packages/common (@cleak/common)
 - Shared types, Zod schemas, the heuristic judge, consensus judge, leak analysis,
   and report renderers — TypeScript + Zod.
 
@@ -79,7 +79,7 @@ The workspace consists of these main components:
 1. The TUI orchestrator (`leak-inspector-tui`) drives the investigation via
    native tool-calling.
 2. Static and dynamic analyzers expose MCP tools over HTTP; the TUI calls them.
-3. Findings are normalized into shared leak bundles (from `@mcpvul/common`)
+3. Findings are normalized into shared leak bundles (from `@cleak/common`)
 4. Judge layer produces verdicts, explanations, and repair suggestions
 5. Reports are emitted in multiple formats for evaluation
 
@@ -92,7 +92,7 @@ Thesis/
 │   ├── dynamic-analyzer/           ← Dynamic analysis MCP service (port 50062)
 │   └── leak-inspector-tui/         ← Standalone agentic TUI/CLI scanner (HYBRID, MCP) — the orchestrator
 ├── packages/
-│   ├── common/                     ← Shared types, DTOs, entities, Zod schemas, analysis (@mcpvul/common)
+│   ├── common/                     ← Shared types, DTOs, entities, Zod schemas, analysis (@cleak/common)
 │   └── agent-core/                 ← Framework-free native tool-calling loop + providers + MCP client
 ├── proto/                          ← Shared gRPC service definitions
 ├── docs/                           ← Canonical docs (ARCHITECTURE, PROMPTS, EVALUATION, SECURITY, DATASETS)

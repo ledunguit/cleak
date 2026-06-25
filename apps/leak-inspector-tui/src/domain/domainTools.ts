@@ -2,23 +2,23 @@
  * Domain tools exposed to the investigation agent (beyond the raw MCP analysis
  * tools). They let the model see the candidate state, read source, register a
  * missed candidate, and — crucially — record a structured verdict in the shared
- * @mcpvul/common shape. record_verdict runs every verdict through the shared
+ * @cleak/common shape. record_verdict runs every verdict through the shared
  * enrichment so it always carries a root cause + an applicable repair diff.
  */
 
 import { resolve, isAbsolute } from 'node:path';
 import { readFileSync, existsSync, statSync } from 'node:fs';
 import { z } from 'zod';
-import { buildTool, type Tool } from '@mcpvul/agent-core';
+import { buildTool, type Tool } from '@cleak/agent-core';
 import {
   InvestigationVerdict,
   ToolKind,
   type VerdictResult,
   type LeakCandidate,
   type LeakEvidence,
-} from '@mcpvul/common/types';
-import { enrichLeakVerdict } from '@mcpvul/common/analysis/heuristic-judge';
-import { deriveDynamicFields, correlateEvidence } from '@mcpvul/common/analysis/dynamic-evidence';
+} from '@cleak/common/types';
+import { enrichLeakVerdict } from '@cleak/common/analysis/heuristic-judge';
+import { deriveDynamicFields, correlateEvidence } from '@cleak/common/analysis/dynamic-evidence';
 import { CandidateManager, normalizeCandidate } from './candidateState';
 import type { PathResolver } from './pathResolver';
 

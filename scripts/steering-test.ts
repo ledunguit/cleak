@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 /** Verifies the loop injects user steering messages between turns (getSteering). */
 
-import { queryLoop, buildTool, type CallModel, type Tool } from '@mcpvul/agent-core';
+import { queryLoop, buildTool, type CallModel, type Tool } from '@cleak/agent-core';
 
 let turn = 0;
 const fakeModel: CallModel = async () => {

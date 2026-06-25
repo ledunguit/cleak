@@ -1,6 +1,6 @@
 # System Sequence Diagrams
 
-Memory-leak investigation system. The orchestrator is the **TUI** (`leak-inspector-tui`), a standalone Bun/Ink CLI driving a native agent loop via `@mcpvul/agent-core`. It produces the data contract `LeakCandidate` → `LeakBundle` → `VerdictResult` → `ScanReport`.
+Memory-leak investigation system. The orchestrator is the **TUI** (`leak-inspector-tui`), a standalone Bun/Ink CLI driving a native agent loop via `@cleak/agent-core`. It produces the data contract `LeakCandidate` → `LeakBundle` → `VerdictResult` → `ScanReport`.
 
 The TUI invokes the `static-analyzer` / `dynamic-analyzer` services over **MCP-over-HTTP** and writes report artifacts to disk.
 

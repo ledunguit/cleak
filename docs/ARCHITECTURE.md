@@ -36,7 +36,7 @@ judging → reporting`.
 | **static-analyzer** | NestJS + Tree-sitter | 50061 (MCP HTTP) | MCP Streamable-HTTP | 11 tool: index, candidate scan, AST, call graph, function summary, path constraints, ownership, Clang scan-build |
 | **dynamic-analyzer** | NestJS + valgrind/asan/lsan | 50062 (MCP HTTP) | MCP Streamable-HTTP | 9 tool: build target + Valgrind/ASan/LSan + run binary |
 | **packages/agent-core** | TS library | — | (nhúng) | Vòng lặp agentic, tool abstraction, MCP client, provider LLM (streaming) |
-| **@mcpvul/common** | TS library | — | (chia sẻ) | Type/Zod, heuristic judge + consensus judge + leak analysis, report renderer |
+| **@cleak/common** | TS library | — | (chia sẻ) | Type/Zod, heuristic judge + consensus judge + leak analysis, report renderer |
 | *(ngoài)* **LLM gateway** | OpenAI-compatible | 20128 | HTTP SSE | `mimo/mimo-v2.5-pro` cục bộ (hoặc OpenAI/Anthropic) |
 
 Hai analyzer nối qua Docker bridge network `mcpvul-net` (`docker-compose.yml`).

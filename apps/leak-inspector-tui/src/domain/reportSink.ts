@@ -6,9 +6,9 @@
 
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { LeakReporting } from '@mcpvul/common/analysis/reporting';
-import type { ScanReport } from '@mcpvul/common/types';
-import type { Message } from '@mcpvul/agent-core';
+import { LeakReporting } from '@cleak/common/analysis/reporting';
+import type { ScanReport } from '@cleak/common/types';
+import type { Message } from '@cleak/agent-core';
 
 const reporter = new LeakReporting();
 

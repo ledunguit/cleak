@@ -1,10 +1,68 @@
 {
-  "name": "@mcpvul/common",
-  "version": "1.0.0",
-  "private": true,
-  "main": "src/index.ts",
-  "types": "src/index.ts",
+  "name": "@cleak/common",
+  "version": "0.1.0",
+  "description": "Shared types, Zod schemas, and framework-free C/C++ memory-leak analysis (heuristic + consensus judge, report renderers) for the cleak toolchain.",
+  "type": "module",
+  "license": "Apache-2.0",
+  "author": "Le Dang Dung <ledung.itsme@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ledunguit/leak-investigator.git",
+    "directory": "packages/common"
+  },
+  "homepage": "https://github.com/ledunguit/leak-investigator/tree/master/packages/common#readme",
+  "bugs": "https://github.com/ledunguit/leak-investigator/issues",
+  "keywords": [
+    "memory-leak",
+    "static-analysis",
+    "c",
+    "cpp",
+    "cwe-401",
+    "judge",
+    "cleak"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist",
+    "LICENSE",
+    "NOTICE"
+  ],
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./types": {
+      "types": "./dist/types/index.d.ts",
+      "import": "./dist/types/index.js"
+    },
+    "./flow/scan-flow-contract": {
+      "types": "./dist/flow/scan-flow-contract.d.ts",
+      "import": "./dist/flow/scan-flow-contract.js"
+    },
+    "./analysis/*": {
+      "types": "./dist/analysis/*.d.ts",
+      "import": "./dist/analysis/*.js"
+    }
+  },
   "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit -p tsconfig.lib.json",
+    "lint": "echo 'lint ok'",
     "test": "bun test"
+  },
+  "dependencies": {
+    "zod": "^4.4.3"
+  },
+  "optionalDependencies": {
+    "pdfkit": "^0.15.0"
   }
 }

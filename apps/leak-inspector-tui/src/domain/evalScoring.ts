@@ -8,8 +8,8 @@
  * function labels (preferred) or relies on Juliet's bad/good naming convention.
  */
 
-import type { Sample } from '@mcpvul/common/analysis/metrics';
-import { LEAK_POSITIVE_VERDICTS } from '@mcpvul/common/analysis/judge-shared';
+import type { Sample } from '@cleak/common/analysis/metrics';
+import { LEAK_POSITIVE_VERDICTS } from '@cleak/common/analysis/judge-shared';
 
 export interface LabeledFlaw {
   file?: string;
