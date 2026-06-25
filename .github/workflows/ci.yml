@@ -15,6 +15,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Node is pinned (not the runner default) so the tree-sitter native binding
+      # builds: tree-sitter@0.25.0 has no Node-24 prebuild and its C++ does not
+      # compile against Node 24's V8 13.x headers.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.3.14

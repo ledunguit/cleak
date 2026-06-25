@@ -24,9 +24,11 @@ jobs:
 
       # setup-node writes ~/.npmrc with NODE_AUTH_TOKEN so `changeset publish`
       # (npm under the hood) can authenticate to the registry.
+      # Node 22 (current LTS): newer than the EOL-track 20, but tree-sitter@0.25.0
+      # still builds on it (Node 24 has no prebuild and fails to compile its C++).
       - uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version: 22
           registry-url: https://registry.npmjs.org
 
       - name: Install
