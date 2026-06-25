@@ -63,7 +63,7 @@
       },
     },
     "apps/leak-inspector-tui": {
-      "name": "cleak",
+      "name": "@cleak/cli",
       "version": "0.1.0",
       "bin": {
         "cleak": "dist/cli.js",
@@ -166,6 +166,8 @@
     "@changesets/write": ["@changesets/write@0.4.0", "", { "dependencies": { "@changesets/types": "^6.1.0", "fs-extra": "^7.0.1", "human-id": "^4.1.1", "prettier": "^2.7.1" } }, "sha512-CdTLvIOPiCNuH71pyDu3rA+Q0n65cmAbXnwWH84rKGiFumFzkmHNT8KHTMEchcxN+Kl8I54xGUhJ7l3E7X396Q=="],
 
     "@cleak/agent-core": ["@cleak/agent-core@workspace:packages/agent-core"],
+
+    "@cleak/cli": ["@cleak/cli@workspace:apps/leak-inspector-tui"],
 
     "@cleak/common": ["@cleak/common@workspace:packages/common"],
 
@@ -614,8 +616,6 @@
     "class-transformer": ["class-transformer@0.5.1", "https://registry.npmmirror.com/class-transformer/-/class-transformer-0.5.1.tgz", {}, "sha512-SQa1Ws6hUbfC98vKGxZH3KFY0Y1lm5Zm0SY8XX9zbK7FJCyVEac3ATW0RIpwzW+oOfmHE5PMPufDG9hCfoEOMw=="],
 
     "class-validator": ["class-validator@0.15.1", "https://registry.npmmirror.com/class-validator/-/class-validator-0.15.1.tgz", { "dependencies": { "@types/validator": "^13.15.3", "libphonenumber-js": "^1.11.1", "validator": "^13.15.22" } }, "sha512-LqoS80HBBSCVhz/3KloUly0ovokxpdOLR++Al3J3+dHXWt9sTKlKd4eYtoxhxyUjoe5+UcIM+5k9MIxyBWnRTw=="],
-
-    "cleak": ["cleak@workspace:apps/leak-inspector-tui"],
 
     "cli-boxes": ["cli-boxes@3.0.0", "", {}, "sha512-/lzGpEWL/8PfI0BmBOPRwp0c/wFNX1RdUML3jK/RcSBA9T8mZDdQpqYBKtCFTOfQbwPqWEOpjqW+Fnayc0969g=="],
 
