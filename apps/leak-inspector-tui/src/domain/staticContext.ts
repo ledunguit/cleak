@@ -9,6 +9,7 @@
  */
 
 import { basename } from 'node:path';
+import { coerceToObject } from './mcpResult';
 import type {
   LeakBundle,
   AllocFreePair,
@@ -48,19 +49,6 @@ function ctxFor(store: StaticContextStore, bundleId: string): Record<string, any
 const sameFile = (a: string, b: string): boolean =>
   a === b || (!!a && !!b && basename(a) === basename(b));
 
-/** Coerce an MCP tool result that may arrive as a JSON string or an object. */
-function asObject(result: unknown): any {
-  if (result && typeof result === 'object') return result;
-  if (typeof result === 'string') {
-    try {
-      return JSON.parse(result);
-    } catch {
-      return {};
-    }
-  }
-  return {};
-}
-
 /**
  * Fold one static tool's (input, result) into the per-bundle context for every
  * bundle in `bundles` that the call pertains to. Lenient file matching (basename)
@@ -73,7 +61,7 @@ export function foldStaticResult(
   result: unknown,
   bundles: LeakBundle[],
 ): void {
-  const out = asObject(result);
+  const out = coerceToObject(result);
   const filePath: string = input?.filePath ?? input?.file_path ?? '';
   const fn: string | undefined = input?.functionName ?? input?.function_name;
   const line: number | undefined = input?.lineNumber ?? input?.line_number;
