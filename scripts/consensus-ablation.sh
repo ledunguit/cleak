@@ -40,3 +40,9 @@ bun scripts/verdict-stability.ts "$S1A" "$S1B"
 echo; echo "════════════ CONSENSUS (n=$K) stability ════════════"
 bun scripts/verdict-stability.ts "$SCA" "$SCB"
 echo; echo "(lower verdict flip rate in the consensus arm ⇒ the judge damps run-to-run churn)"
+
+# Paired significance: do the two judge arms differ on the SAME sites? Compare run-A
+# of each arm site-by-site (McNemar). Stability is about run-to-run churn; this is
+# about whether the consensus verdicts differ from single-LLM at all, with a p-value.
+echo; echo "════════════ SINGLE-LLM vs CONSENSUS — McNemar (paired, run A) ════════════"
+bun scripts/mcnemar-compare.ts "single=$S1A" "consensus=$SCA"
