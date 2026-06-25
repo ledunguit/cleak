@@ -4,60 +4,66 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a Master's thesis workspace on LLM-orchestrated memory leak investigation for C/C++ repositories. The system uses a microservices architecture with MCP (Model Context Protocol) servers for static and dynamic analysis, coordinated by a central NestJS control plane.
+This is a Master's thesis workspace on LLM-orchestrated memory leak investigation for C/C++ repositories. The system is a single agentic CLI/TUI scanner (`leak-inspector-tui`) that orchestrates static and dynamic analysis exposed as MCP (Model Context Protocol) servers, using native tool-calling.
+
+> **Note:** an earlier web implementation (NestJS control-plane + React SPA) has
+> been removed from `master`. It is preserved on the git branch
+> `web-implementation`. `master` is now **TUI-only**.
 
 ## Architecture
 
 > **Current source of truth:** [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 > (components, protocols, diagrams) and [docs/PROMPTS.md](docs/PROMPTS.md) (every
-> LLM prompt). Two updates since this section was first written:
-> - New components: **`packages/agent-core`** (framework-free native tool-calling
->   loop: MCP client, multi-provider streaming `callModel`, idle-timeout, context
->   compaction) and **`apps/leak-inspector-tui`** (standalone HYBRID scanner that
->   drives the analyzers over MCP directly).
-> - The analyzers now live under `apps/static-analyzer` and `apps/dynamic-analyzer`
->   (not `mcp-memory-*`), each serving **both** gRPC and MCP. The leakguard slot
->   is now a self-contained **Clang Static Analyzer (`scan-build`)** — the
->   third-party `tools/leak_guard_tool` submodule has been removed.
-> - There are **two orchestration paths**: the web path (`control-plane`, a
->   JSON-action orchestrator) and the CLI/TUI path (`leak-inspector-tui`,
+> LLM prompt). Key points:
+> - The orchestrator is **`apps/leak-inspector-tui`** (standalone HYBRID scanner
+>   that drives the analyzers over MCP directly), built on
+>   **`packages/agent-core`** (framework-free native tool-calling loop: MCP
+>   client, multi-provider streaming `callModel`, idle-timeout, context
+>   compaction).
+> - The analyzers live under `apps/static-analyzer` and `apps/dynamic-analyzer`,
+>   each serving **MCP/HTTP** to the TUI. The leakguard slot is now a
+>   self-contained **Clang Static Analyzer (`scan-build`)** — the third-party
+>   `tools/leak_guard_tool` submodule has been removed.
+> - There is **one orchestration path**: the CLI/TUI path (`leak-inspector-tui`,
 >   agent-core native tool-calling). See docs/ARCHITECTURE.md §1.
 
-The workspace consists of six main components:
+The workspace consists of these main components:
 
-### apps/control-plane (Control Plane — NestJS)
-- NestJS microservice; HTTP API gateway at port 8090
-- Three services: control-plane, static-analyzer, dynamic-analyzer
-- PostgreSQL for persistent storage
-- GitHub OAuth integration for repository management
-- gRPC inter-service communication via proto/ definitions
-- Orchestrates memory leak investigation pipeline
+### apps/leak-inspector-tui (Orchestrator — Ink CLI/TUI)
+- Standalone agentic CLI/TUI scanner; **the** orchestrator.
+- Native tool-calling via `packages/agent-core`.
+- 4-stage HYBRID workflow:
+  - **(A)** static fan-out sub-agents gather evidence;
+  - **(B)** dynamic worker builds + runs sanitizers OR a deterministic recipe
+    (`buildTarget` → `lsanRun`, no LLM);
+  - **(C)** synthesize;
+  - **(D)** hybrid judge = heuristic for ALL bundles + LLM judge for BORDERLINE
+    + optional consensus (k samples).
+- Writes report artifacts (JSON / Markdown / HTML / snapshot) to
+  `results/<scanId>/` on disk.
+- Reads the LLM key from `<root>/.env` or `apps/leak-inspector-tui/.env`.
 
-### apps/leak-inspector-ui (Frontend)
-- React 19 + TypeScript SPA built with Vite
-- Ant Design 5 component library with custom theming
-- Zustand 5 for state management
-- React Router 7 for client-side routing
-- @xyflow/react v11 for workflow graph visualization
-- Real-time scan progress via Server-Sent Events (SSE)
-- Docker multi-stage build (nginx:alpine serves static files, proxies /api/ to control-plane:8090)
+### apps/static-analyzer (Static Analysis — NestJS)
+- NestJS service serving **MCP/HTTP on port 50061** to the TUI.
+- Tree-sitter AST, lexical scan, call graph, ownership analysis, Clang Static
+  Analyzer / `scan-build`.
+- gRPC server code still exists but has **no consumer** now; docker-compose
+  defaults it to `TRANSPORT_MODE=mcp`.
 
-> **Stale sections removed.** Earlier revisions documented standalone Python MCP
-> servers (`mcp-memory-static-analysis-server`, `mcp-dynamic-analysis-server`,
-> `mcp-memory-common`) and a `tools/leak_guard_tool` submodule. **None of these
-> exist anymore.** The current shape:
-> - Static & dynamic analysis are NestJS apps (`apps/static-analyzer`,
->   `apps/dynamic-analyzer`), each serving **both** gRPC (for the control-plane)
->   and MCP/HTTP (for the TUI).
-> - Shared types/schemas/analysis live in `packages/common` (`@mcpvul/common`) —
->   TypeScript + Zod, not Pydantic.
-> - The "deep static" slot is a self-contained Clang `scan-build` pass inside the
->   static-analyzer (no submodule, no TensorFlow, no `leakguard-runtime`).
-> - `packages/agent-core` + `apps/leak-inspector-tui` are the native tool-calling
->   orchestration path (the control-plane is the JSON-action path).
+### apps/dynamic-analyzer (Dynamic Analysis — NestJS)
+- NestJS service serving **MCP/HTTP on port 50062** to the TUI.
+- Valgrind Memcheck, AddressSanitizer, LeakSanitizer (Linux / Docker).
+
+### packages/agent-core
+- Framework-free native tool-calling loop, MCP client, multi-provider
+  `callModel` (local / openai / anthropic / openai-compat), context compaction.
+
+### packages/common (@mcpvul/common)
+- Shared types, Zod schemas, the heuristic judge, consensus judge, leak analysis,
+  and report renderers — TypeScript + Zod.
 
 ### Canonical docs (source of truth)
-- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — components, protocols, the two orchestration paths
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — components, protocols, the orchestration path
 - [docs/PROMPTS.md](docs/PROMPTS.md) — every LLM prompt
 - [docs/EVALUATION.md](docs/EVALUATION.md) — metrics, scoring model, reproducibility & baseline protocol
 - [docs/SECURITY.md](docs/SECURITY.md) — trust model & controls for executing untrusted code
@@ -66,12 +72,13 @@ The workspace consists of six main components:
 ### proto/
 - Shared gRPC service definitions
 - `static-analyzer.proto` and `dynamic-analyzer.proto`
-- Used by all three NestJS apps for inter-service communication
+- Still present; the analyzers' gRPC server code uses them (no live consumer).
 
 ## Communication Flow
 
-1. Static and dynamic analyzers expose MCP tools over HTTP
-2. NestJS control plane coordinates investigation by calling these tools
+1. The TUI orchestrator (`leak-inspector-tui`) drives the investigation via
+   native tool-calling.
+2. Static and dynamic analyzers expose MCP tools over HTTP; the TUI calls them.
 3. Findings are normalized into shared leak bundles (from `@mcpvul/common`)
 4. Judge layer produces verdicts, explanations, and repair suggestions
 5. Reports are emitted in multiple formats for evaluation
@@ -81,17 +88,15 @@ The workspace consists of six main components:
 ```
 Thesis/
 ├── apps/                           ← Turborepo applications
-│   ├── control-plane/              ← API gateway + orchestrator (port 8090)
-│   ├── static-analyzer/            ← Static analysis gRPC service (port 50051)
-│   ├── dynamic-analyzer/           ← Dynamic analysis gRPC service (port 50052)
-│   └── leak-inspector-ui/          ← React SPA frontend
-│   └── leak-inspector-tui/         ← Standalone agentic TUI/CLI scanner (HYBRID, MCP)
+│   ├── static-analyzer/            ← Static analysis MCP service (port 50061)
+│   ├── dynamic-analyzer/           ← Dynamic analysis MCP service (port 50062)
+│   └── leak-inspector-tui/         ← Standalone agentic TUI/CLI scanner (HYBRID, MCP) — the orchestrator
 ├── packages/
 │   ├── common/                     ← Shared types, DTOs, entities, Zod schemas, analysis (@mcpvul/common)
 │   └── agent-core/                 ← Framework-free native tool-calling loop + providers + MCP client
 ├── proto/                          ← Shared gRPC service definitions
 ├── docs/                           ← Canonical docs (ARCHITECTURE, PROMPTS, EVALUATION, SECURITY, DATASETS)
-├── docker-compose.yml              ← Full stack deployment
+├── docker-compose.yml              ← static-analyzer + dynamic-analyzer (MCP)
 ├── nest-cli.json                   ← NestJS monorepo configuration
 ├── package.json                    ← Root workspace config + turbo scripts
 ├── turbo.json                      ← Task pipeline (build/dev/lint/test)
@@ -102,50 +107,28 @@ Thesis/
 
 ## Common Commands
 
-### Full System Demo
+### Analyzer Services (Docker Compose)
 ```bash
-# Start all services via Docker Compose (from repo root)
+# Start the static + dynamic analyzers (MCP) via Docker Compose (from repo root)
 docker compose up --build
-
-# Access web UI at http://localhost:5173 (frontend) or http://localhost:8090 (API)
-```
-
-### Frontend Development (Hot Reload)
-```bash
-cd apps/leak-inspector-ui
-bun install
-bun run dev          # Vite dev server at http://localhost:5173
-bun run build        # TypeScript check + production build
-```
-
-### Backend Development
-```bash
-cd apps/control-plane
-bun install
-bun run dev          # NestJS watch mode
 ```
 
 ### Build All (Turbo)
 ```bash
-bun run build        # Builds all NestJS apps + frontend via turbo pipeline
+bun run build        # Builds all NestJS apps + the TUI via turbo pipeline
 ```
 
-### Run Individual App
+### Run the TUI / Analyzers
 ```bash
-bun run dev:control-plane     # or turbo run dev --filter=control-plane
-turbo run dev --filter=leak-inspector-ui
-nest build control-plane      # from repo root (uses nest-cli.json)
+turbo run dev --filter=leak-inspector-tui     # run the agentic TUI scanner
+turbo run dev --filter=static-analyzer        # static analyzer (MCP, port 50061)
+turbo run dev --filter=dynamic-analyzer        # dynamic analyzer (MCP, port 50062)
 ```
 
 ## Environment Configuration
 
-### Control Plane
-- `PORT`: Control plane port (default: 8090)
-- `POSTGRES_HOST/DB/USER/PASSWORD`: PostgreSQL connection
-- `STATIC_ANALYZER_URL` / `DYNAMIC_ANALYZER_URL`: gRPC endpoints
-- `GITHUB_CLIENT_ID/SECRET/REDIRECT_URI`: GitHub OAuth
-- `GITHUB_CLONE_ROOT`: Repository clone directory
-- `FRONTEND_URL`: CORS origin for frontend
+### LLM Key
+- The LLM key is read from `<root>/.env` or `apps/leak-inspector-tui/.env`.
 
 ### Static Server
 - `LEAKGUARD_REPO_ROOT`: Path to leak_guard_tool
@@ -156,10 +139,6 @@ nest build control-plane      # from repo root (uses nest-cli.json)
 - `WORKSPACE_ROOT`: Root for allowed execution paths
 - `RUNS_DIR`: Directory for storing run artifacts
 - `VALGRIND_BIN`: Path to Valgrind binary
-
-### Frontend (apps/leak-inspector-ui)
-- Vite proxy: /api/ → http://localhost:8090 (dev only)
-- Production: nginx reverse proxy /api/ → http://control-plane:8090
 
 ## Key MCP Tools
 
@@ -183,32 +162,6 @@ nest build control-plane      # from repo root (uses nest-cli.json)
 - `lsan.run`: Run LeakSanitizer-instrumented binary
 - `dynamic.run_binary`: Generic binary execution entrypoint
 - `dynamic.list_runs`: List stored analysis runs
-
-## Frontend Architecture
-
-### Pages & Routes
-
-| Page | Route | Description |
-|---|---|---|
-| SetupPage | `/` | Repository selection, scan options, workspace management |
-| ActivityPage | `/scan/:id` | Real-time phase timeline + workflow DAG + terminal logs |
-| ReportPage | `/scan/:id/report` | Verdict table, evidence cards, diff viewer |
-| InvestigationsPage | `/investigations` | Scan history management |
-| LogsPage | `/logs` | Live SSE server-side log stream |
-
-### Key Dependencies
-- **React 19** with TypeScript strict mode
-- **Vite 7** with React plugin, path alias `@/` → `src/`
-- **Ant Design 5** (ConfigProvider, Layout, theme tokens)
-- **Zustand 5** (memoryLeakConsoleStore, workspaceStore, logsStore)
-- **React Router 7** (useParams, useNavigate, Outlet, useOutletContext)
-- **@xyflow/react v11** (NodeProps, EdgeProps, ReactFlowProvider)
-- **lucide-react** + **@ant-design/icons** for icons
-
-### State Management
-- `consoleStore` — scan lifecycle, events, report data, UI state
-- `workspaceStore` — GitHub connection, repos, workspaces CRUD
-- `logsStore` — SSE log entries, level filtering, pause/download
 
 ## Important Notes
 

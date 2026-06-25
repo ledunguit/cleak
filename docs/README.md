@@ -20,8 +20,8 @@ Bộ tài liệu cho luận văn **"LLM điều phối điều tra rò rỉ bộ
 ### Kỹ thuật (tiếng Anh, giữ nguyên)
 | Tài liệu | Nội dung |
 |---|---|
-| [ARCHITECTURE.md](ARCHITECTURE.md) | Thành phần, giao thức (gRPC/MCP/SSE), hai pipeline điều phối, data model |
-| [sequence-diagrams.md](sequence-diagrams.md) | Sơ đồ tuần tự runtime (web path + TUI path) |
+| [ARCHITECTURE.md](ARCHITECTURE.md) | Thành phần, giao thức (MCP), pipeline điều phối TUI, data model |
+| [sequence-diagrams.md](sequence-diagrams.md) | Sơ đồ tuần tự runtime (TUI path) |
 | [PROMPTS.md](PROMPTS.md) | Danh mục mọi prompt LLM (anchored tới file:line) |
 | [EVALUATION.md](EVALUATION.md) | Phương pháp đánh giá, scoring, two-tier determinism (§7), baseline protocol (§6) |
 | [DATASETS.md](DATASETS.md) | Lấy/dựng corpus (Juliet CWE-401, real_projects) |
