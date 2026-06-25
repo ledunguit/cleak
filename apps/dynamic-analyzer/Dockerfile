@@ -17,7 +17,7 @@ COPY package.json turbo.json tsconfig.base.json nest-cli.json bun.lock ./
 # Copy all workspace package.json files for Bun workspace resolution
 COPY apps/static-analyzer/package.json apps/static-analyzer/tsconfig.app.json ./apps/static-analyzer/
 COPY apps/dynamic-analyzer/package.json apps/dynamic-analyzer/tsconfig.app.json ./apps/dynamic-analyzer/
-COPY packages/common/package.json packages/common/tsconfig.lib.json ./packages/common/
+COPY packages/common/package.json packages/common/tsconfig.lib.json packages/common/tsup.config.ts ./packages/common/
 
 RUN bun install
 
