@@ -4,11 +4,10 @@
  * cross-correlating a dynamic allocation site back to the static candidate it
  * belongs to.
  *
- * Both orchestration paths reuse this: the web orchestrator
- * (scan-orchestrator.service) and the TUI `record_evidence` tool. Derivation is
- * authoritative on the CONSUMER side so it works even when structured fields are
- * stripped crossing gRPC (only `stack_trace` string + `allocation_type` survive
- * the proto) — we recover `allocStack`/`allocSite`/`leakKind` from those.
+ * The TUI's deterministic dynamic-evidence capture/reconcile reuses this. Derivation
+ * is authoritative on the CONSUMER side so it works even when a normalizer only
+ * surfaces a `stack_trace` string + `allocation_type` — we recover
+ * `allocStack`/`allocSite`/`leakKind` from those.
  *
  * Imported via the sub-path `@cleak/common/analysis/dynamic-evidence`.
  */

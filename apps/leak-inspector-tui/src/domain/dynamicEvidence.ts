@@ -2,7 +2,7 @@
  * Deterministic dynamic-evidence capture — the dynamic twin of `staticContext.ts`.
  *
  * The dynamic sub-agent (an LLM) used to decide which findings to record via a
- * `record_evidence` tool, which made the attached evidence — and therefore the
+ * discretionary evidence tool, which made the attached evidence — and therefore the
  * verdict — non-deterministic run-to-run (the central reproducibility blocker).
  * This module makes evidence capture deterministic: `withDynamicEvidenceCapture`
  * wraps each sanitizer tool and records the RAW run result (no LLM discretion,

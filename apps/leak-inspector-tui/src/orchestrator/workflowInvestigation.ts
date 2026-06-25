@@ -31,7 +31,7 @@ import { AgentActionKind, DynamicMode, type AgentDecision, type LeakBundle } fro
 import type { RunConfig } from '../config';
 import type { AgentMeta, InvestigationContext, InvestigationOutcome, InvestigationPhase } from './investigation';
 import { mcpToolFlags, CONTENT_CAPABLE_TOOLS } from '../domain/mcpToolPlan';
-import { buildDomainTools } from '../domain/domainTools';
+import { buildReadFileTool } from '../domain/readFileTool';
 import { heuristicVerdict } from '../domain/judge';
 import { StepLog } from '../domain/stepLog';
 import { ScanEventName } from './events';
@@ -116,12 +116,7 @@ export function buildWorkflowInvestigationPhase(cfg: RunConfig, dynamicMode: Dyn
       ]);
       const contentStatic = staticRaw.filter((t) => CONTENT_CAPABLE_TOOLS.has(t.name));
 
-      const domainTools = buildDomainTools({
-        candidates,
-        repoPath: ctx.repoPath,
-        pathResolver: ctx.pathResolver,
-      });
-      const readFileTool = domainTools.find((t) => t.name === 'read_file')!;
+      const readFileTool = buildReadFileTool(ctx.repoPath);
 
       ctx.emitter.emit(ScanEventName.INVESTIGATION_STARTED, {
         candidates: allBundles.length,
@@ -225,8 +220,8 @@ export function buildWorkflowInvestigationPhase(cfg: RunConfig, dynamicMode: Dyn
         onNotice('Stage B · dynamic evidence: 1 LLM worker (build once + sanitizers)');
         // The sanitizer tools are wrapped so their findings are captured into
         // `dynStore` DETERMINISTICALLY — the LLM only drives build/run; it can no
-        // longer add or omit evidence that changes a verdict. `record_evidence` is
-        // intentionally NOT in this toolset (the wrapper is the sole source).
+        // longer add or omit evidence that changes a verdict. There is no
+        // discretionary evidence-recording tool — the wrapper is the sole source.
         const tools: Tool[] = [
           ...dynamicRaw.map((t) => withDynamicEvidenceCapture(withHostPathMapping(t, ctx.pathResolver), dynStore)),
           readFileTool,
@@ -251,7 +246,7 @@ export function buildWorkflowInvestigationPhase(cfg: RunConfig, dynamicMode: Dyn
 
       // ── Deterministic reconciliation: fold every captured dynamic finding into the
       // best-correlated bundle, then stamp each bundle's honest coverage status. This
-      // replaces the LLM's discretionary record_evidence as the source of truth. ──
+      // is the SOLE source of dynamic evidence — no LLM-discretionary recording. ──
       reconcileDynamicEvidence(dynStore, allBundles, ctx.pathResolver);
       for (const b of allBundles) b.dynamicCoverage = computeDynamicCoverage(dynStore, b, wantDynamic);
 
