@@ -178,6 +178,12 @@ export interface LeakEvidence {
   correlationMethod?: CorrelationMethod;
   /** |alloc line − candidate line| when both are known. */
   correlationDistanceLines?: number;
+  /**
+   * Graded 0..1 link strength (method + line distance + allocator-family
+   * agreement), a finer signal than the `correlatedToCandidate` boolean. Used to
+   * break ties when a finding could attach to more than one nearby candidate.
+   */
+  correlationConfidence?: number;
 }
 
 // ── Static evidence artifacts (research: MemHint / LAMeD) ──
