@@ -65,6 +65,20 @@ bun scripts/evaluate-corpus.ts no_llm  --corpus demo/lamed
 bun scripts/evaluate-corpus.ts llm_assisted --corpus demo/lamed --consensus-n 3
 ```
 
+> **Real-project allocators (`EXTRA_ALLOCATOR_NAMES`).** Running on cjson showed the
+> leaks flow through **factory allocators** (`cJSON_Duplicate`, `cJSON_CreateObject`
+> → `cJSON_New_Item`) whose names carry no malloc/alloc token, so candidate-scan
+> never discovers the alloc site → **0% recall for both heuristic and LLM**. Supply
+> the project's allocator API (≈ LAMeD's AllocSource annotations) as a
+> comma-separated env on the **static-analyzer container**, then rebuild/recreate:
+> ```bash
+> EXTRA_ALLOCATOR_NAMES="cJSON_Duplicate,cJSON_CreateObject,cJSON_CreateArray,cJSON_CreateString,cJSON_New_Item" \
+>   docker compose up -d --force-recreate static-analyzer
+> ```
+> This makes the factory-alloc leak sites discoverable (candidates ↑); judging them
+> still needs interprocedural/path-sensitive reasoning (the open work — see
+> [CONTRIBUTION.md](CONTRIBUTION.md) threats-to-validity).
+
 The ingest handles LAMeD's quirks: `target_function` overloads `;` as **both** a
 parameter separator (inside the signature) and a multi-function separator, and
 truncates mid-signature with ALL-CAPS return-type macros — so names are extracted
