@@ -45,4 +45,38 @@ describe('CandidateScanService — allocator-aware discovery', () => {
     // sanity: an alloc whose pointer is later "freeze()"d is still discovered
     expect(allocLines('p = malloc(8);\nfreeze(p);')).toEqual([1]);
   });
+
+  test('discovers project FACTORY allocators from EXTRA_ALLOCATOR_NAMES (LAMeD-style)', () => {
+    // Running on the real LAMeD cjson corpus showed the leaks are factory allocs
+    // (cJSON_Duplicate / cJSON_CreateObject) whose names carry NO malloc/alloc token,
+    // so nothing discovers them. A per-project allocator list (≈ LAMeD AllocSource)
+    // makes the leak site discoverable.
+    const prev = process.env.EXTRA_ALLOCATOR_NAMES;
+    process.env.EXTRA_ALLOCATOR_NAMES = 'cJSON_Duplicate, cJSON_CreateObject ,cJSON_New_Item';
+    try {
+      const src = [
+        'v = cJSON_Duplicate(x, 1);', // 1 — factory alloc
+        'o = cJSON_CreateObject();', // 2
+        'n = cJSON_New_Item(&hooks);', // 3
+        'p = cJSON_Print(o);', // 4 — NOT listed → not discovered
+      ].join('\n');
+      expect(allocLines(src)).toEqual([1, 2, 3]);
+    } finally {
+      if (prev === undefined) delete process.env.EXTRA_ALLOCATOR_NAMES;
+      else process.env.EXTRA_ALLOCATOR_NAMES = prev;
+    }
+  });
+
+  test('EXTRA_ALLOCATOR_NAMES ignores unsafe / empty entries', () => {
+    const prev = process.env.EXTRA_ALLOCATOR_NAMES;
+    process.env.EXTRA_ALLOCATOR_NAMES = ' , bad-name(, make_thing';
+    try {
+      // `make_thing` has no alloc token → only the EXTRA list can discover it;
+      // `bad-name(` is not a safe identifier → ignored (no regex injection).
+      expect(allocLines('a = make_thing(8);\nb = other_call();')).toEqual([1]);
+    } finally {
+      if (prev === undefined) delete process.env.EXTRA_ALLOCATOR_NAMES;
+      else process.env.EXTRA_ALLOCATOR_NAMES = prev;
+    }
+  });
 });

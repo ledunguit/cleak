@@ -17,6 +17,10 @@ services:
     environment:
       # Analyzer serves MCP/HTTP only (the sole transport).
       MCP_HTTP_PORT: 50061
+      # Per-project FACTORY allocators (≈ LAMeD AllocSource) — comma-separated
+      # function names whose return value is owned heap but whose name carries no
+      # malloc/alloc token (e.g. cJSON_Duplicate). Empty by default.
+      EXTRA_ALLOCATOR_NAMES: ${EXTRA_ALLOCATOR_NAMES:-}
     volumes:
       - ./demo:/workspace/demo
       - ./targets:/workspace/targets
