@@ -1,24 +1,15 @@
 {
   "$schema": "https://json.schemastore.org/nest-cli",
   "collection": "@nestjs/schematics",
-  "sourceRoot": "apps/control-plane/src",
+  "sourceRoot": "apps/static-analyzer/src",
   "compilerOptions": {
     "deleteOutDir": true,
     "webpack": true,
-    "tsConfigPath": "apps/control-plane/tsconfig.app.json"
+    "tsConfigPath": "apps/static-analyzer/tsconfig.app.json"
   },
   "monorepo": true,
-  "root": "apps/control-plane",
+  "root": "apps/static-analyzer",
   "projects": {
-    "control-plane": {
-      "type": "application",
-      "root": "apps/control-plane",
-      "entryFile": "main",
-      "sourceRoot": "apps/control-plane/src",
-      "compilerOptions": {
-        "tsConfigPath": "apps/control-plane/tsconfig.app.json"
-      }
-    },
     "static-analyzer": {
       "type": "application",
       "root": "apps/static-analyzer",

@@ -22,7 +22,6 @@
     "commander": "^12.1.0",
     "ink": "^5.1.0",
     "ink-text-input": "^6.0.0",
-    "leak-inspector-tui": "workspace:*",
     "react": "^18.3.1",
     "uuid": "^14.0.0",
     "zod": "^4.4.3"

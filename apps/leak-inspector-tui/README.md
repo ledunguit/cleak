@@ -80,9 +80,10 @@ bun apps/leak-inspector-tui/src/cli.ts tui
 | `STATIC_ANALYZER_MCP_URL` / `DYNAMIC_ANALYZER_MCP_URL` | analyzer endpoints | `localhost:50061` / `:50062` |
 | `AGENT_MAX_TURNS` | investigation turn budget | `15` |
 
-The LLM key is read from `apps/control-plane/.env` automatically (the TUI loads it
-on start). Host runs rewrite `host.docker.internal` → `localhost`; set
-`IN_CONTAINER=1` to keep the container hostname.
+The LLM key is read from the repo-root `.env` (or `apps/leak-inspector-tui/.env`)
+automatically (the TUI loads it on start). Host runs rewrite
+`host.docker.internal` → `localhost`; set `IN_CONTAINER=1` to keep the container
+hostname.
 
 ## Thesis experiment scripts
 
