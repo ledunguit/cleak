@@ -9,7 +9,8 @@ surfaces (interactive TUI + headless batch), reproducible artifacts per scan.
 ## Install
 
 ```bash
-npm i -g cleak          # or: bun add -g cleak  ·  pnpm add -g cleak
+npm i -g @cleak/cli     # or: bun add -g @cleak/cli  ·  pnpm add -g @cleak/cli
+# the installed command is still `cleak`
 ```
 
 Then:

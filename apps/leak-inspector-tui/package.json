@@ -1,5 +1,5 @@
 {
-  "name": "cleak",
+  "name": "@cleak/cli",
   "version": "0.1.0",
   "description": "Agentic terminal investigator for C/C++ memory leaks — MCP-driven static + dynamic (Valgrind/ASan/LSan) analysis with an LLM judge.",
   "type": "module",
