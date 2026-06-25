@@ -1,4 +1,4 @@
-# cleak
+# @cleak/cli
 
 ## 0.1.0
 

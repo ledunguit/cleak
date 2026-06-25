@@ -9,7 +9,7 @@
     "lint": "turbo run lint",
     "test": "turbo run test",
     "format": "prettier --write \"**/*.ts\" \"**/*.tsx\"",
-    "cleak:install": "turbo run build --filter=cleak && npm i -g ./apps/leak-inspector-tui",
+    "cleak:install": "turbo run build --filter=@cleak/cli && npm i -g ./apps/leak-inspector-tui",
     "changeset": "changeset",
     "version": "changeset version",
     "release": "turbo run build && changeset publish",

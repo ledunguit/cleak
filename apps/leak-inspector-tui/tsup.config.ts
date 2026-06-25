@@ -1,7 +1,7 @@
 import { defineConfig } from 'tsup';
 
 // `cleak` is a self-contained CLI: the workspace libs (@cleak/agent-core,
-// @cleak/common) are bundled INLINE so a global `npm i -g cleak` has no
+// @cleak/common) are bundled INLINE so a global `npm i -g @cleak/cli` has no
 // workspace deps; the npm runtime deps stay external (installed normally).
 // Output is Node ESM with an executable shebang.
 export default defineConfig({
