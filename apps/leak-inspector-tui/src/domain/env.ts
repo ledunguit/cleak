@@ -1,9 +1,9 @@
 /**
- * Minimal .env loader. The LLM key and gateway settings live in the
- * control-plane's env file; loading it here lets the TUI "just work" without a
- * separate config. The repo root is located independently of the current
- * working directory (so `bun run tui` from the app dir still finds the key).
- * Already-set process.env values always win (CLI/shell overrides take
+ * Minimal .env loader. The LLM key and gateway settings live in the repo-root
+ * `.env` (or the TUI app's own `.env`); loading it here lets the TUI "just work"
+ * without a separate config. The repo root is located independently of the
+ * current working directory (so `bun run tui` from the app dir still finds the
+ * key). Already-set process.env values always win (CLI/shell overrides take
  * precedence); the first file to define a key wins over later files.
  */
 
@@ -15,7 +15,7 @@ function findMarkerRoot(start: string): string | undefined {
   let dir = resolve(start);
   for (let i = 0; i < 12; i++) {
     if (existsSync(join(dir, 'turbo.json')) && existsSync(join(dir, 'apps'))) return dir;
-    if (existsSync(join(dir, 'apps', 'control-plane', '.env'))) return dir;
+    if (existsSync(join(dir, 'apps', 'leak-inspector-tui', 'package.json'))) return dir;
     const parent = dirname(dir);
     if (parent === dir) break;
     dir = parent;
@@ -51,11 +51,11 @@ export function monorepoRoot(cwd = process.cwd()): string | undefined {
   return undefined;
 }
 
-/** Default search order: <root>/.env, then <root>/apps/control-plane/.env (LLM key). */
+/** Default search order: <root>/.env, then <root>/apps/leak-inspector-tui/.env (LLM key). */
 export function defaultEnvFiles(cwd = process.cwd()): string[] {
   const files: string[] = [];
   for (const root of repoRoots(cwd)) {
-    files.push(join(root, '.env'), join(root, 'apps', 'control-plane', '.env'));
+    files.push(join(root, '.env'), join(root, 'apps', 'leak-inspector-tui', '.env'));
   }
   return files;
 }

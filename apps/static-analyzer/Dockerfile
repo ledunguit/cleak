@@ -15,7 +15,6 @@ WORKDIR /app
 COPY package.json turbo.json tsconfig.base.json nest-cli.json bun.lock ./
 
 # Copy all workspace package.json files for Bun workspace resolution
-COPY apps/control-plane/package.json apps/control-plane/tsconfig.app.json ./apps/control-plane/
 COPY apps/static-analyzer/package.json apps/static-analyzer/tsconfig.app.json ./apps/static-analyzer/
 COPY apps/dynamic-analyzer/package.json apps/dynamic-analyzer/tsconfig.app.json ./apps/dynamic-analyzer/
 COPY packages/common/package.json packages/common/tsconfig.lib.json ./packages/common/

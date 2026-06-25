@@ -1,109 +1,22 @@
+# Analyzer stack for leak-inspector-tui.
+# The TUI drives these two analyzers directly over MCP/HTTP (static :50061,
+# dynamic :50062). There is no control-plane / web UI / database — the TUI is a
+# standalone scanner that writes its report artifacts to disk.
 services:
-  postgres:
-    image: postgres:16-alpine
-    ports:
-      - "5432:5432"
-    environment:
-      POSTGRES_USER: mcpvul
-      POSTGRES_PASSWORD: mcpvul
-      POSTGRES_DB: mcpvul
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U mcpvul"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-    networks:
-      - mcpvul-net
-
-  redis:
-    image: redis:7-alpine
-    command: ["redis-server", "--appendonly", "yes"]
-    ports:
-      - "6379:6379"
-    volumes:
-      - redisdata:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
-    networks:
-      - mcpvul-net
-
-  control-plane:
-    build:
-      context: .
-      dockerfile: apps/control-plane/Dockerfile
-    ports:
-      - "8090:8090"
-    env_file:
-      - apps/control-plane/.env
-    environment:
-      # Container networking + paths below OVERRIDE the host-oriented values in
-      # the app .env (env_file). Everything else (LLM keys/models, GitHub OAuth,
-      # JWT, DEFAULT_ANALYSIS_MODE, HTTP/scan tunables) is provided by the .env.
-      PORT: 8090
-      POSTGRES_HOST: postgres
-      POSTGRES_PORT: 5432
-      POSTGRES_USER: mcpvul
-      POSTGRES_PASSWORD: mcpvul
-      POSTGRES_DB: mcpvul
-      STATIC_ANALYZER_URL: static-analyzer:50051
-      DYNAMIC_ANALYZER_URL: dynamic-analyzer:50052
-      # Transport: grpc (default) | mcp | both. Set TRANSPORT_MODE=mcp across all
-      # services to route the control-plane↔analyzer tool calls over real MCP.
-      TRANSPORT_MODE: ${TRANSPORT_MODE:-grpc}
-      STATIC_ANALYZER_MCP_URL: http://static-analyzer:50061/mcp
-      DYNAMIC_ANALYZER_MCP_URL: http://dynamic-analyzer:50062/mcp
-      # Distributed deployment: the build/valgrind toolchain lives in the
-      # dynamic-analyzer image and the Clang Static Analyzer (scan-build) runs
-      # inside the static-analyzer image, so the control-plane must NOT probe
-      # its own host for clang/make/valgrind.
-      # Set to "true" only for a single-host/in-process monolith setup.
-      RUNTIME_PREFLIGHT_LOCAL_TOOLCHAIN: ${RUNTIME_PREFLIGHT_LOCAL_TOOLCHAIN:-false}
-      # Scan job queue (BullMQ on Redis): redis host/port must point at the
-      # compose service, so keep these inline (override the .env).
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
-      # Container paths (override the host paths an app .env might carry).
-      GITHUB_CLONE_ROOT: /clones
-      SCAN_WORKSPACE_ROOT: /workspace/targets/scan-workspaces
-      SCAN_WORKSPACE_ANALYZER_ROOT: /workspace/targets/scan-workspaces
-    volumes:
-      - clones:/clones
-      - ./demo:/workspace/demo
-      - ./targets:/workspace/targets
-    # Reach a host-side LLM gateway (e.g. http://localhost:20128) from the container.
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    networks:
-      - mcpvul-net
-    restart: unless-stopped
-
   static-analyzer:
     build:
       context: .
       dockerfile: apps/static-analyzer/Dockerfile
-    # Bound to localhost only: these are internal, UNAUTHENTICATED gRPC/MCP
-    # services the control-plane reaches over the docker network (static-analyzer:50051).
-    # Publishing to 0.0.0.0 would expose untrusted-code execution to the LAN.
+    # Bound to localhost only: this is an internal, UNAUTHENTICATED MCP service
+    # the TUI reaches over the docker network. Publishing to 0.0.0.0 would expose
+    # untrusted-code execution to the LAN.
     ports:
-      - "127.0.0.1:50051:50051"
       - "127.0.0.1:50061:50061"
     env_file:
       - apps/static-analyzer/.env
     environment:
-      # Inline values override the app .env where the container needs different ones.
-      GRPC_URL: 0.0.0.0:50051
-      # Serve BOTH gRPC (for the control-plane) and MCP/HTTP (for leak-inspector-tui).
-      TRANSPORT_MODE: ${ANALYZER_TRANSPORT_MODE:-both}
+      # Serve MCP/HTTP only (for leak-inspector-tui).
+      TRANSPORT_MODE: ${ANALYZER_TRANSPORT_MODE:-mcp}
       MCP_HTTP_PORT: 50061
     volumes:
       - ./demo:/workspace/demo
@@ -116,17 +29,14 @@ services:
     build:
       context: .
       dockerfile: apps/dynamic-analyzer/Dockerfile
-    # Localhost-only (see static-analyzer note): internal, unauthenticated services.
+    # Localhost-only (see static-analyzer note): internal, unauthenticated service.
     ports:
-      - "127.0.0.1:50052:50052"
       - "127.0.0.1:50062:50062"
     env_file:
       - apps/dynamic-analyzer/.env
     environment:
-      # Inline values override the app .env where the container needs different ones.
-      GRPC_URL: 0.0.0.0:50052
-      # Serve BOTH gRPC (for the control-plane) and MCP/HTTP (for leak-inspector-tui).
-      TRANSPORT_MODE: ${ANALYZER_TRANSPORT_MODE:-both}
+      # Serve MCP/HTTP only (for leak-inspector-tui).
+      TRANSPORT_MODE: ${ANALYZER_TRANSPORT_MODE:-mcp}
       MCP_HTTP_PORT: 50062
       # Container runs dir (override any host path in the app .env).
       RUNS_DIR: /runs
@@ -138,25 +48,7 @@ services:
       - mcpvul-net
     restart: unless-stopped
 
-  leak-inspector-ui:
-    build:
-      context: .
-      dockerfile: apps/leak-inspector-ui/Dockerfile
-    # VITE_API_PROXY_TARGET is a build-time var; loaded here for parity (nginx
-    # serves the prebuilt SPA at runtime).
-    env_file:
-      - apps/leak-inspector-ui/.env
-    ports:
-      - "5173:80"
-    depends_on:
-      - control-plane
-    networks:
-      - mcpvul-net
-
 volumes:
-  pgdata:
-  redisdata:
-  clones:
   runs:
 
 networks:
