@@ -39,8 +39,8 @@ it.
   the dynamic stage entirely in a network-less container.
 - **MCP analyzers are unauthenticated.** The static- and dynamic-analyzer MCP
   servers trust their caller (the TUI); keep them bound to localhost / the
-  internal docker network. (The analyzers' legacy gRPC server code is still
-  present but has no consumer on master.)
+  internal docker network. (MCP/HTTP is the only transport — the legacy gRPC
+  server code has been removed.)
 
 ## Required configuration before any non-local use
 

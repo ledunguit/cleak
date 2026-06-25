@@ -35,7 +35,7 @@ Monorepo (Turborepo) với **một đường điều phối** (CLI/TUI) dùng ch
 
 > Bản hiện thực web (control-plane + React UI) được lưu trên nhánh git `web-implementation`; master nay chỉ còn đường TUI.
 
-Bộ phân tích (phục vụ MCP cho TUI; mã gRPC vẫn còn nhưng không còn consumer):
+Bộ phân tích (phục vụ MCP/HTTP cho TUI — transport duy nhất; mã gRPC/`proto` đã gỡ):
 - **`apps/static-analyzer`** — index file, candidate/AST scan, call-graph, interprocedural
   flow, và một lượt **Clang `scan-build`** (slot "deep static", tự chứa — *không* còn
   submodule LeakGuard).

@@ -24,7 +24,6 @@ RUN bun install
 # 2. Copy source code
 COPY apps/static-analyzer/src ./apps/static-analyzer/src
 COPY packages/common/src ./packages/common/src
-COPY proto ./proto
 
 # 3. Build via turbo
 RUN bunx turbo run build --filter=static-analyzer
@@ -46,12 +45,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 COPY --from=build /app/dist/apps/static-analyzer ./dist
 COPY --from=build /app/node_modules ./node_modules
-COPY --from=build /app/proto ./proto
 
 # tree-sitter native addon
 COPY --from=build /app/node_modules/tree-sitter ./node_modules/tree-sitter
 COPY --from=build /app/node_modules/tree-sitter-c ./node_modules/tree-sitter-c
 
-EXPOSE 50051 50061
+EXPOSE 50061
 
 CMD ["node", "dist/main.js"]

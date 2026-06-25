@@ -47,8 +47,9 @@ The workspace consists of these main components:
 - NestJS service serving **MCP/HTTP on port 50061** to the TUI.
 - Tree-sitter AST, lexical scan, call graph, ownership analysis, Clang Static
   Analyzer / `scan-build`.
-- gRPC server code still exists but has **no consumer** now; docker-compose
-  defaults it to `TRANSPORT_MODE=mcp`.
+- **MCP/HTTP is the only transport.** The old gRPC server (+ `proto/` + `@grpc/*`
+  / `@nestjs/microservices`) had no consumer once the web path was removed and has
+  been **deleted**; `main.ts` just builds a DI context and serves MCP.
 
 ### apps/dynamic-analyzer (Dynamic Analysis — NestJS)
 - NestJS service serving **MCP/HTTP on port 50062** to the TUI.
@@ -69,10 +70,12 @@ The workspace consists of these main components:
 - [docs/SECURITY.md](docs/SECURITY.md) — trust model & controls for executing untrusted code
 - [docs/DATASETS.md](docs/DATASETS.md) — obtaining/rebuilding Juliet + demo corpora (not committed)
 
-### proto/
-- Shared gRPC service definitions
-- `static-analyzer.proto` and `dynamic-analyzer.proto`
-- Still present; the analyzers' gRPC server code uses them (no live consumer).
+### MCP tool surface (no proto/)
+- Tool I/O is declared with **Zod `inputSchema`** inside each analyzer's MCP server
+  (`apps/static-analyzer/src/mcp/static-mcp-server.ts`,
+  `apps/dynamic-analyzer/src/mcp/dynamic-mcp-server.ts`).
+- The former `proto/` gRPC service definitions have been **removed** (gRPC had no
+  consumer once the project went TUI-only).
 
 ## Communication Flow
 
@@ -94,7 +97,6 @@ Thesis/
 ├── packages/
 │   ├── common/                     ← Shared types, DTOs, entities, Zod schemas, analysis (@cleak/common)
 │   └── agent-core/                 ← Framework-free native tool-calling loop + providers + MCP client
-├── proto/                          ← Shared gRPC service definitions
 ├── docs/                           ← Canonical docs (ARCHITECTURE, PROMPTS, EVALUATION, SECURITY, DATASETS)
 ├── docker-compose.yml              ← static-analyzer + dynamic-analyzer (MCP)
 ├── nest-cli.json                   ← NestJS monorepo configuration
@@ -103,7 +105,7 @@ Thesis/
 ├── tsconfig.base.json              ← Shared TypeScript config for NestJS apps
 └── demo/memory_leak_corpus/        ← Test corpus (sources committed; binaries/results git-ignored)
 ```
-(`tools/leak_guard_tool/` and `results/` are gone / git-ignored — see the note above.)
+(`tools/leak_guard_tool/`, `proto/`, and `results/` are gone / git-ignored — see the notes above.)
 
 ## Common Commands
 
