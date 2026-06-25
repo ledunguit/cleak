@@ -8,6 +8,7 @@
 
 import { z } from 'zod';
 import { readFileSafe } from './fileWalk';
+import { THRESHOLDS } from './thresholds';
 import { enrichLeakVerdict } from '@cleak/common/analysis/heuristic-judge';
 import { deriveFusion } from '@cleak/common/analysis/consensus-judge';
 import { enclosingFunctionSnippet, isLeakVerdictString, evidenceIndicatesLeak } from '@cleak/common/analysis/judge-shared';
@@ -36,7 +37,10 @@ const SYSTEM_PROMPT = [
 function sourceSnippet(bundle: LeakBundle): string {
   const src = readFileSafe(bundle.candidate.file_path);
   if (!src) return '(source unavailable)';
-  return enclosingFunctionSnippet(src, bundle.candidate.line_number || 1, { fallbackBefore: 6, fallbackAfter: 5 });
+  return enclosingFunctionSnippet(src, bundle.candidate.line_number || 1, {
+    fallbackBefore: THRESHOLDS.snippetFallbackBefore,
+    fallbackAfter: THRESHOLDS.snippetFallbackAfter,
+  });
 }
 
 function summarizeStatic(ctx: Record<string, any> | undefined): string {
@@ -61,7 +65,7 @@ function summarizeStatic(ctx: Record<string, any> | undefined): string {
   const pairs = (ctx.allocFreePairs || []) as any[];
   if (pairs.length) {
     lines.push('  - Alloc→free pairing:');
-    for (const p of pairs.slice(0, 12)) {
+    for (const p of pairs.slice(0, THRESHOLDS.maxAllocFreePairsShown)) {
       const freed = p.freeLine != null ? `free@${p.freeLine}` : 'UNPAIRED';
       const newVar = p.bindsToNewVariable ? '' : ' [not a new var]';
       lines.push(`      ${p.variable}: ${p.allocCall}@${p.allocLine} → ${freed} (${p.status})${newVar}`);
@@ -74,7 +78,7 @@ function summarizeStatic(ctx: Record<string, any> | undefined): string {
   const leakPaths = (ctx.feasibleLeakPaths || []) as any[];
   if (leakPaths.length) {
     lines.push('  - Feasible leak paths:');
-    for (const lp of leakPaths.slice(0, 5)) {
+    for (const lp of leakPaths.slice(0, THRESHOLDS.maxFeasibleLeakPathsShown)) {
       lines.push(`      • ${lp.narrative} (risk: ${lp.leakRisk})`);
     }
   } else {
@@ -221,7 +225,7 @@ export function isBorderline(verdict: VerdictResult): boolean {
   const v = verdict.verdict;
   if (v === InvestigationVerdict.LIKELY_LEAK || v === InvestigationVerdict.UNCERTAIN) return true;
   // confident confirmed / false-positive → skip the LLM
-  return verdict.confidence >= 0.35 && verdict.confidence <= 0.7;
+  return verdict.confidence >= THRESHOLDS.borderlineLow && verdict.confidence <= THRESHOLDS.borderlineHigh;
 }
 
 /**

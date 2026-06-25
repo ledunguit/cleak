@@ -29,6 +29,7 @@ import { CandidateManager, normalizeCandidate } from '../domain/candidateState';
 import { PathResolver } from '../domain/pathResolver';
 import { walkCFiles, readFileSafe } from '../domain/fileWalk';
 import { heuristicVerdict } from '../domain/judge';
+import { THRESHOLDS } from '../domain/thresholds';
 import type { InvestigationPhase, InvestigationOutcome } from './investigation';
 
 const reporter = new LeakReporting();
@@ -118,8 +119,7 @@ export async function runScan(input: ScanInput, deps: ScanDeps): Promise<ScanRes
 
   // Scan files concurrently (each candidateScan is an independent, stateless MCP
   // call) — the sequential per-file round-trips were the discovery bottleneck.
-  const DISCOVERY_CONCURRENCY = Math.max(1, Number(process.env.DISCOVERY_CONCURRENCY ?? 8));
-  const scanned = await mapWithLimit(cFiles, DISCOVERY_CONCURRENCY, async (file) => {
+  const scanned = await mapWithLimit(cFiles, THRESHOLDS.discoveryConcurrency, async (file) => {
     if (deps.abortSignal?.aborted) return null;
     const content = readFileSafe(file);
     if (content === null) return null;

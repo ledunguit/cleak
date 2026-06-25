@@ -26,6 +26,7 @@ import {
 import { evidenceIndicatesLeak } from '@cleak/common/analysis/judge-shared';
 import { ToolKind, type DynamicCoverage, type LeakBundle, type LeakEvidence } from '@cleak/common/types';
 import type { PathResolver } from './pathResolver';
+import { coerceToObject } from './mcpResult';
 
 /** Which sanitizer produced a run (derived from the MCP tool NAME, not the LLM). */
 type DynamicTool = 'asan' | 'lsan' | 'valgrind';
@@ -59,18 +60,6 @@ const TOOL_KIND: Record<DynamicTool, ToolKind> = {
   valgrind: ToolKind.VALGRIND,
 };
 
-/** Coerce an MCP tool result that may arrive as a JSON string or an object. */
-function asObject(result: unknown): any {
-  if (result && typeof result === 'object') return result;
-  if (typeof result === 'string') {
-    try {
-      return JSON.parse(result);
-    } catch {
-      return {};
-    }
-  }
-  return {};
-}
 
 /**
  * Wrap a dynamic run tool so each call's findings are recorded into `store`
@@ -87,7 +76,7 @@ export function withDynamicEvidenceCapture(tool: Tool, store: DynamicRunStore): 
     call: async (input: any, ctx: any) => {
       const out = await tool.call(input, ctx);
       try {
-        const o = asObject(out);
+        const o = coerceToObject(out);
         const findings = Array.isArray(o.findings) ? o.findings : Array.isArray(o.structuredContent?.findings) ? o.structuredContent.findings : [];
         store.runs.push({
           tool: dyn,
@@ -212,7 +201,7 @@ export async function runDeterministicDynamic(opts: {
   const analyzerRepo = pathResolver.toAnalyzerPath(repoPath);
   let build: any;
   try {
-    build = asObject(await buildTool.call({ projectPath: analyzerRepo, buildCommand }, toolCtx));
+    build = coerceToObject(await buildTool.call({ projectPath: analyzerRepo, buildCommand }, toolCtx));
   } catch (err: any) {
     opts.onNotice?.(`deterministic build threw: ${err?.message ?? err} — falling back`);
     return false;
