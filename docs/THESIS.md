@@ -78,7 +78,7 @@ qua MCP Docker), số liệu **thực** đã chạy trong dự án:
 | Hạng mục | Kết quả |
 |---|---|
 | **Hệ thống thắng baseline static** | no_llm heuristic **F1 0.853** (P0.806/R0.906) **>** Clang Static Analyzer **F1 ≈0.76** |
-| **Consensus giảm dao động ~4×** | tỉ lệ lật verdict **26.7% → 6.7%**; case-stability **73.3% → 93.3%** (n=1 vs n=3) |
+| **Consensus giảm dao động ~2–4×** | tỉ lệ lật verdict **13–27% → 6.7%** (consensus lặp lại y hệt qua 2 đợt; single-LLM tự dao động); xem [EVALUATION §7](EVALUATION.md) |
 | **Tier-1 tất định** | hai lần chạy `no_llm` cho **kết quả chấm điểm y hệt** (TP29 FP7 FN3 TN38) |
 
 → Phương pháp đầy đủ (scoring site-based, bootstrap CI, McNemar, hai tầng tất định):

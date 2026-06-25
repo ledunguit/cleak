@@ -67,7 +67,7 @@ Every scan must deliver all five of the following:
 - **Current reproducible result** (Juliet CWE-401, 30 cases, analyzers over MCP Docker):
   `no_llm` heuristic **P 0.806 / R 0.906 / F1 0.853** — beats Clang Static Analyzer (F1 ≈0.76)
   on the same corpus + same scorer; the consensus judge cuts the run-to-run verdict flip rate
-  **~4× (26.7% → 6.7%)**.
+  **~2–4× (single-LLM 13–27% → consensus 6.7%, replicated across two ablation campaigns)**.
 - **`llm_assisted` needs a reachable LLM endpoint to diverge.** Without a key for a cloud
   provider the run fails loudly (no silent fallback to the heuristic). Provider/endpoint is
   selectable (`local | openai | anthropic | openai-compat`) — see [OPERATIONS.md](OPERATIONS.md).

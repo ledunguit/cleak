@@ -168,16 +168,33 @@ same config twice for each judge arm and compares flip rate:
 K=3 LIMIT=30 scripts/consensus-ablation.sh   # single-LLM (n=1) vs consensus (n=K)
 ```
 
-Measured on the same 30 cases, same analyzer, two runs per arm:
+Measured on the same 30 cases, same analyzer, two runs per arm. The ablation was
+run **twice** (campaign A and a later campaign B, after the dynamic↔candidate
+correlation was tightened) — both reported:
 
-| Judge arm | case stability | verdict flip rate (lower is better) | modal agreement |
-|---|---|---|---|
-| single-LLM (`--consensus-n 1`) | 73.3% | 26.7% (8/30) | 86.7% |
-| consensus (`--consensus-n 3`) | **93.3%** | **6.7% (2/30)** | **96.7%** |
+| Judge arm | campaign | case stability | verdict flip rate (lower is better) | modal agreement |
+|---|---|---|---|---|
+| single-LLM (`--consensus-n 1`) | A | 73.3% | 26.7% (8/30) | 86.7% |
+| single-LLM (`--consensus-n 1`) | B | 86.7% | 13.3% (4/30) | 93.3% |
+| consensus (`--consensus-n 3`)  | A | **93.3%** | **6.7% (2/30)** | **96.7%** |
+| consensus (`--consensus-n 3`)  | B | **93.3%** | **6.7% (2/30)** | **96.7%** |
 
-**Result: consensus voting cut the run-to-run verdict flip rate ~4× (26.7% → 6.7%)**
-and raised case-level stability from 73% to 93%. The self-consistency vote over K
-samples damps exactly the borderline-case churn that the single LLM exhibits —
-turning the LLM's nondeterminism from an indefensibility into a measured, mitigated
-property. (Absolute P/R/F1 still come with the Tier-2 mean ± CI; this table isolates
-*stability*, the reproducibility axis.)
+**Result: consensus voting roughly halves-to-quarters the run-to-run verdict flip
+rate** (single-LLM 13–27% → consensus 6.7%). Two things are worth stating honestly:
+(1) the **consensus arm replicated exactly** across the two campaigns
+(6.7% / 93.3% / 96.7% both times) — the self-consistency vote over K samples is a
+*stable* property, not a lucky single number; (2) the **single-LLM flip rate is
+itself run-variable** (26.7% then 13.3%) — its own instability is further evidence
+of the nondeterminism the consensus judge exists to tame. The robust, replicated
+claim is therefore directional and bounded: consensus is consistently ~2–4× more
+stable; the exact multiple depends on the (noisy) single-LLM baseline.
+
+**Paired effect (McNemar, campaign B, 77 sites, single vs consensus):** consensus
+scored higher (acc 83.1% / F1 0.822 vs single acc 79.2% / F1 0.784); of the
+discordant sites, 5 favoured consensus and 2 favoured single (χ²=0.57, **p=0.45**).
+So the *direction* favours consensus but it is **not significant at n=30** — too few
+discordant pairs to reject "no difference". Report this as a trend with its CI, and
+run more seeds / a larger or harder corpus before claiming a paired win
+(`scripts/mcnemar-compare.ts <runA> <runB>` reproduces it). (Absolute P/R/F1 still
+come with the Tier-2 mean ± CI; this table isolates *stability*, the
+reproducibility axis.)
