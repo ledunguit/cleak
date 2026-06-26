@@ -119,6 +119,27 @@ export function judgeHeuristically(
     reasons.push('allocation reachable through feasible execution path(s)');
   }
 
+  // ── PATH-SENSITIVE leak: the candidate is freed on SOME paths but a reachable exit
+  // still loses it — status 'conditional', or the candidate's variable is explicitly
+  // `unreconciled` on a reachable leak path. This is the real "missing-free on an
+  // error/early-return path" and the dominant REAL-PROJECT leak shape (e.g. cJSON's
+  // `cJSON_free(full_pointer)` / `cJSON_Delete(target)` missing on one branch). It is
+  // a STRONG signal, and (below) it must NOT be exonerated by the ownership-transfer
+  // penalty: a path that LOSES the object is not a path that transfers ownership. ──
+  const candidateVar = candidatePair?.variable;
+  const candidateUnreconciled = (se?.feasibleLeakPaths || []).some(
+    (lp) =>
+      lp.reachable &&
+      lp.leakRisk !== 'none' &&
+      !!candidateVar &&
+      (lp.unreconciledAllocations || []).includes(candidateVar),
+  );
+  const pathSensitiveLeak = (candidatePair?.status === 'conditional' && reachableLeakPath) || candidateUnreconciled;
+  if (pathSensitiveLeak) {
+    score += 0.15;
+    reasons.push('path-sensitive: freed on some paths but a reachable exit leaks this allocation');
+  }
+
   // ── Ownership: allocator that carries no ownership out → likely a local leak. ──
   if (
     se?.ownership &&
@@ -136,8 +157,14 @@ export function judgeHeuristically(
     const correlatedLeak = bundle.evidence.some(
       (e) => e.correlatedToCandidate === true && evidenceIndicatesLeak(e),
     );
-    score -= correlatedLeak ? 0.1 : 0.25;
-    reasons.push(`ownership transferred (${se.ownership.ownershipCarrier?.kind}) — likely the caller's to free`);
+    // Do NOT exonerate when there's a path-sensitive leak: ownership may transfer on
+    // the success path, but the object is LOST on the error path — that leak is real.
+    if (pathSensitiveLeak) {
+      reasons.push(`ownership transferred on the success path, but a reachable exit still leaks this allocation`);
+    } else {
+      score -= correlatedLeak ? 0.1 : 0.25;
+      reasons.push(`ownership transferred (${se.ownership.ownershipCarrier?.kind}) — likely the caller's to free`);
+    }
   } else if (hasOwnershipIssue) {
     score += 0.15;
     reasons.push('ownership convention: malloc_without_free');
@@ -212,6 +239,7 @@ export function judgeHeuristically(
     correlatedRuntimeLeak ||
     structuralHigh ||
     candidatePair?.status === 'unpaired' ||
+    pathSensitiveLeak ||
     hasOwnershipIssue;
   const flagged =
     verdict === InvestigationVerdict.CONFIRMED_LEAK || verdict === InvestigationVerdict.LIKELY_LEAK;
