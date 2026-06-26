@@ -156,13 +156,21 @@ FN3 TN38. Gate `determinism-gate.sh` chứng nhận; đồng thời từ chối 
     `cJSON_Duplicate` được thêm vào struct cha, nhưng trên một đường *error/early-return* cụ thể thì
     struct không được free → leak. Judge per-candidate/per-function (chỉ thấy snippet hàm bao) hợp
     lý kết luận "ownership đã chuyển cho struct → không leak", **bỏ sót** việc struct rò trên đường lỗi.
-  - **Kết luận:** phát hiện leak dự án thực cần **CẢ HAI**: (a) allocator annotation cho discovery
-    (đã làm, đúng hướng LAMeD), VÀ (b) **judging path-sensitive + interprocedural** (việc mở lớn —
-    static-analyzer đã có service interprocedural-flow/ownership/path-constraints nhưng chưa đủ/đưa
-    vào judge cho lớp ca này). Đây là đặc tả CHÍNH XÁC vì sao leak dự án thực khó, đo trên corpus
-    peer-review. (Quá trình lộ + sửa 4 bug thật: ingest repo_path tuyệt đối; `cJSON_malloc` pattern;
-    **Docker build vỡ** do thiếu COPY `tsup.config.ts` — analyzer không rebuild được từ lúc migrate
-    tsc→tsup; + feature `EXTRA_ALLOCATOR_NAMES`. gRPC removal cũng validated e2e trên cả 2 analyzer.)
+  - **Taxonomy 6 leak cjson (đọc TRỰC TIẾP từ 6 fix-commit thật):** (1+2) **deallocator-semantics**
+    — `cJSON_Duplicate`/`cJSON_ReplaceItemInObject`: buffer `cJSON_strdup` gắn cờ `cJSON_StringIsConst`
+    nên `cJSON_Delete` *bỏ qua không free* → leak; cần MÔ HÌNH HOÁ ngữ nghĩa deallocator (gần như
+    bất khả thi nếu không biết cJSON_Delete bỏ qua const). (3+4) **missing-free trên một đường**
+    — `merge_patch` thiếu `cJSON_Delete(target)`, `...FindPointer...` thiếu `cJSON_free(full_pointer)`
+    trên đúng một đường lỗi → *path-sensitive*, lớp DUY NHẤT có hi vọng bắt nếu wire path-constraints
+    vào judge. (5) **control-flow** `suffix_object`: reorder + null-guard trước alloc — tinh vi.
+  - **Kết luận:** real-project recall = 0% KHÔNG phải vì hệ yếu một chỗ mà vì 6 leak thuộc các lớp
+    KHÓ khác nhau: 2 cần deallocator-semantics, 2 path-sensitive, 1 control-flow, 1 file-level. Cần
+    **CẢ** (a) allocator annotation cho discovery (đã làm), VÀ (b) judging path-sensitive +
+    interprocedural + deallocator-model. Đây trùng với chính LAMeD (SOTA cũng chỉ bắt ~5–10/43). Đây
+    là đặc tả CHÍNH XÁC, case-by-case, vì sao leak dự án thực khó — đo trên corpus peer-review.
+    (Quá trình lộ + sửa 4 bug thật: ingest repo_path; `cJSON_malloc` pattern; **Docker build vỡ**
+    thiếu COPY `tsup.config.ts` — analyzer un-rebuildable từ migration tsc→tsup; + feature
+    `EXTRA_ALLOCATOR_NAMES`. gRPC removal validated e2e trên cả 2 analyzer image mới.)
 
 ---
 
