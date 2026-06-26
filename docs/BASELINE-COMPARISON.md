@@ -88,7 +88,16 @@ bun scripts/evaluate-corpus.ts llm_assisted  --corpus demo/lamed --consensus-n 3
 **bỏ** specificity/MCC/accuracy (TN=0 theo cấu trúc — như clang/infer). 6/41 ca chỉ có nhãn
 mức-file (không scoreable ở function mode → báo rõ, không drop). So với LAMeD: họ báo P/R (no
 F1) và đếm bug/43 qua CodeQL/Cooddy/Infer — đối chiếu trên **Recall + số bug bắt được**, không
-phải F1. (Số liệu sẽ điền sau khi materialize + chạy; tooling đã sẵn.)
+phải F1.
+
+**Kết quả thật (đã materialize 41/41 + chạy live):** `no_llm` heuristic **recall 0.000 — TP0/43**
+trên TẤT CẢ 7 project (libtiff 0/7, curl 0/15, cjson 0/6, libsolv 0/6, libxml2 0/4, libssh2 0/3,
+rabbitmq-c 0/2; 41/41 ca chạy OK, không lỗi). Trung thực: con số này **phù hợp văn liệu** — leak
+dự án thực rất khó; chính LAMeD chỉ bắt **5–10/43** và *chỉ sau khi* thêm LLM-generated allocator
+annotations vào một static analyzer thật (Cooddy/CodeQL/Infer). Lexical heuristic không annotation
+→ ~0 là kỳ vọng được. Phân tích nguyên nhân case-by-case (deallocator-semantics / path-sensitive /
+control-flow) ở [CONTRIBUTION.md](CONTRIBUTION.md) §threats-to-validity. Đây *biện minh* định vị
+luận văn: cần annotation (đã có `EXTRA_ALLOCATOR_NAMES`) + judging interprocedural — đúng hướng LAMeD.
 
 ## 6. Các script đánh giá liên quan
 
