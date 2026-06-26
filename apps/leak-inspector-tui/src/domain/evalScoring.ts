@@ -41,12 +41,20 @@ export interface LabeledCase {
   cwe?: string;
   flowVariant?: string;
   functionalVariant?: string;
+  /** Per-project factory allocators / custom deallocators (≈ LAMeD AllocSource /
+   * FreeSink) — function names supplied to candidateScan so wrapper-named
+   * allocators become candidates. Overrides the manifest-level defaults. */
+  allocators?: string[];
+  deallocators?: string[];
 }
 
 export interface LabeledManifest {
   schema_version: string;
   name?: string;
   cases: LabeledCase[];
+  /** Corpus-level default allocators/deallocators (a case's own list overrides). */
+  allocators?: string[];
+  deallocators?: string[];
 }
 
 /** A snapshot finding (subset of fields we score on; read from snapshot.json). */
