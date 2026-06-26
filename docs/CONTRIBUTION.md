@@ -144,18 +144,25 @@ FN3 TN38. Gate `determinism-gate.sh` chứng nhận; đồng thời từ chối 
   phần còn lại là preprint/tech-report (xem caveat ở [RELATED-WORK.md](RELATED-WORK.md)).
 - **Quy mô:** corpus chính là Juliet tổng hợp; real_projects mới 4 ca (2 cặp cJSON) → kết
   luận trên dự án thực cần mở rộng corpus.
-- **PHÁT HIỆN QUAN TRỌNG trên LAMeD thật (cjson 6 ca, đã materialize + chạy live):** **cả
-  `no_llm` lẫn `llm_assisted` đều recall 0%** — và LLM judge ĐÃ chạy (17 verdict LLM). Nút cổ
-  chai **KHÔNG phải tầng judge mà là KHÂU DISCOVERY**: leak cJSON nằm ở các **factory function**
-  (`cJSON_Duplicate`, `cJSON_CreateObject/Array/String` → bên trong gọi `cJSON_New_Item`). Tên
-  hàm KHÔNG chứa token `malloc/alloc`, nên candidate-scan (kể cả allocator-aware) **không phát
-  hiện site cấp phát** → không có candidate ở chỗ leak → cả heuristic lẫn LLM đều không thể flag
-  cái không tồn tại. (Đã sửa được khâu phụ: thêm pattern wrapper `cJSON_malloc` nâng discovery
-  40→60 candidate, nhưng leak thật là factory-alloc nên recall vẫn 0.) **Hệ quả/định hướng:** để
-  bắt leak dự án thực cần **allocator annotation theo từng project** — đúng y mô hình LAMeD
-  (LLM sinh AllocSource/FreeSink). Đây là việc còn mở quan trọng nhất, và nó *biện minh* cho
-  hướng đi của LAMeD. (Quá trình này cũng lộ + sửa 3 bug thật: ingest repo_path tuyệt đối,
-  pattern `cJSON_malloc`, và Docker build vỡ do thiếu COPY `tsup.config.ts`.)
+- **PHÁT HIỆN QUAN TRỌNG trên LAMeD thật (cjson 6 ca, materialize + chạy live cả 4 cấu hình).**
+  **recall = 0% ở MỌI cấu hình**: `no_llm` và `llm_assisted`, *trước* và *sau* khi sửa discovery.
+  Đây là kết quả phân-tầng, trung thực:
+  - **Tầng 1 — discovery:** leak cJSON ở **factory function** (`cJSON_Duplicate`,
+    `cJSON_CreateObject` → `cJSON_New_Item`), tên không chứa token `malloc/alloc` → candidate-scan
+    không thấy site cấp phát. **Đã sửa** bằng `EXTRA_ALLOCATOR_NAMES` (allocator annotation theo
+    project, ≈ LAMeD AllocSource) → candidate 40→68/ca, **factory-alloc site giờ LÀ candidate**.
+  - **Tầng 2 — judging:** *kể cả khi* leak site đã là candidate VÀ LLM judge chạy (19 verdict LLM),
+    recall **vẫn 0%**. Vì leak cJSON là **path-sensitive + interprocedural ownership**: một object
+    `cJSON_Duplicate` được thêm vào struct cha, nhưng trên một đường *error/early-return* cụ thể thì
+    struct không được free → leak. Judge per-candidate/per-function (chỉ thấy snippet hàm bao) hợp
+    lý kết luận "ownership đã chuyển cho struct → không leak", **bỏ sót** việc struct rò trên đường lỗi.
+  - **Kết luận:** phát hiện leak dự án thực cần **CẢ HAI**: (a) allocator annotation cho discovery
+    (đã làm, đúng hướng LAMeD), VÀ (b) **judging path-sensitive + interprocedural** (việc mở lớn —
+    static-analyzer đã có service interprocedural-flow/ownership/path-constraints nhưng chưa đủ/đưa
+    vào judge cho lớp ca này). Đây là đặc tả CHÍNH XÁC vì sao leak dự án thực khó, đo trên corpus
+    peer-review. (Quá trình lộ + sửa 4 bug thật: ingest repo_path tuyệt đối; `cJSON_malloc` pattern;
+    **Docker build vỡ** do thiếu COPY `tsup.config.ts` — analyzer không rebuild được từ lúc migrate
+    tsc→tsup; + feature `EXTRA_ALLOCATOR_NAMES`. gRPC removal cũng validated e2e trên cả 2 analyzer.)
 
 ---
 
