@@ -7,9 +7,9 @@ import { CParserService, FunctionInfo } from './c-parser.service';
 export class FunctionSummaryService {
   constructor(private readonly cParser: CParserService) {}
 
-  summarize(filePath: string, content?: string, functionName?: string) {
+  summarize(filePath: string, content?: string, functionName?: string, extraAllocators?: string[], extraDeallocators?: string[]) {
     const source = content || readFileSync(filePath, 'utf-8');
-    const result = this.cParser.parse(source, filePath);
+    const result = this.cParser.parse(source, filePath, extraAllocators, extraDeallocators);
 
     const functions = result.functions.filter(
       (fn) => !functionName || fn.functionName === functionName,

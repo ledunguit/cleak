@@ -12,9 +12,9 @@ export interface StaticToolServices {
   candidateScan: { scan(filePath: string, content: string, extraAllocators?: string[], extraDeallocators?: string[]): any };
   astScan: { parse(filePath: string, content?: string): any };
   callGraph: { extract(rootPath: string, files: string[]): any };
-  functionSummary: { summarize(filePath: string, content: string, functionName: string): any };
+  functionSummary: { summarize(filePath: string, content: string, functionName: string, extraAllocators?: string[], extraDeallocators?: string[]): any };
   interproceduralFlow: { analyze(rootPath: string, functionName: string, files: string[]): any };
-  pathConstraints: { analyze(filePath: string, content: string, lineNumber: number): any };
+  pathConstraints: { analyze(filePath: string, content: string, lineNumber: number, extraAllocators?: string[], extraDeallocators?: string[]): any };
   ownership: { summarize(files: string[], rootPath: string): any; conventions(content: string, filePath: string): any };
   leakguard: { run(projectPath: string, buildCommand: string, timeoutSec?: number): any; getReport(runId: string): any };
 }
@@ -65,8 +65,8 @@ export function createStaticMcpServer(svc: StaticToolServices): McpServer {
 
   server.registerTool(
     'functionSummary',
-    { description: 'Summarize a function: alloc/free balance, local vars, calls', inputSchema: { filePath: z.string(), content: z.string().optional(), functionName: z.string() } },
-    async (a) => ok(await svc.functionSummary.summarize(a.filePath, a.content ?? '', a.functionName)),
+    { description: 'Summarize a function: alloc/free balance, local vars, calls. Optionally supply per-project allocators/deallocators so factory-allocated vars are paired.', inputSchema: { filePath: z.string(), content: z.string().optional(), functionName: z.string(), extraAllocators: z.array(z.string()).optional(), extraDeallocators: z.array(z.string()).optional() } },
+    async (a) => ok(await svc.functionSummary.summarize(a.filePath, a.content ?? '', a.functionName, a.extraAllocators, a.extraDeallocators)),
   );
 
   server.registerTool(
@@ -77,8 +77,8 @@ export function createStaticMcpServer(svc: StaticToolServices): McpServer {
 
   server.registerTool(
     'pathConstraints',
-    { description: 'Analyze path constraints and feasible paths around an allocation', inputSchema: { filePath: z.string(), content: z.string().optional(), lineNumber: z.number() } },
-    async (a) => ok(await svc.pathConstraints.analyze(a.filePath, a.content ?? '', a.lineNumber)),
+    { description: 'Analyze path constraints and feasible paths around an allocation. Optionally supply per-project allocators/deallocators so factory allocations are tracked on exit paths.', inputSchema: { filePath: z.string(), content: z.string().optional(), lineNumber: z.number(), extraAllocators: z.array(z.string()).optional(), extraDeallocators: z.array(z.string()).optional() } },
+    async (a) => ok(await svc.pathConstraints.analyze(a.filePath, a.content ?? '', a.lineNumber, a.extraAllocators, a.extraDeallocators)),
   );
 
   server.registerTool(

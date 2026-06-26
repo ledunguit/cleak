@@ -30,6 +30,7 @@ import { PathResolver } from '../domain/pathResolver';
 import { walkCFiles, readFileSafe } from '../domain/fileWalk';
 import { heuristicVerdict } from '../domain/judge';
 import { THRESHOLDS } from '../domain/thresholds';
+import { foldStaticResult, type StaticContextStore } from '../domain/staticContext';
 import type { InvestigationPhase, InvestigationOutcome } from './investigation';
 
 const reporter = new LeakReporting();
@@ -88,6 +89,48 @@ export interface ScanResult {
   report: ScanReport & Record<string, unknown>;
   bundles: LeakBundle[];
   investigation?: InvestigationOutcome;
+}
+
+/**
+ * Deterministic static enrichment: for each candidate, run the analyzer's
+ * `functionSummary` + `pathConstraints` (WITH the per-project allocators) and fold
+ * the results into `bundle.staticEvidence` (alloc→free pairing, feasible leak paths).
+ * This makes the heuristic judge PATH-AWARE even in `no_llm` — previously it judged
+ * on an empty static context there — and supplies the project's factory allocators
+ * to the static analysis, which the llm_assisted sub-agents otherwise omit. Pure
+ * (Tier-1 deterministic): the same content + allocators always yield the same evidence.
+ */
+async function enrichStaticEvidence(
+  bundles: LeakBundle[],
+  staticClient: McpClient,
+  input: ScanInput,
+  abortSignal?: AbortSignal,
+): Promise<void> {
+  const allocArgs = {
+    ...(input.extraAllocators?.length ? { extraAllocators: input.extraAllocators } : {}),
+    ...(input.extraDeallocators?.length ? { extraDeallocators: input.extraDeallocators } : {}),
+  };
+  const store: StaticContextStore = new Map();
+  await mapWithLimit(bundles, THRESHOLDS.discoveryConcurrency, async (b) => {
+    if (abortSignal?.aborted) return;
+    const file = b.candidate.file_path;
+    const content = readFileSafe(file);
+    if (content === null) return;
+    const fn = b.candidate.function_name;
+    const line = b.candidate.line_number;
+    try {
+      const fs = await staticClient.callTool('functionSummary', { filePath: file, content, functionName: fn, ...allocArgs });
+      foldStaticResult(store, 'functionSummary', { filePath: file, functionName: fn }, fs, [b]);
+    } catch {
+      /* best-effort: a single failed enrichment must not abort the scan */
+    }
+    try {
+      const pc = await staticClient.callTool('pathConstraints', { filePath: file, content, lineNumber: line, ...allocArgs });
+      foldStaticResult(store, 'pathConstraints', { filePath: file, lineNumber: line }, pc, [b]);
+    } catch {
+      /* best-effort */
+    }
+  });
 }
 
 export async function runScan(input: ScanInput, deps: ScanDeps): Promise<ScanResult> {
@@ -163,6 +206,13 @@ export async function runScan(input: ScanInput, deps: ScanDeps): Promise<ScanRes
     totalFiles: cFiles.length,
     ...(warning ? { warning } : {}),
   });
+
+  // ── Deterministic static enrichment: populate each bundle's staticEvidence so the
+  // heuristic judge is path-aware (alloc→free pairing + feasible leak paths), even in
+  // no_llm. Disable with STATIC_ENRICH=off. ──
+  if (discovered > 0 && process.env.STATIC_ENRICH !== 'off') {
+    await enrichStaticEvidence(candidates.getAllBundles(), staticClient, input, deps.abortSignal);
+  }
 
   // ── Investigation (agentic; optional in M2) ──
   let investigationOutcome: InvestigationOutcome | undefined;

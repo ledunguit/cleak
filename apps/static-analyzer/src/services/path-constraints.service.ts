@@ -6,8 +6,8 @@ import { CParserService, FunctionInfo } from './c-parser.service';
 export class PathConstraintsService {
   constructor(private readonly cParser: CParserService) {}
 
-  analyze(filePath: string, content: string, lineNumber: number) {
-    const result = this.cParser.parse(content, filePath);
+  analyze(filePath: string, content: string, lineNumber: number, extraAllocators?: string[], extraDeallocators?: string[]) {
+    const result = this.cParser.parse(content, filePath, extraAllocators, extraDeallocators);
 
     const containingFunction = result.functions.find((fn) =>
       fn.lineNumber <= lineNumber &&
