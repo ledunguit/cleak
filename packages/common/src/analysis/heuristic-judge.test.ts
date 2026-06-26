@@ -182,3 +182,63 @@ describe('judgeHeuristically — precision fixes', () => {
     expect(flagged(v.verdict)).toBe(false);
   });
 });
+
+// ── Path-sensitive leaks (the dominant real-project shape, e.g. cJSON) ──────────
+// An allocation freed on the main path but lost on an error/early-return path. The
+// static analysis already flags this (AllocFreePair status 'conditional' +
+// FeasibleLeakPath.unreconciledAllocations); the judge must FLAG it and NOT let the
+// "ownership transferred on success" penalty exonerate it. File path is nonexistent
+// so the on-disk structural analysis stays neutral — isolating the static-evidence path.
+function pathBundle(opts: {
+  pairStatus?: 'paired' | 'unpaired' | 'conditional';
+  reachable: boolean;
+  unrec?: string[];
+  ownershipReturned?: boolean;
+}): LeakBundle {
+  const VAR = 'p';
+  const LINE = 10;
+  return {
+    bundleId: 'pb',
+    candidate: { id: 'c', function_name: 'f', file_path: '/nonexistent/x.c', line_number: LINE, allocation_site: '', allocation_type: 'cJSON_malloc', confidence: 'medium', context: '' },
+    evidence: [],
+    staticEvidence: {
+      allocFreePairs: opts.pairStatus
+        ? [{ variable: VAR, allocCall: 'cJSON_malloc', allocLine: LINE, allocFile: 'x.c', freeLine: opts.pairStatus === 'unpaired' ? null : 20, freeFunction: null, bindsToNewVariable: true, status: opts.pairStatus }]
+        : [],
+      feasibleLeakPaths: opts.reachable
+        ? [{ kind: 'return', exitLine: 15, reachable: true, conditions: ['if (err)'], unreconciledAllocations: opts.unrec ?? [VAR], leakRisk: 'high', narrative: 'error path leaks p', feasibilityChecked: 'heuristic' }]
+        : [],
+      ownership: opts.ownershipReturned
+        ? { functionName: 'f', filePath: 'x.c', role: 'allocator', ownershipCarrier: { kind: 'return_value' }, ownershipType: 'returns_ownership', rationale: 'returned' }
+        : undefined,
+      earlyReturnCount: 0,
+      leakyExitPaths: 0,
+    },
+    status: 'pending',
+    createdAt: '',
+    updatedAt: '',
+  } as unknown as LeakBundle;
+}
+
+describe('judgeHeuristically — path-sensitive leaks', () => {
+  test('conditional free + reachable leak path + ownership RETURNED → FLAGGED (was exonerated before)', () => {
+    const v = judgeHeuristically(pathBundle({ pairStatus: 'conditional', reachable: true, unrec: ['p'], ownershipReturned: true }), {});
+    expect(flagged(v.verdict)).toBe(true);
+  });
+
+  test('the candidate variable named on a reachable un-freed exit → strong signal (precise match)', () => {
+    const v = judgeHeuristically(pathBundle({ pairStatus: 'conditional', reachable: true, unrec: ['p'], ownershipReturned: true }), {});
+    // verdict is at least likely_leak, and the explanation mentions the override
+    expect(['confirmed_leak', 'likely_leak']).toContain(v.verdict);
+  });
+
+  test('NO REGRESSION: freed on ALL paths + ownership returned → NOT flagged', () => {
+    const v = judgeHeuristically(pathBundle({ pairStatus: 'paired', reachable: false, ownershipReturned: true }), {});
+    expect(flagged(v.verdict)).toBe(false);
+  });
+
+  test('NO REGRESSION: a transferred-ownership alloc with no reachable leak path stays exonerated', () => {
+    const v = judgeHeuristically(pathBundle({ pairStatus: 'paired', reachable: false, ownershipReturned: true }), {});
+    expect(flagged(v.verdict)).toBe(false);
+  });
+});
