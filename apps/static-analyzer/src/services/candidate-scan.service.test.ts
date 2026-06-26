@@ -22,17 +22,20 @@ describe('CandidateScanService — allocator-aware discovery', () => {
     expect(allocLines(src)).toEqual([1, 2, 3]);
   });
 
-  test('discovers prefixed libc WRAPPERS: cJSON_malloc / g_realloc / apr_strdup', () => {
-    // The real cJSON leaks flow through `cJSON_malloc` — `_malloc` is not `_alloc`,
-    // and the `_` before `malloc` removes the \b boundary, so the older patterns
-    // missed it entirely (→ 0 candidates in the flaw function → 0 recall on LAMeD).
-    const src = [
-      'p = (char*)cJSON_malloc(len);', // line 1
-      'q = g_realloc(p, n);', // line 2
-      'r = apr_strdup(pool, s);', // line 3
-      'd = my_calloc(1, n);', // line 4
-    ].join('\n');
-    expect(allocLines(src)).toEqual([1, 2, 3, 4]);
+  test('prefixed libc wrappers via EXACT names (a greedy `_calloc` pattern would over-match)', () => {
+    // cJSON_malloc / g_realloc carry no malloc/alloc token at a word boundary; supply
+    // them as exact per-project names (≈ LAMeD AllocSource) — precise, no over-match.
+    const src = ['p = (char*)cJSON_malloc(len);', 'q = g_realloc(p, n);', 'r = apr_strdup(pool, s);'].join('\n');
+    expect(allocLinesWith(src, ['cJSON_malloc', 'g_realloc', 'apr_strdup'])).toEqual([1, 2, 3]);
+    // WITHOUT the names, NO greedy wrapper fires (removing that over-match is the fix).
+    expect(allocLines(src)).toEqual([]);
+  });
+
+  test('REGRESSION: a function NAME containing _calloc/_malloc is NOT an allocation', () => {
+    // Juliet defines `char *char_calloc_01_bad(void)`. The old greedy wrapper matched
+    // the function name as an allocation → FP explosion (Juliet FP 7→44). Must ignore it.
+    const src = ['static char * char_calloc_01_bad(void)', '{', '  data = calloc(1, 8);', '}'].join('\n');
+    expect(allocLines(src)).toEqual([3]); // only the real calloc() on line 3
   });
 
   test('does NOT mistake deallocators for allocations (precise word boundary)', () => {

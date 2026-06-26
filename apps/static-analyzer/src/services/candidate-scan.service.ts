@@ -19,13 +19,12 @@ const ALLOC_PATTERNS = [
   // matched (the "alloc" in "deallocate" is mid-word), keeping it precise.
   /\balloc\w*\s*\(/gi,
   /\b\w+_alloc\w*\s*\(/gi,
-  // Custom libc WRAPPERS with a prefix: cJSON_malloc, g_realloc, my_calloc,
-  // apr_strdup. These miss the patterns above (`_malloc` is not `_alloc`, and the
-  // `_` before `malloc` removes the `\b` word boundary) yet are the most common
-  // real-project allocator shape — cJSON's leaks all flow through `cJSON_malloc`.
-  // `free`/`*_free`/`dealloc` never match (no `_malloc/_calloc/_realloc/_strdup`).
-  /\b\w+_(?:m|c|re)alloc\w*\s*\(/gi,
-  /\b\w+_strn?dup\w*\s*\(/gi,
+  // NOTE: a generic `\w+_(m|c|re)alloc` / `\w+_strn?dup` wrapper pattern was tried
+  // here but it OVER-MATCHES — it treats a function NAME like Juliet's
+  // `char_calloc_01_bad(` as an allocation call, doubling candidates and tanking
+  // precision (FP 7→44 on Juliet). Prefixed libc wrappers (cJSON_malloc, g_realloc)
+  // are instead supplied as EXACT per-project names via `extraAllocators` (≈ LAMeD
+  // AllocSource), which is precise. See namePatterns() below.
 ];
 
 const FREE_PATTERNS = [
