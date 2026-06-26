@@ -55,6 +55,11 @@ export interface ScanInput {
   dynamicMode: DynamicMode;
   fileLimit?: number;
   buildCommand?: string;
+  /** Per-project factory allocators / custom deallocators (≈ LAMeD AllocSource /
+   * FreeSink) passed to candidateScan so wrapper-named allocators (cJSON_Duplicate,
+   * xmlNewNode, …) are discovered. Usually supplied by the corpus manifest. */
+  extraAllocators?: string[];
+  extraDeallocators?: string[];
 }
 
 export interface ScanDeps {
@@ -124,7 +129,12 @@ export async function runScan(input: ScanInput, deps: ScanDeps): Promise<ScanRes
     const content = readFileSafe(file);
     if (content === null) return null;
     try {
-      return (await staticClient.callTool('candidateScan', { filePath: file, content })) as any;
+      return (await staticClient.callTool('candidateScan', {
+        filePath: file,
+        content,
+        ...(input.extraAllocators?.length ? { extraAllocators: input.extraAllocators } : {}),
+        ...(input.extraDeallocators?.length ? { extraDeallocators: input.extraDeallocators } : {}),
+      })) as any;
     } catch {
       return null; // a single unreadable/odd file shouldn't abort discovery
     }

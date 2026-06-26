@@ -301,6 +301,9 @@ export async function runEval(opts: EvalOptions): Promise<EvalResult> {
         dynamic: opts.dynamic,
         format: 'snapshot',
         build: c.build_command,
+        // Per-project allocators: the case's own list wins, else the corpus default.
+        extraAllocators: c.allocators ?? manifest.allocators,
+        extraDeallocators: c.deallocators ?? manifest.deallocators,
         staticUrl: opts.staticUrl,
         dynamicUrl: opts.dynamicUrl,
         quiet: true,

@@ -29,6 +29,10 @@ export interface HeadlessOptions {
   apiKey?: string;
   format: string;
   build?: string;
+  /** Per-project factory allocators / custom deallocators (≈ LAMeD AllocSource /
+   * FreeSink) — threaded to candidateScan so wrapper-named allocators are found. */
+  extraAllocators?: string[];
+  extraDeallocators?: string[];
   fileLimit?: number;
   staticUrl?: string;
   dynamicUrl?: string;
@@ -105,6 +109,8 @@ export async function runHeadless(opts: HeadlessOptions): Promise<HeadlessResult
         dynamicMode,
         fileLimit: opts.fileLimit,
         buildCommand: opts.build,
+        extraAllocators: opts.extraAllocators,
+        extraDeallocators: opts.extraDeallocators,
       },
       { staticClient, dynamicClient, emitter, pathResolver, investigation, abortSignal: opts.signal },
     );

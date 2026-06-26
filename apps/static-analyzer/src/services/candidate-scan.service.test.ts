@@ -4,6 +4,8 @@ import { CandidateScanService } from './candidate-scan.service';
 const svc = new CandidateScanService();
 const allocLines = (src: string): number[] =>
   svc.scan('t.c', src).candidates.map((c: any) => c.lineNumber);
+const allocLinesWith = (src: string, allocs?: string[], deallocs?: string[]): number[] =>
+  svc.scan('t.c', src, allocs, deallocs).candidates.map((c: any) => c.lineNumber);
 
 describe('CandidateScanService — allocator-aware discovery', () => {
   test('discovers libc allocators (malloc/calloc/realloc/strdup)', () => {
@@ -78,5 +80,34 @@ describe('CandidateScanService — allocator-aware discovery', () => {
       if (prev === undefined) delete process.env.EXTRA_ALLOCATOR_NAMES;
       else process.env.EXTRA_ALLOCATOR_NAMES = prev;
     }
+  });
+
+  test('per-scan allocators param (manifest-supplied) discovers factory allocators', () => {
+    // The clean mechanism: the corpus manifest supplies the project allocator API,
+    // threaded as a param (no env). cJSON_Print is NOT an owning allocator → skipped.
+    const src = ['v = cJSON_Duplicate(x, 1);', 'o = cJSON_CreateObject();', 'p = cJSON_Print(o);'].join('\n');
+    expect(allocLinesWith(src, ['cJSON_Duplicate', 'cJSON_CreateObject'])).toEqual([1, 2]);
+  });
+
+  test('manifest allocators take PRECEDENCE over the env var', () => {
+    const prev = process.env.EXTRA_ALLOCATOR_NAMES;
+    // Names with NO malloc/alloc token, so only the EXTRA list (param or env) finds them.
+    process.env.EXTRA_ALLOCATOR_NAMES = 'env_factory';
+    try {
+      // Param present → env ignored: only the param name is discovered (line 2).
+      const src = 'a = env_factory(8);\nb = param_factory(8);';
+      expect(allocLinesWith(src, ['param_factory'])).toEqual([2]);
+    } finally {
+      if (prev === undefined) delete process.env.EXTRA_ALLOCATOR_NAMES;
+      else process.env.EXTRA_ALLOCATOR_NAMES = prev;
+    }
+  });
+
+  test('custom deallocators param: a custom free is counted (so it is not mistaken for a leak)', () => {
+    // `my_release` has no free/delete token → without the param it is NOT a free.
+    const withParam = svc.scan('t.c', 'p = malloc(8);\nmy_release(p);', undefined, ['my_release']);
+    const without = svc.scan('t.c', 'p = malloc(8);\nmy_release(p);');
+    expect(withParam.candidates[0].observedDeallocationCount).toBe(1);
+    expect(without.candidates[0].observedDeallocationCount).toBe(0);
   });
 });

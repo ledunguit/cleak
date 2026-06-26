@@ -123,6 +123,34 @@ export function entryToFlaws(e: LamedEntry): { flaws: LabeledFlaw[]; fileLevelOn
   return { flaws: fns.map((fn) => ({ file: e.file, function: fn, cwe: 'CWE-401' })), fileLevelOnly: false };
 }
 
+/**
+ * Per-project allocator / deallocator APIs (≈ LAMeD's AllocSource / FreeSink
+ * annotations). These FACTORY allocators carry no malloc/alloc token (or have a
+ * prefix that breaks the `_malloc` wrapper pattern, e.g. `_TIFFmalloc`), so the
+ * lexical scan misses the leak site without them. Curated from each library's
+ * public allocation API (the projects in the LAMeD benchmark). Keyed by the
+ * lowercase `project` field. Conservative — only well-known owning allocators.
+ */
+export const PROJECT_ALLOCATORS: Record<string, string[]> = {
+  cjson: ['cJSON_New_Item', 'cJSON_Duplicate', 'cJSON_CreateObject', 'cJSON_CreateArray', 'cJSON_CreateString', 'cJSON_CreateRaw', 'cJSON_CreateNull', 'cJSON_CreateBool', 'cJSON_CreateNumber', 'cJSON_CreateArrayReference', 'cJSON_CreateObjectReference', 'cJSON_malloc', 'cJSON_strdup'],
+  curl: ['Curl_cmalloc', 'Curl_ccalloc', 'Curl_crealloc', 'Curl_cstrdup', 'Curl_memdup', 'Curl_saferealloc', 'curl_maprintf', 'curl_mvaprintf', 'aprintf'],
+  libtiff: ['_TIFFmalloc', '_TIFFcalloc', '_TIFFrealloc', '_TIFFmallocExt', '_TIFFcallocExt', '_TIFFCheckMalloc', '_TIFFCheckRealloc'],
+  libsolv: ['solv_malloc', 'solv_malloc2', 'solv_calloc', 'solv_realloc', 'solv_realloc2', 'solv_strdup', 'solv_memdup', 'solv_memdup2'],
+  libxml2: ['xmlMalloc', 'xmlMallocAtomic', 'xmlRealloc', 'xmlMemMalloc', 'xmlMemRealloc', 'xmlStrdup', 'xmlStrndup', 'xmlMemStrdup', 'xmlNewNode', 'xmlNewDocNode', 'xmlNewText', 'xmlNewDoc', 'xmlBufferCreate', 'xmlBufContentWrapper'],
+  libssh2: ['LIBSSH2_ALLOC', 'LIBSSH2_REALLOC', '_libssh2_calloc'],
+  'rabbitmq-c': ['amqp_pool_alloc', 'amqp_pool_alloc_bytes', 'amqp_cstring_bytes', 'amqp_bytes_malloc'],
+};
+
+export const PROJECT_DEALLOCATORS: Record<string, string[]> = {
+  cjson: ['cJSON_Delete', 'cJSON_free'],
+  curl: ['Curl_cfree', 'Curl_safefree'],
+  libtiff: ['_TIFFfree', '_TIFFfreeExt'],
+  libsolv: ['solv_free'],
+  libxml2: ['xmlFree', 'xmlFreeNode', 'xmlFreeNodeList', 'xmlFreeDoc', 'xmlBufferFree', 'xmlMemFree'],
+  libssh2: ['LIBSSH2_FREE'],
+  'rabbitmq-c': ['empty_amqp_pool', 'recycle_amqp_pool'],
+};
+
 // ── Side-effecting helpers (materialization) ────────────────────────────────
 
 function git(repoDir: string, args: string[]): string {
@@ -194,6 +222,8 @@ function main(): void {
       clean: [],
       cwe: 'CWE-401',
       functionalVariant: e.project,
+      allocators: PROJECT_ALLOCATORS[e.project],
+      deallocators: PROJECT_DEALLOCATORS[e.project],
       // Provenance (not read by the scorer, but keeps the label traceable to LAMeD).
       _lamed: { bugRef: e.bug_repo_link, fixCommit: e.commit, file: e.file, targetFunction: e.target_function },
     });

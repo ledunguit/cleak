@@ -9,7 +9,7 @@ import { z } from 'zod';
  */
 export interface StaticToolServices {
   fileIndexing: { indexFiles(rootPath: string, fileLimit?: number, excludePatterns?: string[]): any };
-  candidateScan: { scan(filePath: string, content: string): any };
+  candidateScan: { scan(filePath: string, content: string, extraAllocators?: string[], extraDeallocators?: string[]): any };
   astScan: { parse(filePath: string, content?: string): any };
   callGraph: { extract(rootPath: string, files: string[]): any };
   functionSummary: { summarize(filePath: string, content: string, functionName: string): any };
@@ -36,8 +36,19 @@ export function createStaticMcpServer(svc: StaticToolServices): McpServer {
 
   server.registerTool(
     'candidateScan',
-    { description: 'Scan a file for allocation sites (malloc, calloc, realloc, strdup, new)', inputSchema: { filePath: z.string(), content: z.string().optional() } },
-    async (a) => ok(await svc.candidateScan.scan(a.filePath, a.content ?? '')),
+    {
+      description:
+        'Scan a file for allocation sites (malloc, calloc, realloc, strdup, new). ' +
+        'Optionally supply per-project factory allocators / custom deallocators (≈ LAMeD AllocSource/FreeSink) ' +
+        'so wrapper-named allocators (e.g. cJSON_Duplicate) become candidates.',
+      inputSchema: {
+        filePath: z.string(),
+        content: z.string().optional(),
+        extraAllocators: z.array(z.string()).optional(),
+        extraDeallocators: z.array(z.string()).optional(),
+      },
+    },
+    async (a) => ok(await svc.candidateScan.scan(a.filePath, a.content ?? '', a.extraAllocators, a.extraDeallocators)),
   );
 
   server.registerTool(

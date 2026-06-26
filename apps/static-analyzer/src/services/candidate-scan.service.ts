@@ -44,20 +44,19 @@ const FREE_PATTERNS = [
 const RETURN_PATTERN = /\breturn\b/g;
 
 /**
- * Project-specific allocator FUNCTIONS supplied via `EXTRA_ALLOCATOR_NAMES`
- * (comma-separated). Real projects expose FACTORY allocators whose names carry no
- * malloc/alloc token — cJSON's leaks flow through `cJSON_Duplicate` /
- * `cJSON_CreateObject` (→ `cJSON_New_Item`), g_lib uses `g_strdup`/`g_strconcat`.
- * These are invisible to the lexical patterns, which running on the real LAMeD
- * corpus showed to be the single biggest real-project DISCOVERY gap (no candidate
- * at the leak site → neither the heuristic nor the LLM can flag it). This is the
- * same signal LAMeD generates as AllocSource annotations; here it is supplied as a
- * per-project list. Each name → a precise `\bNAME\s*\(` matcher; only safe
- * identifiers are accepted. Parsed per scan so a per-corpus value takes effect.
+ * Build `\bNAME\s*\(` matchers from a list of function names. Real projects expose
+ * FACTORY allocators / custom deallocators whose names carry no malloc/alloc/free
+ * token — cJSON's leaks flow through `cJSON_Duplicate` / `cJSON_CreateObject`
+ * (→ `cJSON_New_Item`); deallocation via `cJSON_Delete`. These are invisible to the
+ * lexical patterns (the single biggest real-project DISCOVERY gap on LAMeD: no
+ * candidate at the leak site → neither heuristic nor LLM can flag it). This is the
+ * same signal LAMeD generates as AllocSource/FreeSink annotations; supplied here as
+ * a PER-PROJECT list. `names` (from the corpus manifest, threaded per scan) takes
+ * precedence; the `env*` var is a fallback for ad-hoc scans. Only safe identifiers.
  */
-function extraAllocatorPatterns(): RegExp[] {
-  return (process.env.EXTRA_ALLOCATOR_NAMES || '')
-    .split(',')
+function namePatterns(names: string[] | undefined, envVar: string): RegExp[] {
+  const list = names?.length ? names : (process.env[envVar] || '').split(',');
+  return list
     .map((s) => s.trim())
     .filter((s) => /^[A-Za-z_]\w*$/.test(s))
     .map((n) => new RegExp(`\\b${n}\\s*\\(`, 'g'));
@@ -65,8 +64,9 @@ function extraAllocatorPatterns(): RegExp[] {
 
 @Injectable()
 export class CandidateScanService {
-  scan(filePath: string, content?: string) {
-    const allocPatterns = [...ALLOC_PATTERNS, ...extraAllocatorPatterns()];
+  scan(filePath: string, content?: string, extraAllocators?: string[], extraDeallocators?: string[]) {
+    const allocPatterns = [...ALLOC_PATTERNS, ...namePatterns(extraAllocators, 'EXTRA_ALLOCATOR_NAMES')];
+    const freePatterns = [...FREE_PATTERNS, ...namePatterns(extraDeallocators, 'EXTRA_DEALLOCATOR_NAMES')];
     const source = content || readFileSync(filePath, 'utf-8');
     const sanitized = this.sanitizeSource(source);
     const lines = source.split('\n');
@@ -76,7 +76,7 @@ export class CandidateScanService {
 
     const allFreeLines: number[] = [];
     for (let i = 0; i < sanitizedLines.length; i++) {
-      for (const pattern of FREE_PATTERNS) {
+      for (const pattern of freePatterns) {
         pattern.lastIndex = 0;
         if (pattern.test(sanitizedLines[i])) {
           allFreeLines.push(i + 1);
