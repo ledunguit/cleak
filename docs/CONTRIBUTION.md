@@ -171,6 +171,19 @@ FN3 TN38. Gate `determinism-gate.sh` chứng nhận; đồng thời từ chối 
     (Quá trình lộ + sửa 4 bug thật: ingest repo_path; `cJSON_malloc` pattern; **Docker build vỡ**
     thiếu COPY `tsup.config.ts` — analyzer un-rebuildable từ migration tsc→tsup; + feature
     `EXTRA_ALLOCATOR_NAMES`. gRPC removal validated e2e trên cả 2 analyzer image mới.)
+  - **Thử nghiệm judging path-sensitive (đã build, nhánh `thesis/path-sensitive-recall`):** thread
+    allocator annotation vào c-parser → function-summary/path-constraints; chạy enrichment tất định
+    ở no_llm để điền `staticEvidence`; thêm term judge path-sensitive (không cho ownership-penalty
+    che leak trên đường lỗi). **Cơ chế chạy** (pathConstraints phát hiện `feasibleLeakPaths` với
+    `unreconciledAllocations`; judge flag nhiều hơn hẳn trên cjson thật). **NHƯNG** exit-path analysis
+    là **CFG heuristic (không Z3)** → over-report đường rò → bật mặc định làm **sập precision Juliet
+    (FP 7→44)**. ⇒ để **opt-in** (`STATIC_ENRICH=on`); baseline Juliet giữ nguyên P0.806/R0.906/F1 0.853.
+    **Phát hiện cốt lõi:** path-sensitive leak detection **cần feasibility chính xác (Z3)**, không
+    phải CFG heuristic — đây là lý do `feasibilityChecked` còn là stub. recall cjson vẫn 0 do còn:
+    quét cả file test (nhiễu), function-attribution kém trên file lớn, leak `target` là tham số (không
+    phải alloc cục bộ). Mỗi cái là một việc mở riêng (test-dir exclude, attribution, parameter-ownership).
+    *(Nhân tiện sửa 1 bug latent trên master: pattern wrapper `\w+_(m|c|re)alloc` khớp nhầm TÊN HÀM
+    Juliet `char_calloc_01_bad(` → nhân đôi candidate; đã gỡ, thay bằng exact per-project names.)*
 
 ---
 
