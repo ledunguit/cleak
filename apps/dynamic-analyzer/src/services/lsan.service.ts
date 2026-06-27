@@ -22,6 +22,7 @@ export class LsanService {
     const result = await runConfined(binaryPath, args ?? [], {
       timeoutSec: timeout,
       env: { ...process.env, LSAN_OPTIONS: 'verbosity=1:log_threads=1' },
+      unlimitedAddressSpace: true, // ASan/LSan reserve ~20 TB virtual — the -v cap aborts them
     });
     const output = result.stderr || result.stdout;
     const findings = this.resultParser.parseLsanOutput(output);

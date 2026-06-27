@@ -220,7 +220,39 @@ export class ResultParserService {
   // ── LSan Parser (same format as ASan for leak reports) ──
 
   parseLsanOutput(output: string): Finding[] {
-    // LSan output uses same format as ASan
-    return this.parseAsanOutput(output);
+    // LSan's LEAK format differs from ASan's ERROR format: one block per leak,
+    //   "Direct leak of 100 byte(s) in 1 object(s) allocated from:" + a stack whose
+    // FIRST frame is the allocator interceptor (__interceptor_calloc …) — the user
+    // site is a few frames down. Parse each block for bytes/blocks + its frames; the
+    // consumer picks the first user frame for the location.
+    const lines = output.split('\n');
+    const header = /(?<dir>Direct|Indirect) leak of (?<bytes>\d+) byte\(s\) in (?<blocks>\d+) object\(s\)/;
+    const frameRe = /#\d+\s+0x[0-9a-fA-F]+\s+in\s+(?<func>\S+)(?:\s+(?<file>\/[^:\s]+):(?<line>\d+))?/;
+    const findings: Finding[] = [];
+    for (let i = 0; i < lines.length; i++) {
+      const h = header.exec(lines[i]);
+      if (!h?.groups) continue;
+      const bytes = this.safeInt(h.groups.bytes);
+      const blocks = this.safeInt(h.groups.blocks);
+      const leakKind = h.groups.dir === 'Direct' ? 'definitely_lost' : 'indirectly_lost';
+      const stack: StackFrame[] = [];
+      for (i++; i < lines.length && lines[i].trim().startsWith('#'); i++) {
+        const fm = frameRe.exec(lines[i].trim());
+        if (fm?.groups) {
+          stack.push({ function: fm.groups.func || null, file: fm.groups.file || null, line: this.safeInt(fm.groups.line) });
+        }
+      }
+      i--; // step back: the outer loop advances past the first non-frame line
+      findings.push({
+        kind: leakKind,
+        message: `${h.groups.dir} leak of ${bytes} byte(s) in ${blocks} object(s)`,
+        stack,
+        originStack: [],
+        aux: { leak: { bytes, blocks, kind: leakKind } },
+      });
+    }
+    // Leak detected but no per-leak block parsed (truncated/odd format) → generic fallback.
+    if (findings.length === 0 && /LeakSanitizer: (detected|CHECK)/.test(output)) return this.parseAsanOutput(output);
+    return findings;
   }
 }

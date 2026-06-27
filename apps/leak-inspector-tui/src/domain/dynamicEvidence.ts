@@ -94,12 +94,21 @@ export function withDynamicEvidenceCapture(tool: Tool, store: DynamicRunStore): 
 
 /** Build a normalized LeakEvidence from a raw finding (port of attachDynamicEvidence). */
 function findingToEvidence(finding: any, run: DynamicRunRecord, pathResolver: PathResolver): LeakEvidence {
-  const locFile = finding.filePath || finding.file_path || finding.location?.file || '';
-  const locLine = finding.lineNumber ?? finding.line_number ?? finding.location?.line ?? 0;
+  // Sanitizer stacks put the allocator interceptor (__interceptor_calloc, operator new,
+  // malloc/calloc/realloc/strdup) FIRST — the user allocation site is a few frames down.
+  // When the finding carries no explicit location, attribute it to the first USER frame
+  // so the leak correlates to the candidate instead of dropping to "same file" / unlinked.
+  const isUserFrame = (f: any) =>
+    f?.file &&
+    !/^(__interceptor_|__libc_|_start$|operator new|malloc$|calloc$|realloc$|strdup$|aligned_alloc$)/.test(f.function || '') &&
+    !/sysdeps|libc_start_call_main|\/usr\/(lib|include)\//.test(f.file);
+  const userFrame = (finding.stack || []).find(isUserFrame) || (finding.stack || []).find((f: any) => f?.file);
+  const locFile = finding.filePath || finding.file_path || finding.location?.file || userFrame?.file || '';
+  const locLine = finding.lineNumber ?? finding.line_number ?? finding.location?.line ?? userFrame?.line ?? 0;
   const base: LeakEvidence = {
     tool: TOOL_KIND[run.tool],
     runId: run.runId,
-    function_name: finding.functionName || finding.function_name || finding.location?.function || '',
+    function_name: finding.functionName || finding.function_name || finding.location?.function || userFrame?.function || '',
     file_path: pathResolver.toHostPath(locFile),
     line_number: Number(locLine) || 0,
     bytes_lost: Number(finding.bytesLost ?? finding.bytes_lost ?? finding.aux?.leak?.bytes ?? finding.aux?.size ?? 0),

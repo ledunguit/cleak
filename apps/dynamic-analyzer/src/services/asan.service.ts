@@ -23,6 +23,7 @@ export class AsanService {
     const result = await runConfined(binaryPath, args ?? [], {
       timeoutSec: timeout,
       env: { ...process.env, ASAN_OPTIONS: 'detect_leaks=1:verbosity=1' },
+      unlimitedAddressSpace: true, // ASan reserves ~20 TB virtual — the -v cap aborts it
     });
     const output = result.stderr || result.stdout;
     const findings = this.resultParser.parseAsanOutput(output);
