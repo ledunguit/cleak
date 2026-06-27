@@ -43,10 +43,14 @@ cd apps/leak-inspector-tui
 bun src/cli.ts                       # mở TUI (lệnh mặc định)
 # trong TUI:  /scan <path-repo>  ·  /report [scanId]  ·  /config  ·  /eval <corpus> [N]
 ```
-- `/config` chọn **provider** (`local | openai | anthropic | openai-compat`) và sửa
-  **Base URL / Model / API key** ngay trong UI (lưu `~/.config/leak-inspector/prefs.json`,
-  chmod 600). Provider **`openai-compat`** trỏ tới mọi endpoint kiểu OpenAI `/chat/completions`
-  (LM Studio, vLLM, Ollama, OpenRouter, gateway riêng).
+- `/config` sửa **toàn bộ** knob của `RunConfig` ngay trong UI — provider
+  (`local | openai | anthropic | openai-compat`), Base URL / Model / API key,
+  **endpoint analyzer** (`staticUrl`/`dynamicUrl`), LLM tuning, workflow, consensus — lưu
+  `~/.config/cleak/config.json` (chmod 600). Provider **`openai-compat`** trỏ tới mọi endpoint
+  kiểu OpenAI `/chat/completions` (LM Studio, vLLM, Ollama, OpenRouter, gateway riêng).
+- Ngoài TUI, chỉnh từ CLI: `cleak config set staticUrl http://…` · `cleak config get` ·
+  `cleak config init`. Cài global (npm i -g) không cần `.env` — config file là nguồn cấu hình.
+  **Ưu tiên:** CLI flag > biến env (gồm `.env`) > config file > default.
 
 ### 2b. Headless (CI / script)
 ```bash

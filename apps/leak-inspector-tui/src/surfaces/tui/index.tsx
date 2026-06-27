@@ -10,7 +10,7 @@ import { App } from './App';
 import { TuiStore } from './store';
 import { loadEnvFiles } from '../../domain/env';
 import { loadConfig, type Provider } from '../../config';
-import { loadPreferences } from './preferences';
+import { loadConfigFile } from '../../domain/config-file';
 
 export interface LaunchTuiOptions {
   provider?: Provider;
@@ -37,25 +37,25 @@ export async function launchTui(opts: LaunchTuiOptions = {}): Promise<void> {
     return;
   }
   loadEnvFiles();
-  const prefs = loadPreferences();
-  // Precedence: explicit CLI flag > saved preference > built-in default.
-  const provider = opts.provider ?? prefs.defaultProvider;
-  const ep = (provider && prefs.endpoints?.[provider]) || {};
-  // CLI flag wins over the saved per-provider endpoint; blanks fall through to env.
-  const llm = {
-    baseUrl: nonEmpty(opts.baseUrl) ?? nonEmpty(ep.baseUrl),
-    model: nonEmpty(opts.model) ?? nonEmpty(ep.model),
-    apiKey: nonEmpty(opts.apiKey) ?? nonEmpty(ep.apiKey),
-  };
-  const cfg = loadConfig({ provider, llm });
+  const file = loadConfigFile();
+  // Precedence: CLI flag > env > config file > default. Only real flags become
+  // overrides here; the config file is absorbed INSIDE loadConfig (below env), so
+  // provider/endpoints/staticUrl/… resolve with the right precedence. The TUI-only
+  // session defaults (mode/dynamic/autoShowReport) aren't in RunConfig → read direct.
+  const cfg = loadConfig({
+    provider: opts.provider,
+    llm: { baseUrl: nonEmpty(opts.baseUrl), model: nonEmpty(opts.model), apiKey: nonEmpty(opts.apiKey) },
+    ...(nonEmpty(opts.staticUrl) ? { staticUrl: opts.staticUrl } : {}),
+    ...(nonEmpty(opts.dynamicUrl) ? { dynamicUrl: opts.dynamicUrl } : {}),
+  });
   const store = new TuiStore({
     provider: cfg.provider,
     model: cfg.llm.model,
     baseUrl: cfg.llm.baseUrl,
     apiKey: cfg.llm.apiKey,
-    mode: opts.mode ?? prefs.defaultMode,
-    dynamic: opts.dynamic ?? prefs.defaultDynamic,
-    autoShowReport: prefs.autoShowReport,
+    mode: opts.mode ?? file.defaultMode ?? 'llm_assisted',
+    dynamic: opts.dynamic ?? file.defaultDynamic ?? 'off',
+    autoShowReport: file.autoShowReport ?? false,
   });
   const resultsDir = resolve(cfg.resultsDir);
   const { waitUntilExit } = render(
