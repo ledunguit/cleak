@@ -1,479 +1,306 @@
-# Research Plan: LLM-Orchestrated Memory Leak Scanner for C/C++
+# Kế hoạch nghiên cứu: Trình quét rò rỉ bộ nhớ C/C++ do LLM điều phối
 
-> Generated: 2026-05-27
-> Status: Investigation Phase — Codebase Audit Complete
-
----
-
-## 1. Current State Assessment
-
-### 1.1 Architecture Overview
-
-```
-┌─────────────────────────────────────────────────────┐
-│                   Frontend (:5173)                    │
-│            React 19 + Ant Design + Zustand            │
-└──────────────────────┬──────────────────────────────┘
-                       │ HTTP (REST + SSE)
-                       ▼
-┌─────────────────────────────────────────────────────┐
-│             Control Plane (:8090) NestJS              │
-│  ┌───────────┬────────────┬────────────┬──────────┐  │
-│  │ Scan      │ Workspace  │ GitHub     │ Auth     │  │
-│  │ Controller│ Controller │ Controller │Controller│  │
-│  └─────┬─────┴─────┬──────┴─────┬──────┴────┬─────┘  │
-│        │           │            │           │         │
-│  ┌─────▼───────────▼────────────▼───────────▼─────┐  │
-│  │              Services Layer                      │  │
-│  │  ScanOrchestrator • BuildDiscovery              │  │
-│  │  InvestigationPlanner • JudgeService            │  │
-│  │  ReportingService • DynamicPlanner              │  │
-│  │  ToolRegistry • LlmAnalyzer                     │  │
-│  └─────┬──────────────────────┬───────────────────┘  │
-└────────┼──────────────────────┼──────────────────────┘
-         │ gRPC                 │ gRPC
-         ▼                      ▼
-┌─────────────────┐  ┌─────────────────────┐
-│ Static Analyzer │  │ Dynamic Analyzer    │
-│ (:50051) NestJS │  │ (:50052) NestJS     │
-│                 │  │                     │
-│ • File Index    │  │ • Valgrind Memcheck │
-│ • CandidateScan │  │ • AddressSanitizer  │
-│ • AST Scan      │  │ • LeakSanitizer     │
-│ • Call Graph    │  │ • Build Target      │
-│ • FunctionSumm. │  │ • Result Parser     │
-│ • PathConstr.   │  │ • Run Manager       │
-│ • InterprocFlow │  │ • Compare           │
-│ • Ownership     │  │ • Binary Runner     │
-│ • LeakGuard     │  │                     │
-└────────┬────────┘  └─────────────────────┘
-         │ Docker
-         ▼
-┌──────────────────┐
-│ LeakGuard Tool   │
-│ (leakguard-tool: │
-│  dev container)  │
-│                  │
-│ • Clang Static   │
-│   Analyzer       │
-│ • ML Model       │
-│   (TensorFlow)   │
-└──────────────────┘
-```
-
-### 1.2 What Works (Partially or Fully)
-
-| Component | Status | Notes |
-|-----------|--------|-------|
-| Monorepo setup (Turborepo + NestJS) | ✅ Working | `bun run build`, `turbo run dev` |
-| Docker Compose (6 services) | ✅ Working | Builds and starts |
-| PostgreSQL + TypeORM | ✅ Working | Entities, migrations |
-| GitHub OAuth + Clone | ✅ Working | Controller + service |
-| LLM Build Discovery | ✅ Working | Agent loop: Anthropic/OpenAI/Ollama |
-| Candidate Scan (regex) | ✅ Working | malloc/calloc/realloc/strdup/new |
-| Dynamic Analyzer wrappers | ✅ Working | Valgrind, ASan, LSan |
-| Frontend UI scaffold | ✅ Working | All pages, Zustand stores |
-| Report formats (JSON, MD, HTML, PDF, Snapshot) | ✅ Working | Basic implementations |
-| gRPC inter-service communication | ✅ Working | Proto definitions |
-| SSE event streaming | ✅ Working | Real-time scan progress |
-| Pipeline skeleton (orchestrator) | ✅ Working | Linear pipeline flow |
-
-### 1.3 What's Broken or Incomplete
-
-| Component | Status | Root Cause |
-|-----------|--------|------------|
-| **Static analysis depth** | ❌ Superficial | All services are skeletons (~50-100 lines) — no real CFG, no path-sensitive analysis |
-| **AST Scan** | ❌ 22 lines | Returns only function names, no memory pattern analysis |
-| **Call Graph** | ❌ 53 lines | No cross-file resolution, no recursion detection |
-| **Function Summary** | ❌ 56 lines | Just counts alloc/free, no ownership tracking |
-| **Path Constraints** | ❌ 53 lines | Regex-based condition listing, no feasibility analysis |
-| **Interprocedural Flow** | ❌ 55 lines | Single-level trace, no data flow |
-| **Ownership Analysis** | ❌ 108 lines | Simple heuristics, no RAII/smart-pointer |
-| **LeakGuard Docker (Apple Silicon)** | ❌ Broken | AVX issue with TensorFlow on arm64 |
-| **LeakGuard MCP Server** | ❌ Partial | Only wraps Step_5, not full pipeline |
-| **LeakGuard Adapter** | ❌ Regex parsing | Can't parse structured output |
-| **Agentic Orchestrator** | ❌ Linear pipeline | No LLM loop, no adaptive depth |
-| **Investigation Planner (LLM)** | ❌ Fallback-heavy | Simple prompt, falls back to heuristic immediately |
-| **Judge (heuristic)** | ❌ Basic | No LLM-powered verdict/explanation |
-| **Upload Zip** | ❌ Not implemented | Controller has FileInterceptor, no logic |
-| **Error handling** | ❌ Weak | Catch-all silent fallbacks, no retry |
-| **Cross-platform dynamic** | ❌ macOS broken | Valgrind Linux-only, build-target adaptation fragile |
-| **Login flow** | ❌ Not connected | JWT exists, frontend LoginPage is scaffold |
+> Cập nhật: 2026-06-28
+> Trạng thái: **Hệ thống đã xây xong (TUI-only)** → giai đoạn **đánh giá luận văn + củng cố**
+>
+> Tài liệu này là bản tổng hợp **đứng-một-mình** (đọc không cần mở file khác vẫn hiểu). Bản kế
+> hoạch web-era (2026-05, control-plane + React UI + gRPC) đã **bị thay thế** — kiến trúc đó đã
+> gỡ khỏi `master`, còn bảo tồn ở git history + nhánh `web-implementation`. Tài liệu nguồn chi
+> tiết: xem mục [Phụ lục](#phụ-lục--tài-liệu-nguồn).
 
 ---
 
-## 2. Architecture Target: Agentic Orchestrator
+## §1. Bối cảnh & bài toán
 
-### 2.1 Core Concept
+**Rò rỉ bộ nhớ (CWE-401) trong C/C++ là khuyết tật *không gây crash*:** chương trình vẫn chạy
+nhưng hao mòn bộ nhớ dần — khó lộ qua kiểm thử thông thường, không có "đầu vào tái hiện crash"
+như use-after-free hay double-free.
 
-The new orchestrator is an LLM-powered agent that controls the entire scan process. Instead of a fixed pipeline, it operates as an adaptive loop:
+- **Công cụ tĩnh** (Clang Static Analyzer, Infer, CodeQL) sinh ứng viên nhưng **tỉ lệ dương tính
+  giả (FP) cao**.
+- **Công cụ động** (Valgrind, ASan, LSan) cho bằng chứng lúc chạy nhưng **chỉ thấy đường đã thực
+  thi** (cần đầu vào kích hoạt).
+- **Cả hai chỉ đưa cảnh báo** — không giải thích nguyên nhân, không đề xuất sửa.
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                   AGENTIC ORCHESTRATOR LOOP                   │
-├─────────────────────────────────────────────────────────────┤
-│                                                              │
-│  ┌──────────────────────────────────────────────────────┐   │
-│  │ STATE: Scan State Machine                              │   │
-│  │  • Workspace (path, type, manifest)                   │   │
-│  │  • Candidates (ranked by LLM priority)                │   │
-│  │  • Bundles (evidence accumulated)                     │   │
-│  │  • Tool History (what ran, what succeeded)            │   │
-│  │  • Plan (current strategy, next actions)              │   │
-│  └──────────────────────────────────────────────────────┘   │
-│                                                              │
-│  LOOP {                                                      │
-│    // 1. LLM evaluates current state                        │
-│    state_summary = summarize(bundles, evidence, tool_results)│
-│                                                              │
-│    // 2. LLM decides next action                             │
-│    action = llm.decide({                                     │
-│      system_prompt: memory_leak_expert_system_prompt,       │
-│      context: state_summary,                                 │
-│      available_tools: tool_catalog,                          │
-│      chain_of_thought: true                                  │
-│    })                                                        │
-│                                                              │
-│    // 3. Execute action (or tool call)                       │
-│    if action.kind == 'run_tool':                             │
-│      result = tool_registry.invoke(action.tool, args)       │
-│    elif action.kind == 'run_leakguard':                      │
-│      result = leakguard_adapter.run(project, build_cmd)     │
-│    elif action.kind == 'run_dynamic':                        │
-│      result = dynamic_planner.execute(plan)                 │
-│    elif action.kind == 'judge_bundle':                       │
-│      verdict = llm_judge(bundle, static_context, evidence)  │
-│    elif action.kind == 'finish':                             │
-│      break                                                   │
-│                                                              │
-│    // 4. Update state with results                           │
-│    update_state(result)                                      │
-│  }                                                           │
-│                                                              │
-│  // 5. Final verdict + report                                │
-│  report = generate_report(bundles, verdicts, metadata)       │
-└─────────────────────────────────────────────────────────────┘
-```
+**Ý tưởng luận văn:** dùng một **LLM điều phối** vòng lặp điều tra — chọn công cụ phân tích nào
+chạy tiếp, **hợp nhất bằng chứng tĩnh + động**, rồi một **tầng phán quyết (judge)** sinh
+**verdict + giải thích root-cause + diff sửa**. Vòng lặp 3 pha: **discovery → investigation loop
+→ judging/reporting**.
 
-### 2.2 LLM as the "Brain"
+**Khoảng trống nghiên cứu (khảo sát 2025–2026):** *chưa có* hệ nào kết hợp **cả tĩnh lẫn động,
+chuyên cho memory-LEAK** trong C/C++. Các hệ agentic gần nhất (FuzzingBrain V2, ATLANTIS,
+Buttercup) đều xác minh **bằng crash**, không xử lý rò rỉ non-crash. Đây là vị trí định vị của
+luận văn.
 
-| Decision Point | What LLM Decides | Input Context |
-|---|---|---|
-| **Initial Strategy** | Which phases to run, depth settings | File manifest, repo size, languages |
-| **Candidate Ranking** | Which allocation sites are most suspicious | Code snippet, function context, call graph |
-| **Tool Selection** | Which static analysis tool next | Previous results, confidence, bundle type |
-| **Depth Control** | Continue investigating or move on | Evidence strength, time spent |
-| **Dynamic Trigger** | Build + run sanitizer? | Binary available? High-confidence candidates? |
-| **Verdict** | Confirmed/Likely/Uncertain/FP | All evidence, static context, dynamic results |
-| **Explanation** | Why is this a leak? Root cause | Code flow, allocation history |
-| **Repair Suggestion** | How to fix? Code diff | Source context, leak pattern |
-| **Re-planning** | Change strategy mid-scan | Slow progress, new findings, failures |
+---
 
-### 2.3 System Prompt Architecture
+## §2. Kiến trúc hiện tại
+
+`master` là **TUI-only**. **MCP/HTTP là transport duy nhất** — server gRPC, thư mục `proto/`,
+`@nestjs/microservices`, submodule LeakGuard (TensorFlow) đều đã **gỡ bỏ**.
 
 ```
-YOU ARE an expert C/C++ memory leak detection specialist.
-You have access to the following MCP tools:
-  [tool catalog with descriptions]
-
-YOUR MISSION:
-  Find as many real memory leaks as possible in the given
-  C/C++ codebase. For each leak, identify:
-  1. Exact file + line number
-  2. Root cause (why it leaks)
-  3. Repair suggestion
-
-ANALYSIS APPROACH:
-  - Phase 1: Scan for allocation sites (candidates)
-  - Phase 2: Rank candidates by risk
-  - Phase 3: For each high-risk candidate:
-      a) Analyze function control flow
-      b) Trace allocation → all exit paths
-      c) Check each path for matching free
-      d) If free exists on some paths → path-sensitive leak
-      e) If no free found → interprocedural trace
-      f) If still no free → suggest dynamic confirmation
-  - Phase 4: Cross-validate with LeakGuard / ASan / Valgrind
-  - Phase 5: Produce verdict + repair suggestion
-
-CHAIN OF THOUGHT:
-  For each investigation, think step by step:
-  1. Which function(s) does this allocation belong to?
-  2. What are the exit paths?
-  3. On each path, is there a matching free?
-  4. If not: is the pointer returned/stored elsewhere?
-  5. Is there an ownership convention documented?
-
-TOOL USAGE:
-  Be strategic about tool usage:
-  - Start with lightweight tools (candidate_scan)
-  - Use heavier tools (call_graph, data_flow) only on
-    high-confidence candidates
-  - Use dynamic analysis only when you have a buildable
-    binary and strong static evidence
+                         ┌───────────────────────────────────────────┐
+                         │   leak-inspector-tui  (@cleak/cli, host)   │
+                         │   ORCHESTRATOR — Ink CLI/TUI               │
+                         │   native tool-calling qua agent-core       │
+                         │   ghi report → results/<scanId>/           │
+                         └───────────────┬───────────────────────────┘
+                                         │ MCP / HTTP (Streamable)
+                   ┌─────────────────────┴─────────────────────┐
+                   ▼                                           ▼
+        ┌────────────────────────┐                ┌────────────────────────┐
+        │  static-analyzer :50061│                │ dynamic-analyzer :50062│
+        │  NestJS + Tree-sitter  │                │  NestJS                │
+        │  11 MCP tool:          │                │  9 MCP tool:           │
+        │  index/candidate/AST/  │                │  buildTarget/          │
+        │  callGraph/funcSummary/│                │  Valgrind Memcheck/    │
+        │  pathConstraints (Z3)/ │                │  AddressSanitizer/     │
+        │  interprocFlow/        │                │  LeakSanitizer/        │
+        │  ownership/            │                │  runBinary/compare/    │
+        │  Clang scan-build      │                │  listRuns              │
+        └────────────────────────┘                └────────────────────────┘
+                   ▲                                           ▲
+                   └──────── LLM gateway :20128 (mimo/mimo-v2.5-pro,
+                              hoặc OpenAI/Anthropic) ─ chỉ tầng POLICY ─┘
 ```
 
-### 2.4 Tool Catalog
-
-| Tool | Phase | Cost | When to Use |
+| Thành phần | Công nghệ | Cổng | Vai trò |
 |---|---|---|---|
-| `repo.index_files` | Discovery | Low | Always first |
-| `memory.candidate_scan` | Discovery | Low | After indexing |
-| `memory.ast_scan` | Static | Medium | For specific high-confidence candidates |
-| `memory.call_graph` | Static | Medium | When allocation site needs interprocedural tracing |
-| `memory.function_summary` | Static | Low | Quick overview of a function |
-| `memory.path_constraints` | Static | Medium | When allocation is in conditional branches |
-| `memory.interprocedural_flow` | Static | High | When pointer escapes the function |
-| `memory.ownership_summary` | Static | Medium | For ownership convention analysis |
-| `memory.leakguard_run` | Deep Static | High | For final cross-validation |
-| `valgrind.analyze_memcheck` | Dynamic | High | When binary is available (Linux) |
-| `asan.run` | Dynamic | Medium | When binary built with ASan |
-| `lsan.run` | Dynamic | Low | Lightweight leak check |
-| `memory.leakguard_get_report` | Deep Static | Low | After leakguard_run |
+| **leak-inspector-tui** (`@cleak/cli`) | TS + Ink (Bun) | — (host) | **Orchestrator** — scanner độc lập, MCP client, native tool-calling |
+| **static-analyzer** | NestJS + Tree-sitter (C + C++) | **50061** (MCP/HTTP) | 11 tool: index, candidate scan, AST, call graph, function summary, path constraints (Z3), interprocedural flow, ownership, **Clang `scan-build`** (tự chứa) |
+| **dynamic-analyzer** | NestJS + Valgrind/ASan/LSan | **50062** (MCP/HTTP) | 9 tool: build target, Memcheck, ASan, LSan, run binary, compare, list — **Linux/Docker-only** |
+| **agent-core** (`@cleak/agent-core`) | thư viện TS | — | Vòng lặp agentic: tool abstraction, MCP client, `callModel` đa provider (streaming, idle-timeout, nén ngữ cảnh) |
+| **@cleak/common** | thư viện TS | — | Types + Zod schema, heuristic judge, **consensus judge**, leak analysis, render report |
+
+### 2.1 Orchestrator — bộ não của luận văn
+
+Orchestrator **không chỉ "gọi hai analyzer"** — nó **làm chủ toàn bộ luồng quyết định**: khám
+phá gì, gọi tool nào tiếp theo, khi nào chuyển sang động, phán quyết ra sao. Đây là nơi đặt
+**đóng góp cốt lõi** của luận văn — **LLM cầm lái POLICY** (mở, theo-dự-án) còn **Engine bảo đảm
+tất định**. Bung rõ bên trong (mũi tên ▼ = luồng pha; nhãn bên phải = pha đó do **LLM** hay
+**ENGINE** đảm nhiệm):
+
+```
+┌─ leak-inspector-tui · ORCHESTRATOR (bộ não) — chạy trên agent-core ────────────
+
+   repo C/C++
+      │
+      ▼
+   ① PROFILING / STRATEGY       LLM · POLICY    allocatorProfiler · strategist
+      │                                         grep / SMT-verify → cache .cleak/
+      │                         (eval: ĐÓNG BĂNG — manifest cấp allocator → 0 LLM)
+      ▼
+   ② DISCOVERY                  ENGINE · tất định
+      │                         walkCFiles → candidateScan → LeakBundle[]
+      ▼
+   ③ STATIC-ENRICH  (opt-in)    ENGINE · tất định · Z3
+      │                         functionSummary · pathConstraints → staticEvidence
+      ▼
+   ④ INVESTIGATION              LLM · AGENTIC  (chỉ llm_assisted)
+      │    ┌ agent-core loop:  model ⇄ tool-call ⇄ result ⇄ …  (lặp)
+      │    │   • thu bằng chứng tĩnh  ········· MCP ▶ static-analyzer  :50061
+      │    │   • worker động buildTarget→lsanRun  MCP ▶ dynamic-analyzer :50062
+      │    └   (recipe động TẤT ĐỊNH, không LLM)  → dynamicCoverage
+      ▼
+   ⑤ JUDGING  (hybrid)          ENGINE + LLM (chỉ ca borderline)
+      │    heuristic path-sensitive cho MỌI bundle
+      │    └▶ borderline / static↔dynamic DISAGREE → LLM judge
+      │         └▶ CONSENSUS k mẫu → verdict + giải thích + diff sửa
+      ▼
+   ⑥ REPORTING                  ENGINE · tất định
+           snapshot.json · report.{json,md,html} · events.jsonl · metrics.json
+└──────────────────────────────────────────────────────────────────────────────
+```
+
+**Chú giải:** `LLM·POLICY` = quyết định theo-dự-án, **đóng băng khi eval** ⇒ 0 LLM trên đường
+đo · `LLM·AGENTIC` = vòng native tool-calling, chỉ ở `llm_assisted` · `ENGINE` = cơ chế **tất
+định** (tree-sitter parse · CFG · Z3 SAT · ghép alloc↔free · scoring · consensus). Hai cổng MCP
+ra ngoài (① §2) là điểm DUY NHẤT orchestrator chạm tới analyzer.
+
+**Sáu pha của pipeline HYBRID (chi tiết):**
+
+1. **Profiling / Strategy (LLM, tuỳ chọn)** — `allocatorProfiler` (khám phá allocator + ownership
+   notes theo dự án) + `strategist` (quyết `runDynamic`/`judge`/`staticDepth`). Cache ở `<repo>/.cleak/`.
+   **Eval ĐÓNG BĂNG tầng này** (manifest cấp allocator) ⇒ 0 LLM trên đường eval.
+2. **Discovery (tất định)** — `walkCFiles` (loại test/fuzz/vendor) → `candidateScan` (alloc sites:
+   libc + factory theo allocator + C++ `new` + parameter-ownership) → `CandidateManager` → `LeakBundle[]`.
+3. **Static-enrichment (tất định, `STATIC_ENRICH=on`)** — `functionSummary` + `pathConstraints` (Z3
+   feasibility) → `bundle.staticEvidence` (alloc↔free pairs, feasible-leak-paths).
+4. **Investigation (agentic, CHỈ `llm_assisted`)** — sub-agent native tool-calling thu bằng chứng
+   qua MCP; worker động chạy `buildTarget → lsanRun` (recipe **tất định**, không LLM).
+5. **Judging (hybrid)** — heuristic cho MỌI bundle (path-sensitive, không LLM) + LLM judge cho ca
+   **BORDERLINE** (escalate khi static↔dynamic mâu thuẫn) + **consensus** k mẫu (tuỳ chọn).
+6. **Reporting** — `snapshot.json`, `report.{json,md,html}`, `events.jsonl`, `metrics.json` → `results/<scanId>/`.
+
+> **Nguyên tắc cốt lõi:** **LLM = POLICY** (quyết định theo-dự-án: allocator, chiến lược, ownership
+> notes) → hồ sơ có cấu trúc → grep/SMT-verify → cache → **đóng băng cho eval** → nạp cho **Engine
+> = MECHANISM** (tree-sitter parse, CFG, ghép alloc↔free, Z3 SAT, scoring, consensus). Engine
+> **không phụ thuộc LLM trên đường eval** ⇒ giữ Tier-1 tất định.
+
+**Cấu hình:** qua biến env / file `.env`, hoặc — cho bản cài global — `cleak config`
+(`~/.config/cleak/config.json`). Ưu tiên: CLI flag > env > config file > default.
 
 ---
 
-## 3. Detailed Work Breakdown
+## §3. Đóng góp (C1–C4)
 
-### PHASE A: Agentic Orchestrator Core (Priority: P0, Effort: Large)
-
-**A.1. Rewrite ScanOrchestratorService as Agentic Loop**
-- [A.1.1] Design state machine for scan lifecycle
-- [A.1.2] Implement LLM decision loop with chain-of-thought
-- [A.1.3] Tool selection is dynamic, not pre-determined
-- [A.1.4] Adaptive depth: bundles with strong evidence get deeper analysis
-- [A.1.5] Progress feedback through existing SSE system
-- Files: `apps/control-plane/src/services/scan-orchestrator.service.ts`
-
-**A.2. Upgrade InvestigationPlannerService**
-- [A.2.1] Rich LLM prompt with full bundle context + tool catalog
-- [A.2.2] Multi-turn re-planning based on execution results
-- [A.2.3] Strategy library: predefined strategies for common patterns
-- [A.2.4] LLM fallback: when LLM fails, use smarter heuristic (not just simple fallback)
-- Files: `apps/control-plane/src/services/investigation-planner.service.ts`
-
-**A.3. Tool Registry Enhancement**
-- [A.3.1] Add Python MCP server tools as registrable tools
-- [A.3.2] Tool chaining: output of one tool feeds into another
-- [A.3.3] Tool dependency graph
-- [A.3.4] Cost/benefit tracking: track time per tool to inform LLM decisions
-- Files: `apps/control-plane/src/services/tool-registry.service.ts`
-
-### PHASE B: Static Analysis Engine (Priority: P0, Effort: Very Large)
-
-**B.1. C-Parser — True CFG & Analysis (P0)**
-- [B.1.1] Build full Control Flow Graph from tree-sitter AST
-- [B.1.2] Identify all exit paths per function (return, goto, longjmp, exit)
-- [B.1.3] For each allocation: compute reachable-free on every exit path
-- [B.1.4] Path-sensitive: conditionA → free, conditionB → no_free
-- [B.1.5] Loop-aware: allocation inside loop without free inside loop
-- [B.1.6] Early return detection: return before matching free
-- [B.1.7] Nested struct field allocation tracking
-- [B.1.8] Pointer aliasing analysis
-- Files: `apps/static-analyzer/src/services/c-parser.service.ts`
-
-**B.2. Real AST Memory Pattern Scanner (P1)**
-- [B.2.1] Pattern: malloc in loop body without free → accumulating leak
-- [B.2.2] Pattern: conditional allocation: if(x) { p=malloc(); } ... no free
-- [B.2.3] Pattern: missing NULL check after allocation, then NULL deref
-- [B.2.4] Pattern: double free (free → free same pointer)
-- [B.2.5] Pattern: use-after-free (free → use pointer)
-- [B.2.6] Pattern: strdup() without free
-- [B.2.7] Pattern: realloc() without checking return (loses original pointer)
-- Files: `apps/static-analyzer/src/services/ast-scan.service.ts`
-
-**B.3. Call Graph — Interprocedural & Recursive (P2)**
-- [B.3.1] Cross-file call graph resolution
-- [B.3.2] Recursion detection (direct + mutual)
-- [B.3.3] Indirect call resolution (function pointers, vtables)
-- [B.3.4] Reachability: can allocation site reach a free site?
-- Files: `apps/static-analyzer/src/services/call-graph.service.ts`
-
-**B.4. Function Summary — Ownership & Contract (P2)**
-- [B.4.1] Detects "returns_ownership" pattern: malloc → return ptr
-- [B.4.2] Detects "consumes_ownership" pattern: takes ptr → free
-- [B.4.3] Detects "transfers_ownership": alloc → store → return
-- [B.4.4] Function contract inference for LLM context
-- Files: `apps/static-analyzer/src/services/function-summary.service.ts`
-
-**B.5. Path Constraints — Symbolic Execution Lite (P3)**
-- [B.5.1] Extract path conditions for each branch
-- [B.5.2] Simple symbolic execution: which paths are feasible?
-- [B.5.3] Branch coverage analysis for allocation/free pairs
-- Files: `apps/static-analyzer/src/services/path-constraints.service.ts`
-
-**B.6. Interprocedural Data Flow (P2)**
-- [B.6.1] Track allocated pointer through function calls
-- [B.6.2] Taint tracking: mark allocated regions
-- [B.6.3] Deep chain analysis: A→B→C→free vs A→B→D→leak
-- Files: `apps/static-analyzer/src/services/interprocedural-flow.service.ts`
-
-**B.7. Ownership Analysis — Real C/C++ Conventions (P2)**
-- [B.7.1] malloc/free contract detection
-- [B.7.2] new/delete contract detection (C++)
-- [B.7.3] Smart pointer analysis (unique_ptr, shared_ptr, auto_ptr)
-- [B.7.4] RAII: destructor analysis for member allocations
-- [B.7.5] Custom allocator pairs (e.g., my_malloc / my_free)
-- Files: `apps/static-analyzer/src/services/ownership-analysis.service.ts`
-
-### PHASE C: LeakGuard Integration (Priority: P2, Effort: Medium)
-
-**C.1. Docker Build for Apple Silicon (P2)**
-- [C.1.1] Multi-arch Dockerfile (linux/arm64 + linux/amd64)
-- [C.1.2] Isolate TensorFlow steps behind a flag
-- [C.1.3] Test build on Apple Silicon
-- Files: `tools/leak_guard_tool/Dockerfile`, `tools/leak_guard_tool/docker-compose.yml`
-
-**C.2. Full MCP Server (P2)**
-- [C.2.1] Refactor run.py into importable modules
-- [C.2.2] Expose all pipeline steps as MCP tools
-- [C.2.3] Per-plugin execution via MCP
-- [C.2.4] Progress streaming
-- Files: `tools/leak_guard_tool/leakguard_mcp_server.py`, `tools/leak_guard_tool/run.py`
-
-**C.3. LeakGuard Adapter Enhancement (P2)**
-- [C.3.1] Parse structured JSON output
-- [C.3.2] Map findings to LeakBundle format correctly
-- [C.3.3] Handle timeouts, partial results, errors gracefully
-- Files: `apps/static-analyzer/src/services/leakguard-adapter.service.ts`
-
-### PHASE D: LLM Judge & Reporting (Priority: P1, Effort: Medium)
-
-**D.1. LLM-Powered Judge (P1)**
-- [D.1.1] Verdict generation via LLM (confirmed/likely/uncertain)
-- [D.1.2] LLM generates explanation: nguyên nhân leak, cơ chế, tại sao leak
-- [D.1.3] LLM generates repair suggestion with concrete code changes
-- [D.1.4] Include code snippet + call chain in LLM context
-- [D.1.5] Multiple evidence sources combined by LLM (not just heuristic scoring)
-- Files: `apps/control-plane/src/services/judge.service.ts`
-
-**D.2. Professional HTML Report (P1)**
-- [D.2.1] Beautiful HTML with CSS framework
-- [D.2.2] Search, filter, sort findings
-- [D.2.3] Code snippet with highlighted leak lines
-- [D.2.4] Severity breakdown chart
-- [D.2.5] Download as standalone HTML file
-- Files: `apps/control-plane/src/services/reporting.service.ts`
-
-**D.3. Professional PDF Report (P3)**
-- [D.3.1] Use pdfkit or similar library instead of raw PDF
-- [D.3.2] Structured layout: summary, findings table, per-finding detail
-- [D.3.3] Code snippets in monospace
-- [D.3.4] Cover page with scan metadata
-- Files: `apps/control-plane/src/services/reporting.service.ts`
-
-### PHASE E: Infrastructure & UX (Priority: P1-P3)
-
-**E.1. Upload Zip Support (P1)**
-- [E.1.1] File upload endpoint receives zip
-- [E.1.2] Extract to scan workspace
-- [E.1.3] Treat as workspace_path source type
-- Files: `apps/control-plane/src/controllers/workspace.controller.ts`
-
-**E.2. Multiple Source Types (P1)**
-- [E.2.1] Direct git clone from URL (no OAuth needed)
-- [E.2.2] Public GitHub repo without authentication
-- [E.2.3] Upload zip via frontend drag-and-drop
-- Files: multi
-
-**E.3. Scan Workspace Optimization (P3)**
-- [E.3.1] Hardlink/symlink for large repos
-- [E.3.2] Incremental materialization
-- [E.3.3] Cleanup policy (TTL-based)
-- Files: `apps/control-plane/src/services/scan-workspace.service.ts`
-
-**E.4. Cross-Platform Dynamic Analysis (P2)**
-- [E.4.1] Docker-based dynamic analysis for macOS
-- [E.4.2] Build system support matrix: CMake, Make, Autotools, Meson, Bazel
-- [E.4.3] Binary discovery improvements
-- [E.4.4] Clang sanitizer instrumentation wrapper
-- Files: `apps/dynamic-analyzer/src/services/build-target.service.ts`
-
-**E.5. Error Handling & Resilience (P2)**
-- [E.5.1] Retry with exponential backoff
-- [E.5.2] Graceful degradation: partial results still saved
-- [E.5.3] Tool-level timeouts
-- [E.5.4] Error categorization for user feedback
-- [E.5.5] Memory/disk monitoring
-- Files: multi
-
-**E.6. Frontend Polish (P3)**
-- [E.6.1] Working login flow
-- [E.6.2] Finding browser with filter/search/sort
-- [E.6.3] Code viewer with line highlighting
-- [E.6.4] Report download buttons
-- [E.6.5] Real-time scan progress with phase visualization
-- Files: `apps/leak-inspector-ui/`
-
-### PHASE F: Verification & Testing
-
-**F.1. Test Corpus Expansion**
-- [F.1.1] Add diverse C/C++ leak patterns to demo corpus
-- [F.1.2] Standard patterns: early_return, conditional, loop_accumulate, double_free, use_after_free, strdup_leak, struct_field_leak, realloc_mishandle
-- [F.1.3] Real-world targets: small open-source C/C++ projects
-- Files: `demo/memory_leak_corpus/`
-
-**F.2. E2E Smoke Tests**
-- [F.2.1] Update `scripts/run-local-scan-smoke.ts` for each test pattern
-- [F.2.2] Automatic verification: scan should detect known leaks
-- [F.2.3] Regression testing
-- Files: `scripts/run-local-scan-smoke.ts`
+| | Đóng góp | Nội dung | Bằng chứng |
+|---|---|---|---|
+| **C1** | **Consensus judge** | Bỏ phiếu k mẫu LLM độc lập + hợp nhất bằng chứng static↔dynamic (heuristic veto FP độ-tin-thấp). Giảm tỉ lệ lật verdict **~2–4×**. | `packages/common/src/analysis/consensus-judge.ts`; `llmJudge.ts shouldEscalate`; `scripts/consensus-ablation.sh` |
+| **C2** | **Tái lập hai tầng** | Tier-1 `no_llm` **bitwise-deterministic** (gate `determinism-gate.sh` từ chối self-compare + run lỗi); Tier-2 `llm_assisted` báo **biến thiên tường minh** (mean ± CI, theo dõi độ ổn định verdict). | `scripts/{determinism-gate.sh, assert-determinism.ts, verdict-stability.ts}` |
+| **C3** | **Động tất định** | Recipe build+run **ghim cứng** (không LLM trong thực thi) → coverage tất định (`exercised_clean / exercised_leak / not_exercised / dynamic_off`). Tách biến-thiên-động khỏi biến-thiên-judge. | `apps/leak-inspector-tui/src/domain/dynamicEvidence.ts`: `runDeterministicDynamic`, `withDynamicEvidenceCapture` |
+| **C4** | **Làm giàu bằng chứng** | Mỗi bundle có: ownership, cặp alloc↔free (paired/conditional/unpaired), feasible-leak-path (narrative + reachability), phương pháp tương quan (LINKED vs file-only). Cho judge + report suy luận theo-bundle. | cấu trúc `snapshot.json`; verdict card TUI; report md/html |
 
 ---
 
-## 4. Implementation Roadmap
+## §4. Kết quả hiện tại
 
-### Sprint 1: Foundation — Agentic Loop + C-Parser
+### Juliet CWE-401 (n=30, analyzer MCP qua Docker)
+
+| Hệ | P | R | F1 |
+|---|---|---|---|
+| **leak-investigator** (`no_llm`, heuristic) | **0.806** | **0.906** | **0.853** |
+| Clang Static Analyzer (cùng corpus, cùng `scoreCase`) | ~0.69 | ~0.84 | ~0.76 |
+
+### Ablation 2×2 (LLM-orchestration × dynamic-evidence)
+
+| | static (`--dynamic off`) | + dynamic (`selective/aggressive`) |
+|---|---|---|
+| **no_llm** | TP29 FP7 FN3 · P0.806 R0.906 F1 0.853 | TP29–30 FP7 FN2–3 · R0.906–**0.938** |
+| **llm_assisted** | TP29 FP7 FN3 · P0.806 R0.906 | TP29–30 FP7 FN2–3 · R0.906–0.938 |
+
+### Consensus giảm lật verdict (2 đợt, 2 run/nhánh, 30 ca)
+
+| Judge | Đợt | Ổn định ca | **Tỉ lệ lật** | Đồng thuận modal |
+|---|---|---|---|---|
+| single-LLM (`n=1`) | A | 73.3% | **26.7%** (8/30) | 86.7% |
+| single-LLM (`n=1`) | B | 86.7% | **13.3%** (4/30) | 93.3% |
+| consensus (`n=3`) | A | **93.3%** | **6.7%** (2/30) | **96.7%** |
+| consensus (`n=3`) | B | **93.3%** | **6.7%** (2/30) | **96.7%** |
+
+→ Bỏ phiếu k=3 cắt tỉ lệ lật **~2–4×**; nhánh consensus **lặp lại y hệt** qua 2 đợt (tính chất ổn
+định, không phải số may).
+
+### Tái lập & ý nghĩa thống kê
+
+- **Tier-1 (`no_llm`):** hai run thư mục tách biệt → chấm điểm **TP29 FP7 FN3 TN38 y hệt** (byte-identical).
+- **McNemar (đợt B, 77 site, single vs consensus):** χ²=0.57, **p=0.45** — *có hướng* nghiêng
+  consensus nhưng **chưa significant ở n=30**; cần corpus lớn hơn cho thắng-ghép-cặp.
+
+### Dự án thực (cjson LAMeD, 6 leak — chạy live cả 4 cấu hình)
+
+- **Recall = 0% ở MỌI cấu hình baseline.** Không phải lỗi một-nguyên-nhân mà là thách thức nhiều mặt:
+  - **Tầng discovery:** leak ở **factory function** (`cJSON_Duplicate`, `cJSON_CreateObject`) — tên
+    không chứa token `malloc/alloc` → cần allocator-aware discovery (đã thêm).
+  - **Tầng judging:** leak là **path-sensitive + interprocedural ownership** (object thêm vào struct
+    cha nhưng rò trên một đường error/early-return).
+  - **Taxonomy 6 leak** (đọc trực tiếp từ 6 fix-commit): 2 **deallocator-semantics** (`cJSON_Delete`
+    bỏ qua buffer gắn cờ const), 2 **missing-free trên một đường** (`merge_patch`…), 1 control-flow,
+    1 file-level.
+- **Path-sensitive recall (F1–F4, opt-in):** Z3 path-feasibility bắt được **ca thật đầu tiên**
+  (`merge_patch`, 1/6) khi bật `STATIC_ENRICH=on`; nhưng heuristic CFG **over-report trên Juliet
+  (FP 7→44)** nếu không có Z3 ⇒ **chỉ để opt-in**, baseline Juliet giữ nguyên 0.806/0.906/0.853.
+
+### Phát hiện trung thực (đưa vào Threats, §8)
+
+- Trên **Juliet *dễ*, heuristic baseline là mạnh nhất** (F1 0.853); LLM + dynamic *thêm nhiễu* ở đây.
+- **LLM judge KHÔNG lay chuyển Juliet** (`no_llm` ≡ `llm_assisted`, đều TP29 FP7 FN3) — corpus dễ ⇒
+  bundle non-borderline ⇒ heuristic chốt. Giá trị LLM/dynamic kỳ vọng ở corpus **KHÓ / dự án thực**.
+
+---
+
+## §5. Định vị & baseline
+
+Chọn theo **3 trục bù nhau** (không baseline nào khớp cả static+dynamic+agentic+judge cho leak):
+
+- **Trục A — leak C/C++ trực tiếp:** **LAMeD** (EASE 2025, **peer-reviewed duy nhất**; LLM sinh
+  annotation cho analyzer cổ điển; static-only; cJSON P0.933/R0.583 — minh hoạ đánh đổi recall↑/FP↑)
+  · **MemHint** (arXiv 2026, preprint; neuro-symbolic + Z3 + LLM-confirm; static-only; 52–54 leak/7 dự án).
+- **Trục B — kiến trúc (agentic / judge / static+dynamic / MCP):** **FuzzingBrain V2** (arXiv 2026;
+  multi-agent MCP; gần nhất nhưng xác minh **bằng crash**) · **RepoAudit** (ICML'25 poster; agent +
+  SAT validator; đa-defect) · **ATLANTIS** (vô địch AIxCC'25) · **Buttercup** (Trail of Bits, AGPL-3.0)
+  — đều xác minh **bằng crash**.
+- **Trục C — formal / dataset:** **POM** (CMU/SEI; LLM gán nhãn pointer + SAT, hướng prevention) ·
+  **SecVulEval** (dataset 25.4K hàm, preprint).
+
+**Định vị:** baseline leak trực tiếp đều **static-only** → ta thêm **dynamic** + **judge hợp nhất**;
+analogue kiến trúc xác minh **bằng crash** → ta chuyển sang lớp **non-crash leak**. **Caveat:**
+baseline mỏng — chỉ LAMeD đã phản biện đầy đủ; còn lại preprint/tech-report/poster. Chi tiết + log
+kiểm chứng + **claim bị bác bỏ** (KHÔNG trích): `docs/RELATED-WORK.md` + `researchs/`.
+
+---
+
+## §6. Việc còn lại — roadmap tới bảo vệ
+
+| # | Ưu tiên | Hạng mục | Vì sao |
+|---|---|---|---|
+| **R1** | **P0** | Mở rộng **corpus dự án thực** + **auto-sinh driver** | cjson không có `build_command`/driver → dynamic **skip**; corpus thật mới 4 ca (2 cặp cjson). Gap lớn nhất cho recall thực tế. |
+| **R2** | P1 | Siết **tương quan dynamic↔candidate** | Correlation thô → +FP trên Juliet; escalate consensus khi static↔dynamic **DISAGREE** (`shouldEscalate` đã có, cần đo lại multi-seed). |
+| **R3** | P1 | **Ý nghĩa thống kê** | Multi-seed `llm_assisted` + McNemar/bootstrap trên corpus lớn hơn (n=30 → p=0.45 chưa đủ; tooling đã có). |
+| **R4** | P2 | **Engine-debt** còn lại (tất định) | Full CFG-dataflow reachability; goto/longjmp liên thủ tục; field/alias dataflow; deallocator-semantics (const-skip); dùng Z3 để **bỏ opt-in** của F1–F4 (hết over-report Juliet). |
+| **R5** | P2 | LLM-generalization **Move 2** | `ownershipNotes` (đang dormant) → ownership profile có cấu trúc (returnOwnership/freeMode/paramOwnedTypes…), thay heuristic `type.includes('*')`. |
+| **R6** | P2 | Mở rộng **baseline cài-được** | Chạy Infer/CodeQL/Cooddy cùng corpus + cùng `scoreCase` (hiện mới có adapter clang). |
+| **R7** | P3 | **Viết luận văn** + gói tái lập | Chương kết quả + định vị; snapshot + frozen profiles cho reproducibility. |
+
+> Trạng thái nền (đã xong, để khỏi lặp lại): C-parser CFG path-sensitive; C++ (E1), switch-guard
+> (E2), dead-code reachability (E3); Z3 feasibility (F1–F4); allocator-aware discovery; allocator
+> profiler / strategist / judge-tuner (LLM POLICY, **tắt trong eval**); consensus + escalation;
+> two-tier reproducibility; deterministic dynamic; evidence enrichment; eval site-based +
+> McNemar/bootstrap + baseline adapter clang.
+
+---
+
+## §7. Tái lập (reproduction)
+
+```bash
+# 1) Dựng 2 analyzer (MCP) — static :50061, dynamic :50062
+docker compose up --build
+
+# 2) Eval tất định (no_llm), 30 ca Juliet, có tầng động
+EVAL_STATIC_URL=http://127.0.0.1:50061/mcp EVAL_DYNAMIC_URL=http://127.0.0.1:50062/mcp \
+  bun scripts/evaluate-corpus.ts no_llm --corpus demo/juliet_cwe401 --dynamic selective
+
+# 3) llm_assisted nhiều seed → báo biến thiên (Tier-2)
+bun scripts/evaluate-corpus.ts llm_assisted --corpus demo/juliet_cwe401 --runs 5
+
+# 4) Cổng tất định Tier-1 + ablation consensus + so baseline
+scripts/determinism-gate.sh
+scripts/consensus-ablation.sh
+bun scripts/compare-baselines.ts
 ```
-┌─────────────────────────────────────────────────────────┐
-│ Sprint 1 Deliverables                                     │
-├─────────────────────────────────────────────────────────┤
-│ 1. A.1 Agentic loop orchestrator (basic working)         │
-│ 2. A.2 LLM investigation planner (no fallback)           │
-│ 3. B.1 C-Parser CFG + exit path analysis                 │
-│ 4. B.2 Basic memory pattern detection                    │
-│ 5. D.1 LLM Judge (basic verdict + explanation)           │
-│ 6. Test on demo corpus                                   │
-└─────────────────────────────────────────────────────────┘
-```
 
-### Sprint 2: Depth — Advanced Analysis
-```
-┌─────────────────────────────────────────────────────────┐
-│ Sprint 2 Deliverables                                     │
-├─────────────────────────────────────────────────────────┤
-│ 1. B.3-B.7 Complete static analysis services             │
-│ 2. C.1-C.3 LeakGuard integration working                 │
-│ 3. D.2-D.3 Professional reports                          │
-│ 4. E.4 Cross-platform dynamic                            │
-│ 5. E.5 Error handling & resilience                       │
-│ 6. A.3 Tool registry with all tools                      │
-└─────────────────────────────────────────────────────────┘
-```
+> **Gotcha:** `evaluate-corpus.ts` mặc định URL 50071/50072 (dev-server); **docker stack expose
+> 50061/50062** — luôn set `EVAL_STATIC_URL`/`EVAL_DYNAMIC_URL` (các script gate/ablation đã mặc
+> định đúng). Chi tiết: `docs/OPERATIONS.md` · `docs/EVALUATION.md`.
 
-### Sprint 3: Polish - Completed (2026-05-28)
+---
 
-| Task | Files | Status |
-|------|-------|--------|
-| Upload zip support (500MB, disk storage, safe extraction) | workspace.controller.ts, persistence.service.ts | Done |
-| Upload-and-scan one-step flow | workspace.controller.ts | Done |
-| Public GitHub clone by URL (no OAuth) | workspace.controller.ts, persistence.service.ts | Done |
-| Clone-and-scan one-step flow | workspace.controller.ts | Done |
-| Test corpus expansion (7 new patterns -> 16 total) | demo/memory_leak_corpus/ | Done |
-| Smoke test script with --all mode | run-local-scan-smoke.ts (278 lines) | Done |
-| 119 TypeScript files, 5567 lines service code | all verified | Done |
+## §8. Threats to validity
 
-### Completion Audit
+- **Juliet là corpus *dễ*:** heuristic + dynamic có thể *tăng* FP; F1 cao chưa chứng minh được giá
+  trị LLM trên ca khó.
+- **Biến thiên single-LLM cao:** mỗi run lật verdict borderline (temp=0 vẫn lật ở gateway) → luôn
+  **multi-seed + McNemar/bootstrap** trước khi quy kết hiệu ứng cho thay đổi code.
+- **Baseline mỏng:** chỉ LAMeD (EASE 2025) đã phản biện đầy đủ; còn lại preprint/tech-report/poster
+  — kiểm lại venue/số liệu trước bản nộp.
+- **Corpus dự án thực nhỏ:** 4 ca (2 cặp cjson) → kết luận trên dự án thực cần mở rộng (R1).
+- **LLM judge chưa lay chuyển Juliet:** kỳ vọng giá trị ở corpus khó — phải chứng minh bằng R1+R3.
 
-| Requirement | Evidence | Status |
-|------------|----------|--------|
-| Scan from GitHub | OAuth clone + public URL clone | Done |
-| Scan from upload zip | Upload endpoint with safe extraction | Done |
-| Scan from local path | Works fine via workspace path | Done |
-| Agentic orchestrator with LLM | scan-orchestrator.service.ts agentic loop | Done |
-| LLM tool selection + chain-of-thought | investigation-planner.service.ts system prompt | Done |
-| Detect leak: line, file, fix, cause, explanation | ast-scan.service.ts (8 patterns) + LLM Judge | Done |
-| Report: PDF, HTML, JSON, MD (+CSV) | reporting.service.ts (6 formats) | Done |
-| Static analysis depth | 946-line C-Parser with CFG, 7 enhanced services | Done |
-| Cross-platform dynamic analysis | Docker fallback on macOS | Done |
-| Test corpus coverage | 16 patterns, 30 files, 1101 lines of C | Done |
+---
+
+## Phụ lục — tài liệu nguồn
+
+Bản tổng hợp này rút từ các tài liệu canonical (nguồn sự thật, cập nhật hơn nếu lệch):
+
+- [docs/THESIS.md](docs/THESIS.md) — tổng quan đọc-trước
+- [docs/GOAL.md](docs/GOAL.md) — mục tiêu & tiêu chí thành công
+- [docs/CONTRIBUTION.md](docs/CONTRIBUTION.md) — C1–C4 + threats chi tiết
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — thành phần, cổng, pipeline
+- [docs/EVALUATION.md](docs/EVALUATION.md) — phương pháp + số liệu + two-tier
+- [docs/RELATED-WORK.md](docs/RELATED-WORK.md) — baseline 3 trục + kiểm chứng
+- [docs/OPERATIONS.md](docs/OPERATIONS.md) — vận hành & tái lập
+
+> **Ghi chú lịch sử:** bản kế hoạch gốc (2026-05) mô tả đường web (control-plane NestJS + React UI
+> + gRPC, analyzer :50051/:50052, LeakGuard TensorFlow). Đường đó đã gỡ khỏi `master` (TUI-only),
+> bảo tồn ở nhánh `web-implementation`.
