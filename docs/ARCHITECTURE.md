@@ -22,8 +22,17 @@ analyzer trực tiếp qua MCP.
 | State/Queue | file `results/<scanId>/` |
 | Streaming UI | Ink TUI (in-process) |
 
-Pipeline **HYBRID**: `discovery (deterministic) → investigation (agentic) →
-judging → reporting`.
+Pipeline **HYBRID** (đầy đủ, theo thứ tự):
+`profiling (LLM, tuỳ chọn) → strategy (LLM, tuỳ chọn) → discovery (tất định) →
+static-enrichment (tất định, tuỳ chọn) → investigation (agentic, llm_assisted) →
+judging (hybrid) → reporting`.
+
+**Nguyên tắc cốt lõi — LLM sở hữu POLICY, engine sở hữu MECHANISM** (xem §10): những gì
+*khác nhau theo từng project* (API cấp phát/giải phóng, quy ước sở hữu, chiến lược phân tích,
+hiệu chỉnh judge) do **LLM khám phá → xuất profile có cấu trúc → verify (grep/SMT) → cache →
+ĐÔNG CỨNG cho benchmark → nạp vào tham số của engine tất định**. Engine (parse/CFG/pairing/Z3/
+scoring) *thực thi*, không bao giờ phụ thuộc LLM trong đường eval ⇒ Tier-1 determinism + baseline
+Juliet giữ nguyên. Thêm project mới = **0 dòng code**.
 
 > Một bản triển khai web (control-plane NestJS + React SPA, điều phối JSON-action) từng tồn
 > tại nhưng đã được gỡ khỏi `master`; nó được bảo tồn trên nhánh git `web-implementation`.
@@ -89,7 +98,9 @@ Tập tool được khai báo bằng **Zod `inputSchema`** ngay trong các MCP s
 
 - **static** — 11 tool: `IndexFiles, CandidateScan, AstScan, CallGraph, FunctionSummary,
   InterproceduralFlow, PathConstraints, OwnershipSummary, OwnershipConventions, LeakguardRun,
-  LeakguardGetReport`.
+  LeakguardGetReport`. Bốn tool (`CandidateScan, FunctionSummary, PathConstraints, CallGraph`)
+  nhận thêm `extraAllocators?`/`extraDeallocators?` (tên cấp phát/giải phóng theo project, ≈ LAMeD
+  AllocSource/FreeSink) để engine theo dõi factory allocator, không chỉ libc.
 - **dynamic** — 9 tool: `BuildTarget, ValgrindMemcheck, ValgrindGetReport, ValgrindListFindings,
   ValgrindCompareRuns, AsanRun, LsanRun, RunBinary, ListRuns`.
 
@@ -102,25 +113,51 @@ chunk) thay vì deadline tổng, và **nén context** khi prompt lớn (xem `pac
 
 ```mermaid
 flowchart TB
-    A["cli.ts scan|tui → runner.ts"] --> B["scanController.runScan"]
-    subgraph Disc["Discovery (deterministic)"]
-        B --> C["walkCFiles → static.candidateScan (MCP)"]
-        C --> D["CandidateManager → LeakBundle[]"]
+    A["cli.ts scan|tui"] --> H0
+    subgraph Pol["POLICY (LLM, host-side — surfaces/headless.ts)"]
+        H0["allocatorProfiler.decideStrategy"] --> P["profileAllocators<br/>headers/src → {allocators, deallocators, ownershipNotes}<br/>grep-verify + cache .cleak/"]
+        P --> S["strategist.decideStrategy<br/>→ {runDynamic, judge, staticDepth}"]
     end
-    subgraph Inv["Investigation (agentic, llm_assisted)"]
-        D --> E["investigationPhase → agent-core queryLoop"]
-        E --> F["model gọi tool (native tool-calling)"]
-        F --> G["MCP static/dynamic + domain tools<br/>(list/read/record_*)"]
+    S --> B["scanController.runScan<br/>(extraAllocators/Deallocators, ownershipNotes)"]
+    subgraph Disc["Discovery (tất định)"]
+        B --> C["walkCFiles (bỏ test/fuzz/vendor)<br/>→ static.candidateScan (MCP, +allocators)"]
+        C --> D["CandidateManager → LeakBundle[]<br/>(libc + factory + C++ new + param-ownership)"]
+    end
+    subgraph Enr["Static enrichment (tất định, STATIC_ENRICH=on)"]
+        D --> EN["functionSummary + pathConstraints (MCP)<br/>→ foldStaticResult → bundle.staticEvidence<br/>(allocFreePairs, feasibleLeakPaths)"]
+    end
+    subgraph Inv["Investigation (agentic, chỉ llm_assisted)"]
+        EN --> E["investigationPhase → agent-core queryLoop"]
+        E --> F["sub-agent gọi tool (native tool-calling)"]
+        F --> G["MCP static/dynamic<br/>+ deterministic recipe: buildTarget → lsanRun"]
         G --> F
-        F --> H["record_verdict / finalize_report"]
     end
-    H --> J["heuristic judge (bundle chưa verdict)"]
+    EN --> J
+    F --> J["HYBRID judge: heuristic (mọi bundle, path-sensitive)<br/>+ LLM/consensus (borderline) + ownershipNotes + judgeTuner"]
     J --> K["LeakReporting.buildReport"]
-    K --> L["results/&lt;scanId&gt;/<br/>snapshot · report.{json,md,html} · events.jsonl · transcript.json · metrics.json · steps.md"]
-    E -. "AgentEvent / ScanEvent" .-> TUI["Ink store (render trực tiếp)"]
+    K --> L["results/&lt;scanId&gt;/<br/>snapshot · report.{json,md,html} · events.jsonl · metrics.json"]
+    E -. "AgentEvent / ScanEvent" .-> TUI["Ink store"]
 ```
 
-> `no_llm` mode bỏ qua Investigation (chỉ discovery → heuristic judge → report).
+**Giải thích từng tầng:**
+- **Profiling/Strategy (LLM, host-side, tuỳ chọn):** `surfaces/headless.ts` resolve trước khi scan.
+  `allocatorProfiler` đọc header/source → liệt kê API cấp phát/giải phóng + ownership notes,
+  grep-verify, cache `<repo>/.cleak/`. `strategist` (`--strategy auto`) chọn `{runDynamic, judge,
+  staticDepth}`. **Bỏ qua khi allocators được cấp tường minh** (benchmark dùng manifest đông cứng) ⇒
+  eval không có LLM ⇒ tất định. Kết quả nạp vào plumbing `extraAllocators`/`extraDeallocators`/
+  `ownershipNotes` — analyzer KHÔNG đổi.
+- **Discovery (tất định):** `walkCFiles` loại dir test/fuzz/vendor; `candidateScan` tìm site cấp phát
+  (libc + factory theo allocators + C++ `new` + candidate tổng hợp cho **leak tham số**). Attribution
+  hàm bằng range tree-sitter (định tuyến C/C++ theo đuôi file).
+- **Static enrichment (tất định, `STATIC_ENRICH=on`):** mỗi candidate gọi `functionSummary` +
+  `pathConstraints` (kèm allocators) → `foldStaticResult` điền `bundle.staticEvidence`. Làm heuristic
+  judge **path-aware ngay cả ở no_llm** (trước đây judge mù).
+- **Investigation (agentic, chỉ llm_assisted):** sub-agent tĩnh gom evidence qua MCP; dynamic worker
+  build + chạy LSan theo recipe tất định; LLM có ownership notes của project.
+- **Judging (hybrid):** heuristic cho mọi bundle (path-sensitive, §6) + LLM/consensus cho BORDERLINE.
+
+> `no_llm` mode bỏ qua Profiling/Strategy/Investigation (discovery → [enrichment] → heuristic judge →
+> report). Eval determinism gate chạy đúng đường này.
 
 ## 6. Kết nối LLM
 
@@ -139,6 +176,22 @@ flowchart TB
 > (`leak-inspector-tui/.../dynamicEvidence.ts`: `runDeterministicDynamic`,
 > `withDynamicEvidenceCapture`) để loại bỏ dao động run-to-run của bằng chứng động. Xem
 > [CONTRIBUTION.md](CONTRIBUTION.md) và [EVALUATION.md](EVALUATION.md) §7.
+
+### 6.1 Heuristic judge PATH-SENSITIVE (`packages/common/.../heuristic-judge.ts`)
+Judge tất định chấm `bundle.staticEvidence` + evidence động thành điểm rồi so ngưỡng. Các tín hiệu chính:
+- **Alloc→free pairing** (`AllocFreePair.status`): `unpaired` (không free đâu cả) / `conditional`
+  (free một số đường) / `paired`. Trạng thái suy từ **guard-subset reconciliation** (path-sensitive).
+- **Path-sensitive leak** (`pathSensitiveLeak`): pair `conditional` + có `FeasibleLeakPath` reachable,
+  HOẶC biến candidate nằm trong `unreconciledAllocations` của một exit reachable. Là tín hiệu MẠNH và
+  **chặn** ownership-penalty (một đường làm MẤT object ≠ đường chuyển sở hữu) — bắt được leak kiểu
+  `merge_patch` (free `target` trên một số đường, rò trên đường lỗi).
+- **Parameter-ownership leak** (`allocation_type='parameter_ownership'`): tham số con trỏ được free trên
+  một số đường nhưng mất trên đường khác.
+- **Ngưỡng verdict** đặt tên + đông cứng: `JUDGE_VERDICT_THRESHOLDS = {confirmed:0.7, likely:0.4}`.
+  Production có thể nhận override **có biên** từ `domain/judgeTuner.ts` (LLM nudge trong khoảng, clamp);
+  **eval LUÔN dùng ngưỡng đông cứng** ⇒ baseline không đổi.
+- **LLM judge** (`domain/llmJudge.ts`) cho BORDERLINE: prompt được nạp thêm **ownership conventions**
+  (LLM-discovered) + luật path-sensitive/parameter-ownership (xem [PROMPTS.md](PROMPTS.md)).
 
 ## 7. Dữ liệu & artifacts
 
@@ -169,7 +222,19 @@ flowchart LR
 
 - **static-analyzer** (NestJS + Tree-sitter): mỗi service → một tool MCP (file indexing,
   candidate scan, AST, call graph, function summary, interprocedural flow, path constraints,
-  ownership, **Clang scan-build**). Phục vụ MCP :50061 cho TUI.
+  ownership, **Clang scan-build**). Phục vụ MCP :50061 cho TUI. **Engine c-parser** (`c-parser.service.ts`):
+  - **C/C++**: định tuyến theo đuôi file → `tree-sitter-c` (`.c/.h`) hoặc `tree-sitter-cpp`
+    (`.cc/.cpp/.cxx/.hpp/…`). C++ `new`→alloc, `delete`→free.
+  - **Allocator set per-parse**: libc + tên project (LLM-discovered) truyền qua `extraAllocators/
+    Deallocators` — dùng XUYÊN SUỐT (candidate-scan, pairing, CFG, call-graph), không list cố định.
+  - **Path-sensitive**: `collectLineGuards` (guard if/switch + polarity) → guard-subset reconciliation
+    (free trên nhánh-return-khác KHÔNG reconcile exit khác) → `AllocFreePair.status` + exit-path
+    `unreconciledAllocations`.
+  - **Z3 feasibility** (`feasibility.ts`, **node-only** — z3-solver WASM treo dưới Bun): mỗi
+    feasibleLeakPath kiểm SAT `(biến != 0) ∧ guards`; UNSAT ⇒ loại (vd early `if(p==NULL) return;`).
+  - **Reachability bảo thủ** (`collectDeadLines`): bỏ exit path sau terminator vô điều kiện (return/goto/
+    exit/abort/longjmp/noreturn) cùng block → bớt false-positive trên dead code.
+  - **Leak tham số**: param con trỏ free-một-số-đường → candidate `parameter_ownership`.
 - **dynamic-analyzer** (NestJS + child_process): build target (sanitizer flags), Valgrind
   Memcheck, ASan, LSan, run binary, so sánh run. Phục vụ MCP :50062. **Chỉ chạy trên
   Linux/Docker** (valgrind/LSan không chạy native trên macOS).
@@ -185,3 +250,24 @@ flowchart LR
   đều đã xoá (không còn consumer sau khi gỡ web path).
 - ℹ️ **Web path đã gỡ khỏi `master`** (control-plane NestJS + React SPA + Postgres/Redis +
   GitHub OAuth/SSE), bảo tồn trên nhánh git `web-implementation`.
+
+## 10. Tầng LLM-generalization (POLICY) + determinism
+
+Để khái quát hoá cho project mới mà KHÔNG hardcode, các quyết-định-theo-project được tách thành các
+**module LLM host-side** (đều theo cùng khuôn: *gather → one-shot callModel (temp 0) → parse Zod lenient
+→ verify → cache*), nạp vào tham số của engine tất định:
+
+| Module (`apps/leak-inspector-tui/src/domain/`) | LLM quyết (POLICY) | Verify | Nạp vào |
+|---|---|---|---|
+| `allocatorProfiler.ts` | API cấp phát/giải phóng + ownership notes của project | **grep** tên trong source đã đọc | `extraAllocators/Deallocators` (discovery+engine) + `ownershipNotes` (judge) |
+| `strategist.ts` | `{runDynamic, judge, staticDepth}` per-project | (fallback rule-based tất định) | gate dynamic stage / fan-out |
+| `judgeTuner.ts` | nudge ngưỡng verdict theo project | **clamp** vào khoảng cứng | `judgeHeuristically(...thresholds)` |
+
+**Cầu nối:** LLM xuất **dữ liệu cấu trúc**, engine *thực thi*; output luôn **verify + cache theo repo+commit**
+(`<repo>/.cleak/`). **Đảm bảo determinism:** trong benchmark, manifest cung cấp allocators + không bật
+`--strategy`/tuner ⇒ **0 LLM non-deterministic trong đường eval** ⇒ Tier-1 gate (`assert-determinism.ts`) +
+baseline Juliet (TP29 FP7 FN3) giữ nguyên. LLM-tuned chỉ ở production; luận văn báo cáo cả default lẫn tuned.
+
+Ranh giới **MUST-STAY-CODE** (không LLM hoá): parse tree-sitter, CFG, alloc→free pairing, Z3 SAT, scoring
+math, consensus, grep-verify. Lộ trình tổng quát hoá còn lại (run-recipe, test/vendor dir classify) xem
+[CONTRIBUTION.md](CONTRIBUTION.md).

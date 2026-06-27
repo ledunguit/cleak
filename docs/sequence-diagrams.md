@@ -55,13 +55,25 @@ sequenceDiagram
     participant Dynamic as dynamic-analyzer (MCP)
     participant Rep as LeakReporting
 
-    User->>CLI: bun leak-tui scan --repo --mode llm_assisted
-    CLI->>Scan: runScan(input, deps)
+    User->>CLI: bun leak-tui scan --repo --mode llm_assisted [--allocators-from llm --strategy auto]
+
+    rect rgb(240,240,255)
+    Note right of CLI: POLICY (LLM, host-side — skipped in eval/frozen)
+    CLI->>LLM: profileAllocators(headers/src) → {allocators, deallocators, ownershipNotes} + grep-verify + cache
+    CLI->>LLM: decideStrategy → {runDynamic, judge, staticDepth}
+    end
+    CLI->>Scan: runScan(input + extraAllocators/Deallocators + ownershipNotes)
 
     rect rgb(236,250,240)
     Note right of Scan: DISCOVERY (deterministic)
-    Scan->>Static: candidateScan (host injects file content)
-    Static-->>Scan: candidates → CandidateManager
+    Scan->>Static: candidateScan (content + allocators; C/C++ routed)
+    Static-->>Scan: candidates (libc+factory+new+param-ownership) → CandidateManager
+    end
+
+    rect rgb(236,250,240)
+    Note right of Scan: STATIC ENRICHMENT (deterministic, STATIC_ENRICH=on)
+    Scan->>Static: functionSummary + pathConstraints (+allocators) per candidate
+    Static-->>Scan: foldStaticResult → bundle.staticEvidence (pairs, feasibleLeakPaths via Z3)
     end
 
     Scan->>Phase: build toolset + prompts

@@ -65,19 +65,24 @@ bun scripts/evaluate-corpus.ts no_llm  --corpus demo/lamed
 bun scripts/evaluate-corpus.ts llm_assisted --corpus demo/lamed --consensus-n 3
 ```
 
-> **Real-project allocators (`EXTRA_ALLOCATOR_NAMES`).** Running on cjson showed the
-> leaks flow through **factory allocators** (`cJSON_Duplicate`, `cJSON_CreateObject`
-> → `cJSON_New_Item`) whose names carry no malloc/alloc token, so candidate-scan
-> never discovers the alloc site → **0% recall for both heuristic and LLM**. Supply
-> the project's allocator API (≈ LAMeD's AllocSource annotations) as a
-> comma-separated env on the **static-analyzer container**, then rebuild/recreate:
-> ```bash
-> EXTRA_ALLOCATOR_NAMES="cJSON_Duplicate,cJSON_CreateObject,cJSON_CreateArray,cJSON_CreateString,cJSON_New_Item" \
->   docker compose up -d --force-recreate static-analyzer
-> ```
-> This makes the factory-alloc leak sites discoverable (candidates ↑); judging them
-> still needs interprocedural/path-sensitive reasoning (the open work — see
-> [CONTRIBUTION.md](CONTRIBUTION.md) threats-to-validity).
+> **Real-project allocators — per-project profile (frozen for eval).** Real leaks flow
+> through **factory allocators** (`cJSON_Duplicate`, `cJSON_CreateObject` → `cJSON_New_Item`)
+> whose names carry no malloc/alloc token. Each LAMeD case in the manifest now carries
+> `allocators`/`deallocators` (from `PROJECT_ALLOCATORS`/`PROJECT_DEALLOCATORS` in
+> `scripts/lamed/ingest.ts`, ≈ LAMeD's **AllocSource/FreeSink**); the eval threads them via
+> `extraAllocators`/`extraDeallocators` **end-to-end** (candidate-scan + c-parser + pairing +
+> call-graph). This is the **frozen** profile that keeps eval deterministic.
+> In **production** the LLM allocator-profiler (`domain/allocatorProfiler.ts`) discovers this
+> API per-project (cache `<repo>/.cleak/`); its discovery accuracy is measured separately by
+> `scripts/validate-allocator-profile.ts` (P/R/F1 vs the frozen list), so the LLM never injects
+> non-determinism into the leak-eval. (The old `EXTRA_ALLOCATOR_NAMES` container env is kept only
+> as an ad-hoc fallback.)
+>
+> Discovery + **path-sensitive judging** are now both wired: cjson `merge_patch` (a parameter
+> freed on some paths, lost on an error path) is caught — recall **0 → 1/6 on cjson, FP 0** —
+> via guard-subset reconciliation + Z3 feasibility + parameter-ownership detection. Remaining
+> cjson misses are deallocator-semantics (const-skip) + nested-loop control flow (see
+> [CONTRIBUTION.md](CONTRIBUTION.md)).
 
 The ingest handles LAMeD's quirks: `target_function` overloads `;` as **both** a
 parameter separator (inside the signature) and a multi-function separator, and
