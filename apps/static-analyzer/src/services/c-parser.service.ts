@@ -397,13 +397,11 @@ export class CParserService {
         case 'return_statement': {
           const retText = this.nodeText(stmt, lines).slice(0, 60);
           const retId = id++;
-          const hasFreeOnPath = fn.freedVariables.some(
-            (f) => f.line <= ((stmt.startPosition?.row ?? 0) + 1) &&
-                      Math.abs(f.line - (stmt.startPosition?.row ?? 0) - 1) <= 3,
-          );
+          // (CFG return node is informational; path-sensitive free reconciliation lives in
+          // analyzeExitPaths. Don't fake hasFree with a ±3-line proximity guess.)
           nodes.push({
             id: retId, type: 'basic_block', line: (stmt.startPosition?.row ?? 0) + 1,
-            text: retText, hasFree: hasFreeOnPath,
+            text: retText, hasFree: false,
             hasAllocation: false, allocationVars: [],
           });
           edges.push({ from: retId, to: exitId });
@@ -447,19 +445,26 @@ export class CParserService {
         case 'expression_statement':
         case 'declaration': {
           const stmtText = this.nodeText(stmt, lines).slice(0, 80);
-          if (!stmtText) break;
-
-          const hasFree = this.freeSet.has(
-            stmtText.match(/^(\w+)\s*\(/)?.[1] || '',
-          );
-          const hasAlloc = this.allocSet.has(
-            stmtText.match(/=\s*(\w+)\s*\(/)?.[1] || '',
-          );
-
-          // `var = [cast] CALL(` — flagged as an allocation when CALL is in the per-parse
-          // alloc set (libc + LLM-discovered project allocators), not a fixed 4-name list.
-          const allocVarMatch = stmtText.match(/(\w+)\s*=\s*(?:\([^)]*\)\s*)?(\w+)\s*\(/);
-          const allocVars = allocVarMatch && this.allocSet.has(allocVarMatch[2]) ? [allocVarMatch[1]] : [];
+          // Walk the AST (not regex on truncated text, which misreads `log(x); free(p);`
+          // and casts/subscripts) — `free()` at ANY position counts; an allocator call on
+          // an assignment RHS sets hasAllocation + captures the LHS var.
+          let hasFree = false;
+          let hasAlloc = false;
+          const allocVars: string[] = [];
+          for (const call of this.findAllNodes(stmt, 'call_expression')) {
+            const name = this.nodeText(this.getCallFunctionNameNode(call), lines);
+            if (this.freeSet.has(name)) hasFree = true;
+            if (this.allocSet.has(name)) hasAlloc = true;
+          }
+          // C++ `new T(...)` is an allocation too (not a call_expression).
+          if (this.findAllNodes(stmt, 'new_expression').length > 0) hasAlloc = true;
+          if (hasAlloc) {
+            // The LHS variable of `var = [cast] alloc(...)` / `T* var = new T()`.
+            const decl = this.findChild(stmt, 'init_declarator');
+            const assign = this.findAllNodes(stmt, 'assignment_expression')[0];
+            const lhs = decl ? this.extractDeclaratorName(decl, lines) : assign?.children?.[0] ? this.nodeText(assign.children[0], lines) : '';
+            if (lhs) allocVars.push(lhs);
+          }
 
           const blockId = id++;
           nodes.push({
@@ -515,11 +520,17 @@ export class CParserService {
           .map((f) => f.variable),
       );
 
+    // Provably-dead lines: statements after an UNCONDITIONAL terminator (return/goto/exit
+    // …) in the same block can never run, so an exit there is not a real leak path.
+    const dead = this.collectDeadLines(body, lines);
+
     // Analyze each return statement
     for (const ret of fn.returnStatements) {
       const retGuards = guardsAt(ret.line);
       const reconciled = reconciledAt(ret.line, retGuards);
-      const freesBefore = fn.freedVariables.filter((f) => f.line <= ret.line);
+      // Path-sensitive: only frees on THE SAME path (guard-subset) count as "freed on
+      // this exit" — a free in a returning sibling branch must not fake hasFreeOnPath.
+      const pathFrees = fn.freedVariables.filter((f) => f.line <= ret.line && subsetOf(guardsAt(f.line), retGuards));
       const allocUnrec = fn.allocationVariables
         .filter((a) => a.line <= ret.line && !reconciled.has(a.variable))
         .map((a) => a.variable);
@@ -529,9 +540,9 @@ export class CParserService {
       paths.push({
         kind: 'return',
         exitLine: ret.line,
-        reachableFromEntry: true,
-        hasFreeOnPath: freesBefore.length > 0,
-        freeLinesOnPath: freesBefore.map((f) => f.line),
+        reachableFromEntry: !dead.has(ret.line),
+        hasFreeOnPath: pathFrees.length > 0,
+        freeLinesOnPath: pathFrees.map((f) => f.line),
         allAllocationsFreed: unreconciled.length === 0,
         leakRisk: unreconciled.length > 0 ? 'high' : 'none',
         pathConditions: this.inferPathConditions(fn, ret.line),
@@ -637,6 +648,55 @@ export class CParserService {
     };
     walk(body, []);
     return map;
+  }
+
+  /** Functions that do not return — code after them in the same block is unreachable. */
+  private static readonly NORETURN_CALLS = new Set([
+    'exit', '_exit', '_Exit', 'abort', 'longjmp', 'siglongjmp', '__builtin_unreachable', '__builtin_trap', 'panic',
+  ]);
+
+  /**
+   * 1-based lines that are PROVABLY unreachable: a statement after an UNCONDITIONAL
+   * terminator (return / goto / exit()/abort()/longjmp()/_Noreturn) at the SAME block
+   * level, up to the next `labeled_statement`/`case_statement` (a goto/switch target
+   * resets reachability). Conservative on purpose: a terminator inside an if/loop is
+   * CONDITIONAL, so it does NOT kill its siblings — meaning we only ever drop code that
+   * genuinely cannot run, so an exit-path filtered by this can never hide a real leak.
+   */
+  private collectDeadLines(body: any, lines: string[]): Set<number> {
+    const dead = new Set<number>();
+    const markSubtree = (node: any) => {
+      const ln = (node.startPosition?.row ?? -1) + 1;
+      if (ln > 0) dead.add(ln);
+      for (const c of node.children || []) markSubtree(c);
+    };
+    const isTerminator = (stmt: any): boolean => {
+      if (stmt.type === 'return_statement' || stmt.type === 'goto_statement') return true;
+      if (stmt.type === 'expression_statement') {
+        const call = this.findAllNodes(stmt, 'call_expression')[0];
+        const fnNode = call ? this.getCallFunctionNameNode(call) : null;
+        const name = fnNode ? this.nodeText(fnNode, lines) : '';
+        return CParserService.NORETURN_CALLS.has(name);
+      }
+      return false;
+    };
+    const walk = (node: any) => {
+      if (!node) return;
+      if (node.type === 'compound_statement') {
+        let terminated = false;
+        for (const stmt of node.children || []) {
+          if (stmt.type === '{' || stmt.type === '}' || stmt.type === 'comment') continue;
+          if (terminated) {
+            if (stmt.type === 'labeled_statement' || stmt.type === 'case_statement') terminated = false;
+            else markSubtree(stmt);
+          }
+          if (!terminated && isTerminator(stmt)) terminated = true;
+        }
+      }
+      for (const c of node.children || []) walk(c);
+    };
+    walk(body);
+    return dead;
   }
 
   /** Strip fully-enclosing outer parentheses: `((p == NULL))` → `p == NULL`. */
