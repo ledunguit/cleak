@@ -107,8 +107,9 @@ export interface ParseResult {
 export class CParserService {
   private readonly logger = new Logger(CParserService.name);
 
-  /** Lazily-built, reused tree-sitter parser (instantiating one per call is wasteful). */
+  /** Lazily-built, reused tree-sitter parsers (C and C++), instantiated on first use. */
   private parser: any;
+  private cppParser: any;
   /**
    * Parse-result cache keyed by content hash. The same file is parsed by several
    * tools (candidate-scan → ast-scan → function-summary); parsing is a pure
@@ -118,7 +119,24 @@ export class CParserService {
   private readonly cache = new Map<string, ParseResult>();
   private static readonly CACHE_MAX = 512;
 
-  private getParser(): any {
+  /** True for C++ source/header extensions — they must be parsed by tree-sitter-cpp, not
+   * tree-sitter-c (which misparses `new`/`delete`/templates/`::`/range-for). */
+  static isCppPath(filePath?: string): boolean {
+    return /\.(cc|cpp|cxx|c\+\+|hpp|hxx|hh|ipp|tcc|inl)$/i.test(filePath || '');
+  }
+
+  private getParser(cpp = false): any {
+    if (cpp) {
+      if (!this.cppParser) {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const Parser = require('tree-sitter');
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const CPP = require('tree-sitter-cpp');
+        this.cppParser = new Parser();
+        this.cppParser.setLanguage(CPP);
+      }
+      return this.cppParser;
+    }
     if (!this.parser) {
       // eslint-disable-next-line @typescript-eslint/no-var-requires
       const Parser = require('tree-sitter');
@@ -141,8 +159,9 @@ export class CParserService {
     const safe = (xs?: string[]) => (xs || []).filter((s) => /^[A-Za-z_]\w*$/.test(s)).sort();
     const ea = safe(extraAllocators);
     const ed = safe(extraDeallocators);
-    // Cache key includes the extra names — different allocator sets ⇒ different parse.
-    const key = createHash('sha1').update(`${content} ${ea.join(',')} ${ed.join(',')}`).digest('base64');
+    const cpp = CParserService.isCppPath(_filePath);
+    // Cache key includes the extra names + language — different sets/language ⇒ different parse.
+    const key = createHash('sha1').update(`${cpp ? 'cpp' : 'c'} ${content} ${ea.join(',')} ${ed.join(',')}`).digest('base64');
     const hit = this.cache.get(key);
     if (hit) {
       // LRU bump: re-insert so the most-recently-used stays last.
@@ -154,7 +173,7 @@ export class CParserService {
     // in between, so no cross-call race on a shared singleton).
     this.allocSet = ea.length ? new Set([...ALLOCATION_FUNCTIONS, ...ea]) : ALLOCATION_FUNCTIONS;
     this.freeSet = ed.length ? new Set([...DEALLOCATION_FUNCTIONS, ...ed]) : DEALLOCATION_FUNCTIONS;
-    const result = this.parseWithTreeSitter(content);
+    const result = this.parseWithTreeSitter(content, cpp);
     this.allocSet = ALLOCATION_FUNCTIONS;
     this.freeSet = DEALLOCATION_FUNCTIONS;
     this.cache.set(key, result);
@@ -164,9 +183,9 @@ export class CParserService {
     return result;
   }
 
-  private parseWithTreeSitter(content: string): ParseResult {
+  private parseWithTreeSitter(content: string, cpp = false): ParseResult {
     try {
-      const parser = this.getParser();
+      const parser = this.getParser(cpp);
       const tree = parser.parse(content);
       const root = tree.rootNode;
       const lines = content.split('\n');
@@ -760,6 +779,7 @@ export class CParserService {
     const allInitDecls = this.findAllNodes(body, 'init_declarator');
     for (const decl of allInitDecls) {
       const callExprs = this.findAllNodes(decl, 'call_expression');
+      let matched = false;
       for (const expr of callExprs) {
         const fnNode = this.getCallFunctionNameNode(expr);
         const name = fnNode ? this.nodeText(fnNode, lines) : '';
@@ -771,8 +791,14 @@ export class CParserService {
               line: (decl.startPosition?.row ?? 0) + 1,
               callName: name,
             });
+            matched = true;
           }
         }
+      }
+      // C++ `T* p = new T(...)` — a new_expression, not a call_expression.
+      if (!matched && this.findAllNodes(decl, 'new_expression').length > 0) {
+        const varName = this.extractDeclaratorName(decl, lines);
+        if (varName) result.push({ variable: varName, line: (decl.startPosition?.row ?? 0) + 1, callName: 'new' });
       }
     }
 
@@ -781,12 +807,13 @@ export class CParserService {
     for (const expr of allAssignments) {
       const right = expr.children?.[expr.children.length - 1];
       if (right) {
+        const left = expr.children?.[0];
         const callExprs = this.findAllNodes(right, 'call_expression');
+        let matched = false;
         for (const callExpr of callExprs) {
           const fnNode = this.getCallFunctionNameNode(callExpr);
           const name = fnNode ? this.nodeText(fnNode, lines) : '';
           if (this.allocSet.has(name)) {
-            const left = expr.children?.[0];
             if (left) {
               const fieldText = this.nodeText(left, lines);
               // Handle both p->field and s.field
@@ -795,8 +822,13 @@ export class CParserService {
                 line: (left.startPosition?.row ?? 0) + 1,
                 callName: name,
               });
+              matched = true;
             }
           }
+        }
+        // C++ `p = new T(...)` on the RHS of an assignment.
+        if (!matched && left && this.findAllNodes(right, 'new_expression').length > 0) {
+          result.push({ variable: this.nodeText(left, lines), line: (left.startPosition?.row ?? 0) + 1, callName: 'new' });
         }
       }
     }
@@ -1103,6 +1135,13 @@ export class CParserService {
         const varName = this.nodeText(firstArg, lines);
         result.push({ variable: varName, line: call.line });
       }
+    }
+
+    // C++ `delete p;` / `delete[] p;` — a delete_expression, not a call. The operand is
+    // the last child (the identifier being deleted).
+    for (const del of this.findAllNodes(body, 'delete_expression')) {
+      const operand = (del.children || []).filter((c: any) => c.type === 'identifier' || c.type === 'field_expression' || c.type === 'subscript_expression').pop();
+      if (operand) result.push({ variable: this.nodeText(operand, lines), line: (del.startPosition?.row ?? 0) + 1 });
     }
 
     return result;

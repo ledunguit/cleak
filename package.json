@@ -42,6 +42,7 @@
     "rxjs": "^7.8.2",
     "tree-sitter": "^0.25.0",
     "tree-sitter-c": "^0.24.1",
+    "tree-sitter-cpp": "^0.23.4",
     "z3-solver": "^4.13.0",
     "ts-loader": "^9.5.7",
     "ts-node": "^10.9.2",
