@@ -1,6 +1,6 @@
 {
   "name": "@cleak/cli",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Agentic terminal investigator for C/C++ memory leaks — MCP-driven static + dynamic (Valgrind/ASan/LSan) analysis with an LLM judge.",
   "type": "module",
   "license": "Apache-2.0",
