@@ -1,6 +1,6 @@
 {
   "name": "@cleak/common",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Shared types, Zod schemas, and framework-free C/C++ memory-leak analysis (heuristic + consensus judge, report renderers) for the cleak toolchain.",
   "type": "module",
   "license": "Apache-2.0",

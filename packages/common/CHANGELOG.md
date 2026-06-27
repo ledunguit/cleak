@@ -1,5 +1,13 @@
 # @cleak/common
 
+## 0.2.1
+
+### Patch Changes
+
+- Add package READMEs (developer guides: public API surface, modules, and the leak
+  verdict model). Docs-only — no runtime change. Publishes a README onto the npm
+  package pages, which were previously README-less.
+
 ## 0.2.0
 
 ### Minor Changes
