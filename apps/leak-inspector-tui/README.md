@@ -115,6 +115,29 @@ Key LLM đọc tự động từ `<repo-root>/.env` hoặc `apps/leak-inspector-
 Chạy trên host sẽ rewrite `host.docker.internal` → `localhost`; đặt `IN_CONTAINER=1` để giữ
 hostname container.
 
+## Cấu hình qua config file (`cleak config`)
+
+Khi cài global (`npm i -g @cleak/cli`) và chạy ngoài monorepo, **không cần `.env`** — mọi
+setting của `RunConfig` (kể cả **endpoint analyzer** `staticUrl`/`dynamicUrl`, provider, LLM
+tuning, workflow, consensus) chỉnh được qua một **config file** tại
+`~/.config/cleak/config.json` (tôn trọng `$XDG_CONFIG_HOME`; `chmod 600` vì có thể chứa key).
+
+```bash
+cleak config path                              # in đường dẫn file
+cleak config init                              # ghi template đủ key
+cleak config set staticUrl http://host:50061/mcp
+cleak config set consensus.n 3
+cleak config set endpoints.openai.apiKey sk-…  # key được lưu, mask khi `get`
+cleak config get [key] [--json] [--show-secrets]   # in config đã RESOLVE (mask apiKey mặc định)
+cleak config unset <key>
+```
+
+Trong TUI, lệnh **`/config`** mở màn hình settings cho **toàn bộ** knob (theo từng section).
+
+**Thứ tự ưu tiên:** `CLI flag` > **biến env** (gồm cả `.env` của monorepo) > **config file** >
+default. Tức là env vẫn thắng config file — tiện cho workflow `.env`/CI; còn người cài global
+(không có env) thì config file là nguồn cấu hình.
+
 ## Script thực nghiệm luận văn
 
 ```bash

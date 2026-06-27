@@ -1,4 +1,10 @@
 import { defineConfig } from 'tsup';
+import { createRequire } from 'node:module';
+
+// Inject the real package version at build time so `cleak --version` matches the
+// published package (package.json is NOT shipped in the tarball — `files` is just
+// dist/LICENSE/NOTICE — so it can't be read at runtime).
+const pkg = createRequire(import.meta.url)('./package.json') as { version: string };
 
 // `cleak` is a self-contained CLI: the workspace libs (@cleak/agent-core,
 // @cleak/common) are bundled INLINE so a global `npm i -g @cleak/cli` has no
@@ -6,6 +12,7 @@ import { defineConfig } from 'tsup';
 // Output is Node ESM with an executable shebang.
 export default defineConfig({
   entry: ['src/cli.ts'],
+  define: { __CLEAK_VERSION__: JSON.stringify(pkg.version) },
   format: ['esm'],
   target: 'node18',
   platform: 'node',

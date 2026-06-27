@@ -10,10 +10,20 @@
  *   eval   --corpus <p>   batch-evaluate a labeled corpus
  */
 
+import { existsSync } from 'node:fs';
 import { Command } from 'commander';
 import { McpClient, loadMcpTools } from '@cleak/agent-core';
 import { loadConfig, type Provider } from './config';
 import { mcpToolFlags, phaseForMcpTool } from './domain/mcpToolPlan';
+import { loadEnvFiles } from './domain/env';
+import { VERSION } from './version';
+import {
+  configFilePath,
+  saveConfigFile,
+  setConfigKey,
+  unsetConfigKey,
+  configTemplate,
+} from './domain/config-file';
 
 const program = new Command();
 
@@ -27,7 +37,7 @@ function csv(v?: string): string[] | undefined {
 program
   .name('cleak')
   .description('Agentic terminal investigator for C/C++ memory leaks')
-  .version('0.1.0');
+  .version(VERSION);
 
 program
   .command('tools')
@@ -35,6 +45,7 @@ program
   .option('--static-url <url>', 'static analyzer MCP url')
   .option('--dynamic-url <url>', 'dynamic analyzer MCP url')
   .action(async (opts) => {
+    loadEnvFiles(); // pick up .env (and, via loadConfig, the persisted config file)
     const cfg = loadConfig({
       ...(opts.staticUrl ? { staticUrl: opts.staticUrl } : {}),
       ...(opts.dynamicUrl ? { dynamicUrl: opts.dynamicUrl } : {}),
@@ -202,6 +213,73 @@ program
         `Acc=${m.accuracy.toFixed(3)} (TP=${m.tp} FP=${m.fp} FN=${m.fn} TN=${m.tn})\n`,
     );
     process.stdout.write(`✓ wrote ${files.length} artifacts to ${outDir}\n`);
+  });
+
+// ── config: manage the persisted config file (~/.config/cleak/config.json) ──
+// For globally-installed users who configure WITHOUT env vars. Precedence at run
+// time stays CLI flag > env > config file > default.
+const config = program
+  .command('config')
+  .description('manage the persisted cleak config file (CLI flag > env > this file > default)');
+
+config
+  .command('path')
+  .description('print the config file path')
+  .action(() => {
+    process.stdout.write(configFilePath() + '\n');
+  });
+
+config
+  .command('init')
+  .description('write a fully-keyed config template to the config path')
+  .option('--force', 'overwrite an existing config file', false)
+  .action((opts) => {
+    const path = configFilePath();
+    if (existsSync(path) && !opts.force) {
+      process.stderr.write(`refusing to overwrite ${path} (use --force)\n`);
+      process.exitCode = 1;
+      return;
+    }
+    process.stdout.write(`wrote config template → ${saveConfigFile(configTemplate() as Record<string, unknown>)}\n`);
+  });
+
+config
+  .command('get [key]')
+  .description('print the resolved (effective) config, or one dot-key (e.g. staticUrl, consensus.n)')
+  .option('--json', 'compact JSON output', false)
+  .option('--show-secrets', 'reveal the apiKey (masked by default)', false)
+  .action((key, opts) => {
+    loadEnvFiles();
+    const cfg = loadConfig({}) as Record<string, any>;
+    if (!opts.showSecrets && cfg.llm?.apiKey) cfg.llm = { ...cfg.llm, apiKey: '••••••' };
+    const val = key ? key.split('.').reduce((o: any, k: string) => (o == null ? o : o[k]), cfg) : cfg;
+    if (val === undefined) {
+      process.stderr.write(`no such key: ${key}\n`);
+      process.exitCode = 1;
+      return;
+    }
+    process.stdout.write(
+      (typeof val === 'object' ? JSON.stringify(val, null, opts.json ? 0 : 2) : String(val)) + '\n',
+    );
+  });
+
+config
+  .command('set <key> <value>')
+  .description('set a config key by dot-path, e.g. `staticUrl http://…`, `consensus.n 3`, `endpoints.openai.apiKey sk-…`')
+  .action((key, value) => {
+    try {
+      process.stdout.write(`set ${key} → ${setConfigKey(key, value)}\n`);
+    } catch (err: any) {
+      process.stderr.write(`${err?.message ?? err}\n`);
+      process.exitCode = 1;
+    }
+  });
+
+config
+  .command('unset <key>')
+  .description('remove a config key by dot-path')
+  .action((key) => {
+    process.stdout.write(`unset ${key} → ${unsetConfigKey(key)}\n`);
   });
 
 program.parseAsync(process.argv).catch((err) => {

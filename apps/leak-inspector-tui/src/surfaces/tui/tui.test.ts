@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync, existsSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { formatDuration } from './theme';
-import { loadPreferences, savePreferences, DEFAULT_PREFERENCES } from './preferences';
+import { loadConfigFile, saveConfigFile, DEFAULT_CONFIG } from '../../domain/config-file';
 import { TuiStore, visibleFindings } from './store';
 import type { FindingView } from './findings/findingView';
 import type { AgentEvent } from '@cleak/agent-core';
@@ -25,8 +25,8 @@ describe('formatDuration', () => {
   });
 });
 
-describe('preferences round-trip', () => {
-  const dir = mkdtempSync(join(tmpdir(), 'leakprefs-'));
+describe('config file round-trip', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'leakcfg-'));
   const prev = process.env.XDG_CONFIG_HOME;
   process.env.XDG_CONFIG_HOME = dir;
   afterEach(() => {
@@ -36,25 +36,22 @@ describe('preferences round-trip', () => {
   });
 
   test('returns defaults when no file exists, then persists + reloads', () => {
-    expect(loadPreferences()).toEqual(DEFAULT_PREFERENCES);
-    const path = savePreferences({ defaultMode: 'no_llm', defaultDynamic: 'aggressive', autoShowReport: true });
+    expect(loadConfigFile()).toEqual(DEFAULT_CONFIG);
+    const path = saveConfigFile({ defaultMode: 'no_llm', defaultDynamic: 'aggressive', autoShowReport: true });
     expect(existsSync(path)).toBe(true);
-    const loaded = loadPreferences();
+    const loaded = loadConfigFile();
     expect(loaded.defaultDynamic).toBe('aggressive');
     expect(loaded.autoShowReport).toBe(true);
     expect(loaded.defaultMode).toBe('no_llm');
   });
 
   test('persists a provider + per-provider endpoint override, chmod 600', () => {
-    const path = savePreferences({
-      defaultMode: 'llm_assisted',
-      defaultDynamic: 'off',
-      autoShowReport: false,
-      defaultProvider: 'openai-compat',
+    const path = saveConfigFile({
+      provider: 'openai-compat',
       endpoints: { 'openai-compat': { baseUrl: 'http://localhost:1234/v1', model: 'm', apiKey: 'sk-x' } },
     });
-    const loaded = loadPreferences();
-    expect(loaded.defaultProvider).toBe('openai-compat');
+    const loaded = loadConfigFile();
+    expect(loaded.provider).toBe('openai-compat');
     expect(loaded.endpoints?.['openai-compat']).toEqual({ baseUrl: 'http://localhost:1234/v1', model: 'm', apiKey: 'sk-x' });
     // The file may hold a key → must be owner-only (0600).
     expect(statSync(path).mode & 0o777).toBe(0o600);

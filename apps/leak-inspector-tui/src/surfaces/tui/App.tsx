@@ -20,7 +20,7 @@ import { snapshotFindingToView } from './findings/findingView';
 import { COMMANDS, matchCommands, findCommand } from './commands';
 import { loadHistory, appendHistory, historyStep } from './history';
 import { color, glyph, formatDuration } from './theme';
-import { savePreferences, loadPreferences, type UserPreferences } from './preferences';
+import { saveConfigFile, loadConfigFile, type CleakConfig } from '../../domain/config-file';
 import { runTuiScan } from './runner';
 import { runTuiEval } from './evalRunner';
 import { visibleMessages, type TuiStore } from './store';
@@ -372,32 +372,29 @@ export function App({ store, staticUrl, dynamicUrl, cwd, resultsDir, recentScans
     histDraft.current = '';
   };
 
-  const saveConfig = async (prefs: UserPreferences) => {
+  const saveConfig = async (cfg: CleakConfig) => {
     let savedPath = '';
     try {
-      savedPath = savePreferences(prefs);
+      savedPath = saveConfigFile(cfg);
     } catch (err: any) {
       store.addSystemMessage(`failed to save settings: ${err?.message ?? err}`);
     }
-    // Resolve the chosen provider + its endpoint override so the next scan this
-    // session (and the footer/welcome) reflect the change without a restart.
+    // Re-resolve effective config from the just-saved file (env still wins over it)
+    // so the next scan this session + the footer/welcome reflect the change.
     const { loadConfig } = await import('../../config');
-    const provider = prefs.defaultProvider;
-    const ep = (provider && prefs.endpoints?.[provider]) || {};
-    const nz = (s?: string) => (s && s.trim() ? s : undefined);
-    const cfg = loadConfig({ provider, llm: { baseUrl: nz(ep.baseUrl), model: nz(ep.model), apiKey: nz(ep.apiKey) } });
+    const eff = loadConfig({});
     store.setOptions({
-      mode: prefs.defaultMode,
-      dynamic: prefs.defaultDynamic,
-      provider: cfg.provider,
-      model: cfg.llm.model,
-      baseUrl: cfg.llm.baseUrl,
-      apiKey: cfg.llm.apiKey,
+      mode: cfg.defaultMode ?? state.mode,
+      dynamic: cfg.defaultDynamic ?? state.dynamic,
+      provider: eff.provider,
+      model: eff.llm.model,
+      baseUrl: eff.llm.baseUrl,
+      apiKey: eff.llm.apiKey,
     });
-    store.setAutoShowReport(prefs.autoShowReport);
+    store.setAutoShowReport(cfg.autoShowReport ?? state.autoShowReport);
     store.setView('main');
     store.addSystemMessage(
-      `settings saved${savedPath ? ` → ${savedPath}` : ''} · provider ${cfg.provider}${cfg.llm.model ? `:${cfg.llm.model}` : ''} · mode ${prefs.defaultMode}, dynamic ${prefs.defaultDynamic}, auto-report ${prefs.autoShowReport ? 'on' : 'off'}`,
+      `settings saved${savedPath ? ` → ${savedPath}` : ''} · provider ${eff.provider}${eff.llm.model ? `:${eff.llm.model}` : ''} · mode ${cfg.defaultMode ?? state.mode}, dynamic ${cfg.defaultDynamic ?? state.dynamic}, auto-report ${(cfg.autoShowReport ?? state.autoShowReport) ? 'on' : 'off'}`,
     );
   };
 
@@ -406,13 +403,13 @@ export function App({ store, staticUrl, dynamicUrl, cwd, resultsDir, recentScans
       <Box flexDirection="column">
         <ConfigScreen
           initial={{
-            // Persisted prefs (carry the per-provider `endpoints` map) overlaid with
-            // the live session values for the simple toggles + active provider.
-            ...loadPreferences(),
+            // Persisted config (carries endpoints + all knobs) overlaid with the
+            // live session values for the simple toggles + active provider.
+            ...loadConfigFile(),
             defaultMode: state.mode,
             defaultDynamic: state.dynamic,
             autoShowReport: state.autoShowReport,
-            defaultProvider: state.provider as UserPreferences['defaultProvider'],
+            provider: state.provider as CleakConfig['provider'],
           }}
           onSave={saveConfig}
           onCancel={() => store.setView('main')}
