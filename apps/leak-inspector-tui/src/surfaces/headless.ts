@@ -7,9 +7,11 @@
 
 import { resolve, basename, join } from 'node:path';
 import { existsSync, readFileSync } from 'node:fs';
-import { McpClient } from '@cleak/agent-core';
+import { McpClient, buildCallModel } from '@cleak/agent-core';
 import { AnalysisMode, DynamicMode } from '@cleak/common/types';
 import { loadConfig, type Provider, type ConsensusJudgeConfig } from '../config';
+import { toProviderSettings } from '../orchestrator/toolWrappers';
+import { loadOrProfileAllocators } from '../domain/allocatorProfiler';
 import { loadEnvFiles } from '../domain/env';
 import { buildPathResolver } from '../domain/pathResolver';
 import { ScanEmitter, JsonlFileSink, MultiSink, CallbackSink, type EventSink, type ScanEvent } from '../orchestrator/events';
@@ -33,6 +35,11 @@ export interface HeadlessOptions {
    * FreeSink) — threaded to candidateScan so wrapper-named allocators are found. */
   extraAllocators?: string[];
   extraDeallocators?: string[];
+  /** Where the allocator/deallocator names come from. 'auto' (default): use the LLM
+   * profiler when in llm_assisted mode and none were supplied; 'llm': always profile;
+   * 'none': never (current behavior / deterministic). When extraAllocators are passed
+   * explicitly (e.g. the eval harness from a frozen manifest), the profiler is skipped. */
+  allocatorsFrom?: 'auto' | 'llm' | 'none';
   fileLimit?: number;
   staticUrl?: string;
   dynamicUrl?: string;
@@ -99,6 +106,36 @@ export async function runHeadless(opts: HeadlessOptions): Promise<HeadlessResult
   const investigation =
     analysisMode === AnalysisMode.LLM_ASSISTED ? buildWorkflowInvestigationPhase(cfg, dynamicMode) : undefined;
 
+  // ── LLM allocator profiling (generalize: discover the project's alloc/free API
+  // instead of hardcoding it). Skipped when allocators are supplied explicitly (the
+  // eval harness passes a frozen manifest list ⇒ deterministic) or disabled via
+  // 'none'. Default 'auto' = profile only in llm_assisted mode. Discovered names feed
+  // the SAME extraAllocators plumbing; the result is grep-verified + cached per repo. ──
+  let extraAllocators = opts.extraAllocators;
+  let extraDeallocators = opts.extraDeallocators;
+  const allocatorsFrom = opts.allocatorsFrom ?? 'auto';
+  const wantProfile =
+    !extraAllocators?.length &&
+    allocatorsFrom !== 'none' &&
+    (allocatorsFrom === 'llm' || analysisMode === AnalysisMode.LLM_ASSISTED);
+  if (wantProfile) {
+    const callModel = buildCallModel(toProviderSettings(cfg), () => globalThis.crypto.randomUUID());
+    const profile = await loadOrProfileAllocators(repoPath, callModel, {
+      signal: opts.signal,
+      temperature: cfg.llm.temperature,
+      onNotice: opts.quiet ? undefined : (r) => process.stderr.write(`  ${r}\n`),
+    });
+    if (profile) {
+      extraAllocators = profile.allocators;
+      extraDeallocators = profile.deallocators;
+      if (!opts.quiet) {
+        process.stdout.write(
+          `  allocator profile: ${profile.allocators.length} allocators, ${profile.deallocators.length} deallocators (LLM-discovered)\n`,
+        );
+      }
+    }
+  }
+
   const startedAt = Date.now();
   try {
     const result = await runScan(
@@ -109,8 +146,8 @@ export async function runHeadless(opts: HeadlessOptions): Promise<HeadlessResult
         dynamicMode,
         fileLimit: opts.fileLimit,
         buildCommand: opts.build,
-        extraAllocators: opts.extraAllocators,
-        extraDeallocators: opts.extraDeallocators,
+        extraAllocators,
+        extraDeallocators,
       },
       { staticClient, dynamicClient, emitter, pathResolver, investigation, abortSignal: opts.signal },
     );

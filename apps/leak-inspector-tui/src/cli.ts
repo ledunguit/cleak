@@ -17,6 +17,13 @@ import { mcpToolFlags, phaseForMcpTool } from './domain/mcpToolPlan';
 
 const program = new Command();
 
+/** Parse a comma-separated CLI value into a trimmed, non-empty string[] (or undefined). */
+function csv(v?: string): string[] | undefined {
+  if (!v) return undefined;
+  const out = v.split(',').map((s) => s.trim()).filter(Boolean);
+  return out.length ? out : undefined;
+}
+
 program
   .name('cleak')
   .description('Agentic terminal investigator for C/C++ memory leaks')
@@ -77,6 +84,9 @@ program
   .option('--api-key <key>', 'LLM API key override')
   .option('--format <list>', 'comma list: json,markdown,html,snapshot,csv', 'json,markdown,snapshot')
   .option('--build <cmd>', 'build command for dynamic analysis')
+  .option('--allocators-from <mode>', 'allocator API discovery: auto | llm | none', 'auto')
+  .option('--allocators <csv>', 'custom allocator names (comma-separated; overrides discovery)')
+  .option('--deallocators <csv>', 'custom deallocator names (comma-separated)')
   .option('--file-limit <n>', 'cap on indexed files', (v) => parseInt(v, 10))
   .option('--static-url <url>', 'static analyzer MCP url')
   .option('--dynamic-url <url>', 'dynamic analyzer MCP url')
@@ -97,6 +107,9 @@ program
         apiKey: opts.apiKey,
         format: opts.format,
         build: opts.build,
+        allocatorsFrom: opts.allocatorsFrom,
+        extraAllocators: csv(opts.allocators),
+        extraDeallocators: csv(opts.deallocators),
         fileLimit: opts.fileLimit,
         staticUrl: opts.staticUrl,
         dynamicUrl: opts.dynamicUrl,
