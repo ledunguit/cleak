@@ -563,7 +563,13 @@ export class CParserService {
     const walk = (node: any, stack: { condition: string; negated: boolean }[]) => {
       if (!node) return;
       const line = (node.startPosition?.row ?? -1) + 1;
-      if (line > 0 && !map.has(line)) map.set(line, stack);
+      // DEEPER guard stack wins for a line: a single-line `if (p==NULL) return;` puts
+      // the if-condition and the return on the SAME line; the return (deeper, guarded
+      // by p==NULL) must win over the if header (outer, unguarded).
+      if (line > 0) {
+        const existing = map.get(line);
+        if (!existing || stack.length > existing.length) map.set(line, stack);
+      }
       if (node.type === 'if_statement') {
         const condNode = node.childForFieldName?.('condition') ?? this.findChild(node, 'parenthesized_expression');
         const condText = condNode ? this.stripParens(this.nodeText(condNode, lines)) : '';
@@ -891,10 +897,23 @@ export class CParserService {
             c.type === 'pointer_declarator' ||
             c.type === 'array_declarator',
         );
-        const name = declaratorChild
-          ? this.nodeText(declaratorChild, lines)
-          : '';
-        return { name, type: typeNames.join(' ') || 'int' };
+        // For `char *target`, the '*' lives in the pointer_declarator, so the raw text
+        // is `*target` and the type is just `char`. Extract the bare identifier as the
+        // NAME (so it matches freedVariables) and mark the TYPE as a pointer (so the
+        // pointer-parameter checks fire). Same for `char target[]` (array → pointer).
+        const isPointer =
+          declaratorChild?.type === 'pointer_declarator' || declaratorChild?.type === 'array_declarator';
+        let name = '';
+        if (declaratorChild) {
+          if (isPointer) {
+            const id = this.findAllNodes(declaratorChild, 'identifier')[0];
+            name = id ? this.nodeText(id, lines) : this.nodeText(declaratorChild, lines).replace(/[*[\]\s]/g, '');
+          } else {
+            name = this.nodeText(declaratorChild, lines);
+          }
+        }
+        const type = (typeNames.join(' ') || 'int') + (isPointer ? ' *' : '');
+        return { name, type };
       });
   }
 
@@ -996,8 +1015,11 @@ export class CParserService {
       const parameters = this.extractParameters(funcNode, lines);
       const localVariables = this.extractLocalVariables(funcNode, lines);
       const functionCalls = this.extractFunctionCalls(body, lines);
-      const allocationCalls = functionCalls.filter((c) => ALLOCATION_FUNCTIONS.has(c.name));
-      const deallocationCalls = functionCalls.filter((c) => DEALLOCATION_FUNCTIONS.has(c.name));
+      // Use the per-parse sets so project allocators/deallocators (e.g. cJSON_Delete,
+      // cJSON_Duplicate) — supplied via parse(...extraAllocators/extraDeallocators) —
+      // are recognized here, not just the built-in libc names.
+      const allocationCalls = functionCalls.filter((c) => this.allocSet.has(c.name));
+      const deallocationCalls = functionCalls.filter((c) => this.freeSet.has(c.name));
       const returnStatements = this.extractReturnStatements(funcNode, lines);
       const conditions = this.extractConditions(funcNode, lines);
       const allocationVariables = this.extractAllocationVariables(funcNode, lines, allocationCalls);
@@ -1064,8 +1086,13 @@ export class CParserService {
       );
       if (!expr) continue;
       const args = expr.children?.find((c: any) => c.type === 'argument_list');
-      if (args && args.children?.[0]) {
-        const varName = this.nodeText(args.children[0], lines);
+      // argument_list children are `( arg0 , arg1 )` — children[0] is the OPENING PAREN,
+      // not the argument. Take the first real argument so `free(p)` records `p`.
+      const firstArg = args?.children?.find(
+        (c: any) => c.type !== '(' && c.type !== ')' && c.type !== ',',
+      );
+      if (firstArg) {
+        const varName = this.nodeText(firstArg, lines);
         result.push({ variable: varName, line: call.line });
       }
     }
