@@ -878,10 +878,16 @@ export class CParserService {
   }
 
   private extractParameters(node: any, lines: string[]): { name: string; type: string }[] {
-    const declarator = this.findChild(node, 'function_declarator') ||
-                       this.findChild(node, 'pointer_declarator');
-    if (!declarator) return [];
-    const paramList = this.findChild(declarator, 'parameter_list');
+    const topDecl = (node.children || []).find(
+      (c: any) => c.type === 'function_declarator' || c.type === 'pointer_declarator',
+    );
+    if (!topDecl) return [];
+    // `cJSON *foo(...)` nests as pointer_declarator > function_declarator > parameter_list,
+    // so a one-level lookup misses every pointer-returning function. Descend to the
+    // function_declarator within the declarator (not the body) before reading params.
+    const funcDecl =
+      topDecl.type === 'function_declarator' ? topDecl : this.findAllNodes(topDecl, 'function_declarator')[0];
+    const paramList = funcDecl ? this.findChild(funcDecl, 'parameter_list') : undefined;
     if (!paramList) return [];
 
     return (paramList.children || [])
