@@ -12,7 +12,6 @@
   },
   "dependencies": {
     "@cleak/common": "workspace:*",
-    "dotenv": "^16.4.7",
-    "z3-solver": "^4.13.0"
+    "dotenv": "^16.4.7"
   }
 }
