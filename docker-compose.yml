@@ -2,6 +2,12 @@
 # The TUI drives these two analyzers directly over MCP/HTTP (static :50061,
 # dynamic :50062). There is no control-plane / web UI / database — the TUI is a
 # standalone scanner that writes its report artifacts to disk.
+#
+# Each container reads ITS OWN env from apps/<svc>/.env via `env_file` (marked
+# required:false so a fresh clone with no .env still boots on the code defaults —
+# every var is optional). Copy apps/<svc>/.env.example → apps/<svc>/.env to override.
+# NOTE: `env_file` requires Docker Compose v2.24+ for the `required:` field; on
+# older Compose either upgrade or `cp` the .env files before `up`.
 services:
   static-analyzer:
     build:
@@ -9,18 +15,14 @@ services:
       dockerfile: apps/static-analyzer/Dockerfile
     # Bound to localhost only: this is an internal, UNAUTHENTICATED MCP service
     # the TUI reaches over the docker network. Publishing to 0.0.0.0 would expose
-    # untrusted-code execution to the LAN.
+    # untrusted-code execution to the LAN. Keep this port in sync with MCP_HTTP_PORT
+    # in apps/static-analyzer/.env (defaults to 50061).
     ports:
       - "127.0.0.1:50061:50061"
+    # MCP_HTTP_PORT + EXTRA_ALLOCATOR_NAMES now live in apps/static-analyzer/.env.
     env_file:
-      - apps/static-analyzer/.env
-    environment:
-      # Analyzer serves MCP/HTTP only (the sole transport).
-      MCP_HTTP_PORT: 50061
-      # Per-project FACTORY allocators (≈ LAMeD AllocSource) — comma-separated
-      # function names whose return value is owned heap but whose name carries no
-      # malloc/alloc token (e.g. cJSON_Duplicate). Empty by default.
-      EXTRA_ALLOCATOR_NAMES: ${EXTRA_ALLOCATOR_NAMES:-}
+      - path: apps/static-analyzer/.env
+        required: false
     volumes:
       - ./demo:/workspace/demo
       - ./targets:/workspace/targets
@@ -33,14 +35,16 @@ services:
       context: .
       dockerfile: apps/dynamic-analyzer/Dockerfile
     # Localhost-only (see static-analyzer note): internal, unauthenticated service.
+    # Keep this in sync with MCP_HTTP_PORT in apps/dynamic-analyzer/.env (default 50062).
     ports:
       - "127.0.0.1:50062:50062"
     env_file:
-      - apps/dynamic-analyzer/.env
+      - path: apps/dynamic-analyzer/.env
+        required: false
     environment:
-      # Analyzer serves MCP/HTTP only (the sole transport).
-      MCP_HTTP_PORT: 50062
-      # Container runs dir (override any host path in the app .env).
+      # Container artifact dir = the `runs:` volume mount. This is a deployment
+      # fact (must differ from the host ./runs default in the app .env), so it
+      # stays here and intentionally overrides RUNS_DIR from env_file.
       RUNS_DIR: /runs
     volumes:
       - runs:/runs

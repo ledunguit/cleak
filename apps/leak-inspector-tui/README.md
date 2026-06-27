@@ -1,130 +1,134 @@
 # cleak
 
-An agentic terminal investigator for C/C++ memory leaks. It drives static/dynamic
-analysis MCP servers with a native tool-calling loop — the model decides which
-analyses to run on each allocation candidate, gathers evidence, and records a
-verdict — then renders JSON / Markdown / HTML / snapshot reports. One binary, two
-surfaces (interactive TUI + headless batch), reproducible artifacts per scan.
+Trình **điều tra rò rỉ bộ nhớ C/C++** dạng agentic chạy trong terminal. Nó điều phối các MCP
+server phân tích **tĩnh/động** bằng vòng lặp **native tool-calling** — mô hình tự quyết định
+chạy phân tích nào trên mỗi ứng viên cấp phát, thu bằng chứng, ghi verdict — rồi render
+report **JSON / Markdown / HTML / snapshot**. Một binary, hai mặt (TUI tương tác + batch
+headless), artifact tái lập được theo từng scan. **Đây là orchestrator duy nhất** của hệ.
 
-## Install
-
-```bash
-npm i -g @cleak/cli     # or: bun add -g @cleak/cli  ·  pnpm add -g @cleak/cli
-# the installed command is still `cleak`
-```
-
-Then:
+## Cài đặt
 
 ```bash
-cleak tui                                        # interactive terminal UI
-cleak scan --repo <path> --mode llm_assisted     # headless scan → results/<scanId>/
-cleak tools                                      # check analyzer MCP connectivity
-cleak eval --corpus <path>                       # batch-evaluate a labeled corpus
+npm i -g @cleak/cli     # hoặc: bun add -g @cleak/cli  ·  pnpm add -g @cleak/cli
+# lệnh sau khi cài vẫn là `cleak`
 ```
 
-`cleak` needs the two analyzer MCP servers reachable (default `localhost:50061` /
-`50062`) — start them with `docker compose up` from the repo, or point at remote
-ones via `--static-url` / `--dynamic-url`. The LLM key/provider is read from
-`<cwd>/.env` or env vars (`LLM_PROVIDER`, `LOCAL_LLM_API_KEY` / `OPENAI_API_KEY` / …).
-
-### From source (this monorepo)
+Sau đó:
 
 ```bash
-bun run cleak:install     # build the self-contained bundle + npm i -g it
+cleak tui                                        # TUI tương tác
+cleak scan --repo <path> --mode llm_assisted     # scan headless → results/<scanId>/
+cleak tools                                      # kiểm tra kết nối MCP của analyzer
+cleak eval --corpus <path>                       # đánh giá batch một corpus đã gán nhãn
 ```
 
-## Architecture
+`cleak` cần 2 MCP server analyzer chạy sẵn (mặc định `localhost:50061` / `50062`) — bật bằng
+`docker compose up` từ repo, hoặc trỏ tới server từ xa qua `--static-url` / `--dynamic-url`.
+Key/provider LLM đọc từ `<cwd>/.env`, `apps/leak-inspector-tui/.env` hoặc biến môi trường
+(`LLM_PROVIDER`, `LOCAL_LLM_API_KEY` / `OPENAI_API_KEY` / …).
+
+### Từ source (trong monorepo này)
+
+```bash
+bun run cleak:install     # build bundle tự chứa + npm i -g
+```
+
+## Kiến trúc
 
 ```
-packages/agent-core         framework-free agentic core (reusable):
-  loop.ts                   async-generator turn loop (stream → tools → results → repeat)
-  tool.ts                   Tool abstraction + buildTool() defaults
-  providers/                callModel for local | openai | anthropic (native tool-calling)
-  mcp/                      Streamable-HTTP MCP client + tool wrapping (tools/list → Tool)
+packages/agent-core         lõi agentic không phụ thuộc framework (tái dùng được):
+  loop.ts                   queryLoop(): vòng lặp lượt (stream → tool → kết quả → lặp)
+  tool.ts                   trừu tượng Tool + buildTool()
+  providers/                callModel cho local | openai | anthropic | openai-compat
+  mcp/                      MCP client Streamable-HTTP + bọc tool (tools/list → Tool)
 
 apps/leak-inspector-tui
-  domain/                   systemPrompt, domain tools (read_file, record_verdict, …),
-                            CandidateManager, path resolver, heuristic judge wrapper
-  orchestrator/             HYBRID scan controller + ScanEvent emitter + investigation phase
-  surfaces/headless.ts      batch runner → results/<scanId>/ + JSONL event log
-  surfaces/tui/             Ink UI (timeline, tool cards, spinner, permission overlay)
+  domain/                   systemPrompt, tool nghiệp vụ (read_file, record_verdict, …),
+                            CandidateManager, path resolver, dynamicEvidence, wrapper judge
+  orchestrator/             scanController HYBRID + ScanEvent emitter + pha investigation
+  surfaces/headless.ts      batch runner → results/<scanId>/ + log sự kiện JSONL
+  surfaces/tui/             UI Ink (timeline, tool card, spinner, overlay xin phép)
 
-packages/common/analysis    shared report renderers + heuristic analysis + heuristic
-                            judge + consensus judge (the leak-vs-clean decision boundary)
+packages/common/analysis    render report + phân tích heuristic + heuristic judge +
+                            consensus judge (ranh giới quyết định leak-vs-clean)
 ```
 
-### HYBRID orchestration
+### Điều phối HYBRID
 
 ```
-discovery (deterministic: indexFiles + candidateScan)
-  → investigation (agentic native tool-calling loop; llm_assisted only)
-  → judging (deterministic heuristic finalizer for un-verdicted bundles)
+discovery (tất định: indexFiles + candidateScan)
+  → static-enrichment (tất định, opt-in STATIC_ENRICH)
+  → investigation (vòng native tool-calling agentic; CHỈ mode llm_assisted)
+  → dynamic tất định (build → LSan, KHÔNG LLM; mode no_llm khi --dynamic ≠ off + có buildCommand)
+  → judging (heuristic chốt cho mọi bundle + LLM judge cho borderline + consensus tuỳ chọn)
   → reporting (json / markdown / html / snapshot)
 ```
 
-Deterministic discovery + judging keep the candidate set and verdict synthesis
-reproducible; the investigation phase is where the model is genuinely agentic.
+Discovery + judging tất định giữ tập ứng viên và tổng hợp verdict **tái lập được**; pha
+investigation là nơi mô hình thực sự agentic.
 
-## Usage
+## Sử dụng (trong monorepo)
 
-Start the analyzers in MCP mode (they default to gRPC):
+Bật analyzer (MCP là transport duy nhất):
 
 ```bash
-(cd apps/static-analyzer  && TRANSPORT_MODE=mcp MCP_HTTP_PORT=50061 bun run dev)
-(cd apps/dynamic-analyzer && TRANSPORT_MODE=mcp MCP_HTTP_PORT=50062 bun run dev)
+(cd apps/static-analyzer  && MCP_HTTP_PORT=50061 bun run dev)
+(cd apps/dynamic-analyzer && MCP_HTTP_PORT=50062 bun run dev)
+# hoặc đơn giản: docker compose up --build
 ```
 
-Then:
+Rồi:
 
 ```bash
-# discover/verify analyzer tools
+# liệt kê/kiểm tra tool của analyzer
 bun apps/leak-inspector-tui/src/cli.ts tools
 
-# headless scan (writes results/<scanId>/)
+# scan headless (ghi results/<scanId>/)
 bun apps/leak-inspector-tui/src/cli.ts scan --repo demo/memory_leak_corpus/early_return_leak --mode llm_assisted
 
-# interactive TUI (needs a terminal)
+# TUI tương tác (cần terminal)
 bun apps/leak-inspector-tui/src/cli.ts tui
 #   /scan <path>  /mode no_llm|llm_assisted  /dynamic off|selective|aggressive  /report  /tools  /quit
 ```
 
-### Outputs (`results/<scanId>/`)
+### Output (`results/<scanId>/`)
 
-- `snapshot.json` — compact, machine-comparable findings (thesis evaluation format)
-- `report.json` / `report.md` / `report.html` — full report
-- `events.jsonl` — the ScanEvent stream (phase + agent activity)
-- `transcript.json` — the full agent message history (reproducibility / audit)
+- `snapshot.json` — findings gọn, so sánh được bằng máy (định dạng đánh giá luận văn)
+- `report.json` / `report.md` / `report.html` — report đầy đủ
+- `events.jsonl` — luồng ScanEvent (pha + hoạt động agent)
+- `transcript.json` — toàn bộ lịch sử message của agent (tái lập / audit)
 
-## Configuration (env)
+## Cấu hình (ENV)
 
-| var | meaning | default |
+Copy [`.env.example`](.env.example) → `.env` rồi điền. **Mọi biến TUỲ CHỌN** trừ key của
+provider bạn chọn. Bảng rút gọn (đầy đủ trong `.env.example`):
+
+| Biến | Ý nghĩa | Mặc định |
 |---|---|---|
-| `LLM_PROVIDER` | `local` \| `openai` \| `anthropic` | `local` |
-| `LOCAL_LLM_BASE_URL` / `LOCAL_LLM_MODEL` / `LOCAL_LLM_API_KEY` | local OpenAI-compatible gateway | `localhost:20128/v1` |
-| `STATIC_ANALYZER_MCP_URL` / `DYNAMIC_ANALYZER_MCP_URL` | analyzer endpoints | `localhost:50061` / `:50062` |
-| `AGENT_MAX_TURNS` | investigation turn budget | `15` |
+| `LLM_PROVIDER` | `local` \| `openai` \| `anthropic` \| `openai-compat` | `local` |
+| `LOCAL_LLM_BASE_URL` / `LOCAL_LLM_MODEL` / `LOCAL_LLM_API_KEY` | gateway OpenAI-compatible cục bộ | `localhost:20128/v1` |
+| `STATIC_ANALYZER_MCP_URL` / `DYNAMIC_ANALYZER_MCP_URL` | endpoint analyzer | `localhost:50061` / `:50062` |
+| `AGENT_MAX_TURNS` | ngân sách lượt investigation | `15` |
+| `CONSENSUS_N` / `CONSENSUS_RULE` | judge consensus (n=1 ⇒ judge đơn) | `1` / `weighted` |
 
-The LLM key is read from the repo-root `.env` (or `apps/leak-inspector-tui/.env`)
-automatically (the TUI loads it on start). Host runs rewrite
-`host.docker.internal` → `localhost`; set `IN_CONTAINER=1` to keep the container
-hostname.
+Key LLM đọc tự động từ `<repo-root>/.env` hoặc `apps/leak-inspector-tui/.env` khi khởi động.
+Chạy trên host sẽ rewrite `host.docker.internal` → `localhost`; đặt `IN_CONTAINER=1` để giữ
+hostname container.
 
-## Thesis experiment scripts
+## Script thực nghiệm luận văn
 
 ```bash
-bun scripts/evaluate-corpus.ts [no_llm|llm_assisted] [limit]   # score vs expected_leak_count
+bun scripts/evaluate-corpus.ts [no_llm|llm_assisted] [limit]   # chấm điểm vs expected_leak_count
 bun scripts/compare-modes.ts [limit]                           # no_llm vs llm_assisted
-bun scripts/run-local-scan-smoke.ts                            # one-scan sanity check
-bun scripts/mcp-contract-test.ts                               # analyzer tool catalog check
+bun scripts/run-local-scan-smoke.ts                            # sanity 1 scan
+bun scripts/mcp-contract-test.ts                               # kiểm catalog tool analyzer
 ```
 
-## Notes
+## Ghi chú
 
-- **Dynamic analysis** (sanitizers / valgrind) and the **Clang-SA / scan-build**
-  deep-static slot require Linux/Docker; on macOS the analyzers run those phases
-  inside the container. The agent gates them behind `--dynamic` and interactive
-  approval. (The "leakguard" tool slot now runs Clang scan-build, not the removed
-  LeakGuard third-party tool.)
-- In a dev box where the docker stack already holds `50061/50062` in gRPC mode,
-  run the MCP analyzers on alternate ports (e.g. `50071/50072`) and pass
-  `--static-url` / `--dynamic-url`.
+- **Phân tích động** (sanitizer / valgrind) và slot **Clang-SA / scan-build** cần Linux/Docker;
+  trên macOS các pha đó chạy trong container. Agent gate sau `--dynamic` + xin phép tương tác.
+  (Slot "leakguard" giờ chạy Clang scan-build, không phải tool LeakGuard third-party đã gỡ.)
+- **MCP/HTTP là transport duy nhất** — server gRPC + `proto/` của bản web cũ đã bị xoá khỏi
+  `master`. Nếu cổng `50061/50062` đang bận, chạy analyzer ở cổng khác (vd `50071/50072`) rồi
+  truyền `--static-url` / `--dynamic-url`.
