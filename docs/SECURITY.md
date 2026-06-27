@@ -1,10 +1,15 @@
 # Security & Trust Model
 
 This system **compiles and executes untrusted C/C++** from whatever repository is
-under scan. The **leak-inspector-tui** orchestrator drives that execution from LLM
-tool calls, routing build/run requests to the **dynamic-analyzer** over MCP. This
-document states the trust boundary it is built for and the controls that enforce
-it.
+under scan. The **leak-inspector-tui** orchestrator drives that execution, routing
+build/run requests to the **dynamic-analyzer** over MCP. This document states the
+trust boundary it is built for and the controls that enforce it.
+
+> **Both analysis modes can execute code.** `llm_assisted` runs the dynamic stage
+> from LLM tool calls; `no_llm` runs a **deterministic** dynamic stage (build →
+> LSan, no LLM) when invoked with `--dynamic ≠ off` AND a known `buildCommand`.
+> The execution path + confinement are identical. By default (`--dynamic off`, or no
+> `buildCommand`) `no_llm` is **static-only and never executes the scanned code**.
 
 ## Trust model
 
@@ -24,7 +29,7 @@ it.
 | Risk | Control | Where |
 |---|---|---|
 | Shell injection via binary path/args | All binary execution uses `execFile`/`spawn` with an **argv array** — never an interpolated shell string | `apps/dynamic-analyzer/src/services/safe-exec.ts`, valgrind/asan/lsan/binary-runner |
-| Runaway / fork-bomb / OOM in scanned binary | `ulimit` confinement (CPU time, address space, file size, process count) on Linux | `safe-exec.ts` (`DYNAMIC_ULIMIT_*` env) |
+| Runaway / fork-bomb / OOM in scanned binary | `ulimit` confinement (CPU time, file size, process count) on Linux. The **address-space** (`-v`) cap is dropped ONLY for sanitizer/valgrind runs (`unlimitedAddressSpace`) because ASan/LSan reserve ~20 TB of *virtual* shadow memory — the cap aborts them; physical RSS is still container-bounded and CPU/fsize/proc limits stay | `safe-exec.ts` (`DYNAMIC_ULIMIT_*` env) |
 | Build-time escape | Docker build runs `--network none` + bounded `--memory`/`--pids-limit`; mount source is `realpath`-canonicalized; docker args passed as an array | `apps/dynamic-analyzer/src/services/build-target.service.ts` |
 | Path traversal via symlinks | Repo indexing uses `lstat` + a canonical-root containment check; symlinks pointing outside the repo are skipped | `apps/static-analyzer/src/services/file-indexing.service.ts` |
 | `scan-build` shell injection | `spawnSync` with argv; the build command keeps one intended `/bin/sh -c` layer (a single argv element, nothing to escape) | `apps/static-analyzer/src/services/leakguard-adapter.service.ts` |

@@ -5,6 +5,7 @@ import {
   reconcileDynamicEvidence,
   computeDynamicCoverage,
   runDeterministicDynamic,
+  runDeterministicDynamicStage,
   type DynamicRunStore,
 } from './dynamicEvidence';
 import { PathResolver } from './pathResolver';
@@ -182,5 +183,44 @@ describe('runDeterministicDynamic (fixed recipe, no LLM)', () => {
   test('missing buildTarget/lsanRun tool → false', async () => {
     const store = createDynamicRunStore();
     expect(await runDeterministicDynamic({ tools: [], store, repoPath: '/w', buildCommand: 'make', pathResolver: idResolver, toolCtx: {} })).toBe(false);
+  });
+});
+
+describe('runDeterministicDynamicStage (no_llm standalone stage)', () => {
+  // Minimal McpClient: listTools advertises buildTarget+lsanRun; callTool returns the recipe results.
+  const mockClient = (lsanFindings: any[]) =>
+    ({
+      listTools: async () => [
+        { name: 'buildTarget', description: '', inputSchema: {} },
+        { name: 'lsanRun', description: '', inputSchema: {} },
+      ],
+      callTool: async (name: string) =>
+        name === 'buildTarget'
+          ? { success: true, binaryPath: '/w/a.out' }
+          : { success: true, runId: 'r', findings: lsanFindings },
+    }) as any;
+
+  test('a correlated leak → evidence attached + exercised_leak coverage', async () => {
+    const bundles = [bundle()];
+    const { ran } = await runDeterministicDynamicStage(mockClient([leakFinding('a.c', 10, 'bad')]), bundles, {
+      repoPath: '/w',
+      buildCommand: 'make',
+      pathResolver: idResolver,
+    });
+    expect(ran).toBe(true);
+    expect(bundles[0].evidence.length).toBeGreaterThan(0);
+    expect(bundles[0].dynamicCoverage).toBe('exercised_leak');
+  });
+
+  test('a clean run (no findings) → exercised_clean, no evidence', async () => {
+    const bundles = [bundle()];
+    const { ran } = await runDeterministicDynamicStage(mockClient([]), bundles, {
+      repoPath: '/w',
+      buildCommand: 'make',
+      pathResolver: idResolver,
+    });
+    expect(ran).toBe(true);
+    expect(bundles[0].evidence.length).toBe(0);
+    expect(bundles[0].dynamicCoverage).toBe('exercised_clean');
   });
 });
