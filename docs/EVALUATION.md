@@ -50,16 +50,40 @@ Metric formulas (`computeMetrics`) are unit-tested in
 |---|---|---|
 | `no_llm` | discovery + static enrichment (`STATIC_ENRICH`) + **path-sensitive heuristic judge** | deterministic (bitwise — see §7) |
 | `llm_assisted` | agentic LLM orchestration + LLM judge (borderline) | stochastic; variance quantified, not hidden (§7) |
-| `--dynamic off/selective/aggressive` | adds Valgrind/ASan/LSan evidence — **`llm_assisted` only** (the dynamic worker lives in the investigation phase; the flag is inert in `no_llm`, which is static-only) | depends on build |
+| `--dynamic off/selective/aggressive` | adds Valgrind/ASan/LSan evidence — works in **both** modes (`llm_assisted` runs it in the investigation; `no_llm` runs a **deterministic** build→LSan stage, no LLM). Gated on a known `buildCommand`; `--dynamic off` ⇒ static-only | depends on build |
 
 > **Dynamic stage requirements (host runner).** ASan/LSan reserve ~20 TB of virtual address
 > space, so the dynamic analyzer drops the `ulimit -v` cap for instrumented runs
 > (`unlimitedAddressSpace`) and ships `llvm-symbolizer` (else leak frames have no `file:line`
 > and cannot correlate). Without both, a confined sanitizer run silently reports 0 leaks.
-> Verified on Juliet: dynamic evidence correlates to the candidate by `file_line_exact`
-> (`definitely_lost`, bytes). NOTE: because dynamic is `llm_assisted`-only today, the
-> `no_llm` vs `llm_assisted` contrast conflates *LLM orchestration* with *dynamic evidence*;
-> a clean 2×2 ablation would add a deterministic `no_llm + dynamic` cell (open work).
+> Dynamic evidence correlates to the candidate by `file_line_exact` (`definitely_lost`, bytes).
+
+### 3a. The 2×2 ablation (LLM-orchestration × dynamic-evidence)
+
+Because the deterministic `no_llm + dynamic` cell now exists, the two factors are separable
+(previously `no_llm`-vs-`llm_assisted` conflated them). **Juliet CWE-401, n=30, model `mimo/mimo-v2.5-pro` @ temp 0:**
+
+| | static (`--dynamic off`) | + dynamic |
+|---|---|---|
+| **no_llm** | TP29 FP7 FN3 · P0.806 R0.906 | TP29–30 FP7 FN2–3 · R0.906–**0.938** |
+| **llm_assisted** | TP29 FP7 FN3 · P0.806 R0.906 | TP29–30 FP7 FN2–3 · R0.906–0.938 |
+
+Readings (honest, corpus-specific):
+- **Baseline preserved:** `no_llm --dynamic off` = TP29 FP7 FN3, byte-for-byte the documented baseline.
+- **Dynamic adds recall** (FN 3→2 when the leak path executes); **FP is stable at 7** in every cell —
+  runtime evidence corroborates, it does not introduce false positives.
+- **The LLM judge does not move Juliet** (`no_llm` static ≡ `llm_assisted` static, both TP29 FP7 FN3):
+  the easy corpus produces *non-borderline* bundles, so the heuristic finalizes them and the LLM judge
+  never engages. ⇒ On Juliet the differentiator is **dynamic**, not the LLM. Both factors are expected to
+  matter on HARD/real-project corpora where bundles are borderline and leaks are path-sensitive.
+- **Determinism caveat.** Juliet flow-variant 12 (`globalReturnsTrueOrFalse() { return rand()%2; }`) leaks
+  on only ~50% of runs, so `+dynamic` oscillates TP29↔TP30 (recall only; FP fixed). This is the *fundamental
+  coverage limit of dynamic analysis* — it observes only executed paths — not a tooling defect. The bitwise
+  Tier-1 determinism gate (§7) therefore stays on the static `--dynamic off` path.
+- **Real-project dynamic needs a harness.** cjson (LAMeD) carries **no `build_command`** and no runnable
+  driver (function-level positive-only annotations), so the dynamic stage **skips** (off ≡ selective = recall
+  1/6, a skip notice is emitted). This is why static analysis is essential for real projects: you cannot
+  always *run* the leak. Wiring a per-case driver to exercise such leaks is open work.
 
 **Tầng POLICY (LLM) bị ĐÔNG CỨNG / BỎ QUA trong eval — đây là lý do số benchmark vẫn tất định:**
 allocator profiler, strategist, judge-tuner (xem [ARCHITECTURE.md](ARCHITECTURE.md) §10, [PROMPTS.md](PROMPTS.md) §0.5)
