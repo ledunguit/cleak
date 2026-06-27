@@ -85,6 +85,7 @@ program
   .option('--format <list>', 'comma list: json,markdown,html,snapshot,csv', 'json,markdown,snapshot')
   .option('--build <cmd>', 'build command for dynamic analysis')
   .option('--allocators-from <mode>', 'allocator API discovery: auto | llm | none', 'auto')
+  .option('--strategy <mode>', 'adaptive strategist (LLM picks the plan per project): auto | off', 'off')
   .option('--allocators <csv>', 'custom allocator names (comma-separated; overrides discovery)')
   .option('--deallocators <csv>', 'custom deallocator names (comma-separated)')
   .option('--file-limit <n>', 'cap on indexed files', (v) => parseInt(v, 10))
@@ -108,6 +109,7 @@ program
         format: opts.format,
         build: opts.build,
         allocatorsFrom: opts.allocatorsFrom,
+        strategy: opts.strategy,
         extraAllocators: csv(opts.allocators),
         extraDeallocators: csv(opts.deallocators),
         fileLimit: opts.fileLimit,
