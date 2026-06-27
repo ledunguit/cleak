@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { readFileSync } from 'fs';
+import { CParserService, type FunctionInfo } from './c-parser.service';
 
 const ALLOC_PATTERNS = [
   /\bmalloc\s*\(/g,
@@ -53,6 +54,26 @@ const RETURN_PATTERN = /\breturn\b/g;
  * a PER-PROJECT list. `names` (from the corpus manifest, threaded per scan) takes
  * precedence; the `env*` var is a fallback for ad-hoc scans. Only safe identifiers.
  */
+/**
+ * Pick the INNERMOST enclosing function name for a 1-based line: among functions whose
+ * [lineNumber, endLine] range contains the line, the smallest range wins (handles
+ * nesting / shared boundaries). Returns null when no function contains the line, so the
+ * caller can fall back to the lexical scan. Pure + exported so it is unit-testable on
+ * the host (tree-sitter itself only loads in the Linux container).
+ */
+export function enclosingFunctionName(
+  line: number,
+  functions: { functionName: string; lineNumber: number; endLine: number }[],
+): string | null {
+  let best: { functionName: string; lineNumber: number; endLine: number } | null = null;
+  for (const fn of functions) {
+    if (fn.lineNumber <= line && line <= fn.endLine) {
+      if (!best || fn.endLine - fn.lineNumber < best.endLine - best.lineNumber) best = fn;
+    }
+  }
+  return best?.functionName ?? null;
+}
+
 function namePatterns(names: string[] | undefined, envVar: string): RegExp[] {
   const list = names?.length ? names : (process.env[envVar] || '').split(',');
   return list
@@ -63,10 +84,21 @@ function namePatterns(names: string[] | undefined, envVar: string): RegExp[] {
 
 @Injectable()
 export class CandidateScanService {
+  constructor(private readonly cParser: CParserService) {}
+
   scan(filePath: string, content?: string, extraAllocators?: string[], extraDeallocators?: string[]) {
     const allocPatterns = [...ALLOC_PATTERNS, ...namePatterns(extraAllocators, 'EXTRA_ALLOCATOR_NAMES')];
     const freePatterns = [...FREE_PATTERNS, ...namePatterns(extraDeallocators, 'EXTRA_DEALLOCATOR_NAMES')];
     const source = content || readFileSync(filePath, 'utf-8');
+    // Parse once (cached by content+allocators → the enrichment stage reuses it) to get
+    // ACCURATE function boundaries for attributing each candidate to its enclosing
+    // function. LAMeD scores function-level, so a wrong attribution = a missed flaw.
+    let functions: FunctionInfo[] = [];
+    try {
+      functions = this.cParser.parse(source, filePath, extraAllocators, extraDeallocators).functions;
+    } catch {
+      functions = []; // fall back to the lexical scan below
+    }
     const sanitized = this.sanitizeSource(source);
     const lines = source.split('\n');
     const sanitizedLines = sanitized.split('\n');
@@ -100,7 +132,7 @@ export class CandidateScanService {
         pattern.lastIndex = 0;
         const match = pattern.exec(line);
         if (match) {
-          const funcName = this.extractFunctionName(lines, i);
+          const funcName = enclosingFunctionName(lineNumber, functions) ?? this.extractFunctionName(lines, i);
           candidateId++;
           candidates.push({
             id: `static-candidate-${String(candidateId).padStart(4, '0')}`,
@@ -153,6 +185,7 @@ export class CandidateScanService {
     return joined;
   }
 
+  /** Lexical fallback (parse failure / file-scope): backscan ≤20 lines for a signature. */
   private extractFunctionName(lines: string[], lineIndex: number): string {
     const funcPattern = /^(?:static\s+)?\w+(?:\s*\*)?\s*(\w+)\s*\(/;
     for (let i = lineIndex; i >= Math.max(0, lineIndex - 20); i--) {
