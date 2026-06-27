@@ -41,6 +41,11 @@ export interface InvestigationContext {
   getSteering?: () => string[];
   /** Called when the model fails — resume (user typed continue/guidance) or abort. */
   awaitResume?: (reason: string) => Promise<'resume' | 'abort'>;
+  /** Project memory-ownership conventions (LLM-discovered by the allocator profiler):
+   * e.g. "cJSON_Add*ToObject transfers ownership to the parent", "X returns owned
+   * memory freed with Y". Passed to the LLM judge so verdicts respect project semantics
+   * no fixed rule could encode. */
+  projectOwnershipNotes?: string[];
 }
 
 export interface InvestigationOutcome {
