@@ -94,6 +94,7 @@ export const allocatorProfileSystemPrompt = [
   `- Be EXHAUSTIVE on allocators: list EVERY function that returns newly-owned memory — ALL constructors/factories (\`*_New*\`, \`*_Create*\`), duplicators (\`*_Duplicate\`, \`*_dup\`, \`*_clone\`, \`*_copy\`), and parsers/printers/serializers that return an owned buffer (\`*_Parse*\`, \`*_Print*\`). Do not stop at a few examples — include the whole family even if it is long.`,
   `- Use EXACT function names as they appear in the code.`,
   `- Include INTERNAL/static helpers too (e.g. a static \`cJSON_malloc\`/\`*_New_Item\` wrapper, a private \`*_strdup\`), not only the public API — leaks often flow through them.`,
+  `- Include MACRO allocators/deallocators: a \`#define MY_ALLOC(n) malloc(n)\` (or \`#define FREE_OBJ(p) ...\`) is an allocator/deallocator named \`MY_ALLOC\`/\`FREE_OBJ\` — list the macro name.`,
   `- Do NOT include plain libc malloc/calloc/realloc/free/strdup — the engine already knows those. Only the project's CUSTOM names.`,
   `- allocators/reallocators RETURN newly-owned heap memory the caller is responsible for; deallocators FREE or consume it.`,
   `- ownershipNotes: short, project-specific rules (transfer vs borrow, refcounting, pool/arena "free the pool, not each object", "X skips items flagged Y", a constructor that steals its argument). Empty array if none.`,

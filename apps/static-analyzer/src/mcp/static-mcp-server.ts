@@ -11,7 +11,7 @@ export interface StaticToolServices {
   fileIndexing: { indexFiles(rootPath: string, fileLimit?: number, excludePatterns?: string[]): any };
   candidateScan: { scan(filePath: string, content: string, extraAllocators?: string[], extraDeallocators?: string[]): any };
   astScan: { parse(filePath: string, content?: string): any };
-  callGraph: { extract(rootPath: string, files: string[]): any };
+  callGraph: { extract(rootPath: string, files: string[], extraAllocators?: string[], extraDeallocators?: string[]): any };
   functionSummary: { summarize(filePath: string, content: string, functionName: string, extraAllocators?: string[], extraDeallocators?: string[]): any };
   interproceduralFlow: { analyze(rootPath: string, functionName: string, files: string[]): any };
   pathConstraints: { analyze(filePath: string, content: string, lineNumber: number, extraAllocators?: string[], extraDeallocators?: string[]): any };
@@ -59,8 +59,8 @@ export function createStaticMcpServer(svc: StaticToolServices): McpServer {
 
   server.registerTool(
     'callGraph',
-    { description: 'Extract call graph edges and nodes', inputSchema: { rootPath: z.string(), files: z.array(z.string()) } },
-    async (a) => ok(await svc.callGraph.extract(a.rootPath, a.files)),
+    { description: 'Extract call graph edges and nodes. Optionally supply per-project allocators/deallocators so the alloc→free reachability chains track factory allocators.', inputSchema: { rootPath: z.string(), files: z.array(z.string()), extraAllocators: z.array(z.string()).optional(), extraDeallocators: z.array(z.string()).optional() } },
+    async (a) => ok(await svc.callGraph.extract(a.rootPath, a.files, a.extraAllocators, a.extraDeallocators)),
   );
 
   server.registerTool(

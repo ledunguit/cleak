@@ -6,7 +6,7 @@ import { CParserService, ControlFlowGraph } from './c-parser.service';
 export class CallGraphService {
   constructor(private readonly cParser: CParserService) {}
 
-  extract(rootPath: string, files: string[]) {
+  extract(rootPath: string, files: string[], extraAllocators?: string[], extraDeallocators?: string[]) {
     const allFunctions: Map<string, string> = new Map();
     const callEdges: { caller: string; callee: string; filePath: string; lineNumber: number; callee_file?: string }[] = [];
     const recursionCycles: string[][] = [];
@@ -94,7 +94,7 @@ export class CallGraphService {
     }));
 
     // Allocation-to-free reachability analysis
-    const allocFreeChains = this.analyzeAllocFreeChains(files, callEdges);
+    const allocFreeChains = this.analyzeAllocFreeChains(files, callEdges, extraAllocators, extraDeallocators);
 
     return {
       edges: callEdges,
@@ -143,10 +143,13 @@ export class CallGraphService {
   private analyzeAllocFreeChains(
     files: string[],
     edges: { caller: string; callee: string }[],
+    extraAllocators?: string[],
+    extraDeallocators?: string[],
   ): { allocFunction: string; freeFunction: string; callers: string[] }[] {
     const chains: { allocFunction: string; freeFunction: string; callers: string[] }[] = [];
-    const allocFuncs = ['malloc', 'calloc', 'realloc', 'strdup'];
-    const freeFuncs = ['free', 'xfree'];
+    const safe = (xs?: string[]) => (xs || []).filter((s) => /^[A-Za-z_]\w*$/.test(s));
+    const allocFuncs = ['malloc', 'calloc', 'realloc', 'strdup', ...safe(extraAllocators)];
+    const freeFuncs = ['free', 'xfree', ...safe(extraDeallocators)];
 
     for (const allocFn of allocFuncs) {
       for (const freeFn of freeFuncs) {

@@ -437,8 +437,10 @@ export class CParserService {
             stmtText.match(/=\s*(\w+)\s*\(/)?.[1] || '',
           );
 
-          const allocVarMatch = stmtText.match(/(\w+)\s*=\s*(malloc|calloc|realloc|strdup)\s*\(/);
-          const allocVars = allocVarMatch ? [allocVarMatch[1]] : [];
+          // `var = [cast] CALL(` — flagged as an allocation when CALL is in the per-parse
+          // alloc set (libc + LLM-discovered project allocators), not a fixed 4-name list.
+          const allocVarMatch = stmtText.match(/(\w+)\s*=\s*(?:\([^)]*\)\s*)?(\w+)\s*\(/);
+          const allocVars = allocVarMatch && this.allocSet.has(allocVarMatch[2]) ? [allocVarMatch[1]] : [];
 
           const blockId = id++;
           nodes.push({
@@ -783,7 +785,7 @@ export class CParserService {
         for (const callExpr of callExprs) {
           const fnNode = this.getCallFunctionNameNode(callExpr);
           const name = fnNode ? this.nodeText(fnNode, lines) : '';
-          if (ALLOCATION_FUNCTIONS.has(name)) {
+          if (this.allocSet.has(name)) {
             const left = expr.children?.[0];
             if (left) {
               const fieldText = this.nodeText(left, lines);
@@ -1005,7 +1007,7 @@ export class CParserService {
     const callExprs = this.findAllNodes(node, 'call_expression');
     for (const expr of callExprs) {
       const fnNode = this.getCallFunctionNameNode(expr);
-      if (fnNode && ALLOCATION_FUNCTIONS.has(this.nodeText(fnNode, lines))) {
+      if (fnNode && this.allocSet.has(this.nodeText(fnNode, lines))) {
         return true;
       }
     }
