@@ -184,6 +184,24 @@ FN3 TN38. Gate `determinism-gate.sh` chứng nhận; đồng thời từ chối 
     phải alloc cục bộ). Mỗi cái là một việc mở riêng (test-dir exclude, attribution, parameter-ownership).
     *(Nhân tiện sửa 1 bug latent trên master: pattern wrapper `\w+_(m|c|re)alloc` khớp nhầm TÊN HÀM
     Juliet `char_calloc_01_bad(` → nhân đôi candidate; đã gỡ, thay bằng exact per-project names.)*
+  - **F1–F4 (đã build, push) — BẮT ĐƯỢC LEAK DỰ ÁN THỰC ĐẦU TIÊN:** cjson `merge_patch` (rò tham số
+    `target` trên đường lỗi) → **TP, recall 0→1/6, FP 0**; Z3 path-feasibility chữa over-report Juliet
+    **FP 44→8** (early `if(p==NULL) return;` không còn bị coi là leak vì `p!=0 ∧ p==0` = UNSAT). Gồm:
+    F1 attribution chính xác (tree-sitter `endLine`); F2 loại test/fuzz dir; F3 leak tham số
+    (param free-trên-một-số-đường → synthetic candidate); F4 Z3 (`feasibility.ts`, node-only, WASM)
+    + path-aware reconciliation (free trên nhánh-return không reconcile exit khác). Lộ 5 bug c-parser
+    latent (extractFreedVariables lấy nhầm `(`; pointer-returning fn báo 0 param — chỗ giấu merge_patch).
+  - **TỔNG QUÁT HOÁ bằng LLM (chương 3, đã build) — bỏ hardcode allocator:** thay `PROJECT_ALLOCATORS`
+    hardcode bằng **LLM profiler** đọc header/source → liệt kê API cấp phát/giải phóng + ownership notes,
+    feed vào ĐÚNG plumbing `extraAllocators` (analyzer không đổi), grep-verify chống hallucinate, cache
+    theo repo. **Ranh giới:** LLM = POLICY theo-project; engine tất định = MECHANISM (parse/CFG/Z3/score).
+    Eval dùng list **frozen** (manifest) ⇒ profiler bị skip ⇒ determinism nguyên. **Đo được
+    (`validate-allocator-profile.ts`, mimo local temp 0 trên cjson): allocator R 85%, deallocator R 100%**;
+    phần lớn "false positive" thực ra là allocator THẬT mà list hardcode BỎ SÓT (`cJSON_Parse`/`Print`
+    trả owned memory) — tức **LLM đầy đủ HƠN list người viết tay**. Ownership notes chính xác (vd
+    `cJSONUtils_FindPointerFromObjectTo` trả chuỗi freed bằng `cJSON_free`) → thread vào LLM judge (G4)
+    cho ngữ nghĩa deallocator mà code thuần không mã hoá nổi. Lộ trình: cùng khuôn cho run-recipe,
+    phân loại test/vendor dir (thay denylist hardcode).
 
 ---
 

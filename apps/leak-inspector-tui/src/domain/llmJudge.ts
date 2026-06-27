@@ -181,8 +181,11 @@ export async function judgeBundleWithLlm(
   /** Reports WHY the LLM verdict was unusable (so the silent heuristic fallback is
    * visible). Called with a short reason on a call error or an unparseable verdict. */
   onNotice?: (reason: string) => void,
+  /** Project-specific ownership conventions (LLM-discovered) the verdict must respect. */
+  projectNotes?: string[],
 ): Promise<VerdictResult | null> {
   const c = bundle.candidate;
+  const notes = (projectNotes ?? []).filter(Boolean);
   const user = [
     `ALLOCATION SITE: ${c.function_name || '?'}() at ${c.file_path}:${c.line_number} (${c.allocation_type || 'alloc'})`,
     ``,
@@ -196,6 +199,9 @@ export async function judgeBundleWithLlm(
     ``,
     `DYNAMIC EVIDENCE (${bundle.evidence.length}):`,
     summarizeEvidence(bundle),
+    ...(notes.length
+      ? ['', 'PROJECT OWNERSHIP CONVENTIONS (respect these — they encode how THIS project manages memory):', ...notes.map((n) => `- ${n}`)]
+      : []),
     ``,
     'Return your JSON verdict.',
   ].join('\n');

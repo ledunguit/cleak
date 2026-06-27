@@ -113,6 +113,7 @@ export async function runHeadless(opts: HeadlessOptions): Promise<HeadlessResult
   // the SAME extraAllocators plumbing; the result is grep-verified + cached per repo. ──
   let extraAllocators = opts.extraAllocators;
   let extraDeallocators = opts.extraDeallocators;
+  let ownershipNotes: string[] | undefined;
   const allocatorsFrom = opts.allocatorsFrom ?? 'auto';
   const wantProfile =
     !extraAllocators?.length &&
@@ -128,6 +129,7 @@ export async function runHeadless(opts: HeadlessOptions): Promise<HeadlessResult
     if (profile) {
       extraAllocators = profile.allocators;
       extraDeallocators = profile.deallocators;
+      ownershipNotes = profile.ownershipNotes;
       if (!opts.quiet) {
         process.stdout.write(
           `  allocator profile: ${profile.allocators.length} allocators, ${profile.deallocators.length} deallocators (LLM-discovered)\n`,
@@ -148,6 +150,7 @@ export async function runHeadless(opts: HeadlessOptions): Promise<HeadlessResult
         buildCommand: opts.build,
         extraAllocators,
         extraDeallocators,
+        ownershipNotes,
       },
       { staticClient, dynamicClient, emitter, pathResolver, investigation, abortSignal: opts.signal },
     );

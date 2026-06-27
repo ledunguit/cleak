@@ -61,6 +61,8 @@ export interface ScanInput {
    * xmlNewNode, …) are discovered. Usually supplied by the corpus manifest. */
   extraAllocators?: string[];
   extraDeallocators?: string[];
+  /** Project ownership conventions (LLM-discovered) forwarded to the LLM judge. */
+  ownershipNotes?: string[];
 }
 
 export interface ScanDeps {
@@ -224,6 +226,7 @@ export async function runScan(input: ScanInput, deps: ScanDeps): Promise<ScanRes
     investigationOutcome = await deps.investigation.run(candidates, {
       repoPath: input.repoPath,
       buildCommand: input.buildCommand,
+      projectOwnershipNotes: input.ownershipNotes,
       emitter,
       staticClient,
       dynamicClient: deps.dynamicClient,
