@@ -1,5 +1,20 @@
 # @cleak/cli
 
+## 0.3.0
+
+### Minor Changes
+
+- Configure every setting via a config file. A globally-installed `cleak` can now set
+  every `RunConfig` value — the static/dynamic analyzer endpoints, LLM provider/tuning,
+  workflow and consensus knobs — through `~/.config/cleak/config.json` (read at the single
+  `loadConfig()` chokepoint, so the TUI, `scan`, `eval` and `tools` all honour it).
+  - New `cleak config` subcommand: `path | init | get [key] | set <key> <value> | unset <key>`
+    (dot-paths, value coercion, apiKey masking, Zod-validated). The TUI `/config` screen now
+    exposes every knob.
+  - Precedence: CLI flag > env (incl. `.env`) > config file > built-in default.
+  - `cleak --version` now reports the real package version (was hardcoded), and `cleak tools`
+    loads `.env`/config before resolving.
+
 ## 0.2.0
 
 ### Minor Changes
