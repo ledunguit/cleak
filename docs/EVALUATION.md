@@ -50,7 +50,16 @@ Metric formulas (`computeMetrics`) are unit-tested in
 |---|---|---|
 | `no_llm` | discovery + static enrichment (`STATIC_ENRICH`) + **path-sensitive heuristic judge** | deterministic (bitwise — see §7) |
 | `llm_assisted` | agentic LLM orchestration + LLM judge (borderline) | stochastic; variance quantified, not hidden (§7) |
-| `--dynamic off/selective/aggressive` | adds Valgrind/ASan/LSan evidence | depends on build |
+| `--dynamic off/selective/aggressive` | adds Valgrind/ASan/LSan evidence — **`llm_assisted` only** (the dynamic worker lives in the investigation phase; the flag is inert in `no_llm`, which is static-only) | depends on build |
+
+> **Dynamic stage requirements (host runner).** ASan/LSan reserve ~20 TB of virtual address
+> space, so the dynamic analyzer drops the `ulimit -v` cap for instrumented runs
+> (`unlimitedAddressSpace`) and ships `llvm-symbolizer` (else leak frames have no `file:line`
+> and cannot correlate). Without both, a confined sanitizer run silently reports 0 leaks.
+> Verified on Juliet: dynamic evidence correlates to the candidate by `file_line_exact`
+> (`definitely_lost`, bytes). NOTE: because dynamic is `llm_assisted`-only today, the
+> `no_llm` vs `llm_assisted` contrast conflates *LLM orchestration* with *dynamic evidence*;
+> a clean 2×2 ablation would add a deterministic `no_llm + dynamic` cell (open work).
 
 **Tầng POLICY (LLM) bị ĐÔNG CỨNG / BỎ QUA trong eval — đây là lý do số benchmark vẫn tất định:**
 allocator profiler, strategist, judge-tuner (xem [ARCHITECTURE.md](ARCHITECTURE.md) §10, [PROMPTS.md](PROMPTS.md) §0.5)
