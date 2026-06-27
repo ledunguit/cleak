@@ -309,9 +309,15 @@ export function isDiffApplicable(diff: RepairDiff, fileContent: string | null): 
   return true;
 }
 
-/** True when the diff actually adds a deallocation the original lines lacked. */
-export function diffAddsCleanup(diff: RepairDiff): boolean {
-  const dealloc = /\b(free|delete|g_free|kfree|fclose|release|destroy|cleanup|realloc)\s*\(/;
+/** True when the diff actually adds a deallocation the original lines lacked. Matches the
+ * whole dealloc FAMILY (prefixed, any case) so PROJECT deallocators count too — cJSON's
+ * `cJSON_Delete` (capital D) / `cJSON_free`, GLib `g_object_unref`, apr `apr_pool_destroy`
+ * — not just libc `free`. `extraDeallocators` (LLM-discovered) pins exact names when given. */
+export function diffAddsCleanup(diff: RepairDiff, extraDeallocators?: string[]): boolean {
+  const exact = (extraDeallocators || []).filter((s) => /^[A-Za-z_]\w*$/.test(s));
+  const family = `\\b\\w*(?:free|delete|destroy|release|cleanup|dealloc|unref|dispose|fclose)\\w*\\s*\\(`;
+  const pinned = exact.length ? `|\\b(?:${exact.join('|')})\\s*\\(` : '';
+  const dealloc = new RegExp(`${family}${pinned}`, 'i');
   const added = (diff.suggestedLines || []).join('\n');
   const original = (diff.originalLines || []).join('\n');
   return dealloc.test(added) && !dealloc.test(original);
