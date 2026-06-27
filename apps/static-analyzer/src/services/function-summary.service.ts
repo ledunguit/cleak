@@ -77,7 +77,7 @@ export class FunctionSummaryService {
       for (const v of p.unreconciledAllocations) unreconciled.add(v);
     }
 
-    return fn.allocationVariables.map((alloc) => {
+    const allocPairs = fn.allocationVariables.map((alloc) => {
       const free = fn.freedVariables.find((free) => free.variable === alloc.variable);
       const freeLine = free?.line ?? null;
       const freeFunction =
@@ -112,5 +112,28 @@ export class FunctionSummaryService {
         status,
       };
     });
+
+    // F3 — managed pointer-PARAMETER leaks: a parameter the function frees somewhere
+    // ("takes ownership") but loses on at least one reachable exit. It has no alloc
+    // site, so anchor a 'conditional' pseudo-pair at the function signature line (the
+    // synthetic candidate emitted by candidate-scan lands there too).
+    const everFreed = new Set(fn.freedVariables.map((f) => f.variable));
+    const paramPairs: AllocFreePair[] = fn.parameters
+      .filter((p) => (p.type || '').includes('*') && everFreed.has(p.name) && unreconciled.has(p.name))
+      .map((p) => {
+        const free = fn.freedVariables.find((f) => f.variable === p.name);
+        return {
+          variable: p.name,
+          allocCall: 'parameter',
+          allocLine: fn.lineNumber,
+          allocFile: filePath,
+          freeLine: free?.line ?? null,
+          freeFunction: free ? fn.deallocationCalls.find((d) => d.line === free.line)?.name ?? 'free' : null,
+          bindsToNewVariable: false,
+          status: 'conditional' as const,
+        };
+      });
+
+    return [...allocPairs, ...paramPairs];
   }
 }

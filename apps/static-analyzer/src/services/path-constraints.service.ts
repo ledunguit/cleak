@@ -1,12 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { FeasibleLeakPath } from '@cleak/common';
 import { CParserService, FunctionInfo } from './c-parser.service';
+import { leakFeasible } from './feasibility';
 
 @Injectable()
 export class PathConstraintsService {
   constructor(private readonly cParser: CParserService) {}
 
-  analyze(filePath: string, content: string, lineNumber: number, extraAllocators?: string[], extraDeallocators?: string[]) {
+  async analyze(filePath: string, content: string, lineNumber: number, extraAllocators?: string[], extraDeallocators?: string[]) {
     const result = this.cParser.parse(content, filePath, extraAllocators, extraDeallocators);
 
     // Innermost enclosing function by the ACCURATE tree-sitter range (fn.endLine),
@@ -41,7 +42,7 @@ export class PathConstraintsService {
     // Feasible leak paths: reachable exit paths that leave an allocation un-freed.
     // This existing reachability + condition logic IS the pre-LLM feasibility
     // filter the literature (MemHint) calls for — we only emit reachable paths.
-    const feasibleLeakPaths = this.buildFeasibleLeakPaths(containingFunction);
+    const feasibleLeakPaths = await this.buildFeasibleLeakPaths(containingFunction);
 
     return {
       constraints,
@@ -63,28 +64,42 @@ export class PathConstraintsService {
     };
   }
 
-  private buildFeasibleLeakPaths(fn: FunctionInfo): FeasibleLeakPath[] {
+  private async buildFeasibleLeakPaths(fn: FunctionInfo): Promise<FeasibleLeakPath[]> {
     const allocByVar = new Map(
       fn.allocationVariables.map((a) => [a.variable, a]),
     );
 
-    return fn.exitPaths
-      .filter(
-        (p) =>
-          p.reachableFromEntry &&
-          p.leakRisk !== 'none' &&
-          p.unreconciledAllocations.length > 0,
-      )
-      .map((p) => ({
+    const candidates = fn.exitPaths.filter(
+      (p) => p.reachableFromEntry && p.leakRisk !== 'none' && p.unreconciledAllocations.length > 0,
+    );
+
+    const out: FeasibleLeakPath[] = [];
+    for (const p of candidates) {
+      // Z3-FILTER each unreconciled var against this exit's branch guards: a leak of
+      // `v` is impossible when (v != 0) contradicts the guards (e.g. an early
+      // `if (v == NULL) return;`). Drop infeasible vars; drop the whole path if every
+      // candidate leak on it is infeasible. `unknown` (Z3 off / untranslatable guards)
+      // keeps the var — never lose a real leak to the solver.
+      let z3Ran = false;
+      const live: string[] = [];
+      for (const v of p.unreconciledAllocations) {
+        const verdict = await leakFeasible(v, p.guards);
+        if (verdict !== 'unknown') z3Ran = true;
+        if (verdict !== 'infeasible') live.push(v);
+      }
+      if (live.length === 0) continue;
+      out.push({
         kind: p.kind,
         exitLine: p.exitLine,
         reachable: p.reachableFromEntry,
         conditions: p.pathConditions,
-        unreconciledAllocations: p.unreconciledAllocations,
+        unreconciledAllocations: live,
         leakRisk: p.leakRisk,
-        narrative: this.describeLeakPath(p, allocByVar),
-        feasibilityChecked: 'heuristic' as const,
-      }));
+        narrative: this.describeLeakPath({ ...p, unreconciledAllocations: live }, allocByVar),
+        feasibilityChecked: z3Ran ? ('z3' as const) : ('heuristic' as const),
+      });
+    }
+    return out;
   }
 
   private describeLeakPath(

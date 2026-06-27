@@ -50,6 +50,10 @@ COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/node_modules/tree-sitter ./node_modules/tree-sitter
 COPY --from=build /app/node_modules/tree-sitter-c ./node_modules/tree-sitter-c
 
+# z3-solver (WASM, for path-feasibility) — bun installs it workspace-locally, but the
+# dist resolves from the root node_modules, so hoist it there.
+COPY --from=build /app/apps/static-analyzer/node_modules/z3-solver ./node_modules/z3-solver
+
 EXPOSE 50061
 
 CMD ["node", "dist/main.js"]
