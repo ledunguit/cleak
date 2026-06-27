@@ -612,6 +612,27 @@ export class CParserService {
         if (alt) walk(alt, g(true));
         return;
       }
+      // C `switch (e) { case K: … }` — statements inside `case K:` are guarded by `e == K`
+      // (additive: improves feasibility for switch-cleanup dispatch without touching
+      // if/loop handling). Fall-through is approximated by the nearest case label.
+      if (node.type === 'switch_statement') {
+        const condNode = node.childForFieldName?.('condition') ?? this.findChild(node, 'parenthesized_expression');
+        const sw = condNode ? this.stripParens(this.nodeText(condNode, lines)) : '';
+        if (condNode) walk(condNode, stack);
+        const swBody = node.childForFieldName?.('body') ?? this.findChild(node, 'compound_statement');
+        for (const c of swBody?.children || []) {
+          if (c.type !== 'case_statement') {
+            walk(c, stack);
+            continue;
+          }
+          const valNode = (c.children || []).find(
+            (x: any) => x.type === 'number_literal' || x.type === 'char_literal' || x.type === 'identifier',
+          );
+          const guard = sw && valNode ? [...stack, { condition: `${sw} == ${this.nodeText(valNode, lines)}`, negated: false }] : stack;
+          walk(c, guard);
+        }
+        return;
+      }
       for (const child of node.children || []) walk(child, stack);
     };
     walk(body, []);
