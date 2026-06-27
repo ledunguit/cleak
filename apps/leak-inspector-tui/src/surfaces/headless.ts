@@ -12,6 +12,7 @@ import { AnalysisMode, DynamicMode } from '@cleak/common/types';
 import { loadConfig, type Provider, type ConsensusJudgeConfig } from '../config';
 import { toProviderSettings } from '../orchestrator/toolWrappers';
 import { loadOrProfileAllocators } from '../domain/allocatorProfiler';
+import { decideStrategy } from '../domain/strategist';
 import { loadEnvFiles } from '../domain/env';
 import { buildPathResolver } from '../domain/pathResolver';
 import { ScanEmitter, JsonlFileSink, MultiSink, CallbackSink, type EventSink, type ScanEvent } from '../orchestrator/events';
@@ -40,6 +41,10 @@ export interface HeadlessOptions {
    * 'none': never (current behavior / deterministic). When extraAllocators are passed
    * explicitly (e.g. the eval harness from a frozen manifest), the profiler is skipped. */
   allocatorsFrom?: 'auto' | 'llm' | 'none';
+  /** Adaptive strategist: 'auto' lets an LLM planner decide the analysis plan
+   * (currently: skip the dynamic stage on unbuildable repos) for THIS project; 'off'
+   * (default) keeps the requested pipeline. Off in the benchmark ⇒ eval is deterministic. */
+  strategy?: 'auto' | 'off';
   fileLimit?: number;
   staticUrl?: string;
   dynamicUrl?: string;
@@ -80,7 +85,7 @@ export async function runHeadless(opts: HeadlessOptions): Promise<HeadlessResult
         `OPENAI_COMPAT_MODEL or pass --base-url/--model. Got baseUrl='${cfg.llm.baseUrl}', model='${cfg.llm.model}'.`,
     );
   }
-  const dynamicMode =
+  let dynamicMode =
     opts.dynamic === 'aggressive'
       ? DynamicMode.AGGRESSIVE
       : opts.dynamic === 'selective'
@@ -95,7 +100,7 @@ export async function runHeadless(opts: HeadlessOptions): Promise<HeadlessResult
   const emitter = new ScanEmitter(new MultiSink(sinks));
 
   const staticClient = new McpClient(cfg.staticUrl, 'static');
-  const dynamicClient = dynamicMode !== DynamicMode.OFF ? new McpClient(cfg.dynamicUrl, 'dynamic') : undefined;
+  let dynamicClient = dynamicMode !== DynamicMode.OFF ? new McpClient(cfg.dynamicUrl, 'dynamic') : undefined;
   const pathResolver = buildPathResolver({
     hostRoot: cfg.hostRoot,
     analyzerRoot: cfg.analyzerRoot,
@@ -135,6 +140,29 @@ export async function runHeadless(opts: HeadlessOptions): Promise<HeadlessResult
           `  allocator profile: ${profile.allocators.length} allocators, ${profile.deallocators.length} deallocators (LLM-discovered)\n`,
         );
       }
+    }
+  }
+
+  // ── Adaptive strategist (the intelligent harness): an LLM planner picks the analysis
+  // plan for THIS project. v0 wires `runDynamic` — skip the expensive dynamic stage on a
+  // repo with no build system (it can't build ⇒ no recall lost). OPT-IN (--strategy auto)
+  // and never engaged by the benchmark (which passes an explicit dynamic mode), so eval
+  // determinism + the Juliet baseline are untouched. ──
+  if (opts.strategy === 'auto' && analysisMode === AnalysisMode.LLM_ASSISTED) {
+    const callModel = buildCallModel(toProviderSettings(cfg), () => globalThis.crypto.randomUUID());
+    const plan = await decideStrategy(repoPath, callModel, {
+      profileSummary: extraAllocators?.length ? `${extraAllocators.length} allocators, ${extraDeallocators?.length ?? 0} deallocators` : undefined,
+      temperature: cfg.llm.temperature,
+      signal: opts.signal,
+      onNotice: opts.quiet ? undefined : (r) => process.stderr.write(`  ${r}\n`),
+    });
+    if (!opts.quiet) {
+      process.stdout.write(`  strategy: runDynamic=${plan.runDynamic} judge=${plan.judge} staticDepth=${plan.staticDepth}${plan.rationale ? ` — ${plan.rationale}` : ''}\n`);
+    }
+    if (!plan.runDynamic && dynamicMode !== DynamicMode.OFF) {
+      await dynamicClient?.close();
+      dynamicClient = undefined;
+      dynamicMode = DynamicMode.OFF;
     }
   }
 
