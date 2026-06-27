@@ -18,6 +18,22 @@ import {
 import { analyzeLeakHeuristically } from './heuristic-leak-analysis';
 import { evidenceIndicatesLeak } from './judge-shared';
 
+/**
+ * Verdict score thresholds. These are the FROZEN benchmark defaults — the evaluation
+ * ALWAYS uses these, so the reported Juliet/LAMeD numbers are an honest, fixed-policy
+ * measure (no per-project tuning leaks into the benchmark). A production scan MAY pass a
+ * bounded per-project override (see domain/judgeTuner.ts) to adapt to a project's
+ * ownership style; the thesis reports both default and tuned numbers. Named here (not
+ * inlined) so the calibration is explicit + auditable rather than magic constants.
+ */
+export interface VerdictThresholds {
+  /** score ≥ this → confirmed_leak */
+  confirmed: number;
+  /** score ≥ this → likely_leak (else uncertain) */
+  likely: number;
+}
+export const JUDGE_VERDICT_THRESHOLDS: VerdictThresholds = { confirmed: 0.7, likely: 0.4 };
+
 export function readFullFile(filePath: string): string | null {
   if (!filePath || !existsSync(filePath)) return null;
   try {
@@ -31,6 +47,9 @@ export function readFullFile(filePath: string): string | null {
 export function judgeHeuristically(
   bundle: LeakBundle,
   staticContext?: Record<string, any>,
+  /** Bounded per-project override (production only). Omitted in the benchmark ⇒ the
+   * frozen JUDGE_VERDICT_THRESHOLDS are used ⇒ eval stays deterministic. */
+  thresholds: VerdictThresholds = JUDGE_VERDICT_THRESHOLDS,
 ): VerdictResult {
   const hasStaticFree = staticContext?.hasExplicitFree === true;
   const hasStaticAllocation = (staticContext?.allocations || []).length > 0;
@@ -206,9 +225,9 @@ export function judgeHeuristically(
 
   const clamped = Math.min(1, Math.max(0, score));
   let verdict =
-    clamped >= 0.7
+    clamped >= thresholds.confirmed
       ? InvestigationVerdict.CONFIRMED_LEAK
-      : clamped >= 0.4
+      : clamped >= thresholds.likely
         ? InvestigationVerdict.LIKELY_LEAK
         : InvestigationVerdict.UNCERTAIN;
 
