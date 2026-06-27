@@ -152,6 +152,37 @@ export class CandidateScanService {
       }
     }
 
+    // F3 — synthetic candidates for managed pointer-PARAMETER leaks (a param the
+    // function frees on some paths but loses on others). These have no allocation
+    // site, so the lexical scan above never produces them; we anchor one candidate at
+    // the function signature line (where function-summary emits the matching
+    // 'conditional' pseudo-pair). Tree-sitter only loads in the container, so on the
+    // host `functions` is empty and this loop is a no-op.
+    for (const fn of functions) {
+      const unrec = new Set<string>();
+      for (const ep of fn.exitPaths) for (const v of ep.unreconciledAllocations) unrec.add(v);
+      if (unrec.size === 0) continue;
+      const everFreed = new Set(fn.freedVariables.map((f) => f.variable));
+      for (const param of fn.parameters) {
+        if (!(param.type || '').includes('*')) continue;
+        if (!everFreed.has(param.name) || !unrec.has(param.name)) continue;
+        candidateId++;
+        candidates.push({
+          id: `static-candidate-${String(candidateId).padStart(4, '0')}`,
+          functionName: fn.functionName,
+          filePath,
+          lineNumber: fn.lineNumber,
+          allocationSite: `${filePath}:${fn.lineNumber}:parameter:${param.name}`,
+          allocationType: 'parameter_ownership',
+          confidence: 'medium',
+          context: `parameter '${param.name}' is freed on some paths but lost on others`,
+          signature: `${filePath}:${fn.lineNumber}:param:${param.name}`,
+          observedDeallocationCount: allFreeLines.length,
+          earlyReturnLines: allReturnLines,
+        });
+      }
+    }
+
     return { candidates };
   }
 

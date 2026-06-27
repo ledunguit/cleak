@@ -75,6 +75,10 @@ export interface ExitPathAnalysis {
   leakRisk: 'high' | 'medium' | 'low' | 'none';
   pathConditions: string[];
   unreconciledAllocations: string[];
+  /** The branch guards (with polarity) enclosing this exit, e.g. `if (p==NULL) return;`
+   * → `[{condition:'p==NULL', negated:false}]`. Used by the Z3 feasibility filter to
+   * drop impossible leak paths (a leak of p guarded by p==NULL is UNSAT). */
+  guards: { condition: string; negated: boolean }[];
 }
 
 export interface LoopInfo {
@@ -464,21 +468,42 @@ export class CParserService {
     fn: FunctionInfo,
   ): ExitPathAnalysis[] {
     const paths: ExitPathAnalysis[] = [];
-    const totalAllocVars = new Set(fn.allocationVariables.map((a) => a.variable));
+
+    // Per-line branch guards (with polarity) — the conditions enclosing each line.
+    const lineGuards = this.collectLineGuards(body, lines);
+    const guardsAt = (line: number) => lineGuards.get(line) ?? [];
+    // A free reconciles a return iff it precedes it AND lies on the SAME path: every
+    // guard the free is under must also guard the return (guard-subset). This makes a
+    // `free()` inside a branch that RETURNS (e.g. cJSON's `cJSON_Delete(target)` in the
+    // `if(!isObject)` block) NOT reconcile a later exit on the fall-through path.
+    const subsetOf = (
+      a: { condition: string; negated: boolean }[],
+      b: { condition: string; negated: boolean }[],
+    ) => a.every((g) => b.some((h) => h.condition === g.condition && h.negated === g.negated));
+
+    // F3 — pointer parameters the function FREES somewhere ("manages") leak on any path
+    // that loses them, even though they have no allocation site in the function.
+    const pointerParams = fn.parameters.filter((p) => (p.type || '').includes('*')).map((p) => p.name);
+    const everFreed = new Set(fn.freedVariables.map((f) => f.variable));
+    const managedParams = pointerParams.filter((p) => everFreed.has(p));
+
+    const reconciledAt = (exitLine: number, exitGuards: { condition: string; negated: boolean }[]) =>
+      new Set(
+        fn.freedVariables
+          .filter((f) => f.line <= exitLine && subsetOf(guardsAt(f.line), exitGuards))
+          .map((f) => f.variable),
+      );
 
     // Analyze each return statement
     for (const ret of fn.returnStatements) {
-      const freesBefore = fn.freedVariables.filter(
-        (f) => f.line <= ret.line,
-      );
-      const freedNames = new Set(freesBefore.map((f) => f.variable));
-      const unreconciled = fn.allocationVariables
-        .filter((a) => a.line <= ret.line && !freedNames.has(a.variable))
+      const retGuards = guardsAt(ret.line);
+      const reconciled = reconciledAt(ret.line, retGuards);
+      const freesBefore = fn.freedVariables.filter((f) => f.line <= ret.line);
+      const allocUnrec = fn.allocationVariables
+        .filter((a) => a.line <= ret.line && !reconciled.has(a.variable))
         .map((a) => a.variable);
-
-      const allocsBefore = fn.allocationVariables.filter(
-        (a) => a.line <= ret.line,
-      );
+      const paramUnrec = managedParams.filter((p) => !reconciled.has(p));
+      const unreconciled = [...new Set([...allocUnrec, ...paramUnrec])];
 
       paths.push({
         kind: 'return',
@@ -490,6 +515,7 @@ export class CParserService {
         leakRisk: unreconciled.length > 0 ? 'high' : 'none',
         pathConditions: this.inferPathConditions(fn, ret.line),
         unreconciledAllocations: unreconciled,
+        guards: retGuards,
       });
     }
 
@@ -513,10 +539,78 @@ export class CParserService {
         leakRisk: unreconciled.length > 0 ? 'high' : 'none',
         pathConditions: [],
         unreconciledAllocations: unreconciled,
+        // The fall-through end is a MERGE of all paths — guard-subset would under-
+        // reconcile here (a var freed on both branches of an if has a guard on each),
+        // so this exit stays conservative (freed-anywhere reconciles) with no guards.
+        guards: [],
       });
     }
 
     return paths;
+  }
+
+  /**
+   * Map each line to the branch guards (with polarity) that enclose it, via a
+   * guard-tracking walk of the AST. A line inside `if (c) {...}` carries
+   * `{condition:'c', negated:false}`; inside the `else`, `negated:true`. Powers
+   * path-sensitive free reconciliation (guard-subset) and Z3 feasibility.
+   */
+  private collectLineGuards(
+    body: any,
+    lines: string[],
+  ): Map<number, { condition: string; negated: boolean }[]> {
+    const map = new Map<number, { condition: string; negated: boolean }[]>();
+    const walk = (node: any, stack: { condition: string; negated: boolean }[]) => {
+      if (!node) return;
+      const line = (node.startPosition?.row ?? -1) + 1;
+      if (line > 0 && !map.has(line)) map.set(line, stack);
+      if (node.type === 'if_statement') {
+        const condNode = node.childForFieldName?.('condition') ?? this.findChild(node, 'parenthesized_expression');
+        const condText = condNode ? this.stripParens(this.nodeText(condNode, lines)) : '';
+        const cons = node.childForFieldName?.('consequence');
+        const alt = node.childForFieldName?.('alternative') ?? this.findChild(node, 'else_clause');
+        const g = (neg: boolean) =>
+          condText ? [...stack, { condition: condText, negated: neg }] : stack;
+        if (condNode) walk(condNode, stack);
+        // `consequence`: prefer the field; fall back to the first non-condition child.
+        if (cons) walk(cons, g(false));
+        else {
+          for (const child of node.children || []) {
+            if (child === condNode || child === alt) continue;
+            if (child.type === 'parenthesized_expression') continue;
+            walk(child, g(false));
+            break;
+          }
+        }
+        if (alt) walk(alt, g(true));
+        return;
+      }
+      for (const child of node.children || []) walk(child, stack);
+    };
+    walk(body, []);
+    return map;
+  }
+
+  /** Strip fully-enclosing outer parentheses: `((p == NULL))` → `p == NULL`. */
+  private stripParens(s: string): string {
+    let t = s.trim();
+    while (t.startsWith('(') && t.endsWith(')')) {
+      let depth = 0;
+      let matched = true;
+      for (let i = 0; i < t.length; i++) {
+        if (t[i] === '(') depth++;
+        else if (t[i] === ')') {
+          depth--;
+          if (depth === 0 && i < t.length - 1) {
+            matched = false;
+            break;
+          }
+        }
+      }
+      if (!matched) break;
+      t = t.slice(1, -1).trim();
+    }
+    return t;
   }
 
   private inferPathConditions(fn: FunctionInfo, targetLine: number): string[] {

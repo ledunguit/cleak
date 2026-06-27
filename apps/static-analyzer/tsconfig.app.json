@@ -5,5 +5,5 @@
     "outDir": "../../dist/apps/static-analyzer"
   },
   "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist", "test", "**/*spec.ts", "**/*.test.ts"]
+  "exclude": ["node_modules", "dist", "test", "**/*spec.ts", "**/*.test.ts", "**/*.node-test.ts"]
 }
