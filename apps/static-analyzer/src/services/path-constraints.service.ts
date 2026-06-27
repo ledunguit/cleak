@@ -9,10 +9,11 @@ export class PathConstraintsService {
   analyze(filePath: string, content: string, lineNumber: number, extraAllocators?: string[], extraDeallocators?: string[]) {
     const result = this.cParser.parse(content, filePath, extraAllocators, extraDeallocators);
 
-    const containingFunction = result.functions.find((fn) =>
-      fn.lineNumber <= lineNumber &&
-      this.functionEndLine(fn, result.functions) >= lineNumber,
-    );
+    // Innermost enclosing function by the ACCURATE tree-sitter range (fn.endLine),
+    // not the old "next function − 1" heuristic — picks the smallest range on nesting.
+    const containingFunction = result.functions
+      .filter((fn) => fn.lineNumber <= lineNumber && this.functionEndLine(fn, result.functions) >= lineNumber)
+      .sort((a, b) => this.functionEndLine(a, result.functions) - a.lineNumber - (this.functionEndLine(b, result.functions) - b.lineNumber))[0];
 
     if (!containingFunction) {
       return { constraints: [], feasiblePaths: [], exitPaths: [] };
@@ -104,6 +105,9 @@ export class PathConstraintsService {
   }
 
   private functionEndLine(fn: FunctionInfo, allFunctions: FunctionInfo[]): number {
+    // Prefer the real closing-brace line from tree-sitter; fall back to the old
+    // "next function − 1 / +100" estimate only when endLine is absent (defensive).
+    if (fn.endLine && fn.endLine >= fn.lineNumber) return fn.endLine;
     const idx = allFunctions.indexOf(fn);
     if (idx < allFunctions.length - 1) {
       return allFunctions[idx + 1].lineNumber - 1;

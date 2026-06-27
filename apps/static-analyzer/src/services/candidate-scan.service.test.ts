@@ -1,7 +1,8 @@
 import { describe, expect, test } from 'bun:test';
-import { CandidateScanService } from './candidate-scan.service';
+import { CandidateScanService, enclosingFunctionName } from './candidate-scan.service';
+import { CParserService } from './c-parser.service';
 
-const svc = new CandidateScanService();
+const svc = new CandidateScanService(new CParserService());
 const allocLines = (src: string): number[] =>
   svc.scan('t.c', src).candidates.map((c: any) => c.lineNumber);
 const allocLinesWith = (src: string, allocs?: string[], deallocs?: string[]): number[] =>
@@ -112,5 +113,33 @@ describe('CandidateScanService — allocator-aware discovery', () => {
     const without = svc.scan('t.c', 'p = malloc(8);\nmy_release(p);');
     expect(withParam.candidates[0].observedDeallocationCount).toBe(1);
     expect(without.candidates[0].observedDeallocationCount).toBe(0);
+  });
+});
+
+// Function attribution range-picker (the engine of F1). Tree-sitter only loads in the
+// Linux container, so the end-to-end "alloc 30 lines in → correct function" path is
+// verified there; here we unit-test the pure range logic with synthetic ranges.
+describe('enclosingFunctionName — innermost-range attribution', () => {
+  const fns = [
+    { functionName: 'first', lineNumber: 1, endLine: 3 },
+    { functionName: 'big', lineNumber: 5, endLine: 90 }, // a 30+-line body — the old 20-line backscan failed here
+    { functionName: 'outer', lineNumber: 100, endLine: 200 },
+    { functionName: 'inner', lineNumber: 120, endLine: 140 }, // nested inside outer
+  ];
+
+  test('a line deep inside a large function attributes to that function (not unknown)', () => {
+    expect(enclosingFunctionName(60, fns)).toBe('big'); // 55 lines past the signature
+  });
+  test('innermost (smallest) range wins on nesting', () => {
+    expect(enclosingFunctionName(130, fns)).toBe('inner');
+    expect(enclosingFunctionName(110, fns)).toBe('outer'); // outside inner → outer
+  });
+  test('range bounds are inclusive', () => {
+    expect(enclosingFunctionName(5, fns)).toBe('big');
+    expect(enclosingFunctionName(90, fns)).toBe('big');
+  });
+  test('a line in no function returns null (caller falls back to the lexical scan)', () => {
+    expect(enclosingFunctionName(4, fns)).toBeNull(); // gap between first and big
+    expect(enclosingFunctionName(999, fns)).toBeNull();
   });
 });

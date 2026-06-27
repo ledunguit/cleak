@@ -21,6 +21,18 @@ const SKIP_DIRS = new Set([
   'out',
   'vendor',
   'third_party',
+  // Non-library code: test harnesses, fuzz drivers, examples, benchmarks. On real
+  // projects these dwarf the library source (cJSON: tests/ + fuzzing/) and their
+  // allocations are scan NOISE — the actual leak lives in the library (.c) source.
+  // (LAMeD flaws are all in library source; Juliet's corpus is flat → unaffected.)
+  'test',
+  'tests',
+  'fuzz',
+  'fuzzing',
+  'example',
+  'examples',
+  'benchmark',
+  'benchmarks',
 ]);
 
 const C_EXTS = new Set(['.c', '.cc', '.cpp', '.cxx', '.h', '.hpp', '.hxx', '.hh']);
