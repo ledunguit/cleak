@@ -48,9 +48,18 @@ Metric formulas (`computeMetrics`) are unit-tested in
 
 | Mode | What runs | Determinism |
 |---|---|---|
-| `no_llm` | discovery + static heuristics + **heuristic judge** | deterministic (bitwise — see §7) |
+| `no_llm` | discovery + static enrichment (`STATIC_ENRICH`) + **path-sensitive heuristic judge** | deterministic (bitwise — see §7) |
 | `llm_assisted` | agentic LLM orchestration + LLM judge (borderline) | stochastic; variance quantified, not hidden (§7) |
 | `--dynamic off/selective/aggressive` | adds Valgrind/ASan/LSan evidence | depends on build |
+
+**Tầng POLICY (LLM) bị ĐÔNG CỨNG / BỎ QUA trong eval — đây là lý do số benchmark vẫn tất định:**
+allocator profiler, strategist, judge-tuner (xem [ARCHITECTURE.md](ARCHITECTURE.md) §10, [PROMPTS.md](PROMPTS.md) §0.5)
+đều **không chạy trong eval** — corpus manifest cung cấp allocators/deallocators đông cứng (≈ LAMeD
+AllocSource/FreeSink), `--strategy` để off, và judge dùng `JUDGE_VERDICT_THRESHOLDS` đông cứng (không tuner).
+Vì vậy **đường eval không có LLM POLICY non-deterministic**; chỉ `llm_assisted` judge mới stochastic (và được đo
+variance, không giấu). Việc LLM khám phá allocator được đo RIÊNG bằng `scripts/validate-allocator-profile.ts`
+(precision/recall của discovery), KHÔNG đưa non-determinism vào leak-eval. Production thì các tầng này chạy động;
+luận văn báo cáo cả số default lẫn tuned.
 
 The `no_llm` vs `llm_assisted` contrast **is** the LLM-agent ablation (same
 corpus, same analyzers, same scoring; only the orchestration/judge differs). The

@@ -19,9 +19,13 @@
 ## 0. Tổng quan — pipeline 4 tầng và nơi LLM được gọi
 
 Path TUI **không** phải một agent tự do gọi mọi tool. Nó là một **workflow đa-agent theo
-tầng**, định nghĩa ở `apps/leak-inspector-tui/src/orchestrator/workflowInvestigation.ts`. LLM
-chỉ được gọi ở 3 chỗ (Stage A, Stage B-khi-cần, Stage D); Stage C và phần hợp nhất bằng chứng
-là **tất định, không LLM**.
+tầng**, định nghĩa ở `apps/leak-inspector-tui/src/orchestrator/workflowInvestigation.ts`.
+
+LLM được gọi ở hai nơi: (1) **tầng POLICY host-side** TRƯỚC pipeline (3 prompt one-shot:
+allocator-profiler, strategist, judge-tuner — xem §0.5), và (2) **investigation 4-tầng** (Stage A,
+Stage B-khi-cần, Stage D). Stage C + hợp nhất bằng chứng là **tất định, không LLM**. Mọi prompt POLICY
+là one-shot temp-0, output **verify (grep/clamp) + cache**, và **bỏ qua trong benchmark** (manifest đông
+cứng) ⇒ eval tất định.
 
 | Tầng | Việc | LLM? | Prompt |
 |---|---|:--:|---|
@@ -45,6 +49,33 @@ là **tất định, không LLM**.
 (`providers/anthropic.ts:29`); OpenAI-compatible chèn làm message đầu `{role:'system',
 content}` (`providers/normalize.ts:41`). Mặc định thesis: gateway OpenAI-compatible nội bộ
 `local`, model `mimo/mimo-v2.5-pro` tại `localhost:20128/v1` (host-aware) — `config.ts:81-159`.
+
+---
+
+## 0.5. Tầng POLICY (host-side, one-shot, TRƯỚC investigation)
+
+Ba prompt khám-phá-theo-project, đều: *gather host-side → one-shot `callModel` (temp 0) → parse Zod
+lenient (kiểu `parseVerdict`) → **verify** → cache `<repo>/.cleak/`*. Resolve ở `surfaces/headless.ts`.
+**Bỏ qua khi allocators được cấp tường minh** (eval) ⇒ tất định.
+
+### 0.5.1. Allocator profiler — `domain/allocatorProfiler.ts` `allocatorProfileSystemPrompt`
+Đọc header (đầy đủ) + source (cắt) → liệt kê **API cấp phát/giải phóng custom** của project (factory
+`*_new/*_create/*_dup`, parser/printer trả owned, macro `#define ALLOC`, smart-ptr `make_unique`) +
+`ownershipNotes` (quy ước sở hữu: transfer/borrow/refcount/pool, "Delete bỏ qua const"…). Output JSON
+`{allocators, deallocators, reallocators, ownershipNotes, confidence, explanation}`. **Verify:** chỉ giữ
+tên là identifier hợp lệ, KHÔNG phải libc, và **thực sự xuất hiện** trong source đã đưa cho model
+(`verifyNames`, chống hallucinate). Đo độ chính xác bằng `scripts/validate-allocator-profile.ts` (P/R/F1
+so ground-truth). → nạp `extraAllocators/Deallocators` + `ownershipNotes`.
+
+### 0.5.2. Strategist — `domain/strategist.ts` `strategistSystemPrompt`
+Đọc metadata repo (số file, tỉ lệ C++, có build-system?, mật độ smart-ptr) + tóm tắt profile → chọn
+`{runDynamic, judge: single|consensus, staticDepth: shallow|full}`. v0 wire `runDynamic` (bỏ stage dynamic
+khi không build được). **Fallback rule-based tất định** khi LLM lỗi. OPT-IN `--strategy auto`.
+
+### 0.5.3. Judge tuner — `domain/judgeTuner.ts` `judgeTunerSystemPrompt`
+Từ profile → nudge ngưỡng verdict `{confirmed, likely}` cho hợp memory-style project. **Clamp cứng**
+(confirmed 0.55–0.85, likely 0.25–0.6, confirmed>likely) ⇒ LLM không thể làm judge liều. **Production-only**
+— eval LUÔN dùng ngưỡng đông cứng `JUDGE_VERDICT_THRESHOLDS`.
 
 ---
 
@@ -191,7 +222,7 @@ heuristic.
 
 ### 3.2. System prompt — `SYSTEM_PROMPT`
 
-- **File:** `llmJudge.ts:16-27`
+- **File:** `llmJudge.ts` (`SYSTEM_PROMPT`)
 - **Định dạng output:** **JSON only** (không native tool-calling; `tools: []`).
 
 ```text
@@ -203,6 +234,8 @@ Calibrate using the EVIDENCE, in this priority order:
 - A runtime finding in the SAME FILE but a DIFFERENT site (not linked) is weak — do not treat it as proof for this allocation. still_reachable with no other evidence → false_positive.
 - A CLEAN sanitizer/valgrind run that EXERCISED this allocation and reported NO leak here is strong evidence this is NOT a leak → lean false_positive / likely_false_positive (unless a runtime leak is LINKED to this very allocation).
 - Ownership is decisive for false positives: if the allocation is RETURNED to the caller or its pointer is HANDED OFF to a sink/callback/another function (ownership transferred), freeing it is NOT this function's job. When ownership is transferred AND no runtime leak is linked to THIS allocation, answer likely_false_positive or false_positive — do NOT flag it just because you cannot see the free inside this snippet. An UNPAIRED alloc→free with a reachable leak path and NO ownership transfer → confirmed_leak (≥ 0.85).
+- PATH-SENSITIVE leak: an allocation freed on the main/success path but NOT on an error or early-return path (e.g. `if (err) return NULL;` or `goto fail;` before the free) IS a leak — confirmed_leak — EVEN IF the value is returned or added to a structure on the success path. If the static context lists the allocation as freed "on some paths only" (conditional) or names it on a reachable un-freed exit path, treat that as decisive.
+- PARAMETER-ownership leak (allocation_type 'parameter_ownership'): a function that frees a pointer PARAMETER on some paths (taking ownership) but returns on a reachable branch WITHOUT freeing it leaks that parameter — confirmed_leak (e.g. cJSON's `merge_patch`).
 - Freed on all paths / static-global → false_positive (high confidence). Use uncertain only when the evidence is genuinely insufficient.
 - Control flow is concrete, not hypothetical: a constant or scaffolding global such as `if(1)`/`if(0)` or `globalReturnsTrue()` does NOT change between two checks in the SAME function — `if(1)` always runs and `if(0)` is dead code. If the buffer is freed under the same condition it was allocated (or in the `else` of a constant `if`), it IS freed. Do NOT call a leak just because the `free()` sits in a different block, behind a constant condition, or after a `break`/in a second loop — trace whether it actually executes.
 ```
@@ -227,6 +260,9 @@ ${summarizeStatic}        # Ownership · Alloc→free pairing · Feasible leak p
 
 DYNAMIC EVIDENCE (${N}):
 ${summarizeEvidence}      # mỗi finding: tool:kind bytes/blocks @ site [LINKED | same file, different site | CLEAN]; hoặc "(none)"
+
+PROJECT OWNERSHIP CONVENTIONS:   # CHỈ khi có — ownershipNotes do allocator-profiler (§0.5.1) khám phá
+- <vd: "cJSON_Delete bỏ qua chuỗi gắn cJSON_StringIsConst"; "cJSON_Add*ToObject chuyển sở hữu cho parent">
 
 Return your JSON verdict.
 ````

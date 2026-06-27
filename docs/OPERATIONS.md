@@ -57,8 +57,16 @@ bun src/cli.ts scan --repo <path> --mode no_llm
 # LLM-assisted với endpoint OpenAI-compatible tuỳ chỉnh
 bun src/cli.ts scan --repo <path> --mode llm_assisted \
   --provider openai-compat --base-url http://localhost:1234/v1 --model qwen2.5-coder-32b
+
+# Tổng quát hoá theo project (tầng POLICY, xem PROMPTS.md §0.5):
+#   --allocators-from auto|llm|none   LLM khám phá API cấp phát/giải phóng (mặc định auto = bật ở llm_assisted)
+#   --allocators a,b,c                 cấp tên allocator tường minh (bỏ qua LLM-discovery)
+#   --deallocators x,y                 cấp tên deallocator tường minh
+#   --strategy auto|off                strategist chọn plan per-project (off mặc định; bỏ stage dynamic khi không build được)
+bun src/cli.ts scan --repo <path> --mode llm_assisted --allocators-from llm --strategy auto
 ```
-Báo cáo ghi vào `results/<scanId>/` (`report.{json,md,html}`, `snapshot.json`, `steps.md`).
+Báo cáo ghi vào `results/<scanId>/`. Profile allocator/ownership được cache ở `<repo>/.cleak/allocator-profile.json`
+(rerun cùng repo = tất định, 0 LLM call). **Eval bỏ qua tầng POLICY** (manifest cấp allocators) ⇒ tất định.
 
 ## 3. Chạy đánh giá (eval)
 

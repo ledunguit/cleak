@@ -61,3 +61,23 @@
 - **dynamic** — `off` | `selective` | `aggressive` (mức dùng bằng chứng động).
 - **provider** — `local` | `openai` | `anthropic` | `openai-compat` (endpoint OpenAI-tương-thích
   tuỳ chỉnh: base URL + model + key).
+- **`--allocators-from`** — `auto|llm|none`: nguồn API cấp phát/giải phóng (LLM khám phá vs cấp tay vs tắt).
+- **`--strategy`** — `auto|off`: bật strategist (LLM chọn plan per-project).
+- **`STATIC_ENRICH=on`** — bật static-enrichment tất định (điền `staticEvidence` cho judge path-aware).
+
+## Tầng LLM-generalization (POLICY) & engine path-sensitive
+- **POLICY vs MECHANISM** — LLM sở hữu *tri-thức-theo-project* (allocator API, ownership, strategy, judge
+  calibration); engine tất định sở hữu *cơ học* (parse/CFG/pairing/Z3/scoring). LLM quyết, engine thực thi.
+- **allocator profiler** — module LLM đọc repo → `{allocators, deallocators, ownershipNotes}`, **grep-verify**
+  (chống hallucinate), cache `<repo>/.cleak/` (`domain/allocatorProfiler.ts`). Thay list hardcode.
+- **frozen profile** — profile đông cứng (manifest/committed) dùng trong eval ⇒ tất định; production discover động.
+- **strategist** — LLM chọn `{runDynamic, judge, staticDepth}` per-project (`domain/strategist.ts`).
+- **judge tuner** — LLM nudge ngưỡng verdict trong **clamp cứng**, production-only (`domain/judgeTuner.ts`).
+- **static enrichment** — stage tất định gọi functionSummary+pathConstraints → `bundle.staticEvidence`.
+- **path-sensitive leak** — alloc free trên đường chính nhưng MẤT trên đường lỗi/early-return.
+- **parameter-ownership leak** — tham số con trỏ free một-số-đường nhưng mất trên đường khác (vd merge_patch).
+- **guard-subset reconciliation** — free chỉ reconcile một exit nếu guard nó ⊆ guard exit (path-sensitive).
+- **Z3 feasibility** — kiểm SAT `(biến≠0) ∧ guards` để loại leak-path bất khả thi (vd `if(p==NULL) return;`).
+  node-only (z3-solver WASM treo dưới Bun).
+- **dead-code reachability** — bỏ exit-path sau terminator vô điều kiện (return/goto/exit…) cùng block.
+- **ownership notes** — quy ước sở hữu theo project (LLM-discovered) nạp vào prompt judge (vd const-skip).
