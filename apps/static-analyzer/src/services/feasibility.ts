@@ -15,6 +15,29 @@
 
 const RUNTIME_OK = typeof (globalThis as { Bun?: unknown }).Bun === 'undefined';
 
+// z3-solver is a WASM module with a hard 2 GiB (wasm32) heap that only GROWS. On a
+// large real-project function it OOMs — and the abort fires from a WASM pthread as
+// an UNCAUGHT exception that would crash the whole analyzer. We cannot try/catch it,
+// so we defend in depth:
+//   • size-guard: skip Z3 on oversized path formulas (cheap pre-filter);
+//   • safety net (installZ3Guard): a process-level handler that recognises the Z3
+//     OOM abort, DISABLES Z3 for the rest of the process, and SWALLOWS it — one bad
+//     input degrades feasibility to 'unknown' (heuristic kept) instead of taking the
+//     service down. A WASM OOM also corrupts the worker, so disabling is mandatory.
+// 'unknown' is the same safe fallback used when Z3 is unavailable (e.g. under Bun).
+const MAX_GUARDS = Number(process.env.Z3_MAX_GUARDS || 24);
+const MAX_GUARD_CHARS = Number(process.env.Z3_MAX_GUARD_CHARS || 1500);
+// Per-check wall-clock budget (ms). The size-guard stops OOM, but a small-yet-hard
+// formula can make Z3 SPIN (99% CPU, no progress) with no time bound — stalling the
+// whole run. Z3's own 'timeout' param makes check() return 'unknown' when it expires.
+const Z3_TIMEOUT_MS = Number(process.env.Z3_TIMEOUT_MS || 1500);
+// PROACTIVE OOM ceiling. The z3-solver WASM heap only GROWS toward a FATAL 2 GiB cap:
+// emscripten's abort() unwinds and KILLS the process — an uncaughtException handler
+// CANNOT save it (it still dies after the handler runs). The only defence is to stop
+// using Z3 BEFORE the heap nears 2 GiB. `process.memoryUsage().arrayBuffers` counts
+// the WASM linear memory, so we disable Z3 once it crosses this watermark.
+const Z3_MEM_LIMIT_BYTES = Number(process.env.Z3_MEM_LIMIT_MB || 1600) * 1024 * 1024;
+
 export interface Guard {
   /** Raw C boolean expression text of the branch condition (e.g. "p == NULL"). */
   condition: string;
@@ -142,18 +165,44 @@ export function translateCondition(c: any, expr: string, intOf: (n: string) => a
   return p === toks.length ? result : null; // leftover tokens ⇒ untranslatable
 }
 
-// ── Z3 context (lazy, node-only) ──────────────────────────────────────────────────
-let ctxPromise: Promise<any> | null = null;
+// ── Z3 context (lazy, node-only) + crash safety net ───────────────────────────────
+let apiPromise: Promise<{ Context: (n: string) => any } | null> | null = null;
+let ctx: any = null;
+let z3Disabled = false;
+
+/** True when the error is a z3-solver WASM OOM/abort (vs an unrelated bug). */
+function isZ3Abort(err: unknown): boolean {
+  const s = `${(err as { message?: string })?.message ?? ''}\n${(err as { stack?: string })?.stack ?? ''}`;
+  return s.includes('z3-built') || s.includes('Cannot enlarge memory') || s.includes('Aborted(');
+}
+
+// Install ONCE (node only). The WASM OOM surfaces as an uncaught exception on the
+// main thread; recognise it, disable Z3 for the rest of the process, and swallow —
+// so the analyzer survives. Anything else is re-raised unchanged.
+let guardInstalled = false;
+function installZ3Guard(): void {
+  if (guardInstalled || !RUNTIME_OK || typeof process === 'undefined') return;
+  guardInstalled = true;
+  process.on('uncaughtException', (err) => {
+    if (!isZ3Abort(err)) throw err;
+    if (!z3Disabled) process.stderr.write('⚠ Z3 path-feasibility OOM — disabled for this process (heuristic kept)\n');
+    z3Disabled = true;
+  });
+}
+
 async function getContext(): Promise<any | null> {
-  if (!RUNTIME_OK) return null;
-  if (!ctxPromise) {
-    ctxPromise = (async () => {
+  if (!RUNTIME_OK || z3Disabled) return null;
+  installZ3Guard();
+  if (!apiPromise) {
+    apiPromise = (async () => {
       const { init } = await import('z3-solver');
-      const { Context } = await init();
-      return Context('leak');
+      return (await init()) as { Context: (n: string) => any };
     })().catch(() => null);
   }
-  return ctxPromise;
+  const api = await apiPromise;
+  if (!api) return null;
+  if (!ctx) ctx = api.Context('leak');
+  return ctx;
 }
 
 /**
@@ -162,10 +211,26 @@ async function getContext(): Promise<any | null> {
  * 'unknown' ⇒ Z3 unavailable (Bun) or a solver error ⇒ caller keeps the heuristic.
  */
 export async function leakFeasible(liveVar: string, guards: Guard[]): Promise<Feasibility> {
+  if (z3Disabled) return 'unknown'; // a prior OOM/limit took Z3 down → heuristic for the rest
+  // Proactive OOM ceiling: stop BEFORE the fatal 2 GiB wasm heap (emscripten abort is
+  // unrecoverable). Once the WASM heap nears the watermark, disable Z3 for good.
+  if (RUNTIME_OK && process.memoryUsage().arrayBuffers > Z3_MEM_LIMIT_BYTES) {
+    if (!z3Disabled) process.stderr.write('⚠ Z3 path-feasibility near the WASM heap ceiling — disabled (heuristic kept)\n');
+    z3Disabled = true;
+    return 'unknown';
+  }
+  // Size-guard: a pathological function (many branch guards) builds an SMT formula
+  // big enough to OOM Z3's 2 GiB wasm heap. Skip it and keep the heuristic ('unknown').
+  if (guards.length > MAX_GUARDS) return 'unknown';
+  let guardChars = 0;
+  for (const g of guards) guardChars += g.condition.length;
+  if (guardChars > MAX_GUARD_CHARS) return 'unknown';
+
   const c = await getContext();
   if (!c) return 'unknown';
   try {
     const solver = new c.Solver();
+    solver.set('timeout', Z3_TIMEOUT_MS); // bound solve time → 'unknown' on a hard formula
     const env = new Map<string, any>();
     const intOf = (n: string) => {
       if (!env.has(n)) env.set(n, c.Int.const(n));

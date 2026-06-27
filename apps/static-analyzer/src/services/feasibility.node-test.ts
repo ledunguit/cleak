@@ -23,6 +23,9 @@ const cases: [string, Guard[], string][] = [
   ['disjunction p==NULL || x>5', [{ condition: 'p == NULL || x > 5', negated: false }], 'feasible'],
   ['untranslatable obj->f==NULL (dropped)', [{ condition: 'obj->field == NULL', negated: false }], 'feasible'],
   ['no guards', [], 'feasible'],
+  // Size-guard: >40 guards skips Z3 (a giant real-project function would OOM the
+  // 2 GiB wasm heap) and degrades to 'unknown' — verified BEFORE any solver call.
+  ['oversized guard set (size-guard)', Array.from({ length: 41 }, () => ({ condition: 'err', negated: false })), 'unknown'],
 ];
 
 let ok = 0;
