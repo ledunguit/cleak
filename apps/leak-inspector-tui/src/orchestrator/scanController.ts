@@ -28,6 +28,7 @@ import { ScanEmitter, ScanEventName } from './events';
 import { CandidateManager, normalizeCandidate } from '../domain/candidateState';
 import { PathResolver } from '../domain/pathResolver';
 import { walkCFiles, readFileSafe } from '../domain/fileWalk';
+import { runDeterministicDynamicStage } from '../domain/dynamicEvidence';
 import { heuristicVerdict } from '../domain/judge';
 import { THRESHOLDS } from '../domain/thresholds';
 import { foldStaticResult, type StaticContextStore } from '../domain/staticContext';
@@ -238,6 +239,36 @@ export async function runScan(input: ScanInput, deps: ScanDeps): Promise<ScanRes
       onModelActivity: deps.onModelActivity,
       requestPermission: deps.requestPermission,
     });
+  }
+
+  // ── Deterministic dynamic stage (no_llm only): build → LSan with NO LLM, so the
+  // `--dynamic` flag is meaningful in the static mode and the heuristic judge can use
+  // runtime evidence (enables a clean 2×2 ablation: static / +dynamic / +LLM / full).
+  // llm_assisted runs dynamic INSIDE the investigation above, so this is no_llm-exclusive.
+  // SECURITY: this EXECUTES code (build + run the target) under the same confinement as
+  // llm_assisted+dynamic; gated on a known buildCommand so default no_llm stays static-only,
+  // and on dynamicMode!==OFF so `--dynamic off` leaves the reproducible baseline byte-identical. ──
+  if (
+    input.analysisMode === AnalysisMode.NO_LLM &&
+    input.dynamicMode !== DynamicMode.OFF &&
+    deps.dynamicClient &&
+    input.buildCommand
+  ) {
+    emitter.emit(ScanEventName.DYNAMIC_STARTED, {});
+    const onNotice = (text: string) => deps.onAgentEvent?.({ type: 'notice', text } as AgentEvent, undefined);
+    const { ran } = await runDeterministicDynamicStage(deps.dynamicClient, candidates.getAllBundles(), {
+      repoPath: input.repoPath,
+      buildCommand: input.buildCommand,
+      pathResolver,
+      abortSignal: deps.abortSignal,
+      onNotice,
+    });
+    emitter.emit(ScanEventName.DYNAMIC_FINISHED, { ran });
+  } else if (input.analysisMode === AnalysisMode.NO_LLM && input.dynamicMode !== DynamicMode.OFF && !input.buildCommand) {
+    deps.onAgentEvent?.(
+      { type: 'notice', text: 'dynamic requested but no buildCommand — no_llm dynamic needs a build command; skipped' } as AgentEvent,
+      undefined,
+    );
   }
 
   // ── Judging: deterministic heuristic finalizer for any un-verdicted bundle ──

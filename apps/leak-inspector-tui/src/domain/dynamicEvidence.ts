@@ -14,7 +14,8 @@
  * `evidence.length`.
  */
 
-import type { Tool } from '@cleak/agent-core';
+import { loadMcpTools, type Tool, type McpClient } from '@cleak/agent-core';
+import { mcpToolFlags } from './mcpToolPlan';
 import {
   correlateEvidence,
   correlationRank,
@@ -237,4 +238,35 @@ export function computeDynamicCoverage(store: DynamicRunStore, bundle: LeakBundl
   if (!ranOk) return 'not_exercised';
   const correlatedLeak = bundle.evidence.some((e) => isCorrelated(e.correlationMethod ?? 'none') && evidenceIndicatesLeak(e));
   return correlatedLeak ? 'exercised_leak' : 'exercised_clean';
+}
+
+/**
+ * Standalone DETERMINISTIC dynamic stage (build → LSan, no LLM) for the `no_llm` path,
+ * which has no investigation infrastructure. Orchestrates the SAME primitives the
+ * `llm_assisted` investigation uses — `runDeterministicDynamic` → `reconcileDynamicEvidence`
+ * → `computeDynamicCoverage` — so coverage/evidence are identical in shape and the judge
+ * consumes them the same way. No new dynamic logic; just wiring for the static-mode path.
+ * Caller MUST gate on `dynamicMode !== OFF && buildCommand` so the deterministic
+ * static-only baseline is untouched when `--dynamic off`.
+ */
+export async function runDeterministicDynamicStage(
+  dynamicClient: McpClient,
+  bundles: LeakBundle[],
+  opts: { repoPath: string; buildCommand: string; pathResolver: PathResolver; abortSignal?: AbortSignal; onNotice?: (t: string) => void },
+): Promise<{ ran: boolean }> {
+  const tools = await loadMcpTools(dynamicClient, mcpToolFlags); // RAW — runDeterministicDynamic maps/wraps internally
+  const store = createDynamicRunStore();
+  const ran = await runDeterministicDynamic({
+    tools,
+    store,
+    repoPath: opts.repoPath,
+    buildCommand: opts.buildCommand,
+    pathResolver: opts.pathResolver,
+    toolCtx: { cwd: opts.repoPath, abortSignal: opts.abortSignal },
+    onNotice: opts.onNotice,
+  });
+  // Fold findings into the best-correlated bundle + stamp honest coverage (safe if store is empty).
+  reconcileDynamicEvidence(store, bundles, opts.pathResolver);
+  for (const b of bundles) b.dynamicCoverage = computeDynamicCoverage(store, b, true);
+  return { ran };
 }
