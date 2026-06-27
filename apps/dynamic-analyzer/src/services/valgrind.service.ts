@@ -25,7 +25,7 @@ export class ValgrindService {
       // No shell: valgrind + the untrusted binary + its args go through an argv array.
       const vgArgs = ['--tool=memcheck', '--leak-check=full', '--xml=yes', `--xml-file=${xmlPath}`, binaryPath, ...(args || [])];
       console.error(`[Valgrind] Running: valgrind ${vgArgs.join(' ')}`);
-      const result = await runConfined('valgrind', vgArgs, { timeoutSec: timeout });
+      const result = await runConfined('valgrind', vgArgs, { timeoutSec: timeout, unlimitedAddressSpace: true });
       const output = result.stdout || result.stderr;
 
       const rawFindings = this.resultParser.parseValgrindXml(xmlPath);

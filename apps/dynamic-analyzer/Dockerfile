@@ -36,9 +36,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     g++ \
     clang \
+    llvm \
     make \
     cmake \
     && rm -rf /var/lib/apt/lists/*
+
+# ASan/LSan symbolize stack frames at RUNTIME via llvm-symbolizer. Without it, leak
+# frames are bare addresses (a.out+0x…) with no file:line — so dynamic findings cannot
+# be correlated to a candidate and the evidence is silently dropped. The `llvm` package
+# ships a versioned binary; expose it as plain `llvm-symbolizer` on PATH.
+RUN SYM="$(ls /usr/bin/llvm-symbolizer* /usr/lib/llvm-*/bin/llvm-symbolizer 2>/dev/null | head -1)" \
+    && [ -n "$SYM" ] && ln -sf "$SYM" /usr/local/bin/llvm-symbolizer
+ENV ASAN_SYMBOLIZER_PATH=/usr/local/bin/llvm-symbolizer
 
 # Install Node.js for runtime
 RUN apt-get update && apt-get install -y --no-install-recommends \

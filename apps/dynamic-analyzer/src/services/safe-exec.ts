@@ -28,6 +28,16 @@ export interface ConfinedOptions {
   maxBufferBytes?: number;
   env?: NodeJS.ProcessEnv;
   cwd?: string;
+  /**
+   * ASan/LSan (and Valgrind) reserve a HUGE *virtual* address space (~20 TB of
+   * shadow memory). The default `ulimit -v` (address-space) cap makes the sanitizer
+   * allocator abort at startup — `LeakSanitizer: CHECK failed: …kSpaceBeg…` — before
+   * it can report anything, so a confined sanitizer run silently finds 0 leaks. Set
+   * this for instrumented runs to drop ONLY the `-v` cap; CPU-time, file-size and
+   * process-count limits stay, and physical RSS is still bounded by the container's
+   * memory. No effect on ordinary (non-instrumented) binary runs.
+   */
+  unlimitedAddressSpace?: boolean;
 }
 
 /** Run id usable in a filesystem path — strip everything but word chars. */
@@ -49,7 +59,7 @@ const intEnv = (name: string, fallback: number): number => {
  * CPU-time limit tracks the wall timeout + a small slack. Disable with
  * DYNAMIC_ULIMIT=off.
  */
-function confine(bin: string, args: string[], cpuSec: number): { cmd: string; argv: string[] } {
+function confine(bin: string, args: string[], cpuSec: number, unlimitedAS = false): { cmd: string; argv: string[] } {
   if (process.platform !== 'linux' || process.env.DYNAMIC_ULIMIT === 'off') {
     return { cmd: bin, argv: args };
   }
@@ -57,8 +67,10 @@ function confine(bin: string, args: string[], cpuSec: number): { cmd: string; ar
   const fsizeKb = intEnv('DYNAMIC_ULIMIT_FSIZE_KB', 256 * 1024);
   const nproc = intEnv('DYNAMIC_ULIMIT_NPROC', 512);
   const t = Math.max(1, Math.floor(cpuSec));
+  // Sanitizer/Valgrind runs need an UNLIMITED virtual address space (see ConfinedOptions).
+  const vLimit = unlimitedAS ? 'unlimited' : String(asKb);
   // Static template — bin/args arrive as "$@" ($0 is the throwaway "_").
-  const script = `ulimit -t ${t} -v ${asKb} -f ${fsizeKb} -u ${nproc} 2>/dev/null; exec "$@"`;
+  const script = `ulimit -t ${t} -v ${vLimit} -f ${fsizeKb} -u ${nproc} 2>/dev/null; exec "$@"`;
   return { cmd: 'bash', argv: ['-c', script, '_', bin, ...args] };
 }
 
@@ -69,7 +81,7 @@ function confine(bin: string, args: string[], cpuSec: number): { cmd: string; ar
  */
 export function runConfined(binaryPath: string, args: string[], opts: ConfinedOptions = {}): Promise<ConfinedResult> {
   const timeoutSec = opts.timeoutSec ?? 120;
-  const { cmd, argv } = confine(binaryPath, args ?? [], timeoutSec + 5);
+  const { cmd, argv } = confine(binaryPath, args ?? [], timeoutSec + 5, opts.unlimitedAddressSpace);
   return new Promise((resolve) => {
     execFile(
       cmd,

@@ -103,10 +103,13 @@ describe('parseAsanOutput / parseLsanOutput', () => {
     ]);
   });
 
-  test('LSan leak: a frame without file:line keeps the function only', () => {
+  test('LSan leak: per-leak block → kind + bytes/blocks, frames (interceptor first)', () => {
     const f = svc.parseLsanOutput(LSAN_OUTPUT);
     expect(f.length).toBe(1);
-    expect(f[0].kind).toBe('detected memory leaks');
+    // Classified by Direct/Indirect (not the raw header text) so the judge gets a leak kind.
+    expect(f[0].kind).toBe('definitely_lost');
+    expect(f[0].aux.leak).toEqual({ bytes: 100, blocks: 1, kind: 'definitely_lost' });
+    // The allocator interceptor frame (malloc, no file:line) is kept FIRST; the user site follows.
     expect(f[0].stack).toEqual([
       { function: 'malloc', file: null, line: null },
       { function: 'make_buffer', file: '/src/buf.c', line: 10 },
