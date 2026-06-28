@@ -64,6 +64,10 @@ export interface ScanInput {
   extraDeallocators?: string[];
   /** Project ownership conventions (LLM-discovered) forwarded to the LLM judge. */
   ownershipNotes?: string[];
+  /** Deterministic static enrichment (alloc→free pairing + feasible leak paths).
+   * Explicit override of the `STATIC_ENRICH=on` env gate — lets the baseline sweep
+   * control it per-run without racing on a global env var. */
+  enrich?: boolean;
 }
 
 export interface ScanDeps {
@@ -218,7 +222,8 @@ export async function runScan(input: ScanInput, deps: ScanDeps): Promise<ScanRes
   // (FP 7→44). It is the right base for HARD real-project corpora (where the leak IS
   // path-sensitive), but must stay off by default so the reproducible Juliet baseline
   // is preserved. ──
-  if (discovered > 0 && process.env.STATIC_ENRICH === 'on') {
+  const enrichOn = input.enrich ?? process.env.STATIC_ENRICH === 'on';
+  if (discovered > 0 && enrichOn) {
     await enrichStaticEvidence(candidates.getAllBundles(), staticClient, input, deps.abortSignal);
   }
 
