@@ -33,12 +33,19 @@ export interface BaselineSweepRow {
   ranOk?: number;
   caseCount?: number;
   runs?: number;
+  /** Confusion matrix over all scored sites (summed for single-run; mean-rounded across runs). */
+  tp?: number;
+  fp?: number;
+  fn?: number;
+  tn?: number;
   precision?: number;
   recall?: number;
   f1?: number;
   /** Std of F1 across runs (multi-run / fusion configs only). */
   f1Std?: number;
   fpPerKloc?: number;
+  /** Expected Calibration Error — surfaces confidence quality the binary P/R/F1 hide. */
+  ece?: number;
   meanDurationMs?: number;
   meanMcpCalls?: number;
   meanTokens?: number;
@@ -68,21 +75,22 @@ export function renderSweepMarkdown(rows: BaselineSweepRow[], meta: SweepMeta): 
     ...(meta.generatedAt ? [`- Generated: ${meta.generatedAt}`] : []),
     ...(meta.gitCommit ? [`- Git commit: \`${meta.gitCommit}\``] : []),
     '',
-    '| ID | Baseline | Cases | Precision | Recall | F1 | FP/KLOC | ms/case | MCP/case | tok/case |',
-    '|---|---|--:|--:|--:|--:|--:|--:|--:|--:|',
+    '| ID | Baseline | Cases | TP | FP | FN | TN | Precision | Recall | F1 | FP/KLOC | ECE | ms/case | MCP/case | tok/case |',
+    '|---|---|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|',
   ];
   const body = rows.map((r) => {
     if (r.status !== 'ok') {
       const why = r.status === 'skipped' ? `_skipped: ${r.skipReason}_` : `_error: ${r.error}_`;
-      return `| ${r.id} | ${r.name} | ${why} | | | | | | | |`;
+      return `| ${r.id} | ${r.name} | ${why} | | | | | | | | | | | | |`;
     }
-    return `| ${r.id} | ${r.name} | ${r.ranOk ?? 0}/${r.caseCount ?? 0} | ${pct(r.precision)} | ${pct(r.recall)} | ${f1Cell(r)} | ${f3(r.fpPerKloc)} | ${n0(r.meanDurationMs)} | ${n0(r.meanMcpCalls)} | ${n0(r.meanTokens)} |`;
+    return `| ${r.id} | ${r.name} | ${r.ranOk ?? 0}/${r.caseCount ?? 0} | ${n0(r.tp)} | ${n0(r.fp)} | ${n0(r.fn)} | ${n0(r.tn)} | ${pct(r.precision)} | ${pct(r.recall)} | ${f1Cell(r)} | ${f3(r.fpPerKloc)} | ${f3(r.ece)} | ${n0(r.meanDurationMs)} | ${n0(r.meanMcpCalls)} | ${n0(r.meanTokens)} |`;
   });
   return [...head, ...body, ''].join('\n');
 }
 
 export function renderSweepCsv(rows: BaselineSweepRow[]): string {
-  const header = 'id,name,status,ranOk,caseCount,runs,precision,recall,f1,f1Std,fpPerKloc,meanDurationMs,meanMcpCalls,meanTokens';
+  const header =
+    'id,name,status,ranOk,caseCount,runs,tp,fp,fn,tn,precision,recall,f1,f1Std,fpPerKloc,ece,meanDurationMs,meanMcpCalls,meanTokens';
   const cell = (x: number | undefined) => (x === undefined ? '' : String(x));
   const lines = rows.map((r) =>
     [
@@ -92,11 +100,16 @@ export function renderSweepCsv(rows: BaselineSweepRow[]): string {
       cell(r.ranOk),
       cell(r.caseCount),
       cell(r.runs),
+      cell(r.tp),
+      cell(r.fp),
+      cell(r.fn),
+      cell(r.tn),
       cell(r.precision),
       cell(r.recall),
       cell(r.f1),
       cell(r.f1Std),
       cell(r.fpPerKloc),
+      cell(r.ece),
       cell(r.meanDurationMs),
       cell(r.meanMcpCalls),
       cell(r.meanTokens),
@@ -110,15 +123,15 @@ export function renderSweepLatex(rows: BaselineSweepRow[], meta: SweepMeta): str
   const ok = rows.filter((r) => r.status === 'ok');
   const body = ok.map(
     (r) =>
-      `${r.id} & ${esc(r.name)} & ${pct(r.precision)} & ${pct(r.recall)} & ${f1Cell(r)} & ${f3(r.fpPerKloc)} & ${n0(r.meanMcpCalls)} & ${n0(r.meanTokens)} \\\\`,
+      `${r.id} & ${esc(r.name)} & ${n0(r.tp)} & ${n0(r.fp)} & ${n0(r.fn)} & ${n0(r.tn)} & ${pct(r.precision)} & ${pct(r.recall)} & ${f1Cell(r)} & ${f3(r.fpPerKloc)} & ${f3(r.ece)} & ${n0(r.meanMcpCalls)} & ${n0(r.meanTokens)} \\\\`,
   );
   return [
     '\\begin{table}[t]',
     '\\centering',
     `\\caption{Baseline ablation on ${esc(meta.corpus)}.}`,
-    '\\begin{tabular}{llrrrrrr}',
+    '\\begin{tabular}{llrrrrrrrrrr}',
     '\\toprule',
-    'ID & Baseline & P & R & F1 & FP/KLOC & MCP/case & tok/case \\\\',
+    'ID & Baseline & TP & FP & FN & TN & P & R & F1 & FP/KLOC & ECE & MCP/case & tok/case \\\\',
     '\\midrule',
     ...body,
     '\\bottomrule',
