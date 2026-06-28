@@ -18,21 +18,14 @@ describe('isWiredNow (Step-4 gate over the 9 baselines)', () => {
     configs.map((c) => [c.id, isWiredNow(resolveCapabilities(c.capabilities, { runs: c.runs })).wired]),
   );
 
-  test('B1/B3 (deterministic) and B6b/B7 (current agentic) are wired now', () => {
-    expect(wiredById).toMatchObject({ B1: true, B3: true, B6b: true, B7: true });
+  test('all static-discovery baselines are wired now (Step 4b done)', () => {
+    expect(wiredById).toMatchObject({ B1: true, B3: true, B4: true, B6: true, B6a: true, B6b: true, B7: true });
   });
 
-  test('dynamic-only (B2/B5) is gated on Step 4a', () => {
+  test('only dynamic-only (B2/B5) remains gated on Step 4a', () => {
     expect(wiredById.B2).toBe(false);
     expect(wiredById.B5).toBe(false);
     expect(isWiredNow(resolveCapabilities(configs.find((c) => c.id === 'B2')!.capabilities)).reason).toMatch(/4a/);
-  });
-
-  test('deterministic-recipe fusion (B4/B6/B6a) is gated on Step 4b', () => {
-    expect(wiredById.B4).toBe(false);
-    expect(wiredById.B6).toBe(false);
-    expect(wiredById.B6a).toBe(false);
-    expect(isWiredNow(resolveCapabilities(configs.find((c) => c.id === 'B4')!.capabilities, { runs: 3 })).reason).toMatch(/4b/);
   });
 });
 

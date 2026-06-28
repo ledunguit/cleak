@@ -51,6 +51,8 @@ const dynamicUrl = process.env.EVAL_DYNAMIC_URL ?? 'http://127.0.0.1:50072/mcp';
 const dryRun = has('dry-run');
 const includeUnwired = has('include-unwired');
 const consensusOverride = flag('consensus-n') ? Math.max(1, parseInt(flag('consensus-n')!, 10)) : undefined;
+// Override every config's `runs` (handy for a cheap smoke check of fusion baselines).
+const runsOverride = flag('runs') ? Math.max(1, parseInt(flag('runs')!, 10)) : undefined;
 
 const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
 const outDir = flag('out') ?? join(process.env.RESULTS_DIR ?? 'results', `baseline-sweep-${stamp}`);
@@ -76,7 +78,7 @@ console.log(`Baseline sweep · corpus=${corpusDir}${limit ? ` limit=${limit}` : 
 if (dryRun) {
   console.log('DRY RUN — resolved plans (nothing executed):\n');
   for (const c of configs) {
-    const plan = resolveCapabilities(c.capabilities, { consensusN: consensusOverride ?? c.consensusN, runs: c.runs });
+    const plan = resolveCapabilities(c.capabilities, { consensusN: consensusOverride ?? c.consensusN, runs: runsOverride ?? c.runs });
     const w = isWiredNow(plan);
     console.log(
       `  ${c.id.padEnd(4)} ${c.name.padEnd(28)} mode=${plan.mode} dyn=${plan.dynamic} strat=${plan.strategy} ` +
@@ -92,7 +94,7 @@ const pct = (x: number) => `${(x * 100).toFixed(1)}%`;
 
 const rows: BaselineSweepRow[] = [];
 for (const c of configs) {
-  const plan = resolveCapabilities(c.capabilities, { consensusN: consensusOverride ?? c.consensusN, runs: c.runs });
+  const plan = resolveCapabilities(c.capabilities, { consensusN: consensusOverride ?? c.consensusN, runs: runsOverride ?? c.runs });
   const wired = isWiredNow(plan);
   if (!wired.wired && !includeUnwired) {
     console.log(`── ${c.id} ${c.name}: SKIPPED (${wired.reason})`);
@@ -134,6 +136,7 @@ async function runOne(c: BaselineConfig, plan: ReturnType<typeof resolveCapabili
     consensusN: plan.consensusN,
     strategy: plan.strategy,
     enrich: plan.enrich,
+    toolSelect: plan.toolSelect,
   };
   try {
     if (plan.runs <= 1) {

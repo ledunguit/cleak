@@ -79,6 +79,9 @@ export interface EvalOptions {
    * the Juliet baseline reproducible; the sweep sets them per baseline config. */
   strategy?: 'auto' | 'off';
   enrich?: boolean;
+  /** Agentic tool selection (ablation `tool_selector` axis). Default true (current
+   * llm_assisted behaviour); false ⇒ deterministic static enrichment + dynamic recipe. */
+  toolSelect?: boolean;
   /** Cancel the run: in-flight cases are aborted, not-yet-started ones are skipped. */
   signal?: AbortSignal;
   onProgress?: (done: number, total: number, id: string) => void;
@@ -321,6 +324,7 @@ export async function runEval(opts: EvalOptions): Promise<EvalResult> {
         signal: opts.signal,
         ...(opts.strategy ? { strategy: opts.strategy } : {}),
         ...(opts.enrich !== undefined ? { enrich: opts.enrich } : {}),
+        ...(opts.toolSelect !== undefined ? { toolSelect: opts.toolSelect } : {}),
         ...(opts.consensusN != null || opts.consensusRule != null
           ? { consensus: { ...(opts.consensusN != null ? { n: opts.consensusN } : {}), ...(opts.consensusRule ? { rule: opts.consensusRule } : {}) } }
           : {}),
