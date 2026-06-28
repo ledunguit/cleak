@@ -46,6 +46,10 @@ export interface InvestigationContext {
    * memory freed with Y". Passed to the LLM judge so verdicts respect project semantics
    * no fixed rule could encode. */
   projectOwnershipNotes?: string[];
+  /** Dynamic-only discovery (static=false) already built+ran the target and stamped
+   * coverage during discovery. When true the investigation skips Stage B (no second
+   * build/run) and preserves the coverage already attached to each bundle. */
+  dynamicAlreadyRan?: boolean;
 }
 
 export interface InvestigationOutcome {

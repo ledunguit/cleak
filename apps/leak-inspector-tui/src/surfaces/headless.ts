@@ -52,6 +52,10 @@ export interface HeadlessOptions {
    * false, the llm_assisted investigation skips the agentic static fan-out (uses the
    * deterministic enrichment) and the deterministic dynamic recipe only. */
   toolSelect?: boolean;
+  /** Static candidate discovery (ablation `static` axis). Default true. When false,
+   * discovery is dynamic-only (build + LSan → synthesize sites); needs a buildCommand
+   * and --dynamic != off. */
+  staticDiscovery?: boolean;
   fileLimit?: number;
   staticUrl?: string;
   dynamicUrl?: string;
@@ -192,6 +196,7 @@ export async function runHeadless(opts: HeadlessOptions): Promise<HeadlessResult
         extraDeallocators,
         ownershipNotes,
         enrich: opts.enrich,
+        staticDiscovery: opts.staticDiscovery,
       },
       { staticClient, dynamicClient, emitter, pathResolver, investigation, abortSignal: opts.signal },
     );

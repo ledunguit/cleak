@@ -93,12 +93,19 @@ export function withDynamicEvidenceCapture(tool: Tool, store: DynamicRunStore): 
   };
 }
 
-/** Build a normalized LeakEvidence from a raw finding (port of attachDynamicEvidence). */
-function findingToEvidence(finding: any, run: DynamicRunRecord, pathResolver: PathResolver): LeakEvidence {
-  // Sanitizer stacks put the allocator interceptor (__interceptor_calloc, operator new,
-  // malloc/calloc/realloc/strdup) FIRST — the user allocation site is a few frames down.
-  // When the finding carries no explicit location, attribute it to the first USER frame
-  // so the leak correlates to the candidate instead of dropping to "same file" / unlinked.
+/**
+ * The user-code allocation site for a raw sanitizer finding (host paths). Sanitizer
+ * stacks put the allocator interceptor (__interceptor_calloc, operator new,
+ * malloc/calloc/realloc/strdup) FIRST — the user allocation site is a few frames down.
+ * When the finding carries no explicit location, attribute it to the first USER frame
+ * so the leak correlates to the candidate instead of dropping to "same file" / unlinked.
+ * Shared by evidence attribution AND dynamic-only discovery (dynamicDiscovery.ts) so
+ * both agree on where a runtime leak "is".
+ */
+export function leakSiteFromFinding(
+  finding: any,
+  pathResolver: PathResolver,
+): { file: string; line: number; function: string } {
   const isUserFrame = (f: any) =>
     f?.file &&
     !/^(__interceptor_|__libc_|_start$|operator new|malloc$|calloc$|realloc$|strdup$|aligned_alloc$)/.test(f.function || '') &&
@@ -106,12 +113,22 @@ function findingToEvidence(finding: any, run: DynamicRunRecord, pathResolver: Pa
   const userFrame = (finding.stack || []).find(isUserFrame) || (finding.stack || []).find((f: any) => f?.file);
   const locFile = finding.filePath || finding.file_path || finding.location?.file || userFrame?.file || '';
   const locLine = finding.lineNumber ?? finding.line_number ?? finding.location?.line ?? userFrame?.line ?? 0;
+  return {
+    file: pathResolver.toHostPath(locFile),
+    line: Number(locLine) || 0,
+    function: finding.functionName || finding.function_name || finding.location?.function || userFrame?.function || '',
+  };
+}
+
+/** Build a normalized LeakEvidence from a raw finding (port of attachDynamicEvidence). */
+function findingToEvidence(finding: any, run: DynamicRunRecord, pathResolver: PathResolver): LeakEvidence {
+  const site = leakSiteFromFinding(finding, pathResolver);
   const base: LeakEvidence = {
     tool: TOOL_KIND[run.tool],
     runId: run.runId,
-    function_name: finding.functionName || finding.function_name || finding.location?.function || userFrame?.function || '',
-    file_path: pathResolver.toHostPath(locFile),
-    line_number: Number(locLine) || 0,
+    function_name: site.function,
+    file_path: site.file,
+    line_number: site.line,
     bytes_lost: Number(finding.bytesLost ?? finding.bytes_lost ?? finding.aux?.leak?.bytes ?? finding.aux?.size ?? 0),
     blocks_lost: Number(finding.blocksLost ?? finding.blocks_lost ?? finding.aux?.leak?.blocks ?? 0),
     severity: finding.severity || 'medium',
