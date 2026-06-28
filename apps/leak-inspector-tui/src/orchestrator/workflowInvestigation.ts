@@ -86,7 +86,22 @@ export function groupByFileAffinity(bundles: LeakBundle[], size: number): LeakBu
   return groups;
 }
 
-export function buildWorkflowInvestigationPhase(cfg: RunConfig, dynamicMode: DynamicMode): InvestigationPhase {
+export interface WorkflowInvestigationOptions {
+  /** Agentic tool selection (the ablation `tool_selector` axis). When TRUE (default),
+   * Stage A is a fan-out of LLM sub-agents that pick static tools step-by-step, and
+   * Stage B may fall back to an LLM worker. When FALSE, Stage A is skipped entirely —
+   * static evidence comes from the deterministic enrichment stage (scanController's
+   * `enrich`), and Stage B runs the deterministic recipe only (no LLM worker). The
+   * LLM-fusion judge (Stage D) runs in both cases — this axis is independent of it. */
+  toolSelect?: boolean;
+}
+
+export function buildWorkflowInvestigationPhase(
+  cfg: RunConfig,
+  dynamicMode: DynamicMode,
+  opts: WorkflowInvestigationOptions = {},
+): InvestigationPhase {
+  const toolSelect = opts.toolSelect ?? true;
   return {
     async run(candidates, ctx: InvestigationContext): Promise<InvestigationOutcome> {
       const stepLog = new StepLog();
@@ -168,9 +183,18 @@ export function buildWorkflowInvestigationPhase(cfg: RunConfig, dynamicMode: Dyn
       };
 
       // ── Stage A: static evidence (bounded fan-out) ──
+      // tool_selector OFF ⇒ skip the agentic sub-agents entirely; the deterministic
+      // enrichment stage (scanController `enrich`) has already populated each bundle's
+      // staticEvidence, so the judge is still path-aware without LLM tool selection.
       const groups = groupByFileAffinity(allBundles, cfg.workflow.staticGroupSize);
-      onNotice(`Stage A · static evidence: ${groups.length} sub-agent(s), concurrency ${cfg.workflow.staticConcurrency}`);
-      const staticFanout = mapWithLimit(groups, cfg.workflow.staticConcurrency, async (group, gi) => {
+      if (toolSelect) {
+        onNotice(`Stage A · static evidence: ${groups.length} sub-agent(s), concurrency ${cfg.workflow.staticConcurrency}`);
+      } else {
+        onNotice('Stage A · static evidence: deterministic enrichment (tool_selector off — no agentic sub-agents)');
+      }
+      const staticFanout = !toolSelect
+        ? Promise.resolve()
+        : mapWithLimit(groups, cfg.workflow.staticConcurrency, async (group, gi) => {
         if (ctx.abortSignal?.aborted) return;
         const tools: Tool[] = [
           ...contentStatic.map((t) => withHostContent(withStaticContextCapture(t, staticStore, group), ctx.repoPath)),
@@ -194,6 +218,7 @@ export function buildWorkflowInvestigationPhase(cfg: RunConfig, dynamicMode: Dyn
       });
 
       // ── Stage B: dynamic evidence (single worker, concurrent with A) ──
+      // tool_selector OFF ⇒ deterministic recipe ONLY (no LLM dynamic worker).
       const dynamicWorker = (async () => {
         if (!wantDynamic) return;
         if (dynamicRaw.length === 0) {
@@ -215,7 +240,15 @@ export function buildWorkflowInvestigationPhase(cfg: RunConfig, dynamicMode: Dyn
             onNotice,
           });
           if (ok) return;
+          if (!toolSelect) {
+            onNotice('Stage B · deterministic recipe produced no run — tool_selector off, skipping LLM worker');
+            return;
+          }
           onNotice('Stage B · deterministic recipe produced no run — falling back to the LLM worker');
+        }
+        if (!toolSelect) {
+          onNotice('Stage B · dynamic skipped (tool_selector off + no build_command for the deterministic recipe)');
+          return;
         }
         onNotice('Stage B · dynamic evidence: 1 LLM worker (build once + sanitizers)');
         // The sanitizer tools are wrapped so their findings are captured into

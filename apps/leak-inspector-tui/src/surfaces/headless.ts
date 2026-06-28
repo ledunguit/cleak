@@ -48,6 +48,10 @@ export interface HeadlessOptions {
   /** Deterministic static enrichment (alloc→free pairing + feasible leak paths).
    * Explicit override of the `STATIC_ENRICH=on` env gate (baseline sweep). */
   enrich?: boolean;
+  /** Agentic tool selection (ablation `tool_selector` axis). Default true. When
+   * false, the llm_assisted investigation skips the agentic static fan-out (uses the
+   * deterministic enrichment) and the deterministic dynamic recipe only. */
+  toolSelect?: boolean;
   fileLimit?: number;
   staticUrl?: string;
   dynamicUrl?: string;
@@ -115,7 +119,9 @@ export async function runHeadless(opts: HeadlessOptions): Promise<HeadlessResult
   });
 
   const investigation =
-    analysisMode === AnalysisMode.LLM_ASSISTED ? buildWorkflowInvestigationPhase(cfg, dynamicMode) : undefined;
+    analysisMode === AnalysisMode.LLM_ASSISTED
+      ? buildWorkflowInvestigationPhase(cfg, dynamicMode, { toolSelect: opts.toolSelect ?? true })
+      : undefined;
 
   // ── LLM allocator profiling (generalize: discover the project's alloc/free API
   // instead of hardcoding it). Skipped when allocators are supplied explicitly (the

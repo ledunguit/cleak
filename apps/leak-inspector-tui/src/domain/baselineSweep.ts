@@ -7,19 +7,16 @@
 import type { ResolvedRunPlan } from './capabilityResolver';
 
 /**
- * Whether the current engine can run a resolved plan FAITHFULLY today. Two
- * capabilities are still landing in Step 4:
- *  - static=false (dynamic-only discovery)              → Step 4a
- *  - fusion + tool_selector=false (deterministic recipe) → Step 4b
- * Until then the sweep skips those configs rather than publish numbers that don't
- * match the intended semantics. This gate disappears once Step 4 is complete.
+ * Whether the current engine can run a resolved plan FAITHFULLY today. One
+ * capability is still landing in Step 4:
+ *  - static=false (dynamic-only discovery) → Step 4a
+ * (Step 4b — deterministic-recipe fusion for tool_selector=off — is now wired.)
+ * Until 4a lands the sweep skips dynamic-only configs rather than publish numbers
+ * that don't match the intended semantics. This gate disappears once Step 4a is done.
  */
 export function isWiredNow(plan: ResolvedRunPlan): { wired: boolean; reason?: string } {
   if (!plan.staticDiscovery) {
     return { wired: false, reason: 'dynamic-only discovery not yet implemented (Step 4a)' };
-  }
-  if (plan.mode === 'llm_assisted' && !plan.toolSelect) {
-    return { wired: false, reason: 'deterministic-recipe fusion (tool_selector off) not yet implemented (Step 4b)' };
   }
   return { wired: true };
 }
