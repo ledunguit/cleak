@@ -80,7 +80,7 @@ bun scripts/evaluate-corpus.ts llm_assisted --corpus demo/lamed --consensus-n 3
 >
 > Discovery + **path-sensitive judging** are now both wired: cjson `merge_patch` (a parameter
 > freed on some paths, lost on an error path) is caught — recall **0 → 1/6 on cjson, FP 0** —
-> via guard-subset reconciliation + Z3 feasibility + parameter-ownership detection. Remaining
+> via guard-subset reconciliation + parameter-ownership detection. Remaining
 > cjson misses are deallocator-semantics (const-skip) + nested-loop control flow (see
 > [CONTRIBUTION.md](CONTRIBUTION.md)).
 

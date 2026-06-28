@@ -115,7 +115,7 @@ export const FeasibleLeakPathSchema = z.object({
   unreconciledAllocations: z.array(z.string()),
   leakRisk: z.enum(['high', 'medium', 'low', 'none']),
   narrative: z.string(),
-  feasibilityChecked: z.enum(['heuristic', 'z3', 'none']),
+  feasibilityChecked: z.enum(['heuristic', 'none']),
 });
 
 export const StaticLeakEvidenceSchema = z.object({

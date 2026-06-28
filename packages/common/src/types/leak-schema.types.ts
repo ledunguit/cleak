@@ -231,7 +231,7 @@ export interface FeasibleLeakPath {
   leakRisk: 'high' | 'medium' | 'low' | 'none';
   /** Human/LLM-readable alloc→exit-without-free story. */
   narrative: string;
-  feasibilityChecked: 'heuristic' | 'z3' | 'none';
+  feasibilityChecked: 'heuristic' | 'none';
 }
 
 export interface StaticLeakEvidence {

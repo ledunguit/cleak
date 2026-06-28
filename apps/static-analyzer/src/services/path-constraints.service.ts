@@ -1,7 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { FeasibleLeakPath } from '@cleak/common';
 import { CParserService, FunctionInfo } from './c-parser.service';
-import { leakFeasible } from './feasibility';
 
 @Injectable()
 export class PathConstraintsService {
@@ -42,7 +41,7 @@ export class PathConstraintsService {
     // Feasible leak paths: reachable exit paths that leave an allocation un-freed.
     // This existing reachability + condition logic IS the pre-LLM feasibility
     // filter the literature (MemHint) calls for — we only emit reachable paths.
-    const feasibleLeakPaths = await this.buildFeasibleLeakPaths(containingFunction);
+    const feasibleLeakPaths = this.buildFeasibleLeakPaths(containingFunction);
 
     return {
       constraints,
@@ -64,42 +63,32 @@ export class PathConstraintsService {
     };
   }
 
-  private async buildFeasibleLeakPaths(fn: FunctionInfo): Promise<FeasibleLeakPath[]> {
+  private buildFeasibleLeakPaths(fn: FunctionInfo): FeasibleLeakPath[] {
     const allocByVar = new Map(
       fn.allocationVariables.map((a) => [a.variable, a]),
     );
 
+    // Heuristic CFG exit-path analysis: a reachable exit that leaves an allocation
+    // un-freed is a candidate leak path. The paths are already guard-subset
+    // reconciled by the C parser (a free under a matching guard cancels the alloc);
+    // we emit the survivors as-is. There is NO SMT path-feasibility filter — Z3 was
+    // removed from the architecture (its WASM build OOMs on recursive real-project
+    // functions, and the only peer-reviewed leak baseline, LAMeD, is solver-free).
+    // This over-reports NULL-guarded early returns, so STATIC_ENRICH stays opt-in.
     const candidates = fn.exitPaths.filter(
       (p) => p.reachableFromEntry && p.leakRisk !== 'none' && p.unreconciledAllocations.length > 0,
     );
 
-    const out: FeasibleLeakPath[] = [];
-    for (const p of candidates) {
-      // Z3-FILTER each unreconciled var against this exit's branch guards: a leak of
-      // `v` is impossible when (v != 0) contradicts the guards (e.g. an early
-      // `if (v == NULL) return;`). Drop infeasible vars; drop the whole path if every
-      // candidate leak on it is infeasible. `unknown` (Z3 off / untranslatable guards)
-      // keeps the var — never lose a real leak to the solver.
-      let z3Ran = false;
-      const live: string[] = [];
-      for (const v of p.unreconciledAllocations) {
-        const verdict = await leakFeasible(v, p.guards);
-        if (verdict !== 'unknown') z3Ran = true;
-        if (verdict !== 'infeasible') live.push(v);
-      }
-      if (live.length === 0) continue;
-      out.push({
-        kind: p.kind,
-        exitLine: p.exitLine,
-        reachable: p.reachableFromEntry,
-        conditions: p.pathConditions,
-        unreconciledAllocations: live,
-        leakRisk: p.leakRisk,
-        narrative: this.describeLeakPath({ ...p, unreconciledAllocations: live }, allocByVar),
-        feasibilityChecked: z3Ran ? ('z3' as const) : ('heuristic' as const),
-      });
-    }
-    return out;
+    return candidates.map((p) => ({
+      kind: p.kind,
+      exitLine: p.exitLine,
+      reachable: p.reachableFromEntry,
+      conditions: p.pathConditions,
+      unreconciledAllocations: p.unreconciledAllocations,
+      leakRisk: p.leakRisk,
+      narrative: this.describeLeakPath(p, allocByVar),
+      feasibilityChecked: 'heuristic' as const,
+    }));
   }
 
   private describeLeakPath(
