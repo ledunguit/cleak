@@ -74,6 +74,11 @@ export interface EvalOptions {
    * activates multi-agent consensus; n=1 (default) is the single-LLM baseline. */
   consensusN?: number;
   consensusRule?: ConsensusRule;
+  /** Ablation knobs (baseline sweep): the LLM strategist (planner axis) and the
+   * deterministic static-enrichment stage. Both off in the standard eval to keep
+   * the Juliet baseline reproducible; the sweep sets them per baseline config. */
+  strategy?: 'auto' | 'off';
+  enrich?: boolean;
   /** Cancel the run: in-flight cases are aborted, not-yet-started ones are skipped. */
   signal?: AbortSignal;
   onProgress?: (done: number, total: number, id: string) => void;
@@ -103,6 +108,8 @@ export interface CaseRow {
   judgePathCounts: Record<string, number>;
   durationMs: number;
   tokens: number;
+  /** Total MCP tool calls (static + dynamic) for this case — efficiency metric. */
+  mcpCalls: number;
   scanId?: string;
   error?: string;
 }
@@ -134,6 +141,9 @@ export interface EvalResult {
     meanDurationMs: number;
     totalTokens: number;
     meanTokens: number;
+    /** Total + mean MCP tool calls across ok cases (efficiency metric). */
+    totalMcpCalls: number;
+    meanMcpCalls: number;
     /** Total non-blank source lines scored, and false positives per 1k of them
      * (the LAMeD-style FP-density headline). */
     totalLoc: number;
@@ -270,6 +280,7 @@ export async function runEval(opts: EvalOptions): Promise<EvalResult> {
     judgePathCounts: {},
     durationMs: 0,
     tokens: 0,
+    mcpCalls: 0,
   });
 
   const scoreOne = async (c: LabeledCase): Promise<CachedCase> => {
@@ -308,6 +319,8 @@ export async function runEval(opts: EvalOptions): Promise<EvalResult> {
         dynamicUrl: opts.dynamicUrl,
         quiet: true,
         signal: opts.signal,
+        ...(opts.strategy ? { strategy: opts.strategy } : {}),
+        ...(opts.enrich !== undefined ? { enrich: opts.enrich } : {}),
         ...(opts.consensusN != null || opts.consensusRule != null
           ? { consensus: { ...(opts.consensusN != null ? { n: opts.consensusN } : {}), ...(opts.consensusRule ? { rule: opts.consensusRule } : {}) } }
           : {}),
@@ -355,6 +368,7 @@ export async function runEval(opts: EvalOptions): Promise<EvalResult> {
         judgePathCounts,
         durationMs,
         tokens,
+        mcpCalls: r.mcpCalls,
         scanId: r.scanId,
       };
       const result: CachedCase = { id: c.id, samples, row, findings };
@@ -382,6 +396,7 @@ export async function runEval(opts: EvalOptions): Promise<EvalResult> {
         judgePathCounts: {},
         durationMs: Date.now() - started,
         tokens: 0,
+        mcpCalls: 0,
         ...(aborted ? {} : { error: err?.message ?? String(err) }),
       };
       const result: CachedCase = { id: c.id, samples: [], row, findings: [] };
@@ -417,6 +432,7 @@ export async function runEval(opts: EvalOptions): Promise<EvalResult> {
   const totalTokens = okRows.reduce((a, r) => a + r.tokens, 0);
   const totalDuration = okRows.reduce((a, r) => a + r.durationMs, 0);
   const totalLoc = okRows.reduce((a, r) => a + r.loc, 0);
+  const totalMcpCalls = okRows.reduce((a, r) => a + (r.mcpCalls ?? 0), 0);
 
   // Which judge actually decided the flagged verdicts, across all ok cases.
   const judgePathDistribution: Record<string, number> = {};
@@ -469,6 +485,8 @@ export async function runEval(opts: EvalOptions): Promise<EvalResult> {
       meanDurationMs: okRows.length ? Math.round(totalDuration / okRows.length) : 0,
       totalTokens,
       meanTokens: okRows.length ? Math.round(totalTokens / okRows.length) : 0,
+      totalMcpCalls,
+      meanMcpCalls: okRows.length ? Math.round(totalMcpCalls / okRows.length) : 0,
       totalLoc,
       fpPerKloc: totalLoc > 0 ? (cm.fp / totalLoc) * 1000 : 0,
     },

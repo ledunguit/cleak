@@ -34,6 +34,8 @@ export interface ScanMetricsContext {
   inputTokens?: number;
   outputTokens?: number;
   durationMs?: number;
+  /** Total MCP tool calls (static + dynamic) — efficiency metric for the ablation. */
+  mcpCalls?: number;
 }
 
 export interface ScanMetrics {
@@ -59,6 +61,7 @@ export interface ScanMetrics {
   output_tokens?: number;
   total_tokens?: number;
   duration_ms?: number;
+  mcp_calls?: number;
 }
 
 function tally(into: Record<string, number>, key: string | undefined): void {
@@ -113,5 +116,6 @@ export function computeScanMetrics(snapshot: SnapshotLike, ctx: ScanMetricsConte
     output_tokens: output,
     total_tokens: input + output,
     duration_ms: ctx.durationMs,
+    mcp_calls: ctx.mcpCalls,
   };
 }

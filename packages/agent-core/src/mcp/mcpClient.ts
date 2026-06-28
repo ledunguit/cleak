@@ -97,6 +97,9 @@ export class McpClient {
   private connecting?: Promise<void>;
   private readonly maxRetries: number;
   private readonly onRetry?: McpClientOptions['onRetry'];
+  /** Count of logical `callTool` invocations (retries NOT double-counted). An
+   * efficiency metric for the ablation (#MCP calls per scan) — read after a scan. */
+  callCount = 0;
 
   constructor(
     private readonly url: string,
@@ -162,6 +165,7 @@ export class McpClient {
     args: Record<string, unknown>,
     opts?: { signal?: AbortSignal; timeoutMs?: number },
   ): Promise<unknown> {
+    this.callCount++;
     return this.withRetry(
       async () => {
         await this.connectOnce();

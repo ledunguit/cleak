@@ -1,0 +1,15 @@
+# B7 — Proposed adaptive LLM orchestrator (planner + tool selector + all tools + fusion).
+id: B7
+name: Proposed (full adaptive)
+description: >-
+  The full proposed method: LLM strategist plans, the agent adaptively selects tools
+  over MCP, static + dynamic evidence is gathered, and the LLM fuses it into the final
+  verdict. The top of the ablation.
+capabilities:
+  static: true
+  dynamic: true
+  planner: true
+  tool_selector: true
+  fusion: true
+consensusN: 1
+runs: 3

@@ -45,6 +45,9 @@ export interface HeadlessOptions {
    * (currently: skip the dynamic stage on unbuildable repos) for THIS project; 'off'
    * (default) keeps the requested pipeline. Off in the benchmark ⇒ eval is deterministic. */
   strategy?: 'auto' | 'off';
+  /** Deterministic static enrichment (alloc→free pairing + feasible leak paths).
+   * Explicit override of the `STATIC_ENRICH=on` env gate (baseline sweep). */
+  enrich?: boolean;
   fileLimit?: number;
   staticUrl?: string;
   dynamicUrl?: string;
@@ -61,6 +64,9 @@ export interface HeadlessResult extends ScanResult {
   scanId: string;
   dir: string;
   files: string[];
+  /** Total MCP tool calls (static + dynamic) made during this scan — an efficiency
+   *  metric for the ablation (#MCP calls). */
+  mcpCalls: number;
 }
 
 export async function runHeadless(opts: HeadlessOptions): Promise<HeadlessResult> {
@@ -179,9 +185,14 @@ export async function runHeadless(opts: HeadlessOptions): Promise<HeadlessResult
         extraAllocators,
         extraDeallocators,
         ownershipNotes,
+        enrich: opts.enrich,
       },
       { staticClient, dynamicClient, emitter, pathResolver, investigation, abortSignal: opts.signal },
     );
+
+    // Sum logical MCP calls across both analyzer clients (the investigation phase
+    // reuses these same instances, so the count covers discovery + investigation).
+    const mcpCalls = staticClient.callCount + (dynamicClient?.callCount ?? 0);
 
     const formats = parseFormats(opts.format);
     const { files } = writeReports(
@@ -207,6 +218,7 @@ export async function runHeadless(opts: HeadlessOptions): Promise<HeadlessResult
             inputTokens: result.investigation?.usage?.inputTokens,
             outputTokens: result.investigation?.usage?.outputTokens,
             durationMs: Date.now() - startedAt,
+            mcpCalls,
           }),
         );
       } catch {
@@ -225,7 +237,7 @@ export async function runHeadless(opts: HeadlessOptions): Promise<HeadlessResult
           `  coverage: ${coverage} · judge: ${judge}\n`,
       );
     }
-    return { ...result, scanId, dir, files };
+    return { ...result, scanId, dir, files, mcpCalls };
   } finally {
     await staticClient.close();
     await dynamicClient?.close();

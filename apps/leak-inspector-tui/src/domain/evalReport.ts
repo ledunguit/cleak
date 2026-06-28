@@ -120,7 +120,7 @@ function reportMarkdown(r: EvalResult): string {
     `- Corpus: \`${r.corpus}\``,
     `- Generated: ${r.generatedAt}`,
     `- Cases: ${r.ranOk}/${r.caseCount} ran ok`,
-    `- Cost: mean ${r.cost.meanDurationMs} ms/case · ${r.cost.totalTokens} tokens total (${r.cost.meanTokens}/case)`,
+    `- Cost: mean ${r.cost.meanDurationMs} ms/case · ${r.cost.totalTokens} tokens total (${r.cost.meanTokens}/case) · ${r.cost.totalMcpCalls} MCP calls (${r.cost.meanMcpCalls}/case)`,
     `- FP density: ${f3(r.cost.fpPerKloc)} FP / KLOC (${m.fp} FP over ${r.cost.totalLoc} non-blank LOC)`,
     judgePathLine(r),
     `- Expected Calibration Error: ${f3(r.ece)}`,
