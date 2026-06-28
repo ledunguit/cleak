@@ -7,7 +7,8 @@
     "declaration": false,
     "jsx": "react-jsx",
     "lib": ["ES2023"],
-    "types": ["node"]
+    "types": ["node"],
+    "ignoreDeprecations": "6.0"
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist", "**/*.spec.ts", "**/*.test.ts", "**/*.test.tsx"]
