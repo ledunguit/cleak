@@ -7,17 +7,12 @@
 import type { ResolvedRunPlan } from './capabilityResolver';
 
 /**
- * Whether the current engine can run a resolved plan FAITHFULLY today. One
- * capability is still landing in Step 4:
- *  - static=false (dynamic-only discovery) → Step 4a
- * (Step 4b — deterministic-recipe fusion for tool_selector=off — is now wired.)
- * Until 4a lands the sweep skips dynamic-only configs rather than publish numbers
- * that don't match the intended semantics. This gate disappears once Step 4a is done.
+ * Whether the current engine can run a resolved plan FAITHFULLY today. All five
+ * capability axes (static / dynamic / planner / tool_selector / fusion) are now
+ * wired (Steps 4a + 4b complete), so every valid baseline is runnable. Kept as a
+ * hook so a future un-wired capability can be gated here without touching callers.
  */
-export function isWiredNow(plan: ResolvedRunPlan): { wired: boolean; reason?: string } {
-  if (!plan.staticDiscovery) {
-    return { wired: false, reason: 'dynamic-only discovery not yet implemented (Step 4a)' };
-  }
+export function isWiredNow(_plan: ResolvedRunPlan): { wired: boolean; reason?: string } {
   return { wired: true };
 }
 

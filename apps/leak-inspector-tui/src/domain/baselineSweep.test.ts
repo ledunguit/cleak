@@ -18,14 +18,9 @@ describe('isWiredNow (Step-4 gate over the 9 baselines)', () => {
     configs.map((c) => [c.id, isWiredNow(resolveCapabilities(c.capabilities, { runs: c.runs })).wired]),
   );
 
-  test('all static-discovery baselines are wired now (Step 4b done)', () => {
-    expect(wiredById).toMatchObject({ B1: true, B3: true, B4: true, B6: true, B6a: true, B6b: true, B7: true });
-  });
-
-  test('only dynamic-only (B2/B5) remains gated on Step 4a', () => {
-    expect(wiredById.B2).toBe(false);
-    expect(wiredById.B5).toBe(false);
-    expect(isWiredNow(resolveCapabilities(configs.find((c) => c.id === 'B2')!.capabilities)).reason).toMatch(/4a/);
+  test('all 9 baselines are wired now (Steps 4a + 4b done)', () => {
+    expect(Object.values(wiredById).every(Boolean)).toBe(true);
+    expect(Object.keys(wiredById).sort()).toEqual(['B1', 'B2', 'B3', 'B4', 'B5', 'B6', 'B6a', 'B6b', 'B7']);
   });
 });
 

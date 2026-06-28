@@ -137,6 +137,7 @@ async function runOne(c: BaselineConfig, plan: ReturnType<typeof resolveCapabili
     strategy: plan.strategy,
     enrich: plan.enrich,
     toolSelect: plan.toolSelect,
+    staticDiscovery: plan.staticDiscovery,
   };
   try {
     if (plan.runs <= 1) {

@@ -28,7 +28,8 @@ import { ScanEmitter, ScanEventName } from './events';
 import { CandidateManager, normalizeCandidate } from '../domain/candidateState';
 import { PathResolver } from '../domain/pathResolver';
 import { walkCFiles, readFileSafe } from '../domain/fileWalk';
-import { runDeterministicDynamicStage } from '../domain/dynamicEvidence';
+import { runDeterministicDynamicStage, reconcileDynamicEvidence, computeDynamicCoverage } from '../domain/dynamicEvidence';
+import { runDynamicOnlyDiscovery } from '../domain/dynamicDiscovery';
 import { heuristicVerdict } from '../domain/judge';
 import { THRESHOLDS } from '../domain/thresholds';
 import { foldStaticResult, type StaticContextStore } from '../domain/staticContext';
@@ -68,6 +69,10 @@ export interface ScanInput {
    * Explicit override of the `STATIC_ENRICH=on` env gate — lets the baseline sweep
    * control it per-run without racing on a global env var. */
   enrich?: boolean;
+  /** Static candidate discovery (candidateScan). Default true. When false
+   * (ablation `static=false`), discovery is dynamic-only: build + run under LSan and
+   * synthesize one candidate per runtime leak site (no static scan). Needs a build command. */
+  staticDiscovery?: boolean;
 }
 
 export interface ScanDeps {
@@ -167,50 +172,87 @@ export async function runScan(input: ScanInput, deps: ScanDeps): Promise<ScanRes
   // tool. No shared filesystem with the analyzer — works the same whether the
   // analyzer runs locally or on a remote host. ──
   emitter.emit(ScanEventName.DISCOVERY_STARTED, { repoPath: input.repoPath });
-  const cFiles = walkCFiles(input.repoPath, input.fileLimit && input.fileLimit > 0 ? input.fileLimit : 2000).filter(
-    (f) => !JULIET_SUPPORT_FILES.has(basename(f).toLowerCase()),
-  );
-  emitter.emit(ScanEventName.CANDIDATES_SCANNING, { totalFiles: cFiles.length });
+  const staticDiscovery = input.staticDiscovery !== false;
+  let totalFiles = 0;
+  let warning: string | undefined;
+  // True once the dynamic stage has already executed during discovery (static=false),
+  // so the later dynamic stages don't build+run a second time.
+  let dynamicRanInDiscovery = false;
 
-  // Scan files concurrently (each candidateScan is an independent, stateless MCP
-  // call) — the sequential per-file round-trips were the discovery bottleneck.
-  const scanned = await mapWithLimit(cFiles, THRESHOLDS.discoveryConcurrency, async (file) => {
-    if (deps.abortSignal?.aborted) return null;
-    const content = readFileSafe(file);
-    if (content === null) return null;
-    try {
-      return (await staticClient.callTool('candidateScan', {
-        filePath: file,
-        content,
-        ...(input.extraAllocators?.length ? { extraAllocators: input.extraAllocators } : {}),
-        ...(input.extraDeallocators?.length ? { extraDeallocators: input.extraDeallocators } : {}),
-      })) as any;
-    } catch {
-      return null; // a single unreadable/odd file shouldn't abort discovery
+  if (staticDiscovery) {
+    const cFiles = walkCFiles(input.repoPath, input.fileLimit && input.fileLimit > 0 ? input.fileLimit : 2000).filter(
+      (f) => !JULIET_SUPPORT_FILES.has(basename(f).toLowerCase()),
+    );
+    totalFiles = cFiles.length;
+    emitter.emit(ScanEventName.CANDIDATES_SCANNING, { totalFiles: cFiles.length });
+
+    // Scan files concurrently (each candidateScan is an independent, stateless MCP
+    // call) — the sequential per-file round-trips were the discovery bottleneck.
+    const scanned = await mapWithLimit(cFiles, THRESHOLDS.discoveryConcurrency, async (file) => {
+      if (deps.abortSignal?.aborted) return null;
+      const content = readFileSafe(file);
+      if (content === null) return null;
+      try {
+        return (await staticClient.callTool('candidateScan', {
+          filePath: file,
+          content,
+          ...(input.extraAllocators?.length ? { extraAllocators: input.extraAllocators } : {}),
+          ...(input.extraDeallocators?.length ? { extraDeallocators: input.extraDeallocators } : {}),
+        })) as any;
+      } catch {
+        return null; // a single unreadable/odd file shouldn't abort discovery
+      }
+    });
+    // Ingest IN FILE ORDER (mapWithLimit preserves input order) so the candidate set
+    // and its ordering stay deterministic regardless of completion order.
+    scanned.forEach((cs, i) => {
+      if (!cs) return;
+      const file = cFiles[i];
+      for (const c of cs.candidates || []) {
+        // file_path is the real host path (identity) — the host reads it for
+        // snippets/diffs and content is sent to the analyzers.
+        candidates.ingest(normalizeCandidate({ ...c, filePath: c.filePath || c.file_path || file }, (p) => p));
+      }
+    });
+    if (candidates.getAllBundles().length === 0) {
+      warning =
+        cFiles.length === 0
+          ? `No C/C++ source files found under "${input.repoPath}".`
+          : `Scanned ${cFiles.length} file(s) but found no allocation candidates.`;
     }
-  });
-  // Ingest IN FILE ORDER (mapWithLimit preserves input order) so the candidate set
-  // and its ordering stay deterministic regardless of completion order.
-  scanned.forEach((cs, i) => {
-    if (!cs) return;
-    const file = cFiles[i];
-    for (const c of cs.candidates || []) {
-      // file_path is the real host path (identity) — the host reads it for
-      // snippets/diffs and content is sent to the analyzers.
-      candidates.ingest(normalizeCandidate({ ...c, filePath: c.filePath || c.file_path || file }, (p) => p));
+  } else {
+    // ── Dynamic-only discovery (ablation static=false): build + run under LSan and
+    // synthesize one candidate per runtime leak site — no static candidateScan. ──
+    if (deps.dynamicClient && input.buildCommand && input.dynamicMode !== DynamicMode.OFF) {
+      emitter.emit(ScanEventName.DYNAMIC_STARTED, {});
+      const onNotice = (text: string) => deps.onAgentEvent?.({ type: 'notice', text } as AgentEvent, undefined);
+      const { store, candidates: dynCands, ran } = await runDynamicOnlyDiscovery(deps.dynamicClient, {
+        repoPath: input.repoPath,
+        buildCommand: input.buildCommand,
+        pathResolver,
+        abortSignal: deps.abortSignal,
+        onNotice,
+      });
+      for (const c of dynCands) candidates.ingest(c);
+      // Attach the LSan findings as evidence to the just-synthesized bundles + stamp coverage.
+      reconcileDynamicEvidence(store, candidates.getAllBundles(), pathResolver);
+      for (const b of candidates.getAllBundles()) b.dynamicCoverage = computeDynamicCoverage(store, b, true);
+      dynamicRanInDiscovery = ran;
+      emitter.emit(ScanEventName.DYNAMIC_FINISHED, { ran });
+      if (candidates.getAllBundles().length === 0) {
+        warning = ran
+          ? 'Dynamic-only discovery: the target ran clean under LSan (no leaks observed).'
+          : 'Dynamic-only discovery: could not build/run the target — no candidates.';
+      }
+    } else {
+      warning = 'Dynamic-only discovery (static=false) needs the dynamic analyzer + a buildCommand + --dynamic != off.';
     }
-  });
+  }
 
   const discovered = candidates.getAllBundles().length;
-  const warning =
-    discovered === 0
-      ? cFiles.length === 0
-        ? `No C/C++ source files found under "${input.repoPath}".`
-        : `Scanned ${cFiles.length} file(s) but found no allocation candidates.`
-      : undefined;
   emitter.emit(ScanEventName.DISCOVERY_FINISHED, {
     totalCandidates: discovered,
-    totalFiles: cFiles.length,
+    totalFiles,
     ...(warning ? { warning } : {}),
   });
 
@@ -222,7 +264,8 @@ export async function runScan(input: ScanInput, deps: ScanDeps): Promise<ScanRes
   // (FP 7→44). It is the right base for HARD real-project corpora (where the leak IS
   // path-sensitive), but must stay off by default so the reproducible Juliet baseline
   // is preserved. ──
-  const enrichOn = input.enrich ?? process.env.STATIC_ENRICH === 'on';
+  // Enrichment needs static candidates; skip it entirely for dynamic-only discovery.
+  const enrichOn = staticDiscovery && (input.enrich ?? process.env.STATIC_ENRICH === 'on');
   if (discovered > 0 && enrichOn) {
     await enrichStaticEvidence(candidates.getAllBundles(), staticClient, input, deps.abortSignal);
   }
@@ -244,6 +287,9 @@ export async function runScan(input: ScanInput, deps: ScanDeps): Promise<ScanRes
       onAgentEvent: deps.onAgentEvent,
       onModelActivity: deps.onModelActivity,
       requestPermission: deps.requestPermission,
+      // static=false: the dynamic stage already ran during discovery — the
+      // investigation must not build+run a second time (and must keep that coverage).
+      dynamicAlreadyRan: dynamicRanInDiscovery,
     });
   }
 
@@ -258,7 +304,8 @@ export async function runScan(input: ScanInput, deps: ScanDeps): Promise<ScanRes
     input.analysisMode === AnalysisMode.NO_LLM &&
     input.dynamicMode !== DynamicMode.OFF &&
     deps.dynamicClient &&
-    input.buildCommand
+    input.buildCommand &&
+    !dynamicRanInDiscovery // dynamic-only discovery already built+ran the target
   ) {
     emitter.emit(ScanEventName.DYNAMIC_STARTED, {});
     const onNotice = (text: string) => deps.onAgentEvent?.({ type: 'notice', text } as AgentEvent, undefined);

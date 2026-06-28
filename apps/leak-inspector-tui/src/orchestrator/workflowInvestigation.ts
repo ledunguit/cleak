@@ -221,6 +221,10 @@ export function buildWorkflowInvestigationPhase(
       // tool_selector OFF ⇒ deterministic recipe ONLY (no LLM dynamic worker).
       const dynamicWorker = (async () => {
         if (!wantDynamic) return;
+        if (ctx.dynamicAlreadyRan) {
+          onNotice('Stage B · dynamic already ran during dynamic-only discovery — skipping (coverage preserved)');
+          return;
+        }
         if (dynamicRaw.length === 0) {
           onNotice('dynamic enabled but no dynamic tools loaded — analyzer unreachable; running static-only');
           return;
@@ -279,9 +283,14 @@ export function buildWorkflowInvestigationPhase(
 
       // ── Deterministic reconciliation: fold every captured dynamic finding into the
       // best-correlated bundle, then stamp each bundle's honest coverage status. This
-      // is the SOLE source of dynamic evidence — no LLM-discretionary recording. ──
-      reconcileDynamicEvidence(dynStore, allBundles, ctx.pathResolver);
-      for (const b of allBundles) b.dynamicCoverage = computeDynamicCoverage(dynStore, b, wantDynamic);
+      // is the SOLE source of dynamic evidence — no LLM-discretionary recording. When
+      // dynamic-only discovery already ran (static=false), the evidence + coverage are
+      // already on the bundles and dynStore is empty — recomputing would wrongly reset
+      // coverage to 'not_exercised', so we leave discovery's result intact. ──
+      if (!ctx.dynamicAlreadyRan) {
+        reconcileDynamicEvidence(dynStore, allBundles, ctx.pathResolver);
+        for (const b of allBundles) b.dynamicCoverage = computeDynamicCoverage(dynStore, b, wantDynamic);
+      }
 
       // ── Stage C: synthesize (deterministic — context + evidence already merged) ──
       onNotice(`Stage C · synthesize: ${staticStore.size}/${allBundles.length} candidates have static context`);
