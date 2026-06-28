@@ -213,10 +213,11 @@ export async function runScan(input: ScanInput, deps: ScanDeps): Promise<ScanRes
   // ── Deterministic static enrichment: populate each bundle's staticEvidence so the
   // heuristic judge is path-aware (alloc→free pairing + feasible leak paths), even in
   // no_llm. OPT-IN (STATIC_ENRICH=on) — the underlying exit-path analysis is a
-  // heuristic CFG (no Z3 feasibility, see CONTRIBUTION), so it over-reports
-  // unreconciled exits and tanks precision on the easy Juliet corpus (FP 7→44). It is
-  // the right base for HARD real-project corpora (where the leak IS path-sensitive),
-  // but must stay off by default so the reproducible Juliet baseline is preserved. ──
+  // heuristic CFG (guard-subset free reconciliation; no SMT path-feasibility), so it
+  // over-reports unreconciled exits and tanks precision on the easy Juliet corpus
+  // (FP 7→44). It is the right base for HARD real-project corpora (where the leak IS
+  // path-sensitive), but must stay off by default so the reproducible Juliet baseline
+  // is preserved. ──
   if (discovered > 0 && process.env.STATIC_ENRICH === 'on') {
     await enrichStaticEvidence(candidates.getAllBundles(), staticClient, input, deps.abortSignal);
   }

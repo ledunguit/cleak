@@ -29,8 +29,8 @@ judging (hybrid) → reporting`.
 
 **Nguyên tắc cốt lõi — LLM sở hữu POLICY, engine sở hữu MECHANISM** (xem §10): những gì
 *khác nhau theo từng project* (API cấp phát/giải phóng, quy ước sở hữu, chiến lược phân tích,
-hiệu chỉnh judge) do **LLM khám phá → xuất profile có cấu trúc → verify (grep/SMT) → cache →
-ĐÔNG CỨNG cho benchmark → nạp vào tham số của engine tất định**. Engine (parse/CFG/pairing/Z3/
+hiệu chỉnh judge) do **LLM khám phá → xuất profile có cấu trúc → verify (grep) → cache →
+ĐÔNG CỨNG cho benchmark → nạp vào tham số của engine tất định**. Engine (parse/CFG/pairing/
 scoring) *thực thi*, không bao giờ phụ thuộc LLM trong đường eval ⇒ Tier-1 determinism + baseline
 Juliet giữ nguyên. Thêm project mới = **0 dòng code**.
 
@@ -230,8 +230,9 @@ flowchart LR
   - **Path-sensitive**: `collectLineGuards` (guard if/switch + polarity) → guard-subset reconciliation
     (free trên nhánh-return-khác KHÔNG reconcile exit khác) → `AllocFreePair.status` + exit-path
     `unreconciledAllocations`.
-  - **Z3 feasibility** (`feasibility.ts`, **node-only** — z3-solver WASM treo dưới Bun): mỗi
-    feasibleLeakPath kiểm SAT `(biến != 0) ∧ guards`; UNSAT ⇒ loại (vd early `if(p==NULL) return;`).
+  - **Path-feasibility (heuristic CFG)**: `feasibleLeakPath` sinh ra từ guard-subset reconciliation
+    của c-parser (KHÔNG SMT). *(Prototype Z3 in-process đã bị GỠ: `z3-solver` là WASM với trần heap
+    2 GiB cứng → emscripten `abort()` không catch được, treo analyzer; tái lặp cả amd64 lẫn arm64.)*
   - **Reachability bảo thủ** (`collectDeadLines`): bỏ exit path sau terminator vô điều kiện (return/goto/
     exit/abort/longjmp/noreturn) cùng block → bớt false-positive trên dead code.
   - **Leak tham số**: param con trỏ free-một-số-đường → candidate `parameter_ownership`.
@@ -268,6 +269,6 @@ flowchart LR
 `--strategy`/tuner ⇒ **0 LLM non-deterministic trong đường eval** ⇒ Tier-1 gate (`assert-determinism.ts`) +
 baseline Juliet (TP29 FP7 FN3) giữ nguyên. LLM-tuned chỉ ở production; luận văn báo cáo cả default lẫn tuned.
 
-Ranh giới **MUST-STAY-CODE** (không LLM hoá): parse tree-sitter, CFG, alloc→free pairing, Z3 SAT, scoring
+Ranh giới **MUST-STAY-CODE** (không LLM hoá): parse tree-sitter, CFG, alloc→free pairing, scoring
 math, consensus, grep-verify. Lộ trình tổng quát hoá còn lại (run-recipe, test/vendor dir classify) xem
 [CONTRIBUTION.md](CONTRIBUTION.md).

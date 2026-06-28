@@ -106,14 +106,15 @@ phải F1.
   `demo/lamed/memleak_benchmark.json` (committed; Zenodo 15089703); cjson pin `12c4bf1986`; 6 dự án còn lại
   từ DiverseVul. `ingest.ts` checkout đúng bug-commit.
 
-**Giới hạn — path-sensitive enrichment (Z3) trên dự án thực (`STATIC_ENRICH=on`):** chưa đo được trên
-LAMeD trong môi trường hiện tại. `z3-solver` là WASM với **trần heap 2 GiB cứng** (emscripten `abort()`
-**không catch được** — giết process); trên hàm real-project lớn (curl/libxml2) nó OOM, và **cực chậm**
-dưới container amd64 emulate-trên-arm64. Engine đã được **gia cố** (size-guard + Z3 timeout + watermark
-bộ nhớ + safety-net) nên giờ **degrade về heuristic thay vì crash/treo**, nhưng vẫn quá chậm để chạy hết
-41 ca. ⇒ Z3-enrichment dự-án-thực là **future work** (cần native Z3 hoặc host Linux-amd64). Bằng chứng
-path-sensitive vẫn đứng vững ở mức **một ca minh hoạ** (cjson `merge_patch`: recall 0→1, FP0 — rò tham số
-`target` trên đường lỗi qua guard-subset reconciliation + Z3 + parameter-ownership), không phải số toàn-corpus.
+**Giới hạn — path-sensitive enrichment heuristic (`STATIC_ENRICH=on`):** SMT path-feasibility (Z3) đã được
+**GỠ khỏi kiến trúc**. `z3-solver` là WASM với **trần heap 2 GiB cứng** (emscripten `abort()` **không catch
+được** — giết process); đây là thuộc tính của chính file `.wasm`, **tái lập y hệt cả trên native Linux/amd64**
+(hàm cJSON đệ quy vẫn OOM-treo analyzer), nên SMT in-process là không khả thi. Vì vậy static-enrichment giờ
+**chỉ dùng heuristic CFG** (guard-subset reconciliation); vì nó **over-report** (Juliet FP 7→44) nên vẫn giữ
+**opt-in**. Bằng chứng path-sensitive đứng vững ở mức **một ca minh hoạ** (cjson `merge_patch`: recall 0→1, FP0
+— rò tham số `target` trên đường lỗi qua guard-subset reconciliation + parameter-ownership), không phải số
+toàn-corpus. Vì LAMeD bản thân **không dùng solver**, đối-sánh head-to-head không bị ảnh hưởng; headline đo được
+của lớp static (recall 7/44, FP0 vs clang 0/43) giữ nguyên.
 
 Đây *biện minh* định vị luận văn: cần allocator profile (LLM khám phá động, ≈ LAMeD AllocSource) +
 judging path-sensitive/interprocedural — đúng hướng LAMeD, và lớp đầu (discovery + static recall ở FP0)

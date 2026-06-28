@@ -50,8 +50,6 @@ COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/node_modules/tree-sitter ./node_modules/tree-sitter
 COPY --from=build /app/node_modules/tree-sitter-c ./node_modules/tree-sitter-c
 COPY --from=build /app/node_modules/tree-sitter-cpp ./node_modules/tree-sitter-cpp
-# z3-solver (WASM path-feasibility) + its dep async-mutex are root deps, already
-# included in the wholesale node_modules copy above (bun's .bun store + symlinks).
 
 EXPOSE 50061
 

@@ -55,7 +55,7 @@ luận văn.
         │  11 MCP tool:          │                │  9 MCP tool:           │
         │  index/candidate/AST/  │                │  buildTarget/          │
         │  callGraph/funcSummary/│                │  Valgrind Memcheck/    │
-        │  pathConstraints (Z3)/ │                │  AddressSanitizer/     │
+        │  pathConstraints (CFG)/│                │  AddressSanitizer/     │
         │  interprocFlow/        │                │  LeakSanitizer/        │
         │  ownership/            │                │  runBinary/compare/    │
         │  Clang scan-build      │                │  listRuns              │
@@ -68,7 +68,7 @@ luận văn.
 | Thành phần | Công nghệ | Cổng | Vai trò |
 |---|---|---|---|
 | **leak-inspector-tui** (`@cleak/cli`) | TS + Ink (Bun) | — (host) | **Orchestrator** — scanner độc lập, MCP client, native tool-calling |
-| **static-analyzer** | NestJS + Tree-sitter (C + C++) | **50061** (MCP/HTTP) | 11 tool: index, candidate scan, AST, call graph, function summary, path constraints (Z3), interprocedural flow, ownership, **Clang `scan-build`** (tự chứa) |
+| **static-analyzer** | NestJS + Tree-sitter (C + C++) | **50061** (MCP/HTTP) | 11 tool: index, candidate scan, AST, call graph, function summary, path constraints (heuristic CFG), interprocedural flow, ownership, **Clang `scan-build`** (tự chứa) |
 | **dynamic-analyzer** | NestJS + Valgrind/ASan/LSan | **50062** (MCP/HTTP) | 9 tool: build target, Memcheck, ASan, LSan, run binary, compare, list — **Linux/Docker-only** |
 | **agent-core** (`@cleak/agent-core`) | thư viện TS | — | Vòng lặp agentic: tool abstraction, MCP client, `callModel` đa provider (streaming, idle-timeout, nén ngữ cảnh) |
 | **@cleak/common** | thư viện TS | — | Types + Zod schema, heuristic judge, **consensus judge**, leak analysis, render report |
@@ -88,13 +88,13 @@ tất định**. Bung rõ bên trong (mũi tên ▼ = luồng pha; nhãn bên ph
       │
       ▼
    ① PROFILING / STRATEGY       LLM · POLICY    allocatorProfiler · strategist
-      │                                         grep / SMT-verify → cache .cleak/
+      │                                         grep-verify → cache .cleak/
       │                         (eval: ĐÓNG BĂNG — manifest cấp allocator → 0 LLM)
       ▼
    ② DISCOVERY                  ENGINE · tất định
       │                         walkCFiles → candidateScan → LeakBundle[]
       ▼
-   ③ STATIC-ENRICH  (opt-in)    ENGINE · tất định · Z3
+   ③ STATIC-ENRICH  (opt-in)    ENGINE · tất định · heuristic CFG
       │                         functionSummary · pathConstraints → staticEvidence
       ▼
    ④ INVESTIGATION              LLM · AGENTIC  (chỉ llm_assisted)
@@ -115,7 +115,7 @@ tất định**. Bung rõ bên trong (mũi tên ▼ = luồng pha; nhãn bên ph
 
 **Chú giải:** `LLM·POLICY` = quyết định theo-dự-án, **đóng băng khi eval** ⇒ 0 LLM trên đường
 đo · `LLM·AGENTIC` = vòng native tool-calling, chỉ ở `llm_assisted` · `ENGINE` = cơ chế **tất
-định** (tree-sitter parse · CFG · Z3 SAT · ghép alloc↔free · scoring · consensus). Hai cổng MCP
+định** (tree-sitter parse · CFG · ghép alloc↔free · scoring · consensus). Hai cổng MCP
 ra ngoài (① §2) là điểm DUY NHẤT orchestrator chạm tới analyzer.
 
 **Sáu pha của pipeline HYBRID (chi tiết):**
@@ -125,8 +125,9 @@ ra ngoài (① §2) là điểm DUY NHẤT orchestrator chạm tới analyzer.
    **Eval ĐÓNG BĂNG tầng này** (manifest cấp allocator) ⇒ 0 LLM trên đường eval.
 2. **Discovery (tất định)** — `walkCFiles` (loại test/fuzz/vendor) → `candidateScan` (alloc sites:
    libc + factory theo allocator + C++ `new` + parameter-ownership) → `CandidateManager` → `LeakBundle[]`.
-3. **Static-enrichment (tất định, `STATIC_ENRICH=on`)** — `functionSummary` + `pathConstraints` (Z3
-   feasibility) → `bundle.staticEvidence` (alloc↔free pairs, feasible-leak-paths).
+3. **Static-enrichment (tất định, `STATIC_ENRICH=on`)** — `functionSummary` + `pathConstraints`
+   (feasibleLeakPaths qua heuristic CFG, guard-subset reconciliation) → `bundle.staticEvidence`
+   (alloc↔free pairs, feasible-leak-paths).
 4. **Investigation (agentic, CHỈ `llm_assisted`)** — sub-agent native tool-calling thu bằng chứng
    qua MCP; worker động chạy `buildTarget → lsanRun` (recipe **tất định**, không LLM).
 5. **Judging (hybrid)** — heuristic cho MỌI bundle (path-sensitive, không LLM) + LLM judge cho ca
@@ -134,8 +135,8 @@ ra ngoài (① §2) là điểm DUY NHẤT orchestrator chạm tới analyzer.
 6. **Reporting** — `snapshot.json`, `report.{json,md,html}`, `events.jsonl`, `metrics.json` → `results/<scanId>/`.
 
 > **Nguyên tắc cốt lõi:** **LLM = POLICY** (quyết định theo-dự-án: allocator, chiến lược, ownership
-> notes) → hồ sơ có cấu trúc → grep/SMT-verify → cache → **đóng băng cho eval** → nạp cho **Engine
-> = MECHANISM** (tree-sitter parse, CFG, ghép alloc↔free, Z3 SAT, scoring, consensus). Engine
+> notes) → hồ sơ có cấu trúc → grep-verify → cache → **đóng băng cho eval** → nạp cho **Engine
+> = MECHANISM** (tree-sitter parse, CFG, ghép alloc↔free, scoring, consensus). Engine
 > **không phụ thuộc LLM trên đường eval** ⇒ giữ Tier-1 tất định.
 
 **Cấu hình:** qua biến env / file `.env`, hoặc — cho bản cài global — `cleak config`
@@ -198,9 +199,11 @@ ra ngoài (① §2) là điểm DUY NHẤT orchestrator chạm tới analyzer.
   - **Taxonomy 6 leak** (đọc trực tiếp từ 6 fix-commit): 2 **deallocator-semantics** (`cJSON_Delete`
     bỏ qua buffer gắn cờ const), 2 **missing-free trên một đường** (`merge_patch`…), 1 control-flow,
     1 file-level.
-- **Path-sensitive recall (F1–F4, opt-in):** Z3 path-feasibility bắt được **ca thật đầu tiên**
-  (`merge_patch`, 1/6) khi bật `STATIC_ENRICH=on`; nhưng heuristic CFG **over-report trên Juliet
-  (FP 7→44)** nếu không có Z3 ⇒ **chỉ để opt-in**, baseline Juliet giữ nguyên 0.806/0.906/0.853.
+- **Path-sensitive recall (F1–F4, opt-in):** heuristic CFG (guard-subset reconciliation +
+  parameter-ownership) bắt được **ca thật đầu tiên** (`merge_patch`, 1/6) khi bật `STATIC_ENRICH=on`;
+  nhưng nó **over-report trên Juliet (FP 7→44)** ⇒ **chỉ để opt-in**, baseline Juliet giữ nguyên
+  0.806/0.906/0.853. *(Prototype Z3 đã GỠ — z3-solver WASM trần 2 GiB, abort không catch; over-report
+  được xử lý bằng tầng DYNAMIC + consensus thay vì SMT.)*
 
 ### Phát hiện trung thực (đưa vào Threats, §8)
 
@@ -238,13 +241,13 @@ kiểm chứng + **claim bị bác bỏ** (KHÔNG trích): `docs/RELATED-WORK.md
 | **R1** | **P0** | Mở rộng **corpus dự án thực** + **auto-sinh driver** | cjson không có `build_command`/driver → dynamic **skip**; corpus thật mới 4 ca (2 cặp cjson). Gap lớn nhất cho recall thực tế. |
 | **R2** | P1 | Siết **tương quan dynamic↔candidate** | Correlation thô → +FP trên Juliet; escalate consensus khi static↔dynamic **DISAGREE** (`shouldEscalate` đã có, cần đo lại multi-seed). |
 | **R3** | P1 | **Ý nghĩa thống kê** | Multi-seed `llm_assisted` + McNemar/bootstrap trên corpus lớn hơn (n=30 → p=0.45 chưa đủ; tooling đã có). |
-| **R4** | P2 | **Engine-debt** còn lại (tất định) | Full CFG-dataflow reachability; goto/longjmp liên thủ tục; field/alias dataflow; deallocator-semantics (const-skip); dùng Z3 để **bỏ opt-in** của F1–F4 (hết over-report Juliet). |
+| **R4** | P2 | **Engine-debt** còn lại (tất định) | Full CFG-dataflow reachability; goto/longjmp liên thủ tục; field/alias dataflow; deallocator-semantics (const-skip). *(SMT-feasibility để bỏ opt-in F1–F4 đã loại — z3-solver WASM trần 2 GiB; over-report Juliet thay vào đó do tầng DYNAMIC + consensus xử lý.)* |
 | **R5** | P2 | LLM-generalization **Move 2** | `ownershipNotes` (đang dormant) → ownership profile có cấu trúc (returnOwnership/freeMode/paramOwnedTypes…), thay heuristic `type.includes('*')`. |
 | **R6** | P2 | Mở rộng **baseline cài-được** | Chạy Infer/CodeQL/Cooddy cùng corpus + cùng `scoreCase` (hiện mới có adapter clang). |
 | **R7** | P3 | **Viết luận văn** + gói tái lập | Chương kết quả + định vị; snapshot + frozen profiles cho reproducibility. |
 
 > Trạng thái nền (đã xong, để khỏi lặp lại): C-parser CFG path-sensitive; C++ (E1), switch-guard
-> (E2), dead-code reachability (E3); Z3 feasibility (F1–F4); allocator-aware discovery; allocator
+> (E2), dead-code reachability (E3); path-sensitive heuristic CFG (F1–F4, Z3 prototype đã gỡ); allocator-aware discovery; allocator
 > profiler / strategist / judge-tuner (LLM POLICY, **tắt trong eval**); consensus + escalation;
 > two-tier reproducibility; deterministic dynamic; evidence enrichment; eval site-based +
 > McNemar/bootstrap + baseline adapter clang.

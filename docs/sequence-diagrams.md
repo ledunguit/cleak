@@ -73,7 +73,7 @@ sequenceDiagram
     rect rgb(236,250,240)
     Note right of Scan: STATIC ENRICHMENT (deterministic, STATIC_ENRICH=on)
     Scan->>Static: functionSummary + pathConstraints (+allocators) per candidate
-    Static-->>Scan: foldStaticResult → bundle.staticEvidence (pairs, feasibleLeakPaths via Z3)
+    Static-->>Scan: foldStaticResult → bundle.staticEvidence (pairs, feasibleLeakPaths via heuristic CFG)
     end
 
     Scan->>Phase: build toolset + prompts

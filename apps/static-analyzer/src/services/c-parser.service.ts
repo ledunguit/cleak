@@ -76,8 +76,8 @@ export interface ExitPathAnalysis {
   pathConditions: string[];
   unreconciledAllocations: string[];
   /** The branch guards (with polarity) enclosing this exit, e.g. `if (p==NULL) return;`
-   * → `[{condition:'p==NULL', negated:false}]`. Used by the Z3 feasibility filter to
-   * drop impossible leak paths (a leak of p guarded by p==NULL is UNSAT). */
+   * → `[{condition:'p==NULL', negated:false}]`. Used by guard-subset free
+   * reconciliation to match a free under the same guard as its alloc. */
   guards: { condition: string; negated: boolean }[];
 }
 
@@ -585,7 +585,7 @@ export class CParserService {
    * Map each line to the branch guards (with polarity) that enclose it, via a
    * guard-tracking walk of the AST. A line inside `if (c) {...}` carries
    * `{condition:'c', negated:false}`; inside the `else`, `negated:true`. Powers
-   * path-sensitive free reconciliation (guard-subset) and Z3 feasibility.
+   * path-sensitive free reconciliation (guard-subset).
    */
   private collectLineGuards(
     body: any,

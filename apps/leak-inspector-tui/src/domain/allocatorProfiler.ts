@@ -9,7 +9,8 @@
  * deterministic guarantees hold.
  *
  * Boundary: the LLM owns the project-specific POLICY (which names are allocators); the
- * deterministic engine owns the MECHANISM (parsing, pairing, Z3). The LLM decides, the
+ * deterministic engine owns the MECHANISM (parsing, alloc→free pairing, guard-subset
+ * reconciliation). The LLM decides, the
  * engine executes.
  */
 
