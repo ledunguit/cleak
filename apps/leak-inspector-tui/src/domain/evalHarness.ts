@@ -24,7 +24,8 @@ import {
   type ConfidenceInterval,
   type Sample,
 } from '@cleak/common/analysis/metrics';
-import { mapWithLimit } from '@cleak/agent-core';
+import { mapWithLimit, buildCallModel } from '@cleak/agent-core';
+import { toProviderSettings } from '../orchestrator/toolWrappers';
 import type { ConsensusRule } from '@cleak/common/analysis/consensus-judge';
 import { walkCFiles, readFileSafe } from './fileWalk';
 import { EVENT_PHASE, EVENT_KIND, type ScanEventName } from '@cleak/common/flow/scan-flow-contract';
@@ -198,9 +199,10 @@ const PROVIDER_KEY_ENV: Record<string, string> = {
  * runs. (A keyless `local` gateway is legitimate, so it's allowed through; the
  * post-run assertion in `runEval` still catches a dead local gateway.)
  */
-function assertLlmAvailable(mode: string, allowFallback?: boolean, provider?: Provider): void {
+async function assertLlmAvailable(mode: string, allowFallback?: boolean, provider?: Provider): Promise<void> {
   if (mode !== 'llm_assisted' || allowFallback) return;
-  const cfg = loadConfig(provider ? { provider } : {}).llm;
+  const full = loadConfig(provider ? { provider } : {});
+  const cfg = full.llm;
   // A custom OpenAI-compatible endpoint needs a base URL + model; a key is often
   // optional (many local servers accept none), so check completeness, not the key.
   if (cfg.provider === 'openai-compat' && (!cfg.baseUrl || !cfg.model)) {
@@ -218,6 +220,21 @@ function assertLlmAvailable(mode: string, allowFallback?: boolean, provider?: Pr
       `llm_assisted requested but no API key for provider '${cfg.provider}' (set ${env}). ` +
         `Results would silently fall back to the heuristic judge (Δ=0 vs no_llm). ` +
         `Fix the key, or pass allowHeuristicFallback / --allow-heuristic-fallback to run anyway.`,
+    );
+  }
+  // LIVE health-check: a non-empty key/url is NOT enough — a wrong base URL or a down
+  // gateway returns HTML/errors and EVERY case silently falls back to the heuristic
+  // (the exact bug that made a whole n=200 run heuristic-only). One tiny completion
+  // proves the endpoint actually answers; fail LOUD if it doesn't.
+  process.stderr.write(`  llm health-check: provider=${cfg.provider} @ ${cfg.baseUrl} model=${cfg.model} …\n`);
+  try {
+    const callModel = buildCallModel(toProviderSettings(full), () => globalThis.crypto.randomUUID());
+    await callModel({ systemPrompt: 'health check', messages: [{ role: 'user', content: 'reply ok' }], tools: [], temperature: 0 });
+  } catch (err: any) {
+    throw new Error(
+      `llm_assisted health-check FAILED for provider '${cfg.provider}' @ ${cfg.baseUrl} (model ${cfg.model}): ` +
+        `${err?.message ?? err}. The gateway is unreachable/misconfigured — every case would silently fall back ` +
+        `to the heuristic (Δ=0 confound). Fix the endpoint (e.g. --provider local), or pass --allow-heuristic-fallback.`,
     );
   }
 }
@@ -275,7 +292,7 @@ export function selectCases<T extends Record<string, any>>(all: T[], limit?: num
 
 export async function runEval(opts: EvalOptions): Promise<EvalResult> {
   // Integrity gate: never let an LLM run quietly degrade to the heuristic baseline.
-  assertLlmAvailable(opts.mode, opts.allowHeuristicFallback, opts.provider);
+  await assertLlmAvailable(opts.mode, opts.allowHeuristicFallback, opts.provider);
 
   const manifestPath = join(opts.corpusDir, 'corpus_manifest.json');
   const manifest = JSON.parse(readFileSync(manifestPath, 'utf-8')) as LabeledManifest;
