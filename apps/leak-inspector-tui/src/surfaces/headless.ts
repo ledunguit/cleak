@@ -56,6 +56,8 @@ export interface HeadlessOptions {
    * discovery is dynamic-only (build + LSan → synthesize sites); needs a buildCommand
    * and --dynamic != off. */
   staticDiscovery?: boolean;
+  /** Which static evidence tools the enrich stage runs (tool-level ablation). */
+  staticTools?: string[];
   fileLimit?: number;
   staticUrl?: string;
   dynamicUrl?: string;
@@ -207,6 +209,7 @@ export async function runHeadless(opts: HeadlessOptions): Promise<HeadlessResult
         ownershipNotes,
         enrich: opts.enrich,
         staticDiscovery: opts.staticDiscovery,
+        staticTools: opts.staticTools,
       },
       { staticClient, dynamicClient, emitter, pathResolver, investigation, abortSignal: opts.signal },
     );

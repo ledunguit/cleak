@@ -91,6 +91,8 @@ export interface EvalOptions {
   /** Static candidate discovery (ablation `static` axis). Default true; false ⇒
    * dynamic-only discovery (build + LSan → synthesize sites). */
   staticDiscovery?: boolean;
+  /** Static evidence tools the enrich stage runs (tool-level ablation). */
+  staticTools?: string[];
   /** LLM provider override (eval-scoped) — bypasses the cleak config file's provider
    * so a sweep can target a known-good gateway without editing global config. */
   provider?: Provider;
@@ -387,6 +389,7 @@ export async function runEval(opts: EvalOptions): Promise<EvalResult> {
         ...(opts.enrich !== undefined ? { enrich: opts.enrich } : {}),
         ...(opts.toolSelect !== undefined ? { toolSelect: opts.toolSelect } : {}),
         ...(opts.staticDiscovery !== undefined ? { staticDiscovery: opts.staticDiscovery } : {}),
+        ...(opts.staticTools ? { staticTools: opts.staticTools } : {}),
         ...(opts.provider ? { provider: opts.provider } : {}),
         ...(opts.consensusN != null || opts.consensusRule != null
           ? { consensus: { ...(opts.consensusN != null ? { n: opts.consensusN } : {}), ...(opts.consensusRule ? { rule: opts.consensusRule } : {}) } }
