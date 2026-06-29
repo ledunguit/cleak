@@ -50,6 +50,8 @@ const staticUrl = process.env.EVAL_STATIC_URL ?? 'http://127.0.0.1:50071/mcp';
 const dynamicUrl = process.env.EVAL_DYNAMIC_URL ?? 'http://127.0.0.1:50072/mcp';
 const dryRun = has('dry-run');
 const includeUnwired = has('include-unwired');
+// Escape hatch for the corpus integrity gate (no lockfile / failed validation / drift).
+const allowUnvalidated = has('allow-unvalidated');
 const consensusOverride = flag('consensus-n') ? Math.max(1, parseInt(flag('consensus-n')!, 10)) : undefined;
 // Override every config's `runs` (handy for a cheap smoke check of fusion baselines).
 const runsOverride = flag('runs') ? Math.max(1, parseInt(flag('runs')!, 10)) : undefined;
@@ -169,6 +171,7 @@ async function runOne(c: BaselineConfig, plan: ReturnType<typeof resolveCapabili
     staticDiscovery: plan.staticDiscovery,
     provider,
     stratify,
+    allowUnvalidated,
     ...(staticTools ? { staticTools } : {}),
   };
   try {

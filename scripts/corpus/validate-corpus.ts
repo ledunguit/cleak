@@ -230,6 +230,38 @@ console.log(md);
 console.log(`\ncontent-hash: ${contentHash}\n✓ report → ${corpusDir}/corpus_validation_report.{json,md}`);
 
 const hardFail = !summary.schemaOk || summary.quarantined > 0;
+
+// ── lockfile (DS3): the corpus's reproducible identity — committed even though the
+// corpus dir is gitignored, so a regenerated corpus can be verified byte-for-byte. ──
+const lockPath = arg('write-lock');
+if (lockPath) {
+  const clangVersion = (() => {
+    const r = spawnSync('clang', ['--version'], { encoding: 'utf-8' });
+    return (r.stdout || '').split('\n')[0]?.trim() || 'unknown';
+  })();
+  const gitCommit = (() => {
+    const r = spawnSync('git', ['rev-parse', '--short', 'HEAD'], { encoding: 'utf-8' });
+    return r.status === 0 ? (r.stdout || '').trim() : undefined;
+  })();
+  const lock = {
+    schema: 'corpus-lock/v1',
+    corpus: basename(corpusDir),
+    source: {
+      name: arg('source-name') ?? (manifest as any).source ?? 'unknown',
+      url: arg('source-url'),
+      sha256: arg('source-sha'),
+    },
+    ingestCommit: gitCommit,
+    toolVersions: { clang: clangVersion },
+    contentHash: contentHash,
+    validatedAt: arg('now') ?? new Date().toISOString(),
+    validated: !hardFail,
+    summary: { total: summary.totalCases, clean: summary.clean, warned: summary.warned, quarantined: summary.quarantined },
+  };
+  writeFileSync(lockPath, JSON.stringify(lock, null, 2) + '\n');
+  console.log(`✓ lockfile → ${lockPath} (validated=${lock.validated})`);
+}
+
 if (hardFail && !reportOnly) {
   console.error(`\n✗ VALIDATION FAILED — ${quarantined.length} case(s) quarantined (HARD). Re-ingest / fix the corpus.`);
   process.exit(1);

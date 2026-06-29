@@ -52,7 +52,8 @@ const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
 const outDir = join(process.env.RESULTS_DIR ?? 'results', `eval-${mode}-${stamp}`);
 mkdirSync(outDir, { recursive: true });
 
-const baseOpts = { corpusDir, mode, dynamic, limit, concurrency: undefined, resume: false, staticUrl, dynamicUrl, consensusN, consensusRule };
+const allowUnvalidated = process.argv.includes('--allow-unvalidated');
+const baseOpts = { corpusDir, mode, dynamic, limit, concurrency: undefined, resume: false, staticUrl, dynamicUrl, consensusN, consensusRule, allowUnvalidated };
 const pct = (x: number) => `${(x * 100).toFixed(1)}%`;
 
 console.log(`Evaluating corpus=${corpusDir} mode=${mode} dynamic=${dynamic} runs=${runs}${limit ? ` limit=${limit}` : ''}${consensusN ? ` consensus-n=${consensusN}` : ''}\n`);

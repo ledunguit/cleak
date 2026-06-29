@@ -32,6 +32,7 @@ import { EVENT_PHASE, EVENT_KIND, type ScanEventName } from '@cleak/common/flow/
 import { runHeadless } from '../surfaces/headless';
 import { loadConfig, type Provider } from '../config';
 import { captureProvenance, summarizeStat, type EvalProvenance, type Stat } from './provenance';
+import { checkCorpusGate } from './corpusLock';
 import {
   scoreCase,
   isFlagged,
@@ -76,6 +77,10 @@ export interface EvalOptions {
    * deliberate "heuristic under llm_assisted plumbing" runs.
    */
   allowHeuristicFallback?: boolean;
+  /** Bypass the corpus integrity gate (no lockfile / failed validation / source drift).
+   * Loud — the run is stamped `corpus_unvalidated` so a number measured on unverified
+   * data can never be mistaken for a trustworthy one. */
+  allowUnvalidated?: boolean;
   /** Consensus-judge ablation knobs (only meaningful in llm_assisted mode). n>1
    * activates multi-agent consensus; n=1 (default) is the single-LLM baseline. */
   consensusN?: number;
@@ -300,6 +305,22 @@ export async function runEval(opts: EvalOptions): Promise<EvalResult> {
   const manifest = JSON.parse(readFileSync(manifestPath, 'utf-8')) as LabeledManifest;
   const cases = selectCases(manifest.cases ?? [], opts.limit, opts.stratify);
 
+  // Corpus integrity gate: a number is only as trustworthy as its input data. Refuse a
+  // corpus with no lockfile / a failed validation / source drift, unless explicitly
+  // overridden — in which case the run is stamped `corpus_unvalidated` so it can never
+  // pass for a clean number.
+  const gate = checkCorpusGate(opts.corpusDir);
+  if (!gate.ok) {
+    if (!opts.allowUnvalidated) {
+      throw new Error(
+        `✗ corpus integrity gate FAILED for ${opts.corpusDir}: ${gate.reason}.\n` +
+          `  Run \`bun scripts/corpus/validate-corpus.ts --corpus ${opts.corpusDir} --write-lock ${opts.corpusDir}.lock.json\` ` +
+          `and commit the lockfile, or pass --allow-unvalidated to run on UNVERIFIED data.`,
+      );
+    }
+    process.stderr.write(`⚠ corpus UNVALIDATED (${gate.reason}) — running anyway (--allow-unvalidated); numbers are NOT trustworthy.\n`);
+  }
+
   // Reproducibility provenance — the exact config that produced these numbers.
   const llmCfg = opts.mode === 'llm_assisted' ? loadConfig({}).llm : undefined;
   const provenance = captureProvenance({
@@ -307,7 +328,8 @@ export async function runEval(opts: EvalOptions): Promise<EvalResult> {
     model: llmCfg?.model,
     temperature: llmCfg?.temperature,
     dynamicEnabled: opts.dynamic !== 'off',
-    manifestPath,
+    corpusHash: gate.contentHash,
+    corpusValidated: gate.ok,
     runs: opts.runs ?? 1,
     ...(opts.mode === 'llm_assisted'
       ? { consensus: { n: Math.max(1, opts.consensusN ?? 1), rule: opts.consensusRule ?? 'weighted' } }
