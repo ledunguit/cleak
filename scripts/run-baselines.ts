@@ -185,6 +185,7 @@ async function runOne(c: BaselineConfig, plan: ReturnType<typeof resolveCapabili
         meanDurationMs: r.cost.meanDurationMs,
         meanMcpCalls: r.cost.meanMcpCalls,
         meanTokens: r.cost.meanTokens,
+        totalTokens: r.cost.totalTokens,
       };
     }
     const rep = await runEvalRepeated({ ...evalOpts }, plan.runs);
@@ -213,6 +214,7 @@ async function runOne(c: BaselineConfig, plan: ReturnType<typeof resolveCapabili
       meanDurationMs: mean((r) => r.cost.meanDurationMs),
       meanMcpCalls: mean((r) => r.cost.meanMcpCalls),
       meanTokens: mean((r) => r.cost.meanTokens),
+      totalTokens: rep.perRun.reduce((a, r) => a + r.cost.totalTokens, 0),
     };
   } catch (err: any) {
     return { id: c.id, name: c.name, status: 'error', error: err?.message ?? String(err) };

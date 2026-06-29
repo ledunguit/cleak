@@ -41,6 +41,9 @@ export interface BaselineSweepRow {
   meanDurationMs?: number;
   meanMcpCalls?: number;
   meanTokens?: number;
+  /** Total LLM tokens across all cases (the enterprise cost criterion — peripheral to
+   * detection accuracy but reported alongside it). */
+  totalTokens?: number;
 }
 
 export interface SweepMeta {
@@ -77,12 +80,29 @@ export function renderSweepMarkdown(rows: BaselineSweepRow[], meta: SweepMeta): 
     }
     return `| ${r.id} | ${r.name} | ${r.ranOk ?? 0}/${r.caseCount ?? 0} | ${n0(r.tp)} | ${n0(r.fp)} | ${n0(r.fn)} | ${n0(r.tn)} | ${pct(r.precision)} | ${pct(r.recall)} | ${f1Cell(r)} | ${f3(r.fpPerKloc)} | ${f3(r.ece)} | ${n0(r.meanDurationMs)} | ${n0(r.meanMcpCalls)} | ${n0(r.meanTokens)} |`;
   });
-  return [...head, ...body, ''].join('\n');
+  return [...head, ...body, '', ...tokenCostSection(rows)].join('\n');
+}
+
+/** Token-cost footer — the enterprise cost criterion that accompanies (not replaces)
+ * the accuracy table. Lists total LLM tokens per config + the sweep grand total. */
+function tokenCostSection(rows: BaselineSweepRow[]): string[] {
+  const ok = rows.filter((r) => r.status === 'ok' && (r.totalTokens ?? 0) > 0);
+  if (!ok.length) return [];
+  const grand = ok.reduce((a, r) => a + (r.totalTokens ?? 0), 0);
+  return [
+    '## Token cost (LLM)',
+    '',
+    '| ID | Baseline | total tokens | tokens/case |',
+    '|---|---|--:|--:|',
+    ...ok.map((r) => `| ${r.id} | ${r.name} | ${n0(r.totalTokens)} | ${n0(r.meanTokens)} |`),
+    `| **Σ** | **sweep total** | **${n0(grand)}** | — |`,
+    '',
+  ];
 }
 
 export function renderSweepCsv(rows: BaselineSweepRow[]): string {
   const header =
-    'id,name,status,ranOk,caseCount,runs,tp,fp,fn,tn,precision,recall,f1,f1Std,fpPerKloc,ece,meanDurationMs,meanMcpCalls,meanTokens';
+    'id,name,status,ranOk,caseCount,runs,tp,fp,fn,tn,precision,recall,f1,f1Std,fpPerKloc,ece,meanDurationMs,meanMcpCalls,meanTokens,totalTokens';
   const cell = (x: number | undefined) => (x === undefined ? '' : String(x));
   const lines = rows.map((r) =>
     [
@@ -105,6 +125,7 @@ export function renderSweepCsv(rows: BaselineSweepRow[]): string {
       cell(r.meanDurationMs),
       cell(r.meanMcpCalls),
       cell(r.meanTokens),
+      cell(r.totalTokens),
     ].join(','),
   );
   return [header, ...lines].join('\n') + '\n';
