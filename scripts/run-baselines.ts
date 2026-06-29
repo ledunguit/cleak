@@ -62,6 +62,14 @@ const resume = has('resume');
 // sweep can target a known-good gateway (e.g. `--provider local` for the .env gateway)
 // without editing ~/.config/cleak/config.json.
 const provider = flag('provider') as 'local' | 'openai' | 'anthropic' | 'openai-compat' | undefined;
+// Tool-level ablation: override the static evidence tools the enrich stage runs.
+// `--static-tools functionSummary,pathConstraints` | `--static-tools none` (no enrich).
+const stRaw = flag('static-tools');
+const staticTools =
+  stRaw === undefined ? undefined : stRaw === 'none' || stRaw === '' ? [] : stRaw.split(',').map((s) => s.trim()).filter(Boolean);
+// Force the deterministic static-enrichment stage on/off regardless of the config's
+// resolved default — lets a no_llm config run a deterministic static-tool ablation.
+const enrichOverride = has('enrich') ? true : has('no-enrich') ? false : undefined;
 // Stratify the --limit sample evenly across a case key (default functionalVariant for
 // Juliet) instead of top-N — top-N is skewed to whatever family sits first in the manifest.
 const stratifyVal = flag('stratify');
@@ -156,11 +164,12 @@ async function runOne(c: BaselineConfig, plan: ReturnType<typeof resolveCapabili
     dynamicUrl,
     consensusN: plan.consensusN,
     strategy: plan.strategy,
-    enrich: plan.enrich,
+    enrich: enrichOverride ?? plan.enrich,
     toolSelect: plan.toolSelect,
     staticDiscovery: plan.staticDiscovery,
     provider,
     stratify,
+    ...(staticTools ? { staticTools } : {}),
   };
   try {
     if (plan.runs <= 1) {

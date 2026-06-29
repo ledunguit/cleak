@@ -73,6 +73,10 @@ export interface ScanInput {
    * (ablation `static=false`), discovery is dynamic-only: build + run under LSan and
    * synthesize one candidate per runtime leak site (no static scan). Needs a build command. */
   staticDiscovery?: boolean;
+  /** Which static EVIDENCE tools the enrichment stage runs (tool-level ablation).
+   * Default = the wired, judge-consumed pair `['functionSummary','pathConstraints']`.
+   * An empty list ⇒ enrich gathers no evidence (candidateScan-only static). */
+  staticTools?: string[];
 }
 
 export interface ScanDeps {
@@ -122,6 +126,10 @@ async function enrichStaticEvidence(
     ...(input.extraAllocators?.length ? { extraAllocators: input.extraAllocators } : {}),
     ...(input.extraDeallocators?.length ? { extraDeallocators: input.extraDeallocators } : {}),
   };
+  // Tool-level ablation: which evidence tools the enrich stage runs. Default = the
+  // wired, judge-consumed pair. (callGraph/interproceduralFlow/clang are not here yet —
+  // they need judge-side wiring to affect a verdict; see docs/EVALUATION.md.)
+  const tools = new Set(input.staticTools ?? ['functionSummary', 'pathConstraints']);
   const store: StaticContextStore = new Map();
   await mapWithLimit(bundles, THRESHOLDS.discoveryConcurrency, async (b) => {
     if (abortSignal?.aborted) return;
@@ -130,17 +138,21 @@ async function enrichStaticEvidence(
     if (content === null) return;
     const fn = b.candidate.function_name;
     const line = b.candidate.line_number;
-    try {
-      const fs = await staticClient.callTool('functionSummary', { filePath: file, content, functionName: fn, ...allocArgs });
-      foldStaticResult(store, 'functionSummary', { filePath: file, functionName: fn }, fs, [b]);
-    } catch {
-      /* best-effort: a single failed enrichment must not abort the scan */
+    if (tools.has('functionSummary')) {
+      try {
+        const fs = await staticClient.callTool('functionSummary', { filePath: file, content, functionName: fn, ...allocArgs });
+        foldStaticResult(store, 'functionSummary', { filePath: file, functionName: fn }, fs, [b]);
+      } catch {
+        /* best-effort: a single failed enrichment must not abort the scan */
+      }
     }
-    try {
-      const pc = await staticClient.callTool('pathConstraints', { filePath: file, content, lineNumber: line, ...allocArgs });
-      foldStaticResult(store, 'pathConstraints', { filePath: file, lineNumber: line }, pc, [b]);
-    } catch {
-      /* best-effort */
+    if (tools.has('pathConstraints')) {
+      try {
+        const pc = await staticClient.callTool('pathConstraints', { filePath: file, content, lineNumber: line, ...allocArgs });
+        foldStaticResult(store, 'pathConstraints', { filePath: file, lineNumber: line }, pc, [b]);
+      } catch {
+        /* best-effort */
+      }
     }
   });
 }
