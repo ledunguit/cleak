@@ -99,6 +99,81 @@ corpus, same analyzers, same scoring; only the orchestration/judge differs). The
 comparison is therefore end-to-end system effectiveness, not a claim about the
 LLM judge's accuracy in isolation (it judges evidence the same pipeline produced).
 
+### 3b. The 9-baseline capability ablation (YAML-driven)
+
+The 2×2 in §3a is the headline; the **full ablation** decomposes the architecture into **five
+independent capability axes** and measures the contribution of each component *inside our own system*
+(complementing the external comparison in §6). Each baseline is a declarative YAML config
+(`configs/baselines/*.yaml`); `capabilityResolver.ts` maps the flags onto the engine knobs, and
+`scripts/run-baselines.ts` sweeps them through the same harness + scorer.
+
+**Axes** (`[static, dynamic, planner, tool_selector, fusion]`): `static` = static candidate discovery
+(off ⇒ dynamic-only: build+LSan → synthesize one site per runtime leak); `dynamic` = sanitizer stage;
+`planner` = LLM strategist; `tool_selector` = agentic tool selection (off ⇒ deterministic enrichment +
+recipe); `fusion` = LLM/consensus judge. `planner` and `tool_selector` are **independent** so B6a/B6b
+isolate each contribution (the original design only flipped them together at B7).
+
+| ID | Baseline | static | dynamic | planner | tool_sel | fusion |
+|---|---|:-:|:-:|:-:|:-:|:-:|
+| B1 | Static only | ✅ | ❌ | ❌ | ❌ | ❌ |
+| B2 | Dynamic only | ❌ | ✅ | ❌ | ❌ | ❌ |
+| B3 | Rule-based ensemble | ✅ | ✅ | ❌ | ❌ | ❌ |
+| B4 | LLM + static | ✅ | ❌ | ❌ | ❌ | ✅ |
+| B5 | LLM + dynamic | ❌ | ✅ | ❌ | ❌ | ✅ |
+| B6 | LLM + all (no planner/sel) | ✅ | ✅ | ❌ | ❌ | ✅ |
+| B6a | + planner only (isolation) | ✅ | ✅ | ✅ | ❌ | ✅ |
+| B6b | + tool_selector only (isolation) | ✅ | ✅ | ❌ | ✅ | ✅ |
+| B7 | Proposed (full adaptive) | ✅ | ✅ | ✅ | ✅ | ✅ |
+
+```bash
+bun scripts/run-baselines.ts --corpus demo/juliet_cwe401 --limit 200   # full sweep → one table
+bun scripts/run-baselines.ts --only B1,B3 --dry-run                     # inspect resolved plans
+# → results/baseline-sweep-<ts>/baseline-sweep.{md,csv,tex,json}
+```
+
+**Headline (Juliet CWE-401, n=200, single run, model `mimo/mimo-v2.5-pro` @ temp 0; concurrency 10):**
+
+| ID | Baseline | TP | FP | FN | TN | P | R | F1 | FP/KLOC | ECE | MCP/case |
+|---|---|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|
+| B1 | Static only | 158 | 120 | 61 | 324 | 56.8% | 72.1% | 0.636 | 2.007 | 0.362 | 1 |
+| B2 | Dynamic only | 97 | 0 | 125 | 0 | **100%** | 43.7% | 0.608 | 0.000 | **0.005** | 2 |
+| B3 | Rule-based ensemble | 162 | 120 | 57 | 324 | 57.4% | **74.0%** | **0.647** | 2.007 | 0.142 | 3 |
+| B4 | LLM + static | 161 | 134 | 58 | 310 | 54.6% | 73.5% | 0.626 | **2.241** | **0.475** | 8 |
+| B5 | LLM + dynamic | 100 | 0 | 121 | 0 | **100%** | 45.2% | 0.623 | 0.000 | 0.005 | 2 |
+| B6 | LLM + all (no planner/sel) | 161 | 120 | 58 | 324 | 57.3% | 73.5% | 0.644 | 2.007 | 0.246 | 10 |
+| B6a | + planner only | 161 | 120 | 58 | 324 | 57.3% | 73.5% | 0.644 | 2.007 | 0.246 | 10 |
+| B6b | + tool_selector only | 160 | 120 | 59 | 324 | 57.1% | 73.1% | 0.641 | 2.007 | 0.138 | 3 |
+| B7 | Proposed (full adaptive) | 161 | 120 | 58 | 324 | 57.3% | 73.5% | 0.644 | 2.007 | 0.142 | 3 |
+
+Readings (honest, corpus-specific — Juliet is the EASY corpus, see §3a):
+- **The LLM judge never fired (every config: `tok/case = 0`, judge-path 100% heuristic).** Juliet produces
+  no *borderline* bundles, so `fusion` is a no-op here: B4≈B1, B6≈B3. ⇒ The LLM-orchestration axes are
+  **unmeasured on Juliet by construction** — their contribution must be shown on a HARD corpus (LAMeD),
+  where bundles are borderline. The ablation's job here is to prove *where* value is (dynamic), not to
+  oversell the LLM on easy data.
+- **Static ↔ dynamic is the real trade-off:** dynamic-only (B2/B5) = **P 100% / R ~44% / ECE 0.005** (never
+  a false positive, never miscalibrated — every verdict is a runtime-confirmed leak — but it misses ~56%,
+  the unexecuted paths). Static (B1) = R 72% but P 57%, ECE 0.362. Dynamic-only is **positive-only**
+  (TN = 0), like clang/LAMeD (§6): report Recall + FP, not specificity.
+- **The ensemble wins F1 (B3 = 0.647 > B1 = 0.636):** adding dynamic lifts recall (74.0 > 72.1) *and* more
+  than halves calibration error (ECE 0.362 → 0.142). On Juliet, **dynamic — not the LLM — is the value-add.**
+- **`tool_selector` (agentic evidence) calibrates better than deterministic enrichment:** B6b/B7 (agentic
+  Stage A) reach ECE 0.138/0.142 vs B6/B6a (deterministic enrich) 0.246 — the agent gathers richer static
+  context that the heuristic judge consumes, even though the LLM judge itself never fires. **`planner` shows
+  no effect** (B6 ≡ B6a, identical row), as expected when the dynamic mode is given explicitly.
+- **`enrich` HURTS on easy Juliet:** B4 (enrich on, no dynamic) is the worst row — FP 134 (vs 120),
+  FP/KLOC 2.241, **ECE 0.475** — the path-sensitive enrichment over-reports here (matches the FP 7→44
+  note in §7). It is the right base for HARD path-sensitive corpora, not Juliet.
+- **Honest baseline drop:** F1 ≈ 0.64 at n=200 vs 0.85 at n=30 (§3a) — the first 30 are the easy
+  `char_calloc` family; the full set is more varied. **n=200 is the trustworthy Juliet number.**
+
+> **Caveats.** (1) `tok/case` counts only the *investigation* usage, **not** host-side LLM calls
+> (strategist/profiler), so a `planner`-on row understates its true LLM cost. (2) `ms/case` is wall-clock
+> *under concurrency 10* — inflated by contention on the single dynamic analyzer (B5 shows ~25 s/case);
+> `MCP/case` + tokens are the contention-independent cost signals. (3) B2 vs B5 recall differs slightly
+> (43.7 vs 45.2) = dynamic coverage **nondeterminism** (the `rand()%2` flow-variant), not fusion.
+> Reproduce: `bun scripts/run-baselines.ts --corpus demo/juliet_cwe401 --limit 200 --concurrency 10`.
+
 ## 4. Reproducibility provenance
 
 Every `metrics.json` records a `provenance` block so a number can be re-run:

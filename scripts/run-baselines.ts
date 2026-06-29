@@ -53,6 +53,11 @@ const includeUnwired = has('include-unwired');
 const consensusOverride = flag('consensus-n') ? Math.max(1, parseInt(flag('consensus-n')!, 10)) : undefined;
 // Override every config's `runs` (handy for a cheap smoke check of fusion baselines).
 const runsOverride = flag('runs') ? Math.max(1, parseInt(flag('runs')!, 10)) : undefined;
+// Cases run in parallel per config (default: harness picks 6 for no_llm, 3 for llm).
+// Raising this parallelizes the LLM/strategist + build calls (mind gateway rate limits).
+const concurrency = flag('concurrency') ? Math.max(1, parseInt(flag('concurrency')!, 10)) : undefined;
+// Reuse per-case caches under the out dir — lets an interrupted sweep continue.
+const resume = has('resume');
 
 const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
 const outDir = flag('out') ?? join(process.env.RESULTS_DIR ?? 'results', `baseline-sweep-${stamp}`);
@@ -130,7 +135,8 @@ async function runOne(c: BaselineConfig, plan: ReturnType<typeof resolveCapabili
     dynamic: plan.dynamic,
     outDir: caseOut,
     limit,
-    resume: false,
+    resume,
+    concurrency,
     staticUrl,
     dynamicUrl,
     consensusN: plan.consensusN,
