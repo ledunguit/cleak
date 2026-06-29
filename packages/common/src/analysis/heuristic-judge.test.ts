@@ -276,10 +276,19 @@ describe('judgeHeuristically — scan-build corroboration', () => {
     expect(flagged(withDiag.verdict)).toBe(true);
   });
 
-  test('a far-away diagnostic (>2 lines) does NOT corroborate', () => {
+  test('a far-away diagnostic (>2 lines) that names no candidate variable does NOT corroborate', () => {
     const near = judgeHeuristically(scanBuildBundle([{ file: 'x.c', line: 10, message: 'leak', confidence: 'high' }]), {});
     const far = judgeHeuristically(scanBuildBundle([{ file: 'x.c', line: 99, message: 'leak', confidence: 'high' }]), {});
     expect(near.confidence).toBeGreaterThan(far.confidence);
+  });
+
+  test('a far-away diagnostic corroborates when it NAMES the candidate variable (scan-build reports at the leak site, not the alloc line)', () => {
+    // candidate alloc at line 10; scan-build reports the leak at line 40 but names 'data'.
+    const b = scanBuildBundle([{ file: 'x.c', line: 40, message: "Potential leak of memory pointed to by 'data'", confidence: 'high' }]);
+    (b as any).candidate.context = 'data = (char *)malloc(100);';
+    const withVar = judgeHeuristically(b, {});
+    const baseline = judgeHeuristically(scanBuildBundle(), {});
+    expect(withVar.confidence).toBeGreaterThan(baseline.confidence);
   });
 
   test('NO REGRESSION: absent scanBuildDiagnostics → identical verdict & confidence whether the field is missing or undefined', () => {

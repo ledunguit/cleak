@@ -256,10 +256,20 @@ for st in none functionSummary pathConstraints functionSummary,pathConstraints \
   lifts **recall 0.250 → 0.273 (+1 TP: cjson `merge_patch`), FP 0, no regression**. A small but clean gain at
   precision 1.0 — the mechanism works end-to-end on a real project; most remaining misses are path-sensitive
   (future alias-aware work). Recall-additive wiring ⇒ it never risks the precision.
-- **`scanBuild` (Clang scan-build) is judge-wired (opt-in) but needs the BUILD path.** It intercepts the
-  project build, so it does nothing in a pure-static `B1` (no `buildCommand` ⇒ not invoked, row identical
-  above). Its marginal contribution is measured with the build/dynamic path enabled (C). When it does run,
-  a diagnostic within ±2 lines of a candidate adds a small deterministic corroboration (`+0.15`).
+- **`scanBuild` (Clang scan-build) is judge-wired (opt-in) and now functional end-to-end; on Juliet it
+  CORROBORATES (raises confidence) but flips no verdict — the matrix is unchanged, ECE 0.550 → 0.547.**
+  Corroboration matches by the LEAKED VARIABLE scan-build names (`…pointed to by 'data'`), not the alloc line
+  (scan-build reports at the leak site); a match adds a deterministic `+0.15`. Getting here meant fixing three
+  packaging/integration bugs that had left the slot silently dead: (1) the image shipped `perl-base` without
+  `FindBin`, which scan-build (a Perl script) needs → it aborted at startup (Dockerfile now installs `perl`);
+  (2) the adapter wrapped the build in `/bin/sh -c`, which hides the build tool from scan-build's interceptor
+  (`scan-build make` finds the leak, `scan-build /bin/sh -c "make …"` finds none) → the adapter now passes a
+  simple command as direct argv; (3) Juliet's Makefile links `-fsanitize=leak` whose runtime isn't in the
+  image, so `make` fails at link — but scan-build analyzes at COMPILE time, so the diagnostics are still
+  produced. Result (B1 no_llm, stratified n=50): **scan-build runs + attaches on 43/50 cases**, but the
+  confusion matrix is **identical to the 2-tool default** (TP/FP/FN unchanged) — the heuristic is already
+  decisive on Juliet, so `+0.15` shifts *confidence* (ECE improves slightly), not *decisions*. Its
+  verdict-flipping value is where the heuristic is genuinely uncertain (a harder corpus) — future work.
 - **Still not judge-wired (built, not integrated):** `astScan` (agentic-only), `callGraph`,
   `ownershipSummary`. (`scanBuild` is *also* an external comparison baseline as `clang`/`infer` in §6 — a
   separate per-TU `clang --analyze`, distinct from the project-level scan-build evidence tool here.)
