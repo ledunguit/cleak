@@ -12,7 +12,7 @@ import { FunctionSummaryService } from './services/function-summary.service';
 import { InterproceduralFlowService } from './services/interprocedural-flow.service';
 import { PathConstraintsService } from './services/path-constraints.service';
 import { OwnershipAnalysisService } from './services/ownership-analysis.service';
-import { LeakGuardAdapterService } from './services/leakguard-adapter.service';
+import { ScanBuildAdapterService } from './services/scan-build-adapter.service';
 import * as dotenv from 'dotenv';
 import { existsSync } from 'fs';
 
@@ -32,7 +32,7 @@ async function serveMcp(ctx: INestApplicationContext) {
     interproceduralFlow: ctx.get(InterproceduralFlowService),
     pathConstraints: ctx.get(PathConstraintsService),
     ownership: ctx.get(OwnershipAnalysisService),
-    leakguard: ctx.get(LeakGuardAdapterService),
+    scanBuild: ctx.get(ScanBuildAdapterService),
   };
   await startMcpHttp(() => createStaticMcpServer(svc), Number(process.env.MCP_HTTP_PORT || 50061), 'static-analyzer');
 }

@@ -97,8 +97,8 @@ Tập tool được khai báo bằng **Zod `inputSchema`** ngay trong các MCP s
 `apps/dynamic-analyzer/src/mcp/dynamic-mcp-server.ts` (không còn `.proto`):
 
 - **static** — 11 tool: `IndexFiles, CandidateScan, AstScan, CallGraph, FunctionSummary,
-  InterproceduralFlow, PathConstraints, OwnershipSummary, OwnershipConventions, LeakguardRun,
-  LeakguardGetReport`. Bốn tool (`CandidateScan, FunctionSummary, PathConstraints, CallGraph`)
+  InterproceduralFlow, PathConstraints, OwnershipSummary, OwnershipConventions, ScanBuildRun,
+  ScanBuildGetReport`. Bốn tool (`CandidateScan, FunctionSummary, PathConstraints, CallGraph`)
   nhận thêm `extraAllocators?`/`extraDeallocators?` (tên cấp phát/giải phóng theo project, ≈ LAMeD
   AllocSource/FreeSink) để engine theo dõi factory allocator, không chỉ libc.
 - **dynamic** — 9 tool: `BuildTarget, ValgrindMemcheck, ValgrindGetReport, ValgrindListFindings,
@@ -202,7 +202,7 @@ Judge tất định chấm `bundle.staticEvidence` + evidence động thành đi
 
 ### 7.1 Chuẩn hoá `LeakBundle`
 Findings từ mọi tool gom về `LeakBundle` (`packages/common/src/types`): `candidate` (vị trí
-cấp phát) → `evidence[]` (valgrind/asan/lsan/leakguard/heuristic) → `verdict` (`VerdictResult`:
+cấp phát) → `evidence[]` (valgrind/asan/lsan/scan_build/heuristic) → `verdict` (`VerdictResult`:
 verdict + confidence + explanation + `rootCause` + `repairDiff`).
 
 ```mermaid
@@ -244,7 +244,7 @@ flowchart LR
 
 - ✅ **Hướng chính:** `packages/agent-core` (vòng lặp agentic, streaming + idle-timeout +
   nén context) và `apps/leak-inspector-tui` (path HYBRID standalone, **orchestrator duy nhất**).
-- ✅ **leakguard slot = Clang Static Analyzer (scan-build)** self-contained, chạy trong image
+- ✅ **scan-build slot = Clang Static Analyzer (scan-build)** self-contained, chạy trong image
   static-analyzer. **LeakGuard bên thứ ba đã bị gỡ** — không thêm lại.
 - ✅ **gRPC + `proto/` đã gỡ hẳn.** MCP/HTTP là transport duy nhất; controller gRPC,
   bootstrap `createMicroservice`, thư mục `proto/`, và dep `@grpc/*` + `@nestjs/microservices`

@@ -18,7 +18,7 @@ export enum ToolKind {
   VALGRIND = 'valgrind',
   ASAN = 'asan',
   LSAN = 'lsan',
-  LEAKGUARD = 'leakguard',
+  SCAN_BUILD = 'scan_build',
   HEURISTIC = 'heuristic',
   LLM = 'llm',
   /** A multi-sample LLM verdict combined by the consensus judge (self-consistency). */
@@ -430,7 +430,7 @@ export interface InvestigationPlan {
   strategySource: 'heuristic' | 'llm';
   focusBundleIds: string[];
   staticToolSequence: string[];
-  runLeakguard: boolean;
+  runScanBuild: boolean;
   runDynamic: boolean;
   dynamicToolPreference?: string;
   bundleLimit?: number;
@@ -438,7 +438,7 @@ export interface InvestigationPlan {
   notes: string[];
 }
 
-export type InvestigationActionKind = 'run_static_tool' | 'run_leakguard' | 'run_dynamic' | 'finish';
+export type InvestigationActionKind = 'run_static_tool' | 'run_scan_build' | 'run_dynamic' | 'finish';
 
 export interface InvestigationNextAction {
   kind: InvestigationActionKind;
@@ -456,7 +456,7 @@ export interface InvestigationPlanningRecord {
   rationale: string;
   notes: string[];
   staticToolSequence: string[];
-  runLeakguard: boolean;
+  runScanBuild: boolean;
   runDynamic: boolean;
   dynamicToolPreference?: string;
   focusBundleCount: number;
@@ -492,7 +492,7 @@ export enum LeakPatternType {
 
 export enum AgentActionKind {
   RUN_STATIC_TOOL = 'run_static_tool',
-  RUN_LEAKGUARD = 'run_leakguard',
+  RUN_SCAN_BUILD = 'run_scan_build',
   RUN_DYNAMIC = 'run_dynamic',
   JUDGE_BUNDLE = 'judge_bundle',
   REQUEST_MORE_EVIDENCE = 'request_more_evidence',

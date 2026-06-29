@@ -16,7 +16,7 @@ export interface StaticToolServices {
   interproceduralFlow: { analyze(rootPath: string, functionName: string, files: string[]): any };
   pathConstraints: { analyze(filePath: string, content: string, lineNumber: number, extraAllocators?: string[], extraDeallocators?: string[]): any };
   ownership: { summarize(files: string[], rootPath: string): any; conventions(content: string, filePath: string): any };
-  leakguard: { run(projectPath: string, buildCommand: string, timeoutSec?: number): any; getReport(runId: string): any };
+  scanBuild: { run(projectPath: string, buildCommand: string, timeoutSec?: number): any; getReport(runId: string): any };
 }
 
 const ok = (result: unknown) => ({
@@ -94,15 +94,15 @@ export function createStaticMcpServer(svc: StaticToolServices): McpServer {
   );
 
   server.registerTool(
-    'leakguardRun',
+    'scanBuildRun',
     { description: 'Run the project-level Clang Static Analyzer (scan-build) over the project build', inputSchema: { projectPath: z.string(), buildCommand: z.string(), timeoutSec: z.number().optional() } },
-    async (a) => ok(await svc.leakguard.run(a.projectPath, a.buildCommand, a.timeoutSec)),
+    async (a) => ok(await svc.scanBuild.run(a.projectPath, a.buildCommand, a.timeoutSec)),
   );
 
   server.registerTool(
-    'leakguardGetReport',
+    'scanBuildGetReport',
     { description: 'Retrieve Clang Static Analyzer (scan-build) findings', inputSchema: { runId: z.string() } },
-    async (a) => ok(await svc.leakguard.getReport(a.runId)),
+    async (a) => ok(await svc.scanBuild.getReport(a.runId)),
   );
 
   return server;

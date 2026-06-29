@@ -123,8 +123,8 @@ Run the static tools for each, then call done_static.
 - **5 tool tĩnh content-capable**: `candidateScan`, `astScan`, `functionSummary`,
   `pathConstraints`, `ownershipConventions` — đây là **toàn bộ** tool tĩnh được phơi ra cho
   model (lọc bởi `CONTENT_CAPABLE_TOOLS`, `mcpToolPlan.ts:96-109`). 6 tool tĩnh còn lại
-  (`indexFiles`, `callGraph`, `interproceduralFlow`, `ownershipSummary`, `leakguardRun`,
-  `leakguardGetReport`) **bị loại** vì cần mount filesystem chung → giữ analyzer stateless,
+  (`indexFiles`, `callGraph`, `interproceduralFlow`, `ownershipSummary`, `scanBuildRun`,
+  `scanBuildGetReport`) **bị loại** vì cần mount filesystem chung → giữ analyzer stateless,
   deploy được từ xa.
 - `read_file` (xem [§5](#read_file--done-tool)).
 - `done_static` — terminal tool kết thúc vòng lặp.
@@ -308,11 +308,11 @@ timeout 30s; tool nặng (`SERIAL_HEAVY`: build/sanitizer/scan-build) read-only 
 | `callGraph` | *Extract call graph edges and nodes* | ❌ |
 | `interproceduralFlow` | *Interprocedural data flow tracing for a function* | ❌ |
 | `ownershipSummary` | *Summarize ownership conventions across files* | ❌ |
-| `leakguardRun` | *Run the project-level Clang Static Analyzer (scan-build) over the project build* | ❌ |
-| `leakguardGetReport` | *Retrieve Clang Static Analyzer (scan-build) findings* | ❌ |
+| `scanBuildRun` | *Run the project-level Clang Static Analyzer (scan-build) over the project build* | ❌ |
+| `scanBuildGetReport` | *Retrieve Clang Static Analyzer (scan-build) findings* | ❌ |
 
 > ❌ = bị loại khỏi TUI (cần filesystem mount chung) — `CONTENT_CAPABLE_TOOLS`,
-> `mcpToolPlan.ts:96-109`. Slot `leakguard*` nay là Clang Static Analyzer (scan-build)
+> `mcpToolPlan.ts:96-109`. Slot `scanBuild*` nay là Clang Static Analyzer (scan-build)
 > self-contained.
 
 ### Dynamic analyzer (9 tool) — `apps/dynamic-analyzer/src/mcp/dynamic-mcp-server.ts:34-86`
