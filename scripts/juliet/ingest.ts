@@ -27,6 +27,7 @@
 
 import { readdirSync, statSync, readFileSync, writeFileSync, mkdirSync, copyFileSync, existsSync } from 'node:fs';
 import { join, basename, dirname } from 'node:path';
+import { createHash } from 'node:crypto';
 
 function arg(name: string): string | undefined {
   const i = process.argv.indexOf(`--${name}`);
@@ -48,7 +49,14 @@ if (!julietRoot) {
   process.exit(2);
 }
 
-/** Recursively collect files whose name starts with CWE401. */
+/**
+ * Recursively collect a testcase's files. Includes `.h` — Juliet's multi-file C++
+ * "class/virtual-method" variants (`_8x`) ship a per-testcase `CWE401_..._NN.h` that
+ * the `.cpp` `#include`. The old filter matched only `.c/.cpp`, so re-ingesting those
+ * cases dropped the header → the case either failed to compile (`file not found`) or,
+ * with a stale synthetic header lying around, hit a `redefinition`. Collecting `.h`
+ * keeps each C++ case self-contained + buildable.
+ */
 function findCwe401Files(root: string): string[] {
   const out: string[] = [];
   const visit = (dir: string) => {
@@ -67,7 +75,7 @@ function findCwe401Files(root: string): string[] {
         continue;
       }
       if (st.isDirectory()) visit(full);
-      else if (/^CWE401_.*\.(c|cpp)$/i.test(e)) out.push(full);
+      else if (/^CWE401_.*\.(c|cpp|h)$/i.test(e)) out.push(full);
     }
   };
   visit(root);
@@ -94,8 +102,13 @@ function findSupportDir(start: string): string | undefined {
   return undefined;
 }
 
-// Group files into testcases: strip a trailing multi-file letter (…01a.c / …01b.c → base …01).
-const BASE_RE = /^(.*_\d{2})([a-z])?\.(c|cpp)$/i;
+// Group a testcase's files by base = everything up to & including the flow-variant
+// number `_NN`, discarding the per-file suffix. Juliet splits a testcase across:
+//   …_82.h   …_82a.cpp   …_82_bad.cpp   …_82_goodG2B.cpp   …_82_goodB2G.cpp
+// The old regex only stripped a SINGLE trailing letter (`[a-z]?`), so `_82_bad.cpp`
+// etc. fell to the fallback and became SEPARATE case dirs — each missing the shared
+// `_82.h` → unbuildable C++ cases. Strip a `_bad`/`_good…` word OR a single letter.
+const BASE_RE = /^(.*_\d{2})(?:_[A-Za-z0-9]+|[a-z])?\.(c|cpp|h)$/i;
 
 interface Testcase {
   id: string;
@@ -109,7 +122,7 @@ const byBase = new Map<string, Testcase>();
 for (const file of findCwe401Files(julietRoot)) {
   const name = basename(file);
   const m = BASE_RE.exec(name);
-  const base = m ? m[1] : name.replace(/\.(c|cpp)$/i, '');
+  const base = m ? m[1] : name.replace(/\.(c|cpp|h)$/i, '');
   if (variantFilter && !base.toLowerCase().includes(variantFilter.toLowerCase())) continue;
   const flow = /_(\d{2})$/.exec(base)?.[1] ?? '00';
   const func = /__([a-z]+)/i.exec(base)?.[1] ?? 'unknown'; // malloc / calloc / realloc / new / …
@@ -130,6 +143,73 @@ const FLAW_RE = /\/\*\s*(POTENTIAL\s+)?FLAW/i;
 // Core Juliet C support files every CWE-401 testcase needs to compile + run.
 const CORE_SUPPORT = ['std_testcase.h', 'std_testcase_io.h', 'io.c'];
 const INCLUDE_RE = /#\s*include\s+"([^"]+)"/g;
+// A function DEFINITION: `name(...) {` — excludes calls (end `;`) and keeps control
+// keywords out (if/while/for have no bad/good in their name, filtered below).
+const FN_DEF_RE = /\b([A-Za-z_]\w*)\s*\([^;{)]*\)\s*(?:const\s*)?\{/g;
+
+const fileSha = (p: string): string | undefined => {
+  try {
+    return createHash('sha256').update(readFileSync(p)).digest('hex').slice(0, 16);
+  } catch {
+    return undefined;
+  }
+};
+
+/**
+ * Derive flaw/clean function labels FROM THE SOURCE rather than hard-coding
+ * `<base>_bad` + `goodG2B`/`goodB2G`. Juliet names every function with the bad/good
+ * convention (`bad`, `CWE401_..._NN_bad`, `good1..9`, `goodG2B`, `goodB2GSource`, …),
+ * but the hard-coded labels matched only a fraction of flow variants — the rest were
+ * silently "rescued" by the scorer's naming fallback, hiding the drift. Parsing the
+ * real definitions makes the manifest ground truth TRUE (and removes the dependence
+ * on the fallback). C++ class variants (`_8x`) name the leak method `action` inside a
+ * `<base>_bad` class — no bad-named free function — so we fall back to the class-style
+ * base name to keep the case scoreable.
+ */
+function deriveLabels(tcFiles: string[], base: string): { flaws: any[]; clean: any[] } {
+  const bad = new Set<string>();
+  const good = new Set<string>();
+  let flawLine: number | undefined;
+  let flawFile: string | undefined;
+  for (const f of tcFiles) {
+    let src: string;
+    try {
+      src = readFileSync(f, 'utf-8');
+    } catch {
+      continue;
+    }
+    const isSrc = /\.(c|cpp)$/i.test(f);
+    // C++ class variants (`_8x`): the leak lives in a method `action` of a `_bad` class
+    // declared in the `.h`; no bad-named free function exists, so harvest bad/good CLASS
+    // names from every file (incl. the header).
+    for (const m of src.matchAll(/\bclass\s+([A-Za-z_]\w*)/g)) {
+      const name = m[1];
+      if (/good/i.test(name)) good.add(name);
+      else if (/bad/i.test(name)) bad.add(name);
+    }
+    if (!isSrc) continue;
+    for (const m of src.matchAll(FN_DEF_RE)) {
+      const name = m[1];
+      if (/good/i.test(name)) good.add(name);
+      else if (/bad/i.test(name)) bad.add(name);
+    }
+    if (flawLine === undefined) {
+      const idx = src.split('\n').findIndex((l) => FLAW_RE.test(l));
+      if (idx >= 0) {
+        flawLine = idx + 1;
+        flawFile = basename(f);
+      }
+    }
+  }
+  if (bad.size === 0) bad.add(`${base}_bad`); // C++ class variant / unparsed — keep scoreable
+  const flaws = [...bad].map((fn, i) => ({
+    function: fn,
+    ...(i === 0 && flawFile ? { file: flawFile, line: flawLine } : {}),
+    cwe: 'CWE-401',
+  }));
+  const clean = [...good].map((fn) => ({ function: fn }));
+  return { flaws, clean };
+}
 
 /** Copy the support files a project needs: the core set + any local headers it #includes. */
 function copySupport(caseDir: string, tcFiles: string[]): void {
@@ -200,22 +280,19 @@ function makefile(hasCpp: boolean): string {
   ].join('\n');
 }
 
+const seenIds = new Set<string>();
 const cases = testcases.map((tc) => {
+  if (seenIds.has(tc.id)) console.warn(`⚠ duplicate case id '${tc.id}' — files may be merged across testcases`);
+  seenIds.add(tc.id);
+
   const caseDir = join(outDir, 'cases', tc.id);
   mkdirSync(caseDir, { recursive: true });
-  let flawLine: number | undefined;
-  let flawFile: string | undefined;
-  for (const f of tc.files) {
+  // Per-file provenance: origin path + source sha256 (so the lockfile/validator can
+  // prove the ingested bytes came from the verified NIST tree, not a modified source).
+  const sourceFiles = tc.files.map((f) => {
     copyFileSync(f, join(caseDir, basename(f)));
-    if (flawLine === undefined) {
-      const lines = readFileSync(f, 'utf-8').split('\n');
-      const idx = lines.findIndex((l) => FLAW_RE.test(l));
-      if (idx >= 0) {
-        flawLine = idx + 1;
-        flawFile = basename(f);
-      }
-    }
-  }
+    return { name: basename(f), sha256: fileSha(f) };
+  });
 
   const hasCpp = tc.files.some((f) => /\.cpp$/i.test(f));
   const buildable = !!supportDir;
@@ -224,6 +301,8 @@ const cases = testcases.map((tc) => {
     writeFileSync(join(caseDir, 'Makefile'), makefile(hasCpp));
   }
 
+  const { flaws, clean } = deriveLabels(tc.files, tc.base);
+
   return {
     id: tc.id,
     repo_path: join('cases', tc.id),
@@ -231,8 +310,9 @@ const cases = testcases.map((tc) => {
     flowVariant: tc.flowVariant,
     functionalVariant: tc.functionalVariant,
     ...(buildable ? { build_command: `make CC=clang CXX=clang++` } : {}),
-    flaws: [{ function: `${tc.base}_bad`, ...(flawFile ? { file: flawFile } : {}), ...(flawLine ? { line: flawLine } : {}), cwe: 'CWE-401' }],
-    clean: [{ function: 'goodG2B' }, { function: 'goodB2G' }],
+    flaws,
+    clean,
+    _provenance: { source_root: julietRoot, files: sourceFiles },
   };
 });
 
