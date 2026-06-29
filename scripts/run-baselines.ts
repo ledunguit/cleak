@@ -62,6 +62,14 @@ const resume = has('resume');
 // sweep can target a known-good gateway (e.g. `--provider local` for the .env gateway)
 // without editing ~/.config/cleak/config.json.
 const provider = flag('provider') as 'local' | 'openai' | 'anthropic' | 'openai-compat' | undefined;
+// Stratify the --limit sample evenly across a case key (default functionalVariant for
+// Juliet) instead of top-N — top-N is skewed to whatever family sits first in the manifest.
+const stratifyVal = flag('stratify');
+const stratify = has('stratify')
+  ? !stratifyVal || stratifyVal.startsWith('--')
+    ? 'functionalVariant'
+    : stratifyVal
+  : undefined;
 
 const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
 const outDir = flag('out') ?? join(process.env.RESULTS_DIR ?? 'results', `baseline-sweep-${stamp}`);
@@ -82,7 +90,10 @@ const gitCommit = (() => {
 })();
 const meta: SweepMeta = { corpus: corpusDir, limit, generatedAt: new Date().toISOString(), gitCommit };
 
-console.log(`Baseline sweep · corpus=${corpusDir}${limit ? ` limit=${limit}` : ''} · ${configs.length} config(s)\n`);
+console.log(
+  `Baseline sweep · corpus=${corpusDir}${limit ? ` limit=${limit}` : ''}` +
+    `${stratify ? ` stratify=${stratify}` : ''}${provider ? ` provider=${provider}` : ''} · ${configs.length} config(s)\n`,
+);
 
 if (dryRun) {
   console.log('DRY RUN — resolved plans (nothing executed):\n');
@@ -149,6 +160,7 @@ async function runOne(c: BaselineConfig, plan: ReturnType<typeof resolveCapabili
     toolSelect: plan.toolSelect,
     staticDiscovery: plan.staticDiscovery,
     provider,
+    stratify,
   };
   try {
     if (plan.runs <= 1) {
