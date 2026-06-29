@@ -32,7 +32,8 @@ import { runDeterministicDynamicStage, reconcileDynamicEvidence, computeDynamicC
 import { runDynamicOnlyDiscovery } from '../domain/dynamicDiscovery';
 import { heuristicVerdict } from '../domain/judge';
 import { THRESHOLDS } from '../domain/thresholds';
-import { foldStaticResult, type StaticContextStore } from '../domain/staticContext';
+import { foldStaticResult, attachScanBuildDiagnostics, type StaticContextStore } from '../domain/staticContext';
+import { coerceToObject } from '../domain/mcpResult';
 import type { InvestigationPhase, InvestigationOutcome } from './investigation';
 
 const reporter = new LeakReporting();
@@ -127,10 +128,32 @@ async function enrichStaticEvidence(
     ...(input.extraDeallocators?.length ? { extraDeallocators: input.extraDeallocators } : {}),
   };
   // Tool-level ablation: which evidence tools the enrich stage runs. Default = the
-  // wired, judge-consumed pair. (callGraph/interproceduralFlow/clang are not here yet —
-  // they need judge-side wiring to affect a verdict; see docs/EVALUATION.md.)
+  // wired, judge-consumed pair (functionSummary + pathConstraints). Opt-in extras
+  // (`scanBuild`, …) only run when named in `--static-tools`, so the default 2-tool
+  // baseline stays byte-identical. (callGraph/interproceduralFlow: see B2.)
   const tools = new Set(input.staticTools ?? ['functionSummary', 'pathConstraints']);
   const store: StaticContextStore = new Map();
+
+  // ── Project-level Clang scan-build (opt-in): run ONCE over the whole build, then
+  // attach its diagnostics to every matching candidate as a deterministic second
+  // static opinion. Needs a build command (scan-build intercepts the real build),
+  // like the dynamic recipe — so it's skipped when no buildCommand is available. ──
+  if (tools.has('scanBuild') && input.buildCommand) {
+    try {
+      const run = coerceToObject(
+        await staticClient.callTool('scanBuildRun', { projectPath: input.repoPath, buildCommand: input.buildCommand }),
+      );
+      const runId = typeof run.runId === 'string' ? run.runId : undefined;
+      if (runId) {
+        const report = coerceToObject(await staticClient.callTool('scanBuildGetReport', { runId }));
+        const findings = Array.isArray(report.findings) ? (report.findings as Array<Record<string, any>>) : [];
+        attachScanBuildDiagnostics(bundles, findings);
+      }
+    } catch {
+      /* best-effort: a scan-build failure must not abort the scan */
+    }
+  }
+
   await mapWithLimit(bundles, THRESHOLDS.discoveryConcurrency, async (b) => {
     if (abortSignal?.aborted) return;
     const file = b.candidate.file_path;

@@ -242,3 +242,50 @@ describe('judgeHeuristically — path-sensitive leaks', () => {
     expect(flagged(v.verdict)).toBe(false);
   });
 });
+
+// ── Clang scan-build corroboration (opt-in `--static-tools scanBuild`) ──────────
+// A project-level scan-build leak diagnostic NEAR the candidate is a deterministic
+// second static opinion. It must ADD score (corroborate) when present, and be a
+// complete no-op when absent (so the default 2-tool baseline is unaffected). The
+// base bundle is already flagged (unpaired pair + reachable leak path) so the +0.15
+// is observable in `confidence` without being masked by the UNCERTAIN floor.
+function scanBuildBundle(diags?: Array<{ file: string; line: number; message: string; confidence: 'high' | 'medium' | 'low' }>): LeakBundle {
+  const LINE = 10;
+  return {
+    bundleId: 'sb',
+    candidate: { id: 'c', function_name: 'f', file_path: '/nonexistent/x.c', line_number: LINE, allocation_site: '', allocation_type: 'malloc', confidence: 'medium', context: '' },
+    evidence: [],
+    staticEvidence: {
+      allocFreePairs: [{ variable: 'p', allocCall: 'malloc', allocLine: LINE, allocFile: 'x.c', freeLine: null, freeFunction: null, bindsToNewVariable: true, status: 'unpaired' }],
+      feasibleLeakPaths: [{ kind: 'return', exitLine: 15, reachable: true, conditions: [], unreconciledAllocations: [], leakRisk: 'high', narrative: 'leaks', feasibilityChecked: 'heuristic' }],
+      earlyReturnCount: 0,
+      leakyExitPaths: 0,
+      ...(diags ? { scanBuildDiagnostics: diags } : {}),
+    },
+    status: 'pending',
+    createdAt: '',
+    updatedAt: '',
+  } as unknown as LeakBundle;
+}
+
+describe('judgeHeuristically — scan-build corroboration', () => {
+  test('a scan-build diagnostic near the candidate raises confidence (corroborates)', () => {
+    const withDiag = judgeHeuristically(scanBuildBundle([{ file: 'x.c', line: 10, message: 'Potential leak of memory pointed to by p', confidence: 'high' }]), {});
+    const without = judgeHeuristically(scanBuildBundle(), {});
+    expect(withDiag.confidence).toBeGreaterThan(without.confidence);
+    expect(flagged(withDiag.verdict)).toBe(true);
+  });
+
+  test('a far-away diagnostic (>2 lines) does NOT corroborate', () => {
+    const near = judgeHeuristically(scanBuildBundle([{ file: 'x.c', line: 10, message: 'leak', confidence: 'high' }]), {});
+    const far = judgeHeuristically(scanBuildBundle([{ file: 'x.c', line: 99, message: 'leak', confidence: 'high' }]), {});
+    expect(near.confidence).toBeGreaterThan(far.confidence);
+  });
+
+  test('NO REGRESSION: absent scanBuildDiagnostics → identical verdict & confidence whether the field is missing or undefined', () => {
+    const missing = judgeHeuristically(scanBuildBundle(), {});
+    const undef = judgeHeuristically(scanBuildBundle(undefined), {});
+    expect(undef.verdict).toBe(missing.verdict);
+    expect(undef.confidence).toBe(missing.confidence);
+  });
+});

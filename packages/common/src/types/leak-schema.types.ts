@@ -234,12 +234,24 @@ export interface FeasibleLeakPath {
   feasibilityChecked: 'heuristic' | 'none';
 }
 
+/** A single Clang `scan-build` diagnostic, matched to a candidate as a second static opinion. */
+export interface ScanBuildDiagnostic {
+  file: string;
+  line: number;
+  message: string;
+  confidence: 'high' | 'medium' | 'low';
+}
+
 export interface StaticLeakEvidence {
   ownership?: OwnershipSummary;
   allocFreePairs: AllocFreePair[];
   feasibleLeakPaths: FeasibleLeakPath[];
   earlyReturnCount: number;
   leakyExitPaths: number;
+  /** Project-level Clang scan-build diagnostics in the candidate's file (opt-in
+   * `--static-tools scanBuild`). A diagnostic near the candidate corroborates the
+   * heuristic — a deterministic second static opinion. Absent unless scanBuild ran. */
+  scanBuildDiagnostics?: ScanBuildDiagnostic[];
 }
 
 export interface ScanMetadata {

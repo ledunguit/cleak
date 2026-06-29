@@ -16,6 +16,7 @@ import type {
   FeasibleLeakPath,
   OwnershipSummary,
   StaticLeakEvidence,
+  ScanBuildDiagnostic,
 } from '@cleak/common/types';
 import type { Tool } from '@cleak/agent-core';
 
@@ -155,6 +156,38 @@ export function foldStaticResult(
     default:
       break;
   }
+}
+
+/**
+ * Attach project-level Clang `scan-build` diagnostics to every bundle whose candidate
+ * file matches. scan-build is project-level + one-shot, so it does NOT go through the
+ * per-file `foldStaticResult` path — it's matched against all bundles here. The judge
+ * then corroborates a candidate when a diagnostic sits near its allocation line.
+ * Returns the number of bundles that got at least one diagnostic.
+ */
+export function attachScanBuildDiagnostics(
+  bundles: LeakBundle[],
+  findings: Array<Record<string, any>>,
+): number {
+  let attached = 0;
+  for (const b of bundles) {
+    const diags: ScanBuildDiagnostic[] = findings
+      .filter((f) => sameFile(String(f.file_path ?? f.file ?? ''), b.candidate.file_path))
+      .map((f) => ({
+        file: String(f.file_path ?? f.file ?? ''),
+        line: Number(f.line_number ?? f.line ?? 0),
+        message: String(f.context ?? f.message ?? ''),
+        confidence: (['high', 'medium', 'low'].includes(f.confidence) ? f.confidence : 'medium') as
+          | 'high'
+          | 'medium'
+          | 'low',
+      }));
+    if (diags.length) {
+      mergeStaticEvidence(b, { scanBuildDiagnostics: diags });
+      attached++;
+    }
+  }
+  return attached;
 }
 
 /**
