@@ -1,0 +1,22 @@
+{
+  "schema": "corpus-lock/v1",
+  "corpus": "juliet_cwe401",
+  "source": {
+    "name": "NIST Juliet C/C++ v1.3",
+    "url": "https://samate.nist.gov/SARD/downloads/test-suites/2017-10-01-juliet-test-suite-for-c-cplusplus-v1-3.zip",
+    "sha256": "ada9d7e1c323d283446df3f55bdee0d00bda1fed786785fe98764d58688f38eb"
+  },
+  "ingestCommit": "776ae1a",
+  "toolVersions": {
+    "clang": "Apple clang version 21.0.0 (clang-2100.1.1.101)"
+  },
+  "contentHash": "f578c3ee228c1ae06095c7c850e44944",
+  "validatedAt": "2026-06-29T17:31:25.301Z",
+  "validated": true,
+  "summary": {
+    "total": 1658,
+    "clean": 1351,
+    "warned": 307,
+    "quarantined": 0
+  }
+}

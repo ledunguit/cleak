@@ -19,8 +19,12 @@ export interface EvalProvenance {
   runs?: number;
   gitCommit?: string;
   toolVersions: Record<string, string>;
-  /** sha256 of the corpus_manifest.json, so corpus drift is detectable. */
+  /** Content hash over ALL corpus SOURCE files (not just the manifest), so source
+   * drift/corruption is detectable — see corpusLock.ts. */
   corpusHash?: string;
+  /** Whether the corpus passed the integrity gate (lockfile present, validated, no
+   * drift). False ⇒ this number was measured on UNVERIFIED data (--allow-unvalidated). */
+  corpusValidated?: boolean;
   /** Consensus-judge configuration for this run (records the ablation condition). */
   consensus?: { n: number; rule: string };
 }
@@ -72,10 +76,15 @@ export function captureProvenance(opts: {
   model?: string;
   temperature?: number;
   dynamicEnabled: boolean;
+  /** Content hash over corpus source files (from corpusLock.checkCorpusGate). Falls
+   * back to a manifest-only hash if not supplied (legacy callers). */
+  corpusHash?: string;
+  corpusValidated?: boolean;
   manifestPath?: string;
   runs?: number;
   consensus?: { n: number; rule: string };
 }): EvalProvenance {
+  const hash = opts.corpusHash ?? (opts.manifestPath ? corpusHash(opts.manifestPath) : undefined);
   return {
     provider: opts.provider,
     model: opts.model,
@@ -83,7 +92,8 @@ export function captureProvenance(opts: {
     runs: opts.runs,
     gitCommit: gitCommit(),
     toolVersions: toolVersions(opts.dynamicEnabled),
-    ...(opts.manifestPath ? { corpusHash: corpusHash(opts.manifestPath) } : {}),
+    ...(hash ? { corpusHash: hash } : {}),
+    ...(opts.corpusValidated !== undefined ? { corpusValidated: opts.corpusValidated } : {}),
     ...(opts.consensus ? { consensus: opts.consensus } : {}),
   };
 }
