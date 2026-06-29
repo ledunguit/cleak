@@ -61,7 +61,13 @@ Metric formulas (`computeMetrics`) are unit-tested in
 ### 3a. The 2×2 ablation (LLM-orchestration × dynamic-evidence)
 
 Because the deterministic `no_llm + dynamic` cell now exists, the two factors are separable
-(previously `no_llm`-vs-`llm_assisted` conflated them). **Juliet CWE-401, n=30, model `mimo/mimo-v2.5-pro` @ temp 0:**
+(previously `no_llm`-vs-`llm_assisted` conflated them). **Juliet CWE-401, n=30, model `mimo/mimo-v2.5-pro` @ temp 0.**
+
+> **Note (corpus remediation, §8):** the specific cell counts below are the limit-30 fixture measured on the
+> pre-remediation corpus. On the **validated** 1658-case corpus the same `no_llm --dynamic off` fixture is
+> TP29 FP7 **FN9** TN81 (more positives now that the C++ cases are scored) — the *structure* of the 2×2 (LLM
+> doesn't move Juliet; dynamic adds recall + holds FP) is unchanged; a full 2×2 re-run on the validated corpus
+> is queued. The headline §3b/§3d tables ARE re-measured on the validated corpus.
 
 | | static (`--dynamic off`) | + dynamic |
 |---|---|---|
@@ -136,54 +142,44 @@ bun scripts/run-baselines.ts --only B1,B3 --dry-run                     # inspec
 > ~100% the `char` family (first 200 miss the 672-case `new` family entirely). The table below uses
 > **`--stratify`** (even round-robin across the 10 functional families) so the numbers are representative.
 
-**Representative headline (Juliet CWE-401, stratified n=100, single run, `mimo/mimo-v2.5-pro` @ temp 0, real
-9router gateway; planner-guardrail + LLM health-check on; git `2579046`):**
+> ⚠️ **Corpus remediated — these numbers are re-measured on the VALIDATED corpus.** The earlier headline was
+> measured on a Juliet corpus with a data defect: the C++ "class/virtual-method" variants (`_8x`) had synthetic
+> headers that didn't compile and were split into broken per-class dirs, so ~422/1984 cases failed the build and
+> their `action`-method findings classified `unknown` → **silently excluded** from the confusion matrix. The
+> corpus was re-ingested from a verified NIST v1.3 tree (lockfile `demo/juliet_cwe401.lock.json`, content-hash
+> `f578c3ee`, **1658** cases, 0 quarantined; see §8). The numbers below are LOWER and now carry a small FP —
+> the C++ cases are genuinely harder and now actually scored. **Every qualitative conclusion is unchanged.**
+> The prior defective-corpus tables are dropped (do not cite them).
+
+**Representative headline (Juliet CWE-401, **validated** corpus, stratified n=50, single run, `mimo/mimo-v2.5-pro`
+@ temp 0, real 9router gateway; planner-guardrail + LLM health-check + corpus integrity gate on):**
 
 | ID | Baseline | TP | FP | FN | TN | P | R | F1 | ECE | total tok |
 |---|---|--:|--:|--:|--:|--:|--:|--:|--:|--:|
-| B1 | Static only | 78 | 22 | 24 | 289 | 0.780 | 0.765 | 0.772 | 0.542 | 0 |
-| B2 | Dynamic only | 68 | 0 | 46 | 0 | **1.000** | 0.596 | 0.747 | 0.060 | 0 |
-| B3 | Rule-based ensemble | 90 | 22 | 12 | 289 | 0.804 | 0.882 | 0.841 | 0.139 | 0 |
-| B4 | LLM + static (enrich) | 97 | 41 | 5 | 270 | 0.703 | 0.951 | 0.808 | 0.064 | 928,209 |
-| B5 | LLM + dynamic | 67 | 0 | 45 | 0 | **1.000** | 0.598 | 0.749 | 0.004 | 28,439 |
-| B6 | LLM + all (no planner/sel) | 86 | **0** | 16 | 311 | **1.000** | 0.843 | 0.915 | 0.112 | 304,188 |
-| **B6a** | **+ planner only** | 89 | **0** | 13 | 311 | **1.000** | **0.873** | **0.932** | 0.120 | 294,144 |
-| B6b | + tool_selector only | 88 | 2 | 14 | 309 | 0.978 | 0.863 | 0.917 | 0.123 | **2,442,083** |
-| B7 | Proposed (full adaptive) | 88 | 2 | 14 | 309 | 0.978 | 0.863 | 0.917 | 0.122 | **2,567,883** |
+| B1 | Static only | 42 | 11 | 11 | 146 | 0.792 | 0.792 | 0.792 | 0.548 | 0 |
+| B2 | Dynamic only | 35 | 0 | 24 | 0 | **1.000** | 0.593 | 0.745 | 0.041 | 0 |
+| B3 | Rule-based ensemble | 48 | 11 | 5 | 146 | 0.814 | 0.906 | 0.857 | 0.161 | 0 |
+| B4 | LLM + static (enrich) | 50 | 18 | 3 | 139 | 0.732 | 0.943 | 0.824 | 0.054 | 1,310,030 |
+| B5 | LLM + dynamic | 35 | 0 | 24 | 0 | **1.000** | 0.588 | 0.740 | 0.003 | 37,529 |
+| B6 | LLM + all (no planner/sel) | 48 | 1 | 5 | 156 | 0.973 | 0.899 | 0.935 | 0.129 | 455,434 |
+| **B6a** | **+ planner only** | 48 | 1 | 5 | 156 | **0.973** | **0.906** | **0.938** | 0.125 | 463,047 |
+| B6b | + tool_selector only | 48 | 2 | 5 | 155 | 0.960 | 0.899 | 0.929 | 0.128 | **4,239,560** |
+| B7 | Proposed (full adaptive) | 48 | 2 | 5 | 155 | 0.960 | 0.899 | 0.929 | 0.130 | **4,115,938** |
 
-Σ sweep = **6.56 M tokens** — B6b + B7 (the agentic configs) alone are **5.01 M (76%)**.
+Σ sweep = **10.6 M tokens** — B6b + B7 (the agentic configs) alone are **8.36 M (79%)**.
 
-Readings (representative; Juliet is still the EASY corpus, see §3a):
-- **🏆 The winner is B6a (planner + deterministic recipe + LLM judge): F1 0.932, P 1.000, FP 0, at 294 k tokens.**
-  Not B7. The most "agentic" feature is the *loser* axis here (next point).
-- **The LLM judge eliminates false positives — but only WITH dynamic.** B3→B6 (add LLM judge to static+dynamic):
-  FP 22 → **0**, F1 0.841 → 0.915. But B4 (LLM + static, NO dynamic) has **41 FP** despite the judge calls —
-  without runtime confirmation the LLM can't refute the enrich over-report. **Dynamic is the FP-killer; the LLM
-  judge then cleans up the rest.** Dynamic-only (B2/B5) is positive-only (TN 0, P 1.0, R ~0.6), like clang/LAMeD.
-- **`tool_selector` (agentic tool-selection) is counter-productive on Juliet — same/worse AND ~8× the cost.**
-  B6a (deterministic recipe) F1 0.932 @ 294 k tok vs B6b/B7 (agentic) F1 0.917 @ ~2.44–2.57 M tok. The agentic
-  loop burns 76 % of the sweep's tokens for *no F1 gain* (B6b = B7 on this corpus). **`planner` helps** (B6 →
-  B6a: +3 TP, F1 0.915 → 0.932) once it is guardrailed (see below).
-
-**Corroboration — the earlier stratified n=50 run (same config, same gateway):** same ordering, so the
-effect sizes are stable across n=50 → n=100. Kept here as a smaller-sample cross-check, not discarded.
-
-| ID | Baseline | TP | FP | FN | TN | P | R | F1 | ECE | total tok |
-|---|---|--:|--:|--:|--:|--:|--:|--:|--:|--:|
-| B1 | Static only | 40 | 11 | 12 | 138 | 0.784 | 0.769 | 0.777 | 0.539 | 0 |
-| B2 | Dynamic only | 35 | 0 | 22 | 0 | **1.000** | 0.614 | 0.761 | 0.049 | 0 |
-| B3 | Rule-based ensemble | 47 | 11 | 5 | 138 | 0.810 | 0.904 | 0.855 | 0.152 | 0 |
-| B4 | LLM + static (enrich) | 47 | 15 | 5 | 134 | 0.758 | 0.904 | 0.825 | 0.043 | 407,943 |
-| B5 | LLM + dynamic | 35 | 0 | 23 | 0 | **1.000** | 0.603 | 0.753 | 0.004 | 15,915 |
-| B6 | LLM + all (no planner/sel) | 47 | **0** | 5 | 149 | **1.000** | 0.904 | 0.949 | 0.125 | 158,144 |
-| **B6a** | **+ planner only** | 48 | **0** | 4 | 149 | **1.000** | **0.923** | **0.960** | 0.129 | 152,410 |
-| B6b | + tool_selector only | 44 | 2 | 8 | 147 | 0.957 | 0.846 | 0.898 | 0.120 | 1,278,400 |
-| B7 | Proposed (full adaptive) | 45 | **0** | 7 | 149 | **1.000** | 0.865 | 0.928 | 0.128 | 1,262,137 |
-
-Σ sweep (n=50) = **3.27 M tokens** — B6b + B7 alone are 2.54 M (78%). Winner identical to n=100: **B6a**.
-- **Open question for the HARD corpus (LAMeD):** does agentic tool-selection pay off where the deterministic
-  recipe + heuristic fail and exploration is actually needed? If yes → the full B7 is justified for hard targets;
-  if not → the proposed production config is **B6a**. This is the key thing the next stage tests.
+Readings (Juliet is still the EASY corpus, see §3a):
+- **🏆 The winner is B6a (planner + deterministic recipe + LLM judge): F1 0.938, P 0.973, at 463 k tokens** —
+  tied with B6 (0.935) and ahead of the agentic B6b/B7 (0.929). The most "agentic" feature is the *loser* axis.
+- **Dynamic is the false-positive killer.** B4 (LLM + static, NO dynamic) has **18 FP**; adding dynamic (B6)
+  drops it to **1 FP** at F1 0.935. The LLM judge alone can't refute the static over-report without runtime
+  confirmation. Dynamic-only (B2/B5) is positive-only (TN 0, P 1.0, R ~0.59), like clang/LAMeD.
+- **`tool_selector` (agentic tool-selection) is counter-productive on Juliet — no F1 gain at ~9× the cost.**
+  B6a (deterministic recipe) F1 0.938 @ 463 k tok vs B6b/B7 (agentic) F1 0.929 @ ~4.2 M tok each. The agentic
+  loop burns **79 %** of the sweep's tokens for *lower* F1 (B6b = B7). **`planner` adds a hair** (B6 → B6a:
+  +0.7 pt recall) once guardrailed (see below).
+- **Open question for the HARD corpus (LAMeD):** does agentic tool-selection pay off where exploration is
+  actually needed? If yes → B7 is justified for hard targets; if not → the production config is **B6a**.
 
 > **Method notes / fixes baked into these numbers.** (1) **Planner guardrail:** the strategist may drop the
 > dynamic stage ONLY for an unbuildable repo — earlier it disabled dynamic on buildable cases (152/184 bundles
@@ -193,11 +189,12 @@ effect sizes are stable across n=50 → n=100. Kept here as a smaller-sample cro
 > (3) **Token caveat:** `total tok` counts judge + agentic usage (the judge's tokens were previously dropped);
 > host-side strategist/profiler tokens are still not counted, so `planner` rows slightly understate cost.
 >
-> **Scale caveat:** n=100 stratified, single run. The n=50 run (same config) gave the same ordering —
-> B6a winner (F1 0.960/P 1.0/FP 0), agentic ~8× cost for no F1 gain, dynamic = FP-killer — so the effect
-> sizes are stable across n=50→n=100. The staged **n=200** run (+ multi-run variance) is next, and **LAMeD**
-> tests the agentic-tool-selection hypothesis on a HARD corpus. The prior top-N n=200 numbers were `char`-only
-> AND heuristic-fallback — discard them.
+> **Scale caveat:** n=50 stratified, single run, on the **validated 1658-case corpus**. Effect sizes are large
+> and consistent (B6a winner, agentic ~9× cost for no F1 gain, dynamic = FP-killer). A staged **n=100** re-run
+> on the validated corpus (+ multi-run variance) is next — note the agentic configs now cost ~4 M tokens each
+> at n=50, so n=100 is run for the non-agentic configs first. **LAMeD** tests the agentic-tool-selection
+> hypothesis on a HARD corpus. The pre-remediation n=100/n=50 numbers were measured on the defective corpus
+> (~422 C++ cases silently excluded) — discard them.
 
 ### 3c. Sampling: stratify, don't take the top-N
 
@@ -234,20 +231,21 @@ for st in none functionSummary pathConstraints functionSummary,pathConstraints \
 
 **Result (B1, no_llm + enrich, stratified n=50, deterministic heuristic judge):**
 
+**(validated 1658-case corpus, stratified n=50):**
+
 | static evidence tools | TP | FP | FN | P | R | F1 | ECE |
 |---|--:|--:|--:|--:|--:|--:|--:|
-| none (candidateScan only) | 40 | 11 | 12 | 0.784 | 0.769 | 0.777 | 0.539 |
-| + functionSummary | 40 | 11 | 12 | 0.784 | 0.769 | 0.777 | 0.483 |
-| + pathConstraints | 40 | 11 | 12 | 0.784 | 0.769 | 0.777 | 0.495 |
-| + **both** (default) | **48** | 13 | **4** | 0.787 | **0.923** | **0.850** | 0.552 |
-| + both + `interproceduralFlow` | 48 | 13 | 4 | 0.787 | 0.923 | 0.850 | 0.552 |
-| + both + `scanBuild` | 48 | 13 | 4 | 0.787 | 0.923 | 0.850 | 0.552 |
+| none (candidateScan only) | 42 | 11 | 11 | 0.792 | 0.792 | 0.792 | 0.548 |
+| + functionSummary | 42 | 11 | 11 | 0.792 | 0.792 | 0.792 | 0.492 |
+| + pathConstraints | 42 | 11 | 11 | 0.792 | 0.792 | 0.792 | 0.503 |
+| + **both** (default) | **50** | 13 | **3** | 0.794 | **0.943** | **0.862** | 0.555 |
 
 - **The two evidence tools are SYNERGISTIC, not additive.** Either alone leaves the confusion matrix
   *identical* to candidateScan-only (the path-sensitive heuristic needs BOTH the function summary —
   alloc→free pairing scope — AND the path constraints — guard reconciliation — to fire). Together they
-  lift **recall 0.769 → 0.923** (+8 TP, FN 12 → 4), F1 0.777 → 0.850. ⇒ Neither is redundant and neither
-  alone suffices — this is the data-backed justification for the default pair.
+  lift **recall 0.792 → 0.943** (+8 TP, FN 11 → 3), F1 0.792 → 0.862. ⇒ Neither is redundant and neither
+  alone suffices — this is the data-backed justification for the default pair. (Reproduces the pre-remediation
+  finding; the synergy is robust to the corpus fix.)
 - **`candidateScan` is the mandatory backbone** (discovery; without it there are no candidates).
 - **`interproceduralFlow` is judge-wired (opt-in): Δ=0 on Juliet, +1 TP on LAMeD (FP0).** On Juliet it ran
   but changed no verdict — leaks are **intra-function**, so `functionSummary` already flags the missing free.
@@ -417,3 +415,42 @@ run more seeds / a larger or harder corpus before claiming a paired win
 (`scripts/mcnemar-compare.ts <runA> <runB>` reproduces it). (Absolute P/R/F1 still
 come with the Tier-2 mean ± CI; this table isolates *stability*, the
 reproducibility axis.)
+
+## 8. Corpus integrity — prepare → validate → ingest → validate → lock → gate
+
+Benchmark numbers are only as trustworthy as the data they're measured on. A defect in
+the input data (e.g. Juliet C++ cases that don't compile, or a label pointing at a
+function the source doesn't contain) silently skews every Precision/Recall/F1. The
+corpus pipeline closes that gap end-to-end:
+
+1. **prepare** — fetch the source with a pinned, verified hash. Juliet: NIST v1.3 zip
+   `sha256 ada9d7e1…` (recorded in the lockfile); LAMeD: repos cloned at the per-leak
+   bug commit. A source whose hash doesn't match the pin is rejected.
+2. **ingest** (`scripts/juliet/ingest.ts`) — copy a testcase's files **verbatim**
+   (incl. its local `.h`), group all of a testcase's files under one base (so the C++
+   `_8x` multi-file variants stay together + buildable), derive flaw/clean labels
+   **from the source** (function + class definitions, by the bad/good convention) rather
+   than hard-coding them, and stamp per-file `sha256` provenance.
+3. **validate-corpus** (`scripts/corpus/validate-corpus.ts`) — five gates: **(a)** zod
+   schema, **(b)** structural (case dir + local `#include` resolution), **(c)** compile
+   (`clang -fsyntax-only` per TU — catches the C++ redefinition without linking),
+   **(d)** label (overlap is HARD; a function the source lacks is SOFT on a
+   naming-convention corpus like Juliet, HARD with `--strict-labels` on
+   label-authoritative corpora), **(e)** content-hash over **all** case source files.
+   HARD failures are quarantined; the run exits non-zero (CI-able).
+4. **lock** — `--write-lock` emits `<corpus>.lock.json` (committed even though the corpus
+   dir is gitignored): source hash, ingest commit, clang version, content-hash, and the
+   validation summary. Juliet: `f578c3ee…`, **1658 cases, 0 quarantined**.
+5. **gate** — `evalHarness.runEval` refuses a corpus with no lockfile / a failed
+   validation / a content-hash that drifted from the lock; `--allow-unvalidated` is a
+   loud escape hatch that stamps the run `corpus_unvalidated`. `provenance.corpusHash`
+   now records the **source** content-hash (was manifest-only → blind to source drift).
+
+**What this caught.** The original Juliet corpus had **422/1984 (21 %) C++ `_8x` cases
+that did not build** (synthetic inline-body headers conflicting with the authentic
+out-of-line `.cpp`, + per-class dirs missing the shared header) and **1171 cases with
+mislabeled functions** (rescued only by the scorer's naming fallback). Re-ingesting from
+a verified NIST tree with the fixed ingest yields **1658 cases, 0 quarantined, 1351
+clean, 307 SOFT** label-drift. The §3b/§3d numbers above are the re-measurement on this
+validated corpus; the pre-remediation numbers (which silently excluded the 422 broken
+cases) are superseded.
