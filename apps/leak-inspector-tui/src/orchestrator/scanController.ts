@@ -158,10 +158,13 @@ async function enrichStaticEvidence(
   const tools = new Set(input.staticTools ?? ['functionSummary', 'pathConstraints']);
   const store: StaticContextStore = new Map();
 
-  // interproceduralFlow (opt-in, B2) reads files SERVER-SIDE (it traces callees across
-  // files), so pass absolute candidate paths the analyzer can open. Computed once.
+  // interproceduralFlow (opt-in, B2) reads files SERVER-SIDE and traces callees ACROSS
+  // files, so it needs the WHOLE repo's .c/.h set — not just the candidates' files, or
+  // callees in sibling files are invisible (recall capped at the candidate file boundary,
+  // which neutered it on multi-file real projects). Walk the repo once + remap to the
+  // analyzer's filesystem. Bounded by fileLimit (walkCFiles default 2000).
   const ipFiles = tools.has('interproceduralFlow')
-    ? [...new Set(bundles.map((b) => analyzerPath(b.candidate.file_path)))]
+    ? walkCFiles(input.repoPath, input.fileLimit).map(analyzerPath)
     : [];
 
   // ── Project-level Clang scan-build (opt-in): run ONCE over the whole build, then
@@ -213,7 +216,7 @@ async function enrichStaticEvidence(
     // so its paths concat onto, not clobber, the path-constraint evidence. ──
     if (tools.has('interproceduralFlow') && fn) {
       try {
-        const ip = await staticClient.callTool('interproceduralFlow', { rootPath: input.repoPath, functionName: fn, files: ipFiles });
+        const ip = await staticClient.callTool('interproceduralFlow', { rootPath: input.repoPath, functionName: fn, files: ipFiles, ...allocArgs });
         appendFeasibleLeakPaths(b, interproceduralLeakPaths(ip, { function_name: fn, line_number: line }));
       } catch {
         /* best-effort */

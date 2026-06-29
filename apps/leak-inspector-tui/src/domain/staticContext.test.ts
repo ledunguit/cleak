@@ -143,32 +143,22 @@ describe('attachScanBuildDiagnostics', () => {
   });
 });
 
-describe('interproceduralLeakPaths (B2, recall-additive)', () => {
+describe('interproceduralLeakPaths (B2, recall-additive, variable-level)', () => {
   const cand = { function_name: 'make_thing', line_number: 8 };
 
-  test('alloc-without-free + NO reachable free anywhere → one high-risk leak path', () => {
-    const paths = interproceduralLeakPaths(
-      { paths: [{ functionName: 'make_thing', hasAllocWithoutFree: true }], reachableFrees: [] },
-      cand,
-    );
+  test('a variable allocated in the start function but freed nowhere reachable → one high-risk leak path', () => {
+    const paths = interproceduralLeakPaths({ startFunction: 'make_thing', unreconciledAllocVars: ['thing'] }, cand);
     expect(paths).toHaveLength(1);
-    expect(paths[0]).toMatchObject({ reachable: true, leakRisk: 'high' });
+    expect(paths[0]).toMatchObject({ reachable: true, leakRisk: 'high', unreconciledAllocations: ['thing'] });
   });
 
-  test('a free reachable through a callee → stays additive-safe, emits NOTHING (no exoneration, no FP)', () => {
-    const paths = interproceduralLeakPaths(
-      { paths: [{ functionName: 'make_thing', hasAllocWithoutFree: true }], reachableFrees: ['free at /x.c:30'] },
-      cand,
-    );
+  test('every allocation reconciled across the call graph (empty unreconciled) → emits NOTHING (no exoneration, no FP)', () => {
+    const paths = interproceduralLeakPaths({ startFunction: 'make_thing', unreconciledAllocVars: [], reachableFrees: ['cJSON_Delete at /x.c:30'] }, cand);
     expect(paths).toEqual([]);
   });
 
-  test('candidate function freed locally (no alloc-without-free) → nothing', () => {
-    const paths = interproceduralLeakPaths(
-      { paths: [{ functionName: 'make_thing', hasAllocWithoutFree: false }], reachableFrees: [] },
-      cand,
-    );
-    expect(paths).toEqual([]);
+  test('missing field → nothing (degrades safely)', () => {
+    expect(interproceduralLeakPaths({ paths: [] }, cand)).toEqual([]);
   });
 
   test('appendFeasibleLeakPaths concats (does not clobber) existing paths', () => {
@@ -179,7 +169,7 @@ describe('interproceduralLeakPaths (B2, recall-additive)', () => {
       earlyReturnCount: 0,
       leakyExitPaths: 0,
     };
-    appendFeasibleLeakPaths(b, interproceduralLeakPaths({ paths: [{ functionName: 'make_thing', hasAllocWithoutFree: true }], reachableFrees: [] }, { function_name: 'make_thing', line_number: 8 }));
+    appendFeasibleLeakPaths(b, interproceduralLeakPaths({ startFunction: 'make_thing', unreconciledAllocVars: ['thing'] }, { function_name: 'make_thing', line_number: 8 }));
     expect(b.staticEvidence!.feasibleLeakPaths).toHaveLength(2);
     expect(b.staticEvidence!.feasibleLeakPaths[0].narrative).toBe('pre-existing');
   });

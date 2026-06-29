@@ -13,7 +13,7 @@ export interface StaticToolServices {
   astScan: { parse(filePath: string, content?: string): any };
   callGraph: { extract(rootPath: string, files: string[], extraAllocators?: string[], extraDeallocators?: string[]): any };
   functionSummary: { summarize(filePath: string, content: string, functionName: string, extraAllocators?: string[], extraDeallocators?: string[]): any };
-  interproceduralFlow: { analyze(rootPath: string, functionName: string, files: string[]): any };
+  interproceduralFlow: { analyze(rootPath: string, functionName: string, files: string[], extraAllocators?: string[], extraDeallocators?: string[]): any };
   pathConstraints: { analyze(filePath: string, content: string, lineNumber: number, extraAllocators?: string[], extraDeallocators?: string[]): any };
   ownership: { summarize(files: string[], rootPath: string): any; conventions(content: string, filePath: string): any };
   scanBuild: { run(projectPath: string, buildCommand: string, timeoutSec?: number): any; getReport(runId: string): any };
@@ -71,8 +71,18 @@ export function createStaticMcpServer(svc: StaticToolServices): McpServer {
 
   server.registerTool(
     'interproceduralFlow',
-    { description: 'Interprocedural data flow tracing for a function', inputSchema: { rootPath: z.string(), functionName: z.string(), files: z.array(z.string()) } },
-    async (a) => ok(await svc.interproceduralFlow.analyze(a.rootPath, a.functionName, a.files)),
+    {
+      description:
+        'Interprocedural alloc/free flow tracing for a function. Optionally supply per-project allocators/deallocators so the trace tracks factory allocators (cJSON_malloc/_TIFFfree/…) — without them it is blind to non-libc memory APIs.',
+      inputSchema: {
+        rootPath: z.string(),
+        functionName: z.string(),
+        files: z.array(z.string()),
+        extraAllocators: z.array(z.string()).optional(),
+        extraDeallocators: z.array(z.string()).optional(),
+      },
+    },
+    async (a) => ok(await svc.interproceduralFlow.analyze(a.rootPath, a.functionName, a.files, a.extraAllocators, a.extraDeallocators)),
   );
 
   server.registerTool(

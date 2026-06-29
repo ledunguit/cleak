@@ -116,6 +116,33 @@ phải F1.
 toàn-corpus. Vì LAMeD bản thân **không dùng solver**, đối-sánh head-to-head không bị ảnh hưởng; headline đo được
 của lớp static (recall 7/44, FP0 vs clang 0/43) giữ nguyên.
 
+### 5b-bis. interproceduralFlow allocator-aware → recall cross-function trên LAMeD (R3)
+
+`interproceduralFlow` (deep-static, dormant trước đây) đã được **nâng cấp + wire làm evidence opt-in**: (1)
+nhận `extraAllocators/extraDeallocators` (trước thiếu → mù custom allocator `cJSON_Delete`/`_TIFFfree`… →
+Δ0 giả trên mọi dự án thật); (2) **variable-level cross-frame matching** (`unreconciledAllocVars` = biến cấp
+phát ở hàm start, free **nowhere reachable** qua callee) → fold thành `feasibleLeakPath` (recall-additive,
+không bao giờ exonerate); (3) **perf**: parse-once index (O(depth×files)→O(files)) + cross-call parse cache
+(curl cold 63s → warm 1.16s/call).
+
+**Đo thật 41/41 ca (no_llm tất định, default 2-tool enrich `functionSummary,pathConstraints`, allocator-profile
+per-case từ manifest; analyzer Docker + `EVAL_STATIC_PATH_MAP`):**
+
+| static evidence tools | sites | TP | FP | FN | Recall | Precision |
+|---|--:|--:|--:|--:|--:|--:|
+| default (functionSummary + pathConstraints) | 44 | 11 | 0 | 33 | 0.250 | 1.000 |
+| **+ interproceduralFlow** | 44 | **12** | **0** | 32 | **0.273** | **1.000** |
+
+- **+1 TP (recall 0.250 → 0.273), FP = 0, KHÔNG ca nào regress.** Ca bắt thêm = `cjson merge_patch`
+  (`cjson_f50dafc7`) — leak vắt qua biên hàm mà 2-tool default bỏ sót: bằng chứng cơ chế interprocedural
+  hoạt động end-to-end trên dự án thật, **ở precision 1.0** (không đánh đổi FP).
+- **Trung thực về biên độ:** gain nhỏ (1 ca). 32 FN còn lại phần lớn **không phải** dạng "alloc never-freed-
+  anywhere" (mà path-sensitive, hoặc cần phân tích sâu hơn cross-frame variable aliasing) → ngoài tầm tín hiệu
+  interprocedural hiện tại. Đây là hướng future work (alias-aware interprocedural dataflow), không phải bế tắc.
+- **Determinism giữ nguyên:** interproceduralFlow là **opt-in** (`--static-tools …,interproceduralFlow`); default
+  2-tool không gọi nó ⇒ `no_llm` vẫn bitwise (determinism-gate PASS sau nâng cấp). Trên **Juliet** (intra-function)
+  nó Δ0 — đúng kỳ vọng; payoff chỉ xuất hiện trên corpus cross-function thật (LAMeD).
+
 Đây *biện minh* định vị luận văn: cần allocator profile (LLM khám phá động, ≈ LAMeD AllocSource) +
 judging path-sensitive/interprocedural — đúng hướng LAMeD, và lớp đầu (discovery + static recall ở FP0)
 **đã đo được trên đúng commit pinned của LAMeD**.
