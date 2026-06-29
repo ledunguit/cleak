@@ -193,6 +193,40 @@ covers all 10 families (`char/int/malloc/new/strdup/struct/twoIntsStruct/wchar` 
 `destructor/virtual`). It is reproducible (no RNG) — see `selectCases` in `evalHarness.ts`. **Report
 stratified numbers**; a top-N number must say so and is only valid for whatever family leads the manifest.
 
+### 3d. Static evidence-tool ablation (why these tools?)
+
+The static analyzer exposes 11 MCP tools, but they have **distinct roles** — discovery
+(`candidateScan`), evidence enrichment (`functionSummary`, `pathConstraints`), cross-function
+(`callGraph`, `interproceduralFlow`), ownership (`ownershipSummary/Conventions`), and a full alt-analyzer
+(`clang` / scan-build). They are **not competing detectors**, so "each tool's recall" is the wrong metric;
+the right one is each tool's **marginal contribution to the verdict** at a fixed judge. Run with
+`--static-tools` (which evidence tools the enrich stage uses) + `--enrich`:
+
+```bash
+for st in none functionSummary pathConstraints functionSummary,pathConstraints; do
+  bun scripts/run-baselines.ts --only B1 --enrich --static-tools "$st" --stratify --limit 50; done
+```
+
+**Result (B1, no_llm + enrich, stratified n=50, deterministic heuristic judge):**
+
+| static evidence tools | TP | FP | FN | P | R | F1 | ECE |
+|---|--:|--:|--:|--:|--:|--:|--:|
+| none (candidateScan only) | 40 | 11 | 12 | 0.784 | 0.769 | 0.777 | 0.539 |
+| + functionSummary | 40 | 11 | 12 | 0.784 | 0.769 | 0.777 | 0.483 |
+| + pathConstraints | 40 | 11 | 12 | 0.784 | 0.769 | 0.777 | 0.495 |
+| + **both** | **48** | 13 | **4** | 0.787 | **0.923** | **0.850** | 0.552 |
+
+- **The two evidence tools are SYNERGISTIC, not additive.** Either alone leaves the confusion matrix
+  *identical* to candidateScan-only (the path-sensitive heuristic needs BOTH the function summary —
+  alloc→free pairing scope — AND the path constraints — guard reconciliation — to fire). Together they
+  lift **recall 0.769 → 0.923** (+8 TP, FN 12 → 4), F1 0.777 → 0.850. ⇒ Neither is redundant and neither
+  alone suffices — this is the data-backed justification for the default pair.
+- **`candidateScan` is the mandatory backbone** (discovery; without it there are no candidates).
+- **Not yet judge-wired (built, not integrated — honest future work):** `astScan` (agentic-only),
+  `callGraph`, `interproceduralFlow`, `ownershipSummary`, `clang` (scan-build, currently an *external*
+  baseline only, §6). `callGraph`/`interproceduralFlow` are the clear next lever — interprocedural leaks
+  (where static recall is weakest, esp. real projects) need cross-function alloc→free pairing.
+
 ## 4. Reproducibility provenance
 
 Every `metrics.json` records a `provenance` block so a number can be re-run:
