@@ -31,14 +31,18 @@ export class ScanBuildAdapterService {
     const runId = `sb_${Date.now()}`;
     const reportDir = join(this.runsDir, runId);
 
-    // No outer shell: scan-build, the report dir and bin are passed as argv, so a
-    // crafted path/bin can't inject. The build command keeps ONE intended shell
-    // layer (`/bin/sh -c <buildCommand>`) — scan-build needs to intercept a real
-    // build — but it's a single argv element, so there's no escaping to get wrong.
-    // --keep-going: don't abort the whole pass on a single TU failure.
+    // scan-build must SEE the build tool to intercept it: `scan-build make …` recognizes
+    // make and injects its ccc-analyzer compiler; `scan-build /bin/sh -c "make …"` does
+    // NOT — sh hides the tool, so the real compiler runs and scan-build finds nothing.
+    // So for a SIMPLE command (no shell metacharacters) we tokenize on whitespace and pass
+    // the argv straight through; a command that actually needs shell features keeps the one
+    // controlled `/bin/sh -c` layer. Splitting a metachar-free string is injection-safe (no
+    // shell interpretation). --keep-going: don't abort the whole pass on a single TU failure.
+    const simple = !/[|&;<>$`(){}\[\]*?~\n]/.test(buildCommand);
+    const buildArgv = simple ? buildCommand.trim().split(/\s+/) : ['/bin/sh', '-c', buildCommand];
     const result = spawnSync(
       this.scanBuildBin,
-      ['-o', reportDir, '--keep-going', '/bin/sh', '-c', buildCommand],
+      ['-o', reportDir, '--keep-going', ...buildArgv],
       { cwd: projectPath, timeout: timeout * 1000, encoding: 'utf-8', maxBuffer: 10 * 1024 * 1024 },
     );
     // clang analyzer diagnostics go to stderr; merge with stdout so we parse them.

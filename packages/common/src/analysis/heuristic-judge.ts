@@ -139,15 +139,20 @@ export function judgeHeuristically(
   }
 
   // ── Clang scan-build corroboration (opt-in `--static-tools scanBuild`): a project-
-  // level scan-build leak diagnostic NEAR the candidate is a deterministic second
-  // static opinion that reinforces the heuristic. Absent unless scanBuild ran, so it
-  // never perturbs the default 2-tool baseline. ──
-  const scanBuildHit = (se?.scanBuildDiagnostics || []).some(
-    (d) => Math.abs(d.line - bundle.candidate.line_number) <= 2,
-  );
+  // level scan-build leak diagnostic for this candidate is a deterministic second static
+  // opinion. scan-build reports at the LEAK SITE (the exit/last-use), not the allocation
+  // line, so a pure line window misses it — match primarily by the LEAKED VARIABLE it
+  // names (`…pointed to by 'data'`) appearing in the candidate's alloc context, and fall
+  // back to a line window. Absent unless scanBuild ran ⇒ never perturbs the default. ──
+  const candCtx = `${bundle.candidate.context ?? ''} ${bundle.candidate.allocation_site ?? ''}`;
+  const scanBuildHit = (se?.scanBuildDiagnostics || []).some((d) => {
+    const leakedVar = /pointed to by '([^']+)'/.exec(d.message)?.[1];
+    const varMatch = !!leakedVar && new RegExp(`\\b${leakedVar.replace(/[^\w]/g, '')}\\b`).test(candCtx);
+    return varMatch || Math.abs(d.line - bundle.candidate.line_number) <= 2;
+  });
   if (scanBuildHit) {
     score += 0.15;
-    reasons.push('Clang scan-build reports a leak at this allocation');
+    reasons.push('Clang scan-build reports a leak of this allocation');
   }
 
   // ── PATH-SENSITIVE leak: the candidate is freed on SOME paths but a reachable exit

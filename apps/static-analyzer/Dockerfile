@@ -34,8 +34,11 @@ FROM --platform=linux/amd64 node:22-slim AS runtime
 # Runtime needs: node-gyp toolchain for the tree-sitter native addon
 # (python3/make/g++), plus the Clang Static Analyzer (clang + clang-tools
 # provides `scan-build`) and gcc so scan-build can intercept project builds.
+# `perl` is REQUIRED: scan-build is a Perl script that `use`s FindBin — the slim
+# base only ships perl-base (no FindBin), so without this scan-build aborts at
+# startup and the deep-static slot silently returns zero findings.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3 make g++ gcc clang clang-tools && rm -rf /var/lib/apt/lists/* && \
+    python3 make g++ gcc clang clang-tools perl && rm -rf /var/lib/apt/lists/* && \
     # Debian ships scan-build as a versioned binary (scan-build-NN); expose an
     # unversioned `scan-build` on PATH so the adapter's default works.
     if ! command -v scan-build >/dev/null 2>&1; then \
