@@ -45,8 +45,10 @@ export const LabeledCaseSchema = z
     deallocators: z.array(z.string()).optional(),
   })
   .passthrough() // tolerate provenance extras (_lamed, source_origin, file hashes…)
-  .refine((c) => (c.flaws?.length ?? 0) > 0 || c.expected_leak_count !== undefined, {
-    message: 'case has no flaws[] and no expected_leak_count — unscoreable ground truth',
+  .refine((c) => (c.flaws?.length ?? 0) > 0 || (c.clean?.length ?? 0) > 0 || c.expected_leak_count !== undefined, {
+    // A "fixed"/good variant legitimately has only `clean` sites (everything must be a
+    // true negative); only a case with NO flaws, NO clean and NO count is unscoreable.
+    message: 'case has no flaws[], no clean[] and no expected_leak_count — unscoreable ground truth',
   });
 
 export const LabeledManifestSchema = z

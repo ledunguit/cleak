@@ -1,0 +1,20 @@
+{
+  "schema": "corpus-lock/v1",
+  "corpus": "real_projects",
+  "source": {
+    "name": "real-project leak-fix-commit oracle"
+  },
+  "ingestCommit": "1067867",
+  "toolVersions": {
+    "clang": "Apple clang version 21.0.0 (clang-2100.1.1.101)"
+  },
+  "contentHash": "99e4347ee6f276f93465990464f112eb",
+  "validatedAt": "2026-06-29T21:07:16.343Z",
+  "validated": true,
+  "summary": {
+    "total": 4,
+    "clean": 2,
+    "warned": 2,
+    "quarantined": 0
+  }
+}

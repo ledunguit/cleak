@@ -1,0 +1,20 @@
+{
+  "schema": "corpus-lock/v1",
+  "corpus": "memory_leak_corpus",
+  "source": {
+    "name": "hand-curated leak corpus"
+  },
+  "ingestCommit": "1067867",
+  "toolVersions": {
+    "clang": "Apple clang version 21.0.0 (clang-2100.1.1.101)"
+  },
+  "contentHash": "61a102ffde5dd9907ad59d714baafbac",
+  "validatedAt": "2026-06-29T21:06:06.768Z",
+  "validated": true,
+  "summary": {
+    "total": 9,
+    "clean": 9,
+    "warned": 0,
+    "quarantined": 0
+  }
+}
