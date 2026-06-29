@@ -217,12 +217,18 @@ stratified numbers**; a top-N number must say so and is only valid for whatever 
 The static analyzer exposes 11 MCP tools, but they have **distinct roles** — discovery
 (`candidateScan`), evidence enrichment (`functionSummary`, `pathConstraints`), cross-function
 (`callGraph`, `interproceduralFlow`), ownership (`ownershipSummary/Conventions`), and a full alt-analyzer
-(`clang` / scan-build). They are **not competing detectors**, so "each tool's recall" is the wrong metric;
-the right one is each tool's **marginal contribution to the verdict** at a fixed judge. Run with
+(`scanBuild` / Clang scan-build). They are **not competing detectors**, so "each tool's recall" is the wrong
+metric; the right one is each tool's **marginal contribution to the verdict** at a fixed judge. Run with
 `--static-tools` (which evidence tools the enrich stage uses) + `--enrich`:
 
 ```bash
-for st in none functionSummary pathConstraints functionSummary,pathConstraints; do
+# content-based tools (functionSummary/pathConstraints) send content inline; the
+# server-side-file tools (interproceduralFlow/scanBuild) need a path map when the
+# analyzer runs in Docker — host /…/demo → container /workspace/demo.
+for st in none functionSummary pathConstraints functionSummary,pathConstraints \
+          functionSummary,pathConstraints,interproceduralFlow \
+          functionSummary,pathConstraints,scanBuild; do
+  EVAL_STATIC_PATH_MAP="$PWD/demo=/workspace/demo" \
   bun scripts/run-baselines.ts --only B1 --enrich --static-tools "$st" --stratify --limit 50; done
 ```
 
@@ -233,7 +239,9 @@ for st in none functionSummary pathConstraints functionSummary,pathConstraints; 
 | none (candidateScan only) | 40 | 11 | 12 | 0.784 | 0.769 | 0.777 | 0.539 |
 | + functionSummary | 40 | 11 | 12 | 0.784 | 0.769 | 0.777 | 0.483 |
 | + pathConstraints | 40 | 11 | 12 | 0.784 | 0.769 | 0.777 | 0.495 |
-| + **both** | **48** | 13 | **4** | 0.787 | **0.923** | **0.850** | 0.552 |
+| + **both** (default) | **48** | 13 | **4** | 0.787 | **0.923** | **0.850** | 0.552 |
+| + both + `interproceduralFlow` | 48 | 13 | 4 | 0.787 | 0.923 | 0.850 | 0.552 |
+| + both + `scanBuild` | 48 | 13 | 4 | 0.787 | 0.923 | 0.850 | 0.552 |
 
 - **The two evidence tools are SYNERGISTIC, not additive.** Either alone leaves the confusion matrix
   *identical* to candidateScan-only (the path-sensitive heuristic needs BOTH the function summary —
@@ -241,10 +249,22 @@ for st in none functionSummary pathConstraints functionSummary,pathConstraints; 
   lift **recall 0.769 → 0.923** (+8 TP, FN 12 → 4), F1 0.777 → 0.850. ⇒ Neither is redundant and neither
   alone suffices — this is the data-backed justification for the default pair.
 - **`candidateScan` is the mandatory backbone** (discovery; without it there are no candidates).
-- **Not yet judge-wired (built, not integrated — honest future work):** `astScan` (agentic-only),
-  `callGraph`, `interproceduralFlow`, `ownershipSummary`, `clang` (scan-build, currently an *external*
-  baseline only, §6). `callGraph`/`interproceduralFlow` are the clear next lever — interprocedural leaks
-  (where static recall is weakest, esp. real projects) need cross-function alloc→free pairing.
+- **`interproceduralFlow` is now judge-wired (opt-in) but Δ=0 ON JULIET — as expected.** It *ran*
+  (15 MCP calls/case vs 12 for the default pair, confirmed via the Docker path map) and correctly emits a
+  cross-boundary leak path for `bad` functions while staying silent on `good` ones, but it changes **no
+  verdict**: Juliet leaks are **intra-function**, so `functionSummary` already flags the missing free.
+  Its real lever is **cross-function leaks on real projects (LAMeD)** — measured in the next stage (§3, C),
+  where static recall is genuinely weakest. The wiring is recall-additive only (never exonerates), so it
+  can lift recall there without risking the precision shown here.
+- **`scanBuild` (Clang scan-build) is judge-wired (opt-in) but needs the BUILD path.** It intercepts the
+  project build, so it does nothing in a pure-static `B1` (no `buildCommand` ⇒ not invoked, row identical
+  above). Its marginal contribution is measured with the build/dynamic path enabled (C). When it does run,
+  a diagnostic within ±2 lines of a candidate adds a small deterministic corroboration (`+0.15`).
+- **Still not judge-wired (built, not integrated):** `astScan` (agentic-only), `callGraph`,
+  `ownershipSummary`. (`scanBuild` is *also* an external comparison baseline as `clang`/`infer` in §6 — a
+  separate per-TU `clang --analyze`, distinct from the project-level scan-build evidence tool here.)
+- **Determinism preserved:** with the opt-in tools OFF (the default), the `no_llm` pipeline is still
+  bitwise-reproducible — re-verified by `scripts/determinism-gate.sh` after wiring them (§7, Tier-1).
 
 ## 4. Reproducibility provenance
 

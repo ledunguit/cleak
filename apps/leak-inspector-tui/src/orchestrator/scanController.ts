@@ -123,6 +123,24 @@ export interface ScanResult {
  * to the static analysis, which the llm_assisted sub-agents otherwise omit. Pure
  * (Tier-1 deterministic): the same content + allocators always yield the same evidence.
  */
+/**
+ * Map a host path into the ANALYZER's filesystem for server-side-file tools
+ * (interproceduralFlow, scanBuild). When the analyzer runs in Docker its paths differ
+ * from the host; set `EVAL_STATIC_PATH_MAP=/host/prefix=/container/prefix` to remap.
+ * Unset (host-run analyzer) ⇒ identity (just absolutize). content-based tools
+ * (functionSummary/pathConstraints) send file content inline and never use this.
+ */
+function analyzerPath(hostPath: string): string {
+  const abs = resolvePath(hostPath);
+  const map = process.env.EVAL_STATIC_PATH_MAP;
+  if (!map) return abs;
+  const eq = map.indexOf('=');
+  if (eq < 0) return abs;
+  const from = map.slice(0, eq);
+  const to = map.slice(eq + 1);
+  return abs.startsWith(from) ? to + abs.slice(from.length) : abs;
+}
+
 async function enrichStaticEvidence(
   bundles: LeakBundle[],
   staticClient: McpClient,
@@ -143,7 +161,7 @@ async function enrichStaticEvidence(
   // interproceduralFlow (opt-in, B2) reads files SERVER-SIDE (it traces callees across
   // files), so pass absolute candidate paths the analyzer can open. Computed once.
   const ipFiles = tools.has('interproceduralFlow')
-    ? [...new Set(bundles.map((b) => resolvePath(b.candidate.file_path)))]
+    ? [...new Set(bundles.map((b) => analyzerPath(b.candidate.file_path)))]
     : [];
 
   // ── Project-level Clang scan-build (opt-in): run ONCE over the whole build, then
@@ -153,7 +171,7 @@ async function enrichStaticEvidence(
   if (tools.has('scanBuild') && input.buildCommand) {
     try {
       const run = coerceToObject(
-        await staticClient.callTool('scanBuildRun', { projectPath: input.repoPath, buildCommand: input.buildCommand }),
+        await staticClient.callTool('scanBuildRun', { projectPath: analyzerPath(input.repoPath), buildCommand: input.buildCommand }),
       );
       const runId = typeof run.runId === 'string' ? run.runId : undefined;
       if (runId) {
