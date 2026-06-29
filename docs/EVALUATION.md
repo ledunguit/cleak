@@ -136,8 +136,37 @@ bun scripts/run-baselines.ts --only B1,B3 --dry-run                     # inspec
 > ~100% the `char` family (first 200 miss the 672-case `new` family entirely). The table below uses
 > **`--stratify`** (even round-robin across the 10 functional families) so the numbers are representative.
 
-**Representative headline (Juliet CWE-401, stratified n=50, single run, `mimo/mimo-v2.5-pro` @ temp 0, real
-9router gateway; planner-guardrail + LLM health-check on):**
+**Representative headline (Juliet CWE-401, stratified n=100, single run, `mimo/mimo-v2.5-pro` @ temp 0, real
+9router gateway; planner-guardrail + LLM health-check on; git `2579046`):**
+
+| ID | Baseline | TP | FP | FN | TN | P | R | F1 | ECE | total tok |
+|---|---|--:|--:|--:|--:|--:|--:|--:|--:|--:|
+| B1 | Static only | 78 | 22 | 24 | 289 | 0.780 | 0.765 | 0.772 | 0.542 | 0 |
+| B2 | Dynamic only | 68 | 0 | 46 | 0 | **1.000** | 0.596 | 0.747 | 0.060 | 0 |
+| B3 | Rule-based ensemble | 90 | 22 | 12 | 289 | 0.804 | 0.882 | 0.841 | 0.139 | 0 |
+| B4 | LLM + static (enrich) | 97 | 41 | 5 | 270 | 0.703 | 0.951 | 0.808 | 0.064 | 928,209 |
+| B5 | LLM + dynamic | 67 | 0 | 45 | 0 | **1.000** | 0.598 | 0.749 | 0.004 | 28,439 |
+| B6 | LLM + all (no planner/sel) | 86 | **0** | 16 | 311 | **1.000** | 0.843 | 0.915 | 0.112 | 304,188 |
+| **B6a** | **+ planner only** | 89 | **0** | 13 | 311 | **1.000** | **0.873** | **0.932** | 0.120 | 294,144 |
+| B6b | + tool_selector only | 88 | 2 | 14 | 309 | 0.978 | 0.863 | 0.917 | 0.123 | **2,442,083** |
+| B7 | Proposed (full adaptive) | 88 | 2 | 14 | 309 | 0.978 | 0.863 | 0.917 | 0.122 | **2,567,883** |
+
+Σ sweep = **6.56 M tokens** — B6b + B7 (the agentic configs) alone are **5.01 M (76%)**.
+
+Readings (representative; Juliet is still the EASY corpus, see §3a):
+- **🏆 The winner is B6a (planner + deterministic recipe + LLM judge): F1 0.932, P 1.000, FP 0, at 294 k tokens.**
+  Not B7. The most "agentic" feature is the *loser* axis here (next point).
+- **The LLM judge eliminates false positives — but only WITH dynamic.** B3→B6 (add LLM judge to static+dynamic):
+  FP 22 → **0**, F1 0.841 → 0.915. But B4 (LLM + static, NO dynamic) has **41 FP** despite the judge calls —
+  without runtime confirmation the LLM can't refute the enrich over-report. **Dynamic is the FP-killer; the LLM
+  judge then cleans up the rest.** Dynamic-only (B2/B5) is positive-only (TN 0, P 1.0, R ~0.6), like clang/LAMeD.
+- **`tool_selector` (agentic tool-selection) is counter-productive on Juliet — same/worse AND ~8× the cost.**
+  B6a (deterministic recipe) F1 0.932 @ 294 k tok vs B6b/B7 (agentic) F1 0.917 @ ~2.44–2.57 M tok. The agentic
+  loop burns 76 % of the sweep's tokens for *no F1 gain* (B6b = B7 on this corpus). **`planner` helps** (B6 →
+  B6a: +3 TP, F1 0.915 → 0.932) once it is guardrailed (see below).
+
+**Corroboration — the earlier stratified n=50 run (same config, same gateway):** same ordering, so the
+effect sizes are stable across n=50 → n=100. Kept here as a smaller-sample cross-check, not discarded.
 
 | ID | Baseline | TP | FP | FN | TN | P | R | F1 | ECE | total tok |
 |---|---|--:|--:|--:|--:|--:|--:|--:|--:|--:|
@@ -148,22 +177,10 @@ bun scripts/run-baselines.ts --only B1,B3 --dry-run                     # inspec
 | B5 | LLM + dynamic | 35 | 0 | 23 | 0 | **1.000** | 0.603 | 0.753 | 0.004 | 15,915 |
 | B6 | LLM + all (no planner/sel) | 47 | **0** | 5 | 149 | **1.000** | 0.904 | 0.949 | 0.125 | 158,144 |
 | **B6a** | **+ planner only** | 48 | **0** | 4 | 149 | **1.000** | **0.923** | **0.960** | 0.129 | 152,410 |
-| B6b | + tool_selector only | 44 | 2 | 8 | 147 | 0.957 | 0.846 | 0.898 | 0.120 | **1,278,400** |
-| B7 | Proposed (full adaptive) | 45 | **0** | 7 | 149 | **1.000** | 0.865 | 0.928 | 0.128 | **1,262,137** |
+| B6b | + tool_selector only | 44 | 2 | 8 | 147 | 0.957 | 0.846 | 0.898 | 0.120 | 1,278,400 |
+| B7 | Proposed (full adaptive) | 45 | **0** | 7 | 149 | **1.000** | 0.865 | 0.928 | 0.128 | 1,262,137 |
 
-Σ sweep = **3.27 M tokens** — B6b + B7 (the agentic configs) alone are **2.54 M (78%)**.
-
-Readings (representative; Juliet is still the EASY corpus, see §3a):
-- **🏆 The winner is B6a (planner + deterministic recipe + LLM judge): F1 0.960, P 1.000, FP 0, at 152 k tokens.**
-  Not B7. The most "agentic" feature is the *loser* axis here (next point).
-- **The LLM judge eliminates false positives — but only WITH dynamic.** B3→B6 (add LLM judge to static+dynamic):
-  FP 11 → **0**, F1 0.855 → 0.949. But B4 (LLM + static, NO dynamic) still has **15 FP** despite 25 judge calls —
-  without runtime confirmation the LLM can't refute the enrich over-report. **Dynamic is the FP-killer; the LLM
-  judge then cleans up the rest.** Dynamic-only (B2/B5) is positive-only (TN 0, P 1.0, R ~0.6), like clang/LAMeD.
-- **`tool_selector` (agentic tool-selection) is counter-productive on Juliet — worse AND ~8× the cost.**
-  B6a (deterministic recipe) F1 0.960 @ 152 k tok vs B6b/B7 (agentic) F1 0.898/0.928 @ ~1.27 M tok. The agentic
-  loop burns 78 % of the sweep's tokens for *lower* F1. **`planner` helps** (B6 → B6a: +1 TP, F1 0.949 → 0.960)
-  once it is guardrailed (see below).
+Σ sweep (n=50) = **3.27 M tokens** — B6b + B7 alone are 2.54 M (78%). Winner identical to n=100: **B6a**.
 - **Open question for the HARD corpus (LAMeD):** does agentic tool-selection pay off where the deterministic
   recipe + heuristic fail and exploration is actually needed? If yes → the full B7 is justified for hard targets;
   if not → the proposed production config is **B6a**. This is the key thing the next stage tests.
@@ -176,9 +193,11 @@ Readings (representative; Juliet is still the EASY corpus, see §3a):
 > (3) **Token caveat:** `total tok` counts judge + agentic usage (the judge's tokens were previously dropped);
 > host-side strategist/profiler tokens are still not counted, so `planner` rows slightly understate cost.
 >
-> **Scale caveat:** n=50 stratified, single run. Effect sizes are large and consistent, but the staged
-> **n=100 → n=200** runs (+ multi-run variance) confirm them, and **LAMeD** tests the agentic-tool-selection
-> hypothesis. The prior top-N n=200 numbers were `char`-only AND heuristic-fallback — discard them.
+> **Scale caveat:** n=100 stratified, single run. The n=50 run (same config) gave the same ordering —
+> B6a winner (F1 0.960/P 1.0/FP 0), agentic ~8× cost for no F1 gain, dynamic = FP-killer — so the effect
+> sizes are stable across n=50→n=100. The staged **n=200** run (+ multi-run variance) is next, and **LAMeD**
+> tests the agentic-tool-selection hypothesis on a HARD corpus. The prior top-N n=200 numbers were `char`-only
+> AND heuristic-fallback — discard them.
 
 ### 3c. Sampling: stratify, don't take the top-N
 
