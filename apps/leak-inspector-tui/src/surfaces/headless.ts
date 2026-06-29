@@ -175,10 +175,20 @@ export async function runHeadless(opts: HeadlessOptions): Promise<HeadlessResult
     if (!opts.quiet) {
       process.stdout.write(`  strategy: runDynamic=${plan.runDynamic} judge=${plan.judge} staticDepth=${plan.staticDepth}${plan.rationale ? ` — ${plan.rationale}` : ''}\n`);
     }
+    // Guardrail: the strategist may only DROP dynamic for an UNBUILDABLE repo (its
+    // legit use: "no build system ⇒ can't run ⇒ no recall lost"). When a buildCommand
+    // IS present the case is runnable, and the measured cost of skipping dynamic is
+    // severe — runtime confirmation is the false-positive killer, so disabling it on
+    // buildable cases reintroduces FPs (B6a/B7 had 152/184 bundles forced dynamic_off
+    // → P 1.00→0.90/0.76). So we honor runDynamic=false ONLY without a buildCommand.
     if (!plan.runDynamic && dynamicMode !== DynamicMode.OFF) {
-      await dynamicClient?.close();
-      dynamicClient = undefined;
-      dynamicMode = DynamicMode.OFF;
+      if (opts.build) {
+        if (!opts.quiet) process.stdout.write(`  strategy: runDynamic=false ignored (buildCommand present — dynamic kept)\n`);
+      } else {
+        await dynamicClient?.close();
+        dynamicClient = undefined;
+        dynamicMode = DynamicMode.OFF;
+      }
     }
   }
 
