@@ -180,22 +180,33 @@ for (const c of cases) {
   const allText = files.map((f) => readFileSafe(f) ?? '').join('\n');
   const flawFns: string[] = (c.flaws ?? []).map((x: any) => x.function).filter(Boolean);
   const cleanFns: string[] = (c.clean ?? []).map((x: any) => x.function).filter(Boolean);
-  const overlap = flawFns.filter((f) => cleanFns.includes(f));
-  if (overlap.length) rep.hard.push(`function(s) labeled BOTH flaw and clean: ${overlap.join(', ')}`);
+  // A function is contradictorily labeled ONLY at function granularity — the schema
+  // explicitly allows one function to hold both a leak LINE and a clean LINE
+  // (CleanSite.line), so a whole-function flaw + whole-function clean is the real
+  // contradiction; a line-disambiguated pair is legitimate.
+  const flawWhole = new Set((c.flaws ?? []).filter((x: any) => x.line == null).map((x: any) => x.function).filter(Boolean));
+  const cleanWhole = new Set((c.clean ?? []).filter((x: any) => x.line == null).map((x: any) => x.function).filter(Boolean));
+  const overlap = [...flawWhole].filter((f) => cleanWhole.has(f));
+  if (overlap.length) rep.hard.push(`function(s) labeled BOTH flaw and clean at function level: ${overlap.join(', ')}`);
 
-  const labelDrift: string[] = [];
-  for (const fn of [...flawFns, ...cleanFns]) if (!identifierPresent(allText, fn)) labelDrift.push(`label '${fn}' not in source`);
+  // Function existence is the authoritative label fact: SOFT on a naming-convention
+  // corpus (the scorer's good/bad fallback rescues it), HARD with --strict-labels.
+  const fnMissing: string[] = [];
+  for (const fn of [...flawFns, ...cleanFns]) if (!identifierPresent(allText, fn)) fnMissing.push(`label '${fn}' not in source`);
+  if (fnMissing.length) (strictLabels ? rep.hard : rep.soft).push(...fnMissing);
+  // Flaw-line-at-an-allocation is a FUZZY heuristic — the labeled line is often the
+  // leak/return site, not the alloc, and custom allocators may be absent from the
+  // profile — so it's ALWAYS just a SOFT hint, never a hard gate.
   const allocSet = new Set([...ALLOC_LIST, ...corpusAllocators, ...(c.allocators ?? [])]);
   for (const flaw of c.flaws ?? []) {
     if (flaw.line && flaw.file) {
       const ff = files.find((f) => basename(f) === basename(flaw.file));
       if (ff) {
         const near = (readFileSafe(ff) ?? '').split('\n').slice(Math.max(0, flaw.line - 4), flaw.line + 3).join('\n');
-        if (!(ALLOC_RE.test(near) || [...allocSet].some((a) => near.includes(a)))) labelDrift.push(`flaw line ${flaw.file}:${flaw.line} not at an allocation`);
+        if (!(ALLOC_RE.test(near) || [...allocSet].some((a) => near.includes(a)))) rep.soft.push(`flaw line ${flaw.file}:${flaw.line} not at an obvious allocation`);
       }
     }
   }
-  if (labelDrift.length) (strictLabels ? rep.hard : rep.soft).push(...labelDrift);
 
   reports.push(rep);
 }

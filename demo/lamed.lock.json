@@ -1,0 +1,20 @@
+{
+  "schema": "corpus-lock/v1",
+  "corpus": "lamed",
+  "source": {
+    "name": "LAMeD (EASE 2025), Zenodo 15089703"
+  },
+  "ingestCommit": "1067867",
+  "toolVersions": {
+    "clang": "Apple clang version 21.0.0 (clang-2100.1.1.101)"
+  },
+  "contentHash": "4e8dbf91bdd7b2b551e3cc2b7c70774f",
+  "validatedAt": "2026-06-29T21:06:07.665Z",
+  "validated": true,
+  "summary": {
+    "total": 41,
+    "clean": 41,
+    "warned": 0,
+    "quarantined": 0
+  }
+}
