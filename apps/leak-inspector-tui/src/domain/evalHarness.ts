@@ -29,7 +29,7 @@ import type { ConsensusRule } from '@cleak/common/analysis/consensus-judge';
 import { walkCFiles, readFileSafe } from './fileWalk';
 import { EVENT_PHASE, EVENT_KIND, type ScanEventName } from '@cleak/common/flow/scan-flow-contract';
 import { runHeadless } from '../surfaces/headless';
-import { loadConfig } from '../config';
+import { loadConfig, type Provider } from '../config';
 import { captureProvenance, summarizeStat, type EvalProvenance, type Stat } from './provenance';
 import {
   scoreCase,
@@ -85,6 +85,9 @@ export interface EvalOptions {
   /** Static candidate discovery (ablation `static` axis). Default true; false ⇒
    * dynamic-only discovery (build + LSan → synthesize sites). */
   staticDiscovery?: boolean;
+  /** LLM provider override (eval-scoped) — bypasses the cleak config file's provider
+   * so a sweep can target a known-good gateway without editing global config. */
+  provider?: Provider;
   /** Cancel the run: in-flight cases are aborted, not-yet-started ones are skipped. */
   signal?: AbortSignal;
   onProgress?: (done: number, total: number, id: string) => void;
@@ -190,9 +193,9 @@ const PROVIDER_KEY_ENV: Record<string, string> = {
  * runs. (A keyless `local` gateway is legitimate, so it's allowed through; the
  * post-run assertion in `runEval` still catches a dead local gateway.)
  */
-function assertLlmAvailable(mode: string, allowFallback?: boolean): void {
+function assertLlmAvailable(mode: string, allowFallback?: boolean, provider?: Provider): void {
   if (mode !== 'llm_assisted' || allowFallback) return;
-  const cfg = loadConfig({}).llm;
+  const cfg = loadConfig(provider ? { provider } : {}).llm;
   // A custom OpenAI-compatible endpoint needs a base URL + model; a key is often
   // optional (many local servers accept none), so check completeness, not the key.
   if (cfg.provider === 'openai-compat' && (!cfg.baseUrl || !cfg.model)) {
@@ -234,7 +237,7 @@ function countSourceLoc(repoDir: string): number {
 
 export async function runEval(opts: EvalOptions): Promise<EvalResult> {
   // Integrity gate: never let an LLM run quietly degrade to the heuristic baseline.
-  assertLlmAvailable(opts.mode, opts.allowHeuristicFallback);
+  assertLlmAvailable(opts.mode, opts.allowHeuristicFallback, opts.provider);
 
   const manifestPath = join(opts.corpusDir, 'corpus_manifest.json');
   const manifest = JSON.parse(readFileSync(manifestPath, 'utf-8')) as LabeledManifest;
@@ -329,6 +332,7 @@ export async function runEval(opts: EvalOptions): Promise<EvalResult> {
         ...(opts.enrich !== undefined ? { enrich: opts.enrich } : {}),
         ...(opts.toolSelect !== undefined ? { toolSelect: opts.toolSelect } : {}),
         ...(opts.staticDiscovery !== undefined ? { staticDiscovery: opts.staticDiscovery } : {}),
+        ...(opts.provider ? { provider: opts.provider } : {}),
         ...(opts.consensusN != null || opts.consensusRule != null
           ? { consensus: { ...(opts.consensusN != null ? { n: opts.consensusN } : {}), ...(opts.consensusRule ? { rule: opts.consensusRule } : {}) } }
           : {}),

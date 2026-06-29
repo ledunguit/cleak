@@ -307,6 +307,12 @@ export function buildWorkflowInvestigationPhase(
       const useConsensus = cfg.consensus.n > 1;
       const judgeLabel = useConsensus ? `consensus×${cfg.consensus.n} (${cfg.consensus.rule})` : 'LLM judge';
       onNotice(`Stage D · ${borderline.length}/${allBundles.length} borderline → ${judgeLabel} (concurrency ${cfg.workflow.judgeConcurrency})`);
+      // Accumulate Stage-D judge token usage into the same `usage` ledger the agentic
+      // loops feed — previously the judge's tokens were dropped, so the eval reported 0.
+      const addUsage = (u: { inputTokens: number; outputTokens: number }) => {
+        usage.inputTokens += u.inputTokens;
+        usage.outputTokens += u.outputTokens;
+      };
       await mapWithLimit(borderline, cfg.workflow.judgeConcurrency, async (b) => {
         if (ctx.abortSignal?.aborted) return;
         const sctx = staticStore.get(b.bundleId);
@@ -317,11 +323,11 @@ export function buildWorkflowInvestigationPhase(
           verdict = await judgeByConsensus(
             b,
             sctx,
-            () => judgeBundleWithLlm(b, sctx, callModel, ctx.abortSignal, cfg.consensus.temperature, onNotice, ctx.projectOwnershipNotes),
+            () => judgeBundleWithLlm(b, sctx, callModel, ctx.abortSignal, cfg.consensus.temperature, onNotice, ctx.projectOwnershipNotes, addUsage),
             cfg.consensus,
           );
         } else {
-          verdict = await judgeBundleWithLlm(b, sctx, callModel, ctx.abortSignal, cfg.llm.judgeTemperature, onNotice, ctx.projectOwnershipNotes);
+          verdict = await judgeBundleWithLlm(b, sctx, callModel, ctx.abortSignal, cfg.llm.judgeTemperature, onNotice, ctx.projectOwnershipNotes, addUsage);
         }
         if (!verdict) return;
         b.verdict = verdict;
