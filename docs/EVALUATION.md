@@ -249,13 +249,13 @@ for st in none functionSummary pathConstraints functionSummary,pathConstraints \
   lift **recall 0.769 → 0.923** (+8 TP, FN 12 → 4), F1 0.777 → 0.850. ⇒ Neither is redundant and neither
   alone suffices — this is the data-backed justification for the default pair.
 - **`candidateScan` is the mandatory backbone** (discovery; without it there are no candidates).
-- **`interproceduralFlow` is now judge-wired (opt-in) but Δ=0 ON JULIET — as expected.** It *ran*
-  (15 MCP calls/case vs 12 for the default pair, confirmed via the Docker path map) and correctly emits a
-  cross-boundary leak path for `bad` functions while staying silent on `good` ones, but it changes **no
-  verdict**: Juliet leaks are **intra-function**, so `functionSummary` already flags the missing free.
-  Its real lever is **cross-function leaks on real projects (LAMeD)** — measured in the next stage (§3, C),
-  where static recall is genuinely weakest. The wiring is recall-additive only (never exonerates), so it
-  can lift recall there without risking the precision shown here.
+- **`interproceduralFlow` is judge-wired (opt-in): Δ=0 on Juliet, +1 TP on LAMeD (FP0).** On Juliet it ran
+  but changed no verdict — leaks are **intra-function**, so `functionSummary` already flags the missing free.
+  Its real lever is **cross-function leaks on real projects**: on **LAMeD** (after an engine upgrade —
+  allocator-aware + variable-level cross-frame matching + a parse cache; see BASELINE-COMPARISON §5b-bis) it
+  lifts **recall 0.250 → 0.273 (+1 TP: cjson `merge_patch`), FP 0, no regression**. A small but clean gain at
+  precision 1.0 — the mechanism works end-to-end on a real project; most remaining misses are path-sensitive
+  (future alias-aware work). Recall-additive wiring ⇒ it never risks the precision.
 - **`scanBuild` (Clang scan-build) is judge-wired (opt-in) but needs the BUILD path.** It intercepts the
   project build, so it does nothing in a pure-static `B1` (no `buildCommand` ⇒ not invoked, row identical
   above). Its marginal contribution is measured with the build/dynamic path enabled (C). When it does run,

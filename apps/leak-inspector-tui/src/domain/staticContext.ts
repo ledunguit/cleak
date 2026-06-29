@@ -193,34 +193,32 @@ export function attachScanBuildDiagnostics(
 /**
  * Derive ADDITIVE interprocedural leak paths from an `interproceduralFlow` result.
  *
- * Recall-direction ONLY: we emit a FeasibleLeakPath when the candidate's own function
- * allocates without a local free AND the interprocedural trace finds NO free reachable
- * through any callee — i.e. the allocation leaks across the function boundary. We never
- * mark an allocation as freed/paired here (that could exonerate and SUPPRESS a true
- * leak); the worst case is an extra (possibly false) leak signal, which the precision
- * metric will catch. Returns [] unless the cross-boundary leak is unambiguous.
+ * Recall-direction ONLY, variable-level: emit a FeasibleLeakPath when the candidate's
+ * function allocates a variable that is freed NOWHERE reachable (not locally, not in any
+ * callee) — the `unreconciledAllocVars` the (allocator-aware) service computed by matching
+ * alloc/free variable names across frames. We never mark an allocation as freed/paired
+ * here (that could exonerate and SUPPRESS a true leak); the worst case is an extra
+ * (possibly false) leak signal, which the precision metric catches. Returns [] when every
+ * allocation of the candidate function is reconciled somewhere in the call graph.
  */
 export function interproceduralLeakPaths(
   result: unknown,
   candidate: { function_name: string; line_number: number },
 ): FeasibleLeakPath[] {
   const out = coerceToObject(result);
-  const paths: any[] = Array.isArray(out.paths) ? out.paths : [];
-  const reachableFrees: string[] = Array.isArray(out.reachableFrees) ? out.reachableFrees : [];
-  const fnPath = paths.find((p) => p?.functionName === candidate.function_name);
-  if (!fnPath || fnPath.hasAllocWithoutFree !== true) return [];
-  // A free exists somewhere reachable through the call chain → stay additive-safe and
-  // do NOT claim a leak (we don't variable-match across frames, so we won't risk an FP).
-  if (reachableFrees.length > 0) return [];
+  const unreconciled: string[] = Array.isArray(out.unreconciledAllocVars)
+    ? out.unreconciledAllocVars.map(String)
+    : [];
+  if (!unreconciled.length) return [];
   return [
     {
       kind: 'fallthrough',
       exitLine: candidate.line_number,
       reachable: true,
       conditions: [],
-      unreconciledAllocations: [],
+      unreconciledAllocations: unreconciled,
       leakRisk: 'high',
-      narrative: `interprocedural: '${candidate.function_name}' allocates without a free reachable through any callee`,
+      narrative: `interprocedural: '${candidate.function_name}' allocates ${unreconciled.join(', ')} — freed nowhere reachable through any callee`,
       feasibilityChecked: 'heuristic',
     },
   ];
