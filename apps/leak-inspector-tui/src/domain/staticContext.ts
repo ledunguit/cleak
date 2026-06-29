@@ -191,6 +191,54 @@ export function attachScanBuildDiagnostics(
 }
 
 /**
+ * Derive ADDITIVE interprocedural leak paths from an `interproceduralFlow` result.
+ *
+ * Recall-direction ONLY: we emit a FeasibleLeakPath when the candidate's own function
+ * allocates without a local free AND the interprocedural trace finds NO free reachable
+ * through any callee — i.e. the allocation leaks across the function boundary. We never
+ * mark an allocation as freed/paired here (that could exonerate and SUPPRESS a true
+ * leak); the worst case is an extra (possibly false) leak signal, which the precision
+ * metric will catch. Returns [] unless the cross-boundary leak is unambiguous.
+ */
+export function interproceduralLeakPaths(
+  result: unknown,
+  candidate: { function_name: string; line_number: number },
+): FeasibleLeakPath[] {
+  const out = coerceToObject(result);
+  const paths: any[] = Array.isArray(out.paths) ? out.paths : [];
+  const reachableFrees: string[] = Array.isArray(out.reachableFrees) ? out.reachableFrees : [];
+  const fnPath = paths.find((p) => p?.functionName === candidate.function_name);
+  if (!fnPath || fnPath.hasAllocWithoutFree !== true) return [];
+  // A free exists somewhere reachable through the call chain → stay additive-safe and
+  // do NOT claim a leak (we don't variable-match across frames, so we won't risk an FP).
+  if (reachableFrees.length > 0) return [];
+  return [
+    {
+      kind: 'fallthrough',
+      exitLine: candidate.line_number,
+      reachable: true,
+      conditions: [],
+      unreconciledAllocations: [],
+      leakRisk: 'high',
+      narrative: `interprocedural: '${candidate.function_name}' allocates without a free reachable through any callee`,
+      feasibilityChecked: 'heuristic',
+    },
+  ];
+}
+
+/** Append feasible leak paths to a bundle's staticEvidence (merge replaces; this concats). */
+export function appendFeasibleLeakPaths(bundle: LeakBundle, paths: FeasibleLeakPath[]): void {
+  if (!paths.length) return;
+  const cur: StaticLeakEvidence = bundle.staticEvidence ?? {
+    allocFreePairs: [],
+    feasibleLeakPaths: [],
+    earlyReturnCount: 0,
+    leakyExitPaths: 0,
+  };
+  bundle.staticEvidence = { ...cur, feasibleLeakPaths: [...(cur.feasibleLeakPaths || []), ...paths] };
+}
+
+/**
  * Wrap a (host-content-resolved) static tool so each successful call folds its
  * result into `store`. Wrap as `withHostContent(withStaticContextCapture(tool))`
  * so the capture sees the resolved absolute `filePath`.
