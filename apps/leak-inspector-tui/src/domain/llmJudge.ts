@@ -183,6 +183,10 @@ export async function judgeBundleWithLlm(
   onNotice?: (reason: string) => void,
   /** Project-specific ownership conventions (LLM-discovered) the verdict must respect. */
   projectNotes?: string[],
+  /** Reports the model token usage of THIS judge call (tokens are spent on any call,
+   * parseable or not) so the harness can count judge cost — it was previously dropped
+   * (only the agentic Stage A/B loops accumulated usage). */
+  onUsage?: (u: { inputTokens: number; outputTokens: number }) => void,
 ): Promise<VerdictResult | null> {
   const c = bundle.candidate;
   const notes = (projectNotes ?? []).filter(Boolean);
@@ -213,6 +217,7 @@ export async function judgeBundleWithLlm(
     onNotice?.(`judge ${c.file_path}:${c.line_number} — model call failed (${err?.message ?? err}); keeping heuristic`);
     return null;
   }
+  if (resp.usage) onUsage?.({ inputTokens: resp.usage.inputTokens ?? 0, outputTokens: resp.usage.outputTokens ?? 0 });
   const parsed = parseVerdict(resp.text ?? '');
   if (!parsed.ok) {
     onNotice?.(`judge ${c.file_path}:${c.line_number} — ${parsed.reason}; keeping heuristic`);

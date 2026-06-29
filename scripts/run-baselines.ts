@@ -58,6 +58,10 @@ const runsOverride = flag('runs') ? Math.max(1, parseInt(flag('runs')!, 10)) : u
 const concurrency = flag('concurrency') ? Math.max(1, parseInt(flag('concurrency')!, 10)) : undefined;
 // Reuse per-case caches under the out dir — lets an interrupted sweep continue.
 const resume = has('resume');
+// LLM provider override (eval-scoped) — bypass the cleak config file's provider so a
+// sweep can target a known-good gateway (e.g. `--provider local` for the .env gateway)
+// without editing ~/.config/cleak/config.json.
+const provider = flag('provider') as 'local' | 'openai' | 'anthropic' | 'openai-compat' | undefined;
 
 const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
 const outDir = flag('out') ?? join(process.env.RESULTS_DIR ?? 'results', `baseline-sweep-${stamp}`);
@@ -144,6 +148,7 @@ async function runOne(c: BaselineConfig, plan: ReturnType<typeof resolveCapabili
     enrich: plan.enrich,
     toolSelect: plan.toolSelect,
     staticDiscovery: plan.staticDiscovery,
+    provider,
   };
   try {
     if (plan.runs <= 1) {
