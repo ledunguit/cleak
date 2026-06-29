@@ -57,6 +57,11 @@ export interface EvalOptions {
   dynamic: 'off' | 'selective' | 'aggressive';
   outDir: string;
   limit?: number;
+  /** Stratify the `limit` sample EVENLY across a case key (e.g. `functionalVariant`)
+   * instead of taking the top-N in manifest order — Juliet is grouped by family, so
+   * top-N is heavily skewed (first 200 are ~90% `char`, 0% of the 672-case `new`
+   * family). Deterministic round-robin: representative coverage, reproducible. */
+  stratify?: string;
   concurrency?: number;
   resume?: boolean;
   staticUrl?: string;
@@ -235,13 +240,46 @@ function countSourceLoc(repoDir: string): number {
   return loc;
 }
 
+/**
+ * Pick the `limit` cases to evaluate. Default = top-N in manifest order. With
+ * `stratifyKey` set, sample EVENLY across that key via deterministic round-robin
+ * (round 0 takes one case from every group in sorted-key order, then round 1, …)
+ * so a small `limit` still covers every category — Juliet's manifest is grouped by
+ * family, so plain top-N is heavily skewed. No `limit` ⇒ all cases (order unchanged).
+ */
+export function selectCases<T extends Record<string, any>>(all: T[], limit?: number, stratifyKey?: string): T[] {
+  if (limit === undefined || limit >= all.length) return all;
+  if (!stratifyKey) return all.slice(0, limit);
+  const groups = new Map<string, T[]>();
+  for (const c of all) {
+    const k = String(c[stratifyKey] ?? '?');
+    const g = groups.get(k);
+    if (g) g.push(c);
+    else groups.set(k, [c]);
+  }
+  const buckets = [...groups.keys()].sort().map((k) => groups.get(k)!);
+  const out: T[] = [];
+  for (let round = 0; out.length < limit; round++) {
+    let progressed = false;
+    for (const b of buckets) {
+      if (round < b.length) {
+        out.push(b[round]);
+        progressed = true;
+        if (out.length >= limit) break;
+      }
+    }
+    if (!progressed) break;
+  }
+  return out;
+}
+
 export async function runEval(opts: EvalOptions): Promise<EvalResult> {
   // Integrity gate: never let an LLM run quietly degrade to the heuristic baseline.
   assertLlmAvailable(opts.mode, opts.allowHeuristicFallback, opts.provider);
 
   const manifestPath = join(opts.corpusDir, 'corpus_manifest.json');
   const manifest = JSON.parse(readFileSync(manifestPath, 'utf-8')) as LabeledManifest;
-  const cases = (manifest.cases ?? []).slice(0, opts.limit ?? Infinity);
+  const cases = selectCases(manifest.cases ?? [], opts.limit, opts.stratify);
 
   // Reproducibility provenance — the exact config that produced these numbers.
   const llmCfg = opts.mode === 'llm_assisted' ? loadConfig({}).llm : undefined;
