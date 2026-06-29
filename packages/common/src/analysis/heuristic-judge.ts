@@ -138,6 +138,18 @@ export function judgeHeuristically(
     reasons.push('allocation reachable through feasible execution path(s)');
   }
 
+  // ── Clang scan-build corroboration (opt-in `--static-tools scanBuild`): a project-
+  // level scan-build leak diagnostic NEAR the candidate is a deterministic second
+  // static opinion that reinforces the heuristic. Absent unless scanBuild ran, so it
+  // never perturbs the default 2-tool baseline. ──
+  const scanBuildHit = (se?.scanBuildDiagnostics || []).some(
+    (d) => Math.abs(d.line - bundle.candidate.line_number) <= 2,
+  );
+  if (scanBuildHit) {
+    score += 0.15;
+    reasons.push('Clang scan-build reports a leak at this allocation');
+  }
+
   // ── PATH-SENSITIVE leak: the candidate is freed on SOME paths but a reachable exit
   // still loses it — status 'conditional', or the candidate's variable is explicitly
   // `unreconciled` on a reachable leak path. This is the real "missing-free on an

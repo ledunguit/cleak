@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { foldStaticResult, type StaticContextStore } from './staticContext';
+import { foldStaticResult, attachScanBuildDiagnostics, type StaticContextStore } from './staticContext';
 import type { LeakBundle } from '@cleak/common/types';
 
 function bundle(id: string, file: string, fn: string, line: number): LeakBundle {
@@ -100,5 +100,39 @@ describe('foldStaticResult', () => {
     const store: StaticContextStore = new Map();
     foldStaticResult(store, 'functionSummary', { filePath: file, functionName: 'session_open' }, JSON.stringify({ allocations: ['a'], frees: ['a'] }), [b]);
     expect(store.get('b1')!.hasExplicitFree).toBe(true);
+  });
+});
+
+describe('attachScanBuildDiagnostics', () => {
+  const file = '/repo/session.c';
+
+  test('attaches same-file scan-build findings to the matching bundle', () => {
+    const b = bundle('b1', file, 'session_open', 8);
+    const other = bundle('b2', '/repo/queue.c', 'queue_push', 21);
+    const n = attachScanBuildDiagnostics(
+      [b, other],
+      [
+        { file_path: 'session.c', line_number: 9, context: 'Potential leak of memory pointed to by s', confidence: 'high' },
+        { file_path: 'queue.c', line_number: 22, context: 'leak', confidence: 'low' },
+      ],
+    );
+    expect(n).toBe(2);
+    expect(b.staticEvidence?.scanBuildDiagnostics).toEqual([
+      { file: 'session.c', line: 9, message: 'Potential leak of memory pointed to by s', confidence: 'high' },
+    ]);
+    expect(other.staticEvidence?.scanBuildDiagnostics).toHaveLength(1);
+  });
+
+  test('a bundle with no matching diagnostic gets no scanBuildDiagnostics field', () => {
+    const b = bundle('b1', file, 'session_open', 8);
+    const n = attachScanBuildDiagnostics([b], [{ file_path: 'other.c', line_number: 3, context: 'leak', confidence: 'medium' }]);
+    expect(n).toBe(0);
+    expect(b.staticEvidence?.scanBuildDiagnostics).toBeUndefined();
+  });
+
+  test('unknown confidence string falls back to medium', () => {
+    const b = bundle('b1', file, 'session_open', 8);
+    attachScanBuildDiagnostics([b], [{ file_path: 'session.c', line_number: 8, context: 'leak', confidence: 'weird' }]);
+    expect(b.staticEvidence?.scanBuildDiagnostics?.[0].confidence).toBe('medium');
   });
 });
