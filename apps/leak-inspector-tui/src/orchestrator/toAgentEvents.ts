@@ -1,7 +1,7 @@
 /**
  * Translate the agent loop's AgentEvent stream into the scan's ScanEventName
  * vocabulary so the timeline / events.jsonl see agent turns and tool results,
- * and so leakguard / dynamic phases light up when the model first calls one of
+ * and so scan-build / dynamic phases light up when the model first calls one of
  * their tools (and are finished when the investigation ends).
  */
 
@@ -28,9 +28,9 @@ export function makeAgentEventHandler(emitter: ScanEmitter): AgentEventBridge {
         break;
       case 'tool_use': {
         const phase = phaseForMcpTool(ev.name);
-        if (phase === ScanPhase.LEAKGUARD && !started.has(phase)) {
+        if (phase === ScanPhase.SCAN_BUILD && !started.has(phase)) {
           started.add(phase);
-          emitter.emit(ScanEventName.LEAKGUARD_STARTED, { tool: ev.name });
+          emitter.emit(ScanEventName.SCAN_BUILD_STARTED, { tool: ev.name });
         } else if (phase === ScanPhase.DYNAMIC) {
           if (!started.has(phase)) {
             started.add(phase);
@@ -60,7 +60,7 @@ export function makeAgentEventHandler(emitter: ScanEmitter): AgentEventBridge {
 
   const finishPendingPhases = (): void => {
     if (started.has(ScanPhase.DYNAMIC)) emitter.emit(ScanEventName.DYNAMIC_FINISHED, {});
-    if (started.has(ScanPhase.LEAKGUARD)) emitter.emit(ScanEventName.LEAKGUARD_FINISHED, {});
+    if (started.has(ScanPhase.SCAN_BUILD)) emitter.emit(ScanEventName.SCAN_BUILD_FINISHED, {});
   };
 
   return { handle, finishPendingPhases };

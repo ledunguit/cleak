@@ -25,7 +25,7 @@ src/
     path-constraints.service.ts   phân tích đường đi khả thi quanh site cấp phát (Z3, node-only)
     ownership-analysis.service.ts quy ước chuyển quyền sở hữu (ownership transfer)
     c-parser.service.ts           CFG path-sensitive, reachability dead-code (engine E1–E3)
-    leakguard-adapter.service.ts  bọc Clang `scan-build` (slot "leakguard" tự chứa)
+    scan-build-adapter.service.ts bọc Clang `scan-build` (slot "scan-build" tự chứa)
 ```
 
 > Tham số `extra*Allocators` / `extra*Deallocators` (≈ **AllocSource/FreeSink** của LAMeD)
@@ -46,8 +46,8 @@ src/
 | `pathConstraints` | `filePath`, `content?`, `lineNumber`, `extraAllocators?`, `extraDeallocators?` | đường đi khả thi quanh dòng cấp phát (Z3) |
 | `ownershipSummary` | `files`, `rootPath` | tổng hợp quy ước sở hữu nhiều file |
 | `ownershipConventions` | `filePath`, `content?` | quy ước chuyển quyền sở hữu trong 1 file |
-| `leakguardRun` | `projectPath`, `buildCommand`, `timeoutSec?` | chạy Clang `scan-build` trên bản build dự án |
-| `leakguardGetReport` | `runId` | findings của `scan-build` |
+| `scanBuildRun` | `projectPath`, `buildCommand`, `timeoutSec?` | chạy Clang `scan-build` trên bản build dự án |
+| `scanBuildGetReport` | `runId` | findings của `scan-build` |
 
 ## Cấu hình (ENV)
 
@@ -77,7 +77,7 @@ Kiểm tra nhanh tool catalog: `bun scripts/mcp-contract-test.ts`.
 
 - **MCP-only.** Server gRPC + `proto/` đã bị xoá khỏi `master` (không còn consumer sau khi
   bỏ bản web). `main.ts` chỉ dựng DI context rồi serve MCP.
-- Slot **"leakguard"** giờ là **Clang `scan-build` tự chứa** — submodule third-party
+- Slot **"scan-build"** giờ là **Clang `scan-build` tự chứa** — submodule third-party
   `tools/leak_guard_tool` đã bị gỡ.
 - Tài liệu nguồn: [docs/ARCHITECTURE.md](../../docs/ARCHITECTURE.md) ·
   [docs/PROMPTS.md](../../docs/PROMPTS.md) · [docs/SECURITY.md](../../docs/SECURITY.md).

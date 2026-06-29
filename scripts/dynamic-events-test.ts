@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 /**
  * Verifies M6 wiring without a Linux/Docker dynamic environment:
- *  (1) the agent-event → scan-event bridge emits the right leakguard/dynamic
+ *  (1) the agent-event → scan-event bridge emits the right scan-build/dynamic
  *      phase events for a synthetic tool sequence;
  *  (2) the dynamic analyzer's tools load and the heavy ones are flagged `ask`.
  */
@@ -25,8 +25,8 @@ const emitter = new ScanEmitter(sink);
 const bridge = makeAgentEventHandler(emitter);
 
 const seq: AgentEvent[] = [
-  { type: 'tool_use', id: '1', name: 'leakguardRun', input: {}, isReadOnly: true },
-  { type: 'tool_result', id: '1', name: 'leakguardRun', output: {}, isError: false, durationMs: 10 },
+  { type: 'tool_use', id: '1', name: 'scanBuildRun', input: {}, isReadOnly: true },
+  { type: 'tool_result', id: '1', name: 'scanBuildRun', output: {}, isError: false, durationMs: 10 },
   { type: 'tool_use', id: '2', name: 'buildTarget', input: {}, isReadOnly: true },
   { type: 'tool_result', id: '2', name: 'buildTarget', output: {}, isError: false, durationMs: 20 },
   { type: 'tool_use', id: '3', name: 'asanRun', input: {}, isReadOnly: true },
@@ -36,7 +36,7 @@ for (const ev of seq) bridge.handle(ev);
 bridge.finishPendingPhases();
 
 const want = [
-  'leakguard_started',
+  'scan_build_started',
   'agent_tool_result',
   'dynamic_started',
   'dynamic_build_started',
@@ -45,12 +45,12 @@ const want = [
   'agent_tool_result',
   'dynamic_tool_result',
   'dynamic_finished',
-  'leakguard_finished',
+  'scan_build_finished',
 ];
 for (const w of want) if (!emitted.includes(w)) fail(`expected event '${w}' not emitted. got: ${emitted.join(', ')}`);
 // dynamic_started must fire exactly once (not per dynamic tool)
 if (emitted.filter((e) => e === 'dynamic_started').length !== 1) fail('dynamic_started should fire exactly once');
-console.log(`✓ event bridge: ${emitted.length} events, all leakguard/dynamic phase events present`);
+console.log(`✓ event bridge: ${emitted.length} events, all scan-build/dynamic phase events present`);
 
 // ── (2) Dynamic tools load + flags ──
 const dynUrl = process.env.SMOKE_DYNAMIC_URL ?? 'http://127.0.0.1:50072/mcp';

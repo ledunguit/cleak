@@ -118,7 +118,7 @@ sequenceDiagram
 
 ## Notes
 
-- **Optional phases** (skipped unless the agent chooses them): `PREFLIGHT`, `LEAKGUARD` (Clang `scan-build`), `DYNAMIC`.
+- **Optional phases** (skipped unless the agent chooses them): `PREFLIGHT`, `SCAN_BUILD` (Clang `scan-build`), `DYNAMIC`.
 - **Transport**: the TUI talks to the analyzers via agent-core `McpClient` over HTTP (MCP) — the sole transport. The former gRPC server code + `proto/` definitions have been removed (no consumer once the project went TUI-only).
 - **Analysis modes**: `no_llm` (deterministic heuristic) vs `llm_assisted` (LLM plans actions & judges) — same report contract for comparability.
 - **Verdict enrichment**: `enrichLeakVerdict()` adds `rootCause` + `repairDiff` to each `VerdictResult`.

@@ -875,10 +875,10 @@ function phaseLabel(phase: ScanPhase): string {
   return `── ${phase.toUpperCase()} ──`;
 }
 
-/** Show the actual tool a slot runs (the leakguard slot is the Clang scan-build analyzer). */
+/** Show the actual tool a slot runs (the scan-build slot is the Clang scan-build analyzer). */
 const TOOL_DISPLAY: Record<string, string> = {
-  leakguardRun: 'clang-sa:scan-build',
-  leakguardGetReport: 'clang-sa:get-report',
+  scanBuildRun: 'clang-sa:scan-build',
+  scanBuildGetReport: 'clang-sa:get-report',
 };
 function displayToolName(name: string): string {
   return TOOL_DISPLAY[name] ?? name;

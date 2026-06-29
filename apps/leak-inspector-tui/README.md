@@ -151,7 +151,7 @@ bun scripts/mcp-contract-test.ts                               # kiểm catalog 
 
 - **Phân tích động** (sanitizer / valgrind) và slot **Clang-SA / scan-build** cần Linux/Docker;
   trên macOS các pha đó chạy trong container. Agent gate sau `--dynamic` + xin phép tương tác.
-  (Slot "leakguard" giờ chạy Clang scan-build, không phải tool LeakGuard third-party đã gỡ.)
+  (Slot "scan-build" giờ chạy Clang scan-build, không phải tool LeakGuard third-party đã gỡ.)
 - **MCP/HTTP là transport duy nhất** — server gRPC + `proto/` của bản web cũ đã bị xoá khỏi
   `master`. Nếu cổng `50061/50062` đang bận, chạy analyzer ở cổng khác (vd `50071/50072`) rồi
   truyền `--static-url` / `--dynamic-url`.

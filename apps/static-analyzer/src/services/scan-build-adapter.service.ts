@@ -11,11 +11,12 @@ import { join } from 'path';
  * docker.sock mount. scan-build intercepts the project's own build (the
  * supplied buildCommand) and emits Clang diagnostics in the form
  * `file:line:col: warning: ... [checker]`, which we parse into structured
- * findings. Kept under the historical `leakguard` tool id so the proto/MCP/UI
- * "deep static" slot is unchanged.
+ * findings. This is the "deep static" slot, exposed over MCP as
+ * `scanBuildRun` / `scanBuildGetReport`. (NOTE: distinct from the per-TU
+ * `clang --analyze` external baseline `ClangAnalyzerAdapter` in the TUI.)
  */
 @Injectable()
-export class LeakGuardAdapterService {
+export class ScanBuildAdapterService {
   private readonly runsDir = process.env.RUNS_DIR || './runs';
   private readonly scanBuildBin = process.env.SCAN_BUILD_BIN || 'scan-build';
 
@@ -27,7 +28,7 @@ export class LeakGuardAdapterService {
 
   async run(projectPath: string, buildCommand: string, timeoutSec?: number) {
     const timeout = timeoutSec || 300;
-    const runId = `lg_${Date.now()}`;
+    const runId = `sb_${Date.now()}`;
     const reportDir = join(this.runsDir, runId);
 
     // No outer shell: scan-build, the report dir and bin are passed as argv, so a
@@ -47,7 +48,7 @@ export class LeakGuardAdapterService {
   }
 
   async getReport(runId: string) {
-    const filePath = join(this.runsDir, `${runId}.leakguard.json`);
+    const filePath = join(this.runsDir, `${runId}.scanbuild.json`);
     if (!existsSync(filePath)) {
       return {
         report: '',
@@ -65,7 +66,7 @@ export class LeakGuardAdapterService {
   private saveRun(runId: string, output: string, projectPath?: string) {
     const findings = this.parseFindings(output, projectPath);
     writeFileSync(
-      join(this.runsDir, `${runId}.leakguard.json`),
+      join(this.runsDir, `${runId}.scanbuild.json`),
       JSON.stringify({ runId, output, findings }, null, 2),
     );
   }
@@ -91,7 +92,7 @@ export class LeakGuardAdapterService {
       file = file.replace(/^\.\//, '');
 
       findings.push({
-        id: `leakguard-${findings.length + 1}`,
+        id: `scanbuild-${findings.length + 1}`,
         file_path: file,
         line_number: Number(match.groups.line),
         function_name: this.extractFunctionName(line),

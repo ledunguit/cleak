@@ -32,7 +32,7 @@ trust boundary it is built for and the controls that enforce it.
 | Runaway / fork-bomb / OOM in scanned binary | `ulimit` confinement (CPU time, file size, process count) on Linux. The **address-space** (`-v`) cap is dropped ONLY for sanitizer/valgrind runs (`unlimitedAddressSpace`) because ASan/LSan reserve ~20 TB of *virtual* shadow memory — the cap aborts them; physical RSS is still container-bounded and CPU/fsize/proc limits stay | `safe-exec.ts` (`DYNAMIC_ULIMIT_*` env) |
 | Build-time escape | Docker build runs `--network none` + bounded `--memory`/`--pids-limit`; mount source is `realpath`-canonicalized; docker args passed as an array | `apps/dynamic-analyzer/src/services/build-target.service.ts` |
 | Path traversal via symlinks | Repo indexing uses `lstat` + a canonical-root containment check; symlinks pointing outside the repo are skipped | `apps/static-analyzer/src/services/file-indexing.service.ts` |
-| `scan-build` shell injection | `spawnSync` with argv; the build command keeps one intended `/bin/sh -c` layer (a single argv element, nothing to escape) | `apps/static-analyzer/src/services/leakguard-adapter.service.ts` |
+| `scan-build` shell injection | `spawnSync` with argv; the build command keeps one intended `/bin/sh -c` layer (a single argv element, nothing to escape) | `apps/static-analyzer/src/services/scan-build-adapter.service.ts` |
 | Run id → filesystem path | `sanitizeRunId` strips to `[A-Za-z0-9_]` before building `/tmp/<id>.xml` | `safe-exec.ts`, `valgrind.service.ts` |
 | Analyzer ports on the LAN | MCP ports published to `127.0.0.1` only in docker-compose | `docker-compose.yml` |
 

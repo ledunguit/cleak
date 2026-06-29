@@ -9,7 +9,7 @@
  * The NestJS backend runs a DYNAMIC agentic loop (discovery → investigation loop
  * → judging/reporting), not the original Python linear 10-phase pipeline. We map
  * that loop onto stable DISPLAY phases below: INVESTIGATION is the hub that hosts
- * per-turn agent activity; LEAKGUARD / DYNAMIC / JUDGING are optional phases that
+ * per-turn agent activity; SCAN_BUILD / DYNAMIC / JUDGING are optional phases that
  * light up when their `*_started` event arrives (they happen inside the loop).
  */
 
@@ -20,7 +20,7 @@ export enum ScanPhase {
   WORKSPACE = 'workspace',
   DISCOVERY = 'discovery',
   INVESTIGATION = 'investigation',
-  LEAKGUARD = 'leakguard',
+  SCAN_BUILD = 'scan_build',
   DYNAMIC = 'dynamic',
   JUDGING = 'judging',
   REPORTING = 'reporting',
@@ -33,7 +33,7 @@ export const SCAN_PHASE_ORDER: ScanPhase[] = [
   ScanPhase.WORKSPACE,
   ScanPhase.DISCOVERY,
   ScanPhase.INVESTIGATION,
-  ScanPhase.LEAKGUARD,
+  ScanPhase.SCAN_BUILD,
   ScanPhase.DYNAMIC,
   ScanPhase.JUDGING,
   ScanPhase.REPORTING,
@@ -63,8 +63,8 @@ export enum ScanEventName {
   AGENT_TURN_FINISHED = 'agent_turn_finished',
   INVESTIGATION_FINISHED = 'investigation_finished',
 
-  LEAKGUARD_STARTED = 'leakguard_started',
-  LEAKGUARD_FINISHED = 'leakguard_finished',
+  SCAN_BUILD_STARTED = 'scan_build_started',
+  SCAN_BUILD_FINISHED = 'scan_build_finished',
 
   DYNAMIC_STARTED = 'dynamic_started',
   DYNAMIC_BUILD_STARTED = 'dynamic_build_started',
@@ -107,8 +107,8 @@ export const EVENT_PHASE: Record<ScanEventName, ScanPhase> = {
   [ScanEventName.AGENT_TURN_FINISHED]: ScanPhase.INVESTIGATION,
   [ScanEventName.INVESTIGATION_FINISHED]: ScanPhase.INVESTIGATION,
 
-  [ScanEventName.LEAKGUARD_STARTED]: ScanPhase.LEAKGUARD,
-  [ScanEventName.LEAKGUARD_FINISHED]: ScanPhase.LEAKGUARD,
+  [ScanEventName.SCAN_BUILD_STARTED]: ScanPhase.SCAN_BUILD,
+  [ScanEventName.SCAN_BUILD_FINISHED]: ScanPhase.SCAN_BUILD,
 
   [ScanEventName.DYNAMIC_STARTED]: ScanPhase.DYNAMIC,
   [ScanEventName.DYNAMIC_BUILD_STARTED]: ScanPhase.DYNAMIC,
@@ -149,8 +149,8 @@ export const EVENT_KIND: Record<ScanEventName, ScanEventKind> = {
   [ScanEventName.AGENT_TURN_FINISHED]: 'activity',
   [ScanEventName.INVESTIGATION_FINISHED]: 'phase_finish',
 
-  [ScanEventName.LEAKGUARD_STARTED]: 'phase_start',
-  [ScanEventName.LEAKGUARD_FINISHED]: 'phase_finish',
+  [ScanEventName.SCAN_BUILD_STARTED]: 'phase_start',
+  [ScanEventName.SCAN_BUILD_FINISHED]: 'phase_finish',
 
   [ScanEventName.DYNAMIC_STARTED]: 'phase_start',
   [ScanEventName.DYNAMIC_BUILD_STARTED]: 'activity',
@@ -179,8 +179,8 @@ export const TOOL_PHASE: Record<string, ScanPhase> = {
   'memory.interprocedural_flow': ScanPhase.INVESTIGATION,
   'memory.ownership_summary': ScanPhase.INVESTIGATION,
   'memory.ownership_conventions': ScanPhase.INVESTIGATION,
-  'memory.leakguard_run': ScanPhase.LEAKGUARD,
-  'memory.leakguard_get_report': ScanPhase.LEAKGUARD,
+  'memory.scan_build_run': ScanPhase.SCAN_BUILD,
+  'memory.scan_build_get_report': ScanPhase.SCAN_BUILD,
   'asan.run': ScanPhase.DYNAMIC,
   'lsan.run': ScanPhase.DYNAMIC,
   'valgrind.analyze_memcheck': ScanPhase.DYNAMIC,
@@ -199,7 +199,7 @@ export const PHASE_META: Record<ScanPhase, PhaseMeta> = {
   [ScanPhase.WORKSPACE]: { title: 'Workspace', subtitle: 'Materialize + build plan', optional: false },
   [ScanPhase.DISCOVERY]: { title: 'Discovery', subtitle: 'Index + candidate scan', optional: false },
   [ScanPhase.INVESTIGATION]: { title: 'Investigation', subtitle: 'Agentic loop: static tools + decisions', optional: false },
-  [ScanPhase.LEAKGUARD]: { title: 'Clang SA', subtitle: 'Project-level scan-build (Clang Static Analyzer)', optional: true },
+  [ScanPhase.SCAN_BUILD]: { title: 'Clang SA', subtitle: 'Project-level scan-build (Clang Static Analyzer)', optional: true },
   [ScanPhase.DYNAMIC]: { title: 'Dynamic', subtitle: 'Build + sanitizers', optional: true },
   [ScanPhase.JUDGING]: { title: 'Judging', subtitle: 'Verdicts + confidence', optional: false },
   [ScanPhase.REPORTING]: { title: 'Reporting', subtitle: 'Build outputs', optional: false },

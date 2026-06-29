@@ -21,7 +21,7 @@ const CONCURRENCY_SAFE = new Set<string>([
   'pathConstraints',
   'ownershipSummary',
   'ownershipConventions',
-  'leakguardGetReport',
+  'scanBuildGetReport',
   'valgrindGetReport',
   'valgrindListFindings',
   'valgrindCompareRuns',
@@ -30,7 +30,7 @@ const CONCURRENCY_SAFE = new Set<string>([
 
 /** Heavy/process-spawning tools — read-only w.r.t. source, but must run serially. */
 const SERIAL_HEAVY = new Set<string>([
-  'leakguardRun',
+  'scanBuildRun',
   'buildTarget',
   'valgrindMemcheck',
   'asanRun',
@@ -66,8 +66,8 @@ export const MCP_TOOL_PHASE: Record<string, ScanPhase> = {
   pathConstraints: ScanPhase.INVESTIGATION,
   ownershipSummary: ScanPhase.INVESTIGATION,
   ownershipConventions: ScanPhase.INVESTIGATION,
-  leakguardRun: ScanPhase.LEAKGUARD,
-  leakguardGetReport: ScanPhase.LEAKGUARD,
+  scanBuildRun: ScanPhase.SCAN_BUILD,
+  scanBuildGetReport: ScanPhase.SCAN_BUILD,
   buildTarget: ScanPhase.DYNAMIC,
   valgrindMemcheck: ScanPhase.DYNAMIC,
   valgrindGetReport: ScanPhase.DYNAMIC,
@@ -96,7 +96,7 @@ export function toolSource(toolName: string): ToolSource {
  * Static-analyzer tools that accept file CONTENT (so the orchestrator can pass
  * host file content instead of relying on a shared filesystem). These are the
  * only static tools exposed to the agent — the multi-file / filesystem tools
- * (indexFiles, callGraph, interproceduralFlow, ownershipSummary, leakguard*)
+ * (indexFiles, callGraph, interproceduralFlow, ownershipSummary, scanBuild*)
  * need a shared mount and are excluded so the analyzer stays a stateless,
  * remote-deployable service.
  */
@@ -119,8 +119,8 @@ export const STATIC_TOOL_NAMES = [
   'pathConstraints',
   'ownershipSummary',
   'ownershipConventions',
-  'leakguardRun',
-  'leakguardGetReport',
+  'scanBuildRun',
+  'scanBuildGetReport',
 ] as const;
 
 /** Dynamic-analyzer tool names (gated behind --dynamic). */

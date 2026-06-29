@@ -10,7 +10,7 @@ export const InvestigationVerdictSchema = z.enum([
   'likely_false_positive',
   'false_positive',
 ]);
-export const ToolKindSchema = z.enum(['valgrind', 'asan', 'lsan', 'leakguard', 'heuristic', 'llm', 'consensus']);
+export const ToolKindSchema = z.enum(['valgrind', 'asan', 'lsan', 'scan_build', 'heuristic', 'llm', 'consensus']);
 export const AnalysisModeSchema = z.enum(['no_llm', 'llm_assisted']);
 export const DynamicModeSchema = z.enum(['off', 'selective', 'aggressive']);
 export const DynamicToolPreferenceSchema = z.enum(['auto', 'valgrind', 'lsan', 'asan']);

@@ -21,7 +21,7 @@ This is a Master's thesis workspace on LLM-orchestrated memory leak investigatio
 >   client, multi-provider streaming `callModel`, idle-timeout, context
 >   compaction).
 > - The analyzers live under `apps/static-analyzer` and `apps/dynamic-analyzer`,
->   each serving **MCP/HTTP** to the TUI. The leakguard slot is now a
+>   each serving **MCP/HTTP** to the TUI. The scan-build slot is now a
 >   self-contained **Clang Static Analyzer (`scan-build`)** — the third-party
 >   `tools/leak_guard_tool` submodule has been removed.
 > - There is **one orchestration path**: the CLI/TUI path (`leak-inspector-tui`,
@@ -133,9 +133,9 @@ turbo run dev --filter=dynamic-analyzer        # dynamic analyzer (MCP, port 500
 - The LLM key is read from `<root>/.env` or `apps/leak-inspector-tui/.env`.
 
 ### Static Server
-- `LEAKGUARD_REPO_ROOT`: Path to leak_guard_tool
-- `LEAKGUARD_DOCKER_IMAGE`: leakguard-tool:dev
-- `LEAKGUARD_DOCKER_PLATFORM`: linux/amd64
+- `SCAN_BUILD_BIN`: Path to the `scan-build` binary (default `scan-build`)
+- `RUNS_DIR`: Directory for scan-build run artifacts (default `./runs`)
+- `MCP_HTTP_PORT`: MCP/HTTP port (default 50061)
 
 ### Dynamic Server
 - `WORKSPACE_ROOT`: Root for allowed execution paths
@@ -152,8 +152,8 @@ turbo run dev --filter=dynamic-analyzer        # dynamic analyzer (MCP, port 500
 - `memory.call_graph`: Call graph extraction
 - `memory.path_constraints`: Path constraint analysis
 - `memory.interprocedural_flow`: Interprocedural dataflow
-- `memory.leakguard_run`: Execute LeakGuard analyzer
-- `memory.leakguard_get_report`: Retrieve LeakGuard findings
+- `scanBuildRun`: Execute the project-level Clang Static Analyzer (scan-build)
+- `scanBuildGetReport`: Retrieve scan-build findings
 
 ### Dynamic Server Tools
 - `valgrind.analyze_memcheck`: Run Valgrind Memcheck
@@ -167,10 +167,11 @@ turbo run dev --filter=dynamic-analyzer        # dynamic analyzer (MCP, port 500
 
 ## Important Notes
 
-### Docker-in-Docker Considerations
-- Static server runs LeakGuard via Docker, requiring `/var/run/docker.sock` mount
-- When static server itself runs in a container, it needs Docker socket access
-- LeakGuard runtime container must be available on the same Docker daemon
+### scan-build (deep-static slot)
+- The static server runs Clang `scan-build` DIRECTLY in its own container (clang +
+  clang-tools baked into the image) — no nested `docker run`, no `docker.sock` mount.
+- scan-build intercepts the project's own build (`buildCommand`) and parses the
+  emitted Clang diagnostics into structured findings.
 
 ### Valgrind Platform Limitations
 - Valgrind is Linux-only and will not work natively on macOS

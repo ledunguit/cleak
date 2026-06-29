@@ -8,7 +8,7 @@ import { FunctionSummaryService } from './services/function-summary.service';
 import { InterproceduralFlowService } from './services/interprocedural-flow.service';
 import { PathConstraintsService } from './services/path-constraints.service';
 import { OwnershipAnalysisService } from './services/ownership-analysis.service';
-import { LeakGuardAdapterService } from './services/leakguard-adapter.service';
+import { ScanBuildAdapterService } from './services/scan-build-adapter.service';
 
 @Module({
   providers: [
@@ -21,7 +21,7 @@ import { LeakGuardAdapterService } from './services/leakguard-adapter.service';
     InterproceduralFlowService,
     PathConstraintsService,
     OwnershipAnalysisService,
-    LeakGuardAdapterService,
+    ScanBuildAdapterService,
   ],
 })
 export class StaticAnalyzerModule {}
