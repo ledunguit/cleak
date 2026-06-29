@@ -126,53 +126,72 @@ isolate each contribution (the original design only flipped them together at B7)
 | B7 | Proposed (full adaptive) | ✅ | ✅ | ✅ | ✅ | ✅ |
 
 ```bash
-bun scripts/run-baselines.ts --corpus demo/juliet_cwe401 --limit 200   # full sweep → one table
+# Representative sweep: stratify the sample evenly across families (§3c), real LLM gateway.
+bun scripts/run-baselines.ts --corpus demo/juliet_cwe401 --limit 200 --stratify --provider local
 bun scripts/run-baselines.ts --only B1,B3 --dry-run                     # inspect resolved plans
-# → results/baseline-sweep-<ts>/baseline-sweep.{md,csv,tex,json}
+# → results/baseline-sweep-<ts>/baseline-sweep.{md,csv,tex,json}  (+ a Token-cost footer)
 ```
 
-**Headline (Juliet CWE-401, n=200, single run, model `mimo/mimo-v2.5-pro` @ temp 0; concurrency 10):**
+> **Sampling matters (§3c):** plain `--limit N` takes the top-N in manifest order, which for Juliet is
+> ~100% the `char` family (first 200 miss the 672-case `new` family entirely). The table below uses
+> **`--stratify`** (even round-robin across the 10 functional families) so the numbers are representative.
 
-| ID | Baseline | TP | FP | FN | TN | P | R | F1 | FP/KLOC | ECE | MCP/case |
-|---|---|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|
-| B1 | Static only | 158 | 120 | 61 | 324 | 56.8% | 72.1% | 0.636 | 2.007 | 0.362 | 1 |
-| B2 | Dynamic only | 97 | 0 | 125 | 0 | **100%** | 43.7% | 0.608 | 0.000 | **0.005** | 2 |
-| B3 | Rule-based ensemble | 162 | 120 | 57 | 324 | 57.4% | **74.0%** | **0.647** | 2.007 | 0.142 | 3 |
-| B4 | LLM + static | 161 | 134 | 58 | 310 | 54.6% | 73.5% | 0.626 | **2.241** | **0.475** | 8 |
-| B5 | LLM + dynamic | 100 | 0 | 121 | 0 | **100%** | 45.2% | 0.623 | 0.000 | 0.005 | 2 |
-| B6 | LLM + all (no planner/sel) | 161 | 120 | 58 | 324 | 57.3% | 73.5% | 0.644 | 2.007 | 0.246 | 10 |
-| B6a | + planner only | 161 | 120 | 58 | 324 | 57.3% | 73.5% | 0.644 | 2.007 | 0.246 | 10 |
-| B6b | + tool_selector only | 160 | 120 | 59 | 324 | 57.1% | 73.1% | 0.641 | 2.007 | 0.138 | 3 |
-| B7 | Proposed (full adaptive) | 161 | 120 | 58 | 324 | 57.3% | 73.5% | 0.644 | 2.007 | 0.142 | 3 |
+**Representative headline (Juliet CWE-401, stratified n=50, single run, `mimo/mimo-v2.5-pro` @ temp 0, real
+9router gateway; planner-guardrail + LLM health-check on):**
 
-Readings (honest, corpus-specific — Juliet is the EASY corpus, see §3a):
-- **The LLM judge never fired (every config: `tok/case = 0`, judge-path 100% heuristic).** Juliet produces
-  no *borderline* bundles, so `fusion` is a no-op here: B4≈B1, B6≈B3. ⇒ The LLM-orchestration axes are
-  **unmeasured on Juliet by construction** — their contribution must be shown on a HARD corpus (LAMeD),
-  where bundles are borderline. The ablation's job here is to prove *where* value is (dynamic), not to
-  oversell the LLM on easy data.
-- **Static ↔ dynamic is the real trade-off:** dynamic-only (B2/B5) = **P 100% / R ~44% / ECE 0.005** (never
-  a false positive, never miscalibrated — every verdict is a runtime-confirmed leak — but it misses ~56%,
-  the unexecuted paths). Static (B1) = R 72% but P 57%, ECE 0.362. Dynamic-only is **positive-only**
-  (TN = 0), like clang/LAMeD (§6): report Recall + FP, not specificity.
-- **The ensemble wins F1 (B3 = 0.647 > B1 = 0.636):** adding dynamic lifts recall (74.0 > 72.1) *and* more
-  than halves calibration error (ECE 0.362 → 0.142). On Juliet, **dynamic — not the LLM — is the value-add.**
-- **`tool_selector` (agentic evidence) calibrates better than deterministic enrichment:** B6b/B7 (agentic
-  Stage A) reach ECE 0.138/0.142 vs B6/B6a (deterministic enrich) 0.246 — the agent gathers richer static
-  context that the heuristic judge consumes, even though the LLM judge itself never fires. **`planner` shows
-  no effect** (B6 ≡ B6a, identical row), as expected when the dynamic mode is given explicitly.
-- **`enrich` HURTS on easy Juliet:** B4 (enrich on, no dynamic) is the worst row — FP 134 (vs 120),
-  FP/KLOC 2.241, **ECE 0.475** — the path-sensitive enrichment over-reports here (matches the FP 7→44
-  note in §7). It is the right base for HARD path-sensitive corpora, not Juliet.
-- **Honest baseline drop:** F1 ≈ 0.64 at n=200 vs 0.85 at n=30 (§3a) — the first 30 are the easy
-  `char_calloc` family; the full set is more varied. **n=200 is the trustworthy Juliet number.**
+| ID | Baseline | TP | FP | FN | TN | P | R | F1 | ECE | total tok |
+|---|---|--:|--:|--:|--:|--:|--:|--:|--:|--:|
+| B1 | Static only | 40 | 11 | 12 | 138 | 0.784 | 0.769 | 0.777 | 0.539 | 0 |
+| B2 | Dynamic only | 35 | 0 | 22 | 0 | **1.000** | 0.614 | 0.761 | 0.049 | 0 |
+| B3 | Rule-based ensemble | 47 | 11 | 5 | 138 | 0.810 | 0.904 | 0.855 | 0.152 | 0 |
+| B4 | LLM + static (enrich) | 47 | 15 | 5 | 134 | 0.758 | 0.904 | 0.825 | 0.043 | 407,943 |
+| B5 | LLM + dynamic | 35 | 0 | 23 | 0 | **1.000** | 0.603 | 0.753 | 0.004 | 15,915 |
+| B6 | LLM + all (no planner/sel) | 47 | **0** | 5 | 149 | **1.000** | 0.904 | 0.949 | 0.125 | 158,144 |
+| **B6a** | **+ planner only** | 48 | **0** | 4 | 149 | **1.000** | **0.923** | **0.960** | 0.129 | 152,410 |
+| B6b | + tool_selector only | 44 | 2 | 8 | 147 | 0.957 | 0.846 | 0.898 | 0.120 | **1,278,400** |
+| B7 | Proposed (full adaptive) | 45 | **0** | 7 | 149 | **1.000** | 0.865 | 0.928 | 0.128 | **1,262,137** |
 
-> **Caveats.** (1) `tok/case` counts only the *investigation* usage, **not** host-side LLM calls
-> (strategist/profiler), so a `planner`-on row understates its true LLM cost. (2) `ms/case` is wall-clock
-> *under concurrency 10* — inflated by contention on the single dynamic analyzer (B5 shows ~25 s/case);
-> `MCP/case` + tokens are the contention-independent cost signals. (3) B2 vs B5 recall differs slightly
-> (43.7 vs 45.2) = dynamic coverage **nondeterminism** (the `rand()%2` flow-variant), not fusion.
-> Reproduce: `bun scripts/run-baselines.ts --corpus demo/juliet_cwe401 --limit 200 --concurrency 10`.
+Σ sweep = **3.27 M tokens** — B6b + B7 (the agentic configs) alone are **2.54 M (78%)**.
+
+Readings (representative; Juliet is still the EASY corpus, see §3a):
+- **🏆 The winner is B6a (planner + deterministic recipe + LLM judge): F1 0.960, P 1.000, FP 0, at 152 k tokens.**
+  Not B7. The most "agentic" feature is the *loser* axis here (next point).
+- **The LLM judge eliminates false positives — but only WITH dynamic.** B3→B6 (add LLM judge to static+dynamic):
+  FP 11 → **0**, F1 0.855 → 0.949. But B4 (LLM + static, NO dynamic) still has **15 FP** despite 25 judge calls —
+  without runtime confirmation the LLM can't refute the enrich over-report. **Dynamic is the FP-killer; the LLM
+  judge then cleans up the rest.** Dynamic-only (B2/B5) is positive-only (TN 0, P 1.0, R ~0.6), like clang/LAMeD.
+- **`tool_selector` (agentic tool-selection) is counter-productive on Juliet — worse AND ~8× the cost.**
+  B6a (deterministic recipe) F1 0.960 @ 152 k tok vs B6b/B7 (agentic) F1 0.898/0.928 @ ~1.27 M tok. The agentic
+  loop burns 78 % of the sweep's tokens for *lower* F1. **`planner` helps** (B6 → B6a: +1 TP, F1 0.949 → 0.960)
+  once it is guardrailed (see below).
+- **Open question for the HARD corpus (LAMeD):** does agentic tool-selection pay off where the deterministic
+  recipe + heuristic fail and exploration is actually needed? If yes → the full B7 is justified for hard targets;
+  if not → the proposed production config is **B6a**. This is the key thing the next stage tests.
+
+> **Method notes / fixes baked into these numbers.** (1) **Planner guardrail:** the strategist may drop the
+> dynamic stage ONLY for an unbuildable repo — earlier it disabled dynamic on buildable cases (152/184 bundles
+> forced `dynamic_off`), which reintroduced FPs (pre-fix B6a P 0.90, B7 0.76). (2) **LLM health-check:** the
+> harness now does a live 1-token completion up front and FAILS LOUD on a dead/misconfigured gateway — an
+> earlier full run was silently heuristic-only because the global config pointed at a down `localhost:1234`.
+> (3) **Token caveat:** `total tok` counts judge + agentic usage (the judge's tokens were previously dropped);
+> host-side strategist/profiler tokens are still not counted, so `planner` rows slightly understate cost.
+>
+> **Scale caveat:** n=50 stratified, single run. Effect sizes are large and consistent, but the staged
+> **n=100 → n=200** runs (+ multi-run variance) confirm them, and **LAMeD** tests the agentic-tool-selection
+> hypothesis. The prior top-N n=200 numbers were `char`-only AND heuristic-fallback — discard them.
+
+### 3c. Sampling: stratify, don't take the top-N
+
+`--limit N` defaults to `cases.slice(0, N)` — the first N in manifest order. Juliet's manifest is
+**grouped by family**, so a top-N sample is severely skewed: the first 50 cases are **100 % `char`**, and
+the first 200 are ~90 % `char` + 0 % of the **672-case `new` (C++ new/delete)** family. Any metric from a
+top-N sample therefore describes one family, not the corpus.
+
+`--stratify [key]` (default `functionalVariant`) instead samples **evenly via deterministic round-robin**:
+round 0 takes one case from every family (sorted-key order), round 1 the next, … so even a small `limit`
+covers all 10 families (`char/int/malloc/new/strdup/struct/twoIntsStruct/wchar` + the tiny
+`destructor/virtual`). It is reproducible (no RNG) — see `selectCases` in `evalHarness.ts`. **Report
+stratified numbers**; a top-N number must say so and is only valid for whatever family leads the manifest.
 
 ## 4. Reproducibility provenance
 
