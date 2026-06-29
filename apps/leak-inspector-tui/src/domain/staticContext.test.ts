@@ -1,5 +1,11 @@
 import { describe, expect, test } from 'bun:test';
-import { foldStaticResult, attachScanBuildDiagnostics, type StaticContextStore } from './staticContext';
+import {
+  foldStaticResult,
+  attachScanBuildDiagnostics,
+  interproceduralLeakPaths,
+  appendFeasibleLeakPaths,
+  type StaticContextStore,
+} from './staticContext';
 import type { LeakBundle } from '@cleak/common/types';
 
 function bundle(id: string, file: string, fn: string, line: number): LeakBundle {
@@ -134,5 +140,47 @@ describe('attachScanBuildDiagnostics', () => {
     const b = bundle('b1', file, 'session_open', 8);
     attachScanBuildDiagnostics([b], [{ file_path: 'session.c', line_number: 8, context: 'leak', confidence: 'weird' }]);
     expect(b.staticEvidence?.scanBuildDiagnostics?.[0].confidence).toBe('medium');
+  });
+});
+
+describe('interproceduralLeakPaths (B2, recall-additive)', () => {
+  const cand = { function_name: 'make_thing', line_number: 8 };
+
+  test('alloc-without-free + NO reachable free anywhere → one high-risk leak path', () => {
+    const paths = interproceduralLeakPaths(
+      { paths: [{ functionName: 'make_thing', hasAllocWithoutFree: true }], reachableFrees: [] },
+      cand,
+    );
+    expect(paths).toHaveLength(1);
+    expect(paths[0]).toMatchObject({ reachable: true, leakRisk: 'high' });
+  });
+
+  test('a free reachable through a callee → stays additive-safe, emits NOTHING (no exoneration, no FP)', () => {
+    const paths = interproceduralLeakPaths(
+      { paths: [{ functionName: 'make_thing', hasAllocWithoutFree: true }], reachableFrees: ['free at /x.c:30'] },
+      cand,
+    );
+    expect(paths).toEqual([]);
+  });
+
+  test('candidate function freed locally (no alloc-without-free) → nothing', () => {
+    const paths = interproceduralLeakPaths(
+      { paths: [{ functionName: 'make_thing', hasAllocWithoutFree: false }], reachableFrees: [] },
+      cand,
+    );
+    expect(paths).toEqual([]);
+  });
+
+  test('appendFeasibleLeakPaths concats (does not clobber) existing paths', () => {
+    const b = bundle('b1', '/repo/x.c', 'make_thing', 8);
+    b.staticEvidence = {
+      allocFreePairs: [],
+      feasibleLeakPaths: [{ kind: 'return', exitLine: 5, reachable: true, conditions: [], unreconciledAllocations: [], leakRisk: 'low', narrative: 'pre-existing', feasibilityChecked: 'heuristic' }],
+      earlyReturnCount: 0,
+      leakyExitPaths: 0,
+    };
+    appendFeasibleLeakPaths(b, interproceduralLeakPaths({ paths: [{ functionName: 'make_thing', hasAllocWithoutFree: true }], reachableFrees: [] }, { function_name: 'make_thing', line_number: 8 }));
+    expect(b.staticEvidence!.feasibleLeakPaths).toHaveLength(2);
+    expect(b.staticEvidence!.feasibleLeakPaths[0].narrative).toBe('pre-existing');
   });
 });

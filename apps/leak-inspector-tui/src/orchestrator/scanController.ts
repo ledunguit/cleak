@@ -12,7 +12,7 @@
  * is where the model freely chooses which analysis tools to run.
  */
 
-import { basename } from 'node:path';
+import { basename, resolve as resolvePath } from 'node:path';
 import { mapWithLimit } from '@cleak/agent-core';
 import type { AgentEvent, McpClient } from '@cleak/agent-core';
 import {
@@ -32,7 +32,13 @@ import { runDeterministicDynamicStage, reconcileDynamicEvidence, computeDynamicC
 import { runDynamicOnlyDiscovery } from '../domain/dynamicDiscovery';
 import { heuristicVerdict } from '../domain/judge';
 import { THRESHOLDS } from '../domain/thresholds';
-import { foldStaticResult, attachScanBuildDiagnostics, type StaticContextStore } from '../domain/staticContext';
+import {
+  foldStaticResult,
+  attachScanBuildDiagnostics,
+  interproceduralLeakPaths,
+  appendFeasibleLeakPaths,
+  type StaticContextStore,
+} from '../domain/staticContext';
 import { coerceToObject } from '../domain/mcpResult';
 import type { InvestigationPhase, InvestigationOutcome } from './investigation';
 
@@ -129,10 +135,16 @@ async function enrichStaticEvidence(
   };
   // Tool-level ablation: which evidence tools the enrich stage runs. Default = the
   // wired, judge-consumed pair (functionSummary + pathConstraints). Opt-in extras
-  // (`scanBuild`, …) only run when named in `--static-tools`, so the default 2-tool
-  // baseline stays byte-identical. (callGraph/interproceduralFlow: see B2.)
+  // (`scanBuild`, `interproceduralFlow`) only run when named in `--static-tools`, so
+  // the default 2-tool baseline stays byte-identical. (callGraph: still unused.)
   const tools = new Set(input.staticTools ?? ['functionSummary', 'pathConstraints']);
   const store: StaticContextStore = new Map();
+
+  // interproceduralFlow (opt-in, B2) reads files SERVER-SIDE (it traces callees across
+  // files), so pass absolute candidate paths the analyzer can open. Computed once.
+  const ipFiles = tools.has('interproceduralFlow')
+    ? [...new Set(bundles.map((b) => resolvePath(b.candidate.file_path)))]
+    : [];
 
   // ── Project-level Clang scan-build (opt-in): run ONCE over the whole build, then
   // attach its diagnostics to every matching candidate as a deterministic second
@@ -173,6 +185,18 @@ async function enrichStaticEvidence(
       try {
         const pc = await staticClient.callTool('pathConstraints', { filePath: file, content, lineNumber: line, ...allocArgs });
         foldStaticResult(store, 'pathConstraints', { filePath: file, lineNumber: line }, pc, [b]);
+      } catch {
+        /* best-effort */
+      }
+    }
+    // ── interproceduralFlow (opt-in, B2): RECALL-direction only. Trace callees from the
+    // candidate's function; if it allocates without a free reachable across the boundary,
+    // append a feasible leak path (additive — never exonerates). Runs AFTER pathConstraints
+    // so its paths concat onto, not clobber, the path-constraint evidence. ──
+    if (tools.has('interproceduralFlow') && fn) {
+      try {
+        const ip = await staticClient.callTool('interproceduralFlow', { rootPath: input.repoPath, functionName: fn, files: ipFiles });
+        appendFeasibleLeakPaths(b, interproceduralLeakPaths(ip, { function_name: fn, line_number: line }));
       } catch {
         /* best-effort */
       }
