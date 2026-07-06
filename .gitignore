@@ -83,3 +83,5 @@ vendor
 # corpus validation reports (regenerable; the lockfile is the committed artifact)
 demo/**/corpus_validation_report.json
 demo/**/corpus_validation_report.md
+
+.omo
