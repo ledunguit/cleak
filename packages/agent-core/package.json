@@ -1,6 +1,6 @@
 {
   "name": "@cleak/agent-core",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Framework-free agentic loop, tool abstraction, MCP client and multi-provider (OpenAI/Anthropic/local) model adapters.",
   "type": "module",
   "license": "Apache-2.0",
