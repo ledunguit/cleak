@@ -237,10 +237,11 @@ async function assertLlmAvailable(mode: string, allowFallback?: boolean, provide
   try {
     const callModel = buildCallModel(toProviderSettings(full), () => globalThis.crypto.randomUUID());
     await callModel({ systemPrompt: 'health check', messages: [{ role: 'user', content: 'reply ok' }], tools: [], temperature: 0 });
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
     throw new Error(
       `llm_assisted health-check FAILED for provider '${cfg.provider}' @ ${cfg.baseUrl} (model ${cfg.model}): ` +
-        `${err?.message ?? err}. The gateway is unreachable/misconfigured — every case would silently fall back ` +
+        `${msg}. The gateway is unreachable/misconfigured — every case would silently fall back ` +
         `to the heuristic (Δ=0 confound). Fix the endpoint (e.g. --provider local), or pass --allow-heuristic-fallback.`,
     );
   }
@@ -468,10 +469,11 @@ export async function runEval(opts: EvalOptions): Promise<EvalResult> {
       emitResult(c, result);
       opts.onProgress?.(++done, cases.length, c.id);
       return result;
-    } catch (err: any) {
+    } catch (err: unknown) {
       // A case interrupted by cancel counts as skipped (not a real error), and is
       // NOT cached so a later --resume re-runs it.
-      const aborted = opts.signal?.aborted || err?.name === 'AbortError';
+      const msg = err instanceof Error ? err.message : String(err);
+      const aborted = opts.signal?.aborted || (err instanceof Error && err.name === 'AbortError');
       const row: CaseRow = {
         id: c.id,
         cwe: c.cwe,
@@ -489,7 +491,7 @@ export async function runEval(opts: EvalOptions): Promise<EvalResult> {
         durationMs: Date.now() - started,
         tokens: 0,
         mcpCalls: 0,
-        ...(aborted ? {} : { error: err?.message ?? String(err) }),
+        ...(aborted ? {} : { error: msg }),
       };
       const result: CachedCase = { id: c.id, samples: [], row, findings: [] };
       emitResult(c, result);

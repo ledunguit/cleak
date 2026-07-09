@@ -184,8 +184,9 @@ export async function profileAllocators(
       signal: opts.signal,
       temperature: opts.temperature ?? 0,
     });
-  } catch (err: any) {
-    opts.onNotice?.(`allocator-profile: model call failed (${err?.message ?? err})`);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    opts.onNotice?.(`allocator-profile: model call failed (${msg})`);
     return null;
   }
   const parsed = parseAllocatorProfile(resp.text ?? '');

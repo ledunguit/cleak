@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { readFileSync } from 'fs';
 import { CParserService, type FunctionInfo } from './c-parser.service';
 
@@ -84,6 +84,7 @@ function namePatterns(names: string[] | undefined, envVar: string): RegExp[] {
 
 @Injectable()
 export class CandidateScanService {
+  private readonly logger = new Logger(CandidateScanService.name);
   constructor(private readonly cParser: CParserService) {}
 
   scan(filePath: string, content?: string, extraAllocators?: string[], extraDeallocators?: string[]) {
@@ -97,6 +98,7 @@ export class CandidateScanService {
     try {
       functions = this.cParser.parse(source, filePath, extraAllocators, extraDeallocators).functions;
     } catch {
+      this.logger.warn(`AST parse failed for ${filePath}, falling back to lexical`);
       functions = []; // fall back to the lexical scan below
     }
     const sanitized = this.sanitizeSource(source);

@@ -12,13 +12,10 @@
  * Imported via the sub-path `@cleak/common/analysis/dynamic-evidence`.
  */
 import { createHash } from 'crypto';
-import {
-  CorrelationMethod,
-  DynamicLeakKind,
-  LeakCandidate,
-  LeakEvidence,
-  StackFrameRef,
-} from '../types/leak-schema.types';
+import { DynamicLeakKind } from '../types/enums';
+import type { CorrelationMethod } from '../types/evidence';
+import type { LeakCandidate } from '../types/candidate';
+import type { LeakEvidence, StackFrameRef } from '../types/evidence';
 
 /** Paths / functions that indicate a non-user (allocator / libc) frame. */
 const LIBRARY_FILE_RE = /\/usr\/|\/libc|\/libgcc|\/lib\/|libstdc\+\+|vg_replace_malloc|<unknown>/i;

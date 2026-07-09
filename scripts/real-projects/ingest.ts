@@ -106,8 +106,9 @@ for (const rec of gt.records) {
       for (const h of rec.headers ?? []) {
         writeFileSync(join(caseDir, basename(h)), fileAt(repoDir, v.rev, h));
       }
-    } catch (err: any) {
-      process.stderr.write(`  ! ${caseId}: ${err?.message ?? err} — skipped\n`);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      process.stderr.write(`  ! ${caseId}: ${msg} — skipped\n`);
       rmSync(caseDir, { recursive: true, force: true });
       continue;
     }

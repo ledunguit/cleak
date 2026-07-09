@@ -208,8 +208,9 @@ function main(): void {
         // Copy the working tree (sans .git) to a stable, per-case snapshot.
         cpSync(clone, caseDir, { recursive: true, filter: (src) => !src.includes(`${clone}/.git`) });
         materialized++;
-      } catch (err: any) {
-        skipped.push(`${e.id} (${String(err?.message ?? err).slice(0, 80)})`);
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        skipped.push(`${e.id} (${msg.slice(0, 80)})`);
         continue;
       }
     }

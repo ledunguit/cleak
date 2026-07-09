@@ -136,8 +136,9 @@ export async function decideStrategy(
       signal: opts.signal,
       temperature: opts.temperature ?? 0,
     });
-  } catch (err: any) {
-    opts.onNotice?.(`strategist: model call failed (${err?.message ?? err}); using fallback`);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    opts.onNotice?.(`strategist: model call failed (${msg}); using fallback`);
     return fallbackPlan(meta);
   }
   const parsed = parseStrategyPlan(resp.text ?? '');

@@ -1,5 +1,19 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
+import { ok } from '@cleak/common/mcp/ok-helper';
+import type {
+  RepoIndexResponse,
+  CandidateScanResponse,
+  AstScanResponse,
+  CallGraphResponse,
+  FunctionSummaryResponse,
+  InterproceduralFlowResponse,
+  PathConstraintsResponse,
+  OwnershipSummaryResponse,
+  OwnershipConventionsResponse,
+  ScanBuildRunResponse,
+  ScanBuildReportResponse,
+} from '../types/mcp-responses';
 
 /**
  * The static-analyzer's analysis services, resolved from the Nest DI container.
@@ -8,21 +22,16 @@ import { z } from 'zod';
  * Unlike gRPC, MCP returns the full JSON result (no proto field stripping).
  */
 export interface StaticToolServices {
-  fileIndexing: { indexFiles(rootPath: string, fileLimit?: number, excludePatterns?: string[]): any };
-  candidateScan: { scan(filePath: string, content: string, extraAllocators?: string[], extraDeallocators?: string[]): any };
-  astScan: { parse(filePath: string, content?: string): any };
-  callGraph: { extract(rootPath: string, files: string[], extraAllocators?: string[], extraDeallocators?: string[]): any };
-  functionSummary: { summarize(filePath: string, content: string, functionName: string, extraAllocators?: string[], extraDeallocators?: string[]): any };
-  interproceduralFlow: { analyze(rootPath: string, functionName: string, files: string[], extraAllocators?: string[], extraDeallocators?: string[]): any };
-  pathConstraints: { analyze(filePath: string, content: string, lineNumber: number, extraAllocators?: string[], extraDeallocators?: string[]): any };
-  ownership: { summarize(files: string[], rootPath: string): any; conventions(content: string, filePath: string): any };
-  scanBuild: { run(projectPath: string, buildCommand: string, timeoutSec?: number): any; getReport(runId: string): any };
+  fileIndexing: { indexFiles(rootPath: string, fileLimit?: number, excludePatterns?: string[]): RepoIndexResponse };
+  candidateScan: { scan(filePath: string, content: string, extraAllocators?: string[], extraDeallocators?: string[]): CandidateScanResponse };
+  astScan: { parse(filePath: string, content?: string): AstScanResponse };
+  callGraph: { extract(rootPath: string, files: string[], extraAllocators?: string[], extraDeallocators?: string[]): CallGraphResponse };
+  functionSummary: { summarize(filePath: string, content: string, functionName: string, extraAllocators?: string[], extraDeallocators?: string[]): FunctionSummaryResponse };
+  interproceduralFlow: { analyze(rootPath: string, functionName: string, files: string[], extraAllocators?: string[], extraDeallocators?: string[]): InterproceduralFlowResponse };
+  pathConstraints: { analyze(filePath: string, content: string, lineNumber: number, extraAllocators?: string[], extraDeallocators?: string[]): PathConstraintsResponse | Promise<PathConstraintsResponse> };
+  ownership: { summarize(files: string[], rootPath: string): OwnershipSummaryResponse; conventions(content: string, filePath: string): OwnershipConventionsResponse };
+  scanBuild: { run(projectPath: string, buildCommand: string, timeoutSec?: number): Promise<ScanBuildRunResponse>; getReport(runId: string): Promise<ScanBuildReportResponse> };
 }
-
-const ok = (result: unknown) => ({
-  content: [{ type: 'text' as const, text: JSON.stringify(result ?? null) }],
-  structuredContent: (result ?? {}) as Record<string, unknown>,
-});
 
 /** Build the static-analyzer MCP server with all 11 memory-leak analysis tools. */
 export function createStaticMcpServer(svc: StaticToolServices): McpServer {

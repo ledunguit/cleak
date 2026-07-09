@@ -114,11 +114,12 @@ export async function runBaselineEval(
       };
       opts.onProgress?.(++done, cases.length, c.id);
       return { samples, row };
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
       opts.onProgress?.(++done, cases.length, `${c.id} (error)`);
       return {
         samples: [],
-        row: { id: c.id, status: 'error', tp: 0, fp: 0, fn: 0, tn: 0, flagged: 0, loc, error: err?.message ?? String(err) },
+        row: { id: c.id, status: 'error', tp: 0, fp: 0, fn: 0, tn: 0, flagged: 0, loc, error: msg },
       };
     }
   };

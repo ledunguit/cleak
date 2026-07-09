@@ -116,12 +116,12 @@ export async function* queryLoop(params: QueryParams): AsyncGenerator<AgentEvent
         signal: ctx.abortSignal,
         onFirstChunk: () => params.onModelActivity?.('receive'),
       });
-    } catch (err: any) {
+    } catch (err: unknown) {
       if (ctx.abortSignal?.aborted) {
         yield { type: 'done', reason: 'aborted' };
         return { messages, reason: 'aborted', turns: turn, usage };
       }
-      const message = err?.message ?? String(err);
+      const message = err instanceof Error ? err.message : String(err);
       // Pause and wait for the user (e.g. "continue" or new guidance) instead of
       // ending the run. The retried turn reuses this turn number (no budget burn).
       if (params.awaitResume) {
@@ -232,8 +232,9 @@ export async function* queryLoop(params: QueryParams): AsyncGenerator<AgentEvent
         const base = tool.mapResultToBlock(output, tu.id) as ToolResultBlock;
         const block: ToolResultBlock = { ...base, content: truncateResult(base.content, tool.maxResultSizeChars) };
         return { output, isError: false, durationMs: deps.now() - start, block };
-      } catch (err: any) {
-        return errResult(tu.id, err?.message ?? String(err), deps.now() - start);
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return errResult(tu.id, msg, deps.now() - start);
       }
     };
 

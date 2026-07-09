@@ -51,6 +51,7 @@ export class RunManagerService {
         try {
           return JSON.parse(readFileSync(filePath, 'utf-8')) as RunRecord;
         } catch {
+          console.debug(`corrupt run file: ${filePath}`);
           return null;
         }
       })

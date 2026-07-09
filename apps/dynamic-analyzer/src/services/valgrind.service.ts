@@ -53,13 +53,14 @@ export class ValgrindService {
         findings,
         summary: stats,
       };
-    } catch (err: any) {
-      console.error(`[Valgrind] Error: ${err.message}`);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`[Valgrind] Error: ${msg}`);
       return {
         success: false,
         runId: id,
         findings: [],
-        summary: err.message,
+        summary: msg,
       };
     }
   }

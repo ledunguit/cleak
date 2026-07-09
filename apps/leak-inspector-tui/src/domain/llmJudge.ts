@@ -213,8 +213,9 @@ export async function judgeBundleWithLlm(
   let resp;
   try {
     resp = await callModel({ systemPrompt: SYSTEM_PROMPT, messages: [{ role: 'user', content: user }], tools: [], signal, temperature });
-  } catch (err: any) {
-    onNotice?.(`judge ${c.file_path}:${c.line_number} — model call failed (${err?.message ?? err}); keeping heuristic`);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    onNotice?.(`judge ${c.file_path}:${c.line_number} — model call failed (${msg}); keeping heuristic`);
     return null;
   }
   if (resp.usage) onUsage?.({ inputTokens: resp.usage.inputTokens ?? 0, outputTokens: resp.usage.outputTokens ?? 0 });

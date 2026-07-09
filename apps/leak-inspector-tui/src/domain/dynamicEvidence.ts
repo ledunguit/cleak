@@ -229,8 +229,9 @@ export async function runDeterministicDynamic(opts: {
   let build: any;
   try {
     build = coerceToObject(await buildTool.call({ projectPath: analyzerRepo, buildCommand }, toolCtx));
-  } catch (err: any) {
-    opts.onNotice?.(`deterministic build threw: ${err?.message ?? err} — falling back`);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    opts.onNotice?.(`deterministic build threw: ${msg} — falling back`);
     return false;
   }
   if (build.success === false) {
@@ -243,8 +244,9 @@ export async function runDeterministicDynamic(opts: {
   const lsanCaptured = withDynamicEvidenceCapture(lsanTool, store);
   try {
     await lsanCaptured.call({ binaryPath }, toolCtx);
-  } catch (err: any) {
-    opts.onNotice?.(`deterministic lsanRun threw: ${err?.message ?? err}`);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    opts.onNotice?.(`deterministic lsanRun threw: ${msg}`);
   }
   return store.runs.some((r) => r.success);
 }
