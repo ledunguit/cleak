@@ -62,6 +62,32 @@ describe('withDynamicEvidenceCapture', () => {
     expect(store.runs[0]).toMatchObject({ tool: 'lsan', runId: 'r1', success: true });
     expect(store.runs[0].findings).toHaveLength(1);
   });
+
+  test('empty/malformed result records no findings and empty runId', async () => {
+    const store = createDynamicRunStore();
+    const wrapped = withDynamicEvidenceCapture(fakeTool('lsanRun', {}), store);
+    await wrapped.call({}, {});
+    expect(store.runs).toHaveLength(1);
+    expect(store.runs[0].findings).toEqual([]);
+    expect(store.runs[0].runId).toBe('');
+  });
+
+  test('null result records no findings and empty runId', async () => {
+    const store = createDynamicRunStore();
+    const wrapped = withDynamicEvidenceCapture(fakeTool('lsanRun', null), store);
+    await wrapped.call({}, {});
+    expect(store.runs).toHaveLength(1);
+    expect(store.runs[0].findings).toEqual([]);
+    expect(store.runs[0].runId).toBe('');
+  });
+
+  test('structuredContent.findings is captured when top-level findings is absent', async () => {
+    const store = createDynamicRunStore();
+    const wrapped = withDynamicEvidenceCapture(fakeTool('lsanRun', { success: true, runId: 'r2', structuredContent: { findings: [leakFinding('b.c', 20, 'fn')] } }), store);
+    await wrapped.call({}, {});
+    expect(store.runs).toHaveLength(1);
+    expect(store.runs[0].findings).toHaveLength(1);
+  });
 });
 
 describe('reconcileDynamicEvidence', () => {
