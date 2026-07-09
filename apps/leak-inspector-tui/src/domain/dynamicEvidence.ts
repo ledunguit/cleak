@@ -44,6 +44,28 @@ export interface DynamicRunStore {
   runs: DynamicRunRecord[];
 }
 
+/** Shape of an MCP sanitizer run tool result. */
+interface DynamicRunResult {
+  findings?: unknown[];
+  runId?: string;
+  run_id?: string;
+  success?: boolean;
+  structuredContent?: {
+    findings?: unknown[];
+    runId?: string;
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+}
+
+/** Shape of an MCP buildTarget tool result. */
+interface DynamicBuildResult {
+  success?: boolean;
+  binaryPath?: string;
+  errors?: string[];
+  [key: string]: unknown;
+}
+
 export function createDynamicRunStore(): DynamicRunStore {
   return { runs: [] };
 }
@@ -77,7 +99,7 @@ export function withDynamicEvidenceCapture(tool: Tool, store: DynamicRunStore): 
     call: async (input: any, ctx: any) => {
       const out = await tool.call(input, ctx);
       try {
-        const o = coerceToObject(out);
+        const o = coerceToObject<DynamicRunResult>(out);
         const findings = Array.isArray(o.findings) ? o.findings : Array.isArray(o.structuredContent?.findings) ? o.structuredContent.findings : [];
         store.runs.push({
           tool: dyn,
@@ -228,7 +250,7 @@ export async function runDeterministicDynamic(opts: {
   const analyzerRepo = pathResolver.toAnalyzerPath(repoPath);
   let build: any;
   try {
-    build = coerceToObject(await buildTool.call({ projectPath: analyzerRepo, buildCommand }, toolCtx));
+    build = coerceToObject<DynamicBuildResult>(await buildTool.call({ projectPath: analyzerRepo, buildCommand }, toolCtx));
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     opts.onNotice?.(`deterministic build threw: ${msg} — falling back`);
