@@ -228,7 +228,8 @@ async function runOne(c: BaselineConfig, plan: ReturnType<typeof resolveCapabili
       meanTokens: mean((r) => r.cost.meanTokens),
       totalTokens: rep.perRun.reduce((a, r) => a + r.cost.totalTokens, 0),
     };
-  } catch (err: any) {
-    return { id: c.id, name: c.name, status: 'error', error: err?.message ?? String(err) };
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return { id: c.id, name: c.name, status: 'error', error: msg };
   }
 }

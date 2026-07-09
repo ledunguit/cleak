@@ -18,6 +18,7 @@
  * enclosing function's final exit — always a real, applicable anchor.
  */
 import { LeakBundle, LeakCandidate, LeakRootCause, LeakPatternType, RepairDiff } from '../types';
+import { ALLOCATION_FN_PATTERN } from '../constants/allocators';
 
 export interface HeuristicAnalysis {
   patternType: LeakPatternType;
@@ -55,8 +56,7 @@ export interface HeuristicAnalysis {
   freedAnywhereInFunction: boolean;
 }
 
-const ALLOC_FNS =
-  'malloc|calloc|realloc|reallocarray|strdup|strndup|aligned_alloc|valloc|memalign|posix_memalign|g_malloc|g_malloc0|g_strdup|asprintf';
+const ALLOC_FNS = ALLOCATION_FN_PATTERN;
 
 export interface FunctionBounds {
   /** 0-based line index of the line containing the opening brace. */

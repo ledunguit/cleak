@@ -72,8 +72,9 @@ export async function runDynamicOnlyDiscovery(
   let tools;
   try {
     tools = await loadMcpTools(dynamicClient, mcpToolFlags);
-  } catch (err: any) {
-    opts.onNotice?.(`dynamic-only discovery: analyzer unreachable (${err?.message ?? err}) — no candidates`);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    opts.onNotice?.(`dynamic-only discovery: analyzer unreachable (${msg}) — no candidates`);
     return { store, candidates: [], ran: false };
   }
   const ran = await runDeterministicDynamic({

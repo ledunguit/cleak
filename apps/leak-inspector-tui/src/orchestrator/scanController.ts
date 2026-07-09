@@ -182,8 +182,8 @@ async function enrichStaticEvidence(
         const findings = Array.isArray(report.findings) ? (report.findings as Array<Record<string, any>>) : [];
         attachScanBuildDiagnostics(bundles, findings);
       }
-    } catch {
-      /* best-effort: a scan-build failure must not abort the scan */
+    } catch (err) {
+      console.debug(`scan-build enrichment failed: ${err?.message}`);
     }
   }
 
@@ -199,7 +199,7 @@ async function enrichStaticEvidence(
         const fs = await staticClient.callTool('functionSummary', { filePath: file, content, functionName: fn, ...allocArgs });
         foldStaticResult(store, 'functionSummary', { filePath: file, functionName: fn }, fs, [b]);
       } catch {
-        /* best-effort: a single failed enrichment must not abort the scan */
+        console.debug(`functionSummary failed for ${file}:${fn}`);
       }
     }
     if (tools.has('pathConstraints')) {
@@ -207,7 +207,7 @@ async function enrichStaticEvidence(
         const pc = await staticClient.callTool('pathConstraints', { filePath: file, content, lineNumber: line, ...allocArgs });
         foldStaticResult(store, 'pathConstraints', { filePath: file, lineNumber: line }, pc, [b]);
       } catch {
-        /* best-effort */
+        console.debug(`pathConstraints failed for ${file}:${line}`);
       }
     }
     // ── interproceduralFlow (opt-in, B2): RECALL-direction only. Trace callees from the
@@ -219,7 +219,7 @@ async function enrichStaticEvidence(
         const ip = await staticClient.callTool('interproceduralFlow', { rootPath: input.repoPath, functionName: fn, files: ipFiles, ...allocArgs });
         appendFeasibleLeakPaths(b, interproceduralLeakPaths(ip, { function_name: fn, line_number: line }));
       } catch {
-        /* best-effort */
+        console.debug(`interproceduralFlow failed for ${fn}`);
       }
     }
   });
@@ -280,7 +280,8 @@ export async function runScan(input: ScanInput, deps: ScanDeps): Promise<ScanRes
           ...(input.extraDeallocators?.length ? { extraDeallocators: input.extraDeallocators } : {}),
         })) as any;
       } catch {
-        return null; // a single unreadable/odd file shouldn't abort discovery
+        console.debug(`candidateScan failed for ${file}`);
+        return null;
       }
     });
     // Ingest IN FILE ORDER (mapWithLimit preserves input order) so the candidate set

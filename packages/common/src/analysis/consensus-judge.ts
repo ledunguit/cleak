@@ -239,7 +239,8 @@ async function sampleAll(
       if (i >= n) return;
       try {
         out[i] = await sampleJudge(i);
-      } catch {
+      } catch (err) {
+        console.debug(`consensus sample ${i} failed: ${err instanceof Error ? err.message : String(err)}`);
         out[i] = null;
       }
     }

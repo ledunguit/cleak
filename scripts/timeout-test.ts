@@ -16,16 +16,17 @@ try {
   );
   console.error('✗ expected a timeout');
   process.exit(1);
-} catch (err: any) {
-  if (!/timed out/.test(err.message)) {
-    console.error(`✗ unclear timeout message: ${err.message}`);
+} catch (err: unknown) {
+  const msg = err instanceof Error ? err.message : String(err);
+  if (!/timed out/.test(msg)) {
+    console.error(`✗ unclear timeout message: ${msg}`);
     process.exit(1);
   }
   if (notices.length !== 1) {
     console.error(`✗ onRetry should fire once, got ${notices.length}`);
     process.exit(1);
   }
-  console.log(`✓ timeout: "${err.message}" · retry notice: ${notices[0]}`);
+  console.log(`✓ timeout: "${msg}" · retry notice: ${notices[0]}`);
 }
 
 // ── caller abort ──
@@ -35,9 +36,10 @@ try {
   await fetchWithRetry(url, { method: 'GET' }, { timeoutMs: 5000, retries: 2, signal: ac.signal });
   console.error('✗ expected abort');
   process.exit(1);
-} catch (err: any) {
-  if (err.message !== 'interrupted') {
-    console.error(`✗ caller abort should say 'interrupted', got '${err.message}'`);
+} catch (err: unknown) {
+  const msg = err instanceof Error ? err.message : String(err);
+  if (msg !== 'interrupted') {
+    console.error(`✗ caller abort should say 'interrupted', got '${msg}'`);
     process.exit(1);
   }
   console.log(`✓ caller abort → "interrupted" (not retried)`);

@@ -80,8 +80,9 @@ export async function tuneThresholds(callModel: CallModel, opts: TuneOptions = {
       signal: opts.signal,
       temperature: opts.temperature ?? 0,
     });
-  } catch (err: any) {
-    opts.onNotice?.(`judge-tuner: model call failed (${err?.message ?? err}); using frozen defaults`);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    opts.onNotice?.(`judge-tuner: model call failed (${msg}); using frozen defaults`);
     return JUDGE_VERDICT_THRESHOLDS;
   }
   const parsed = parseTuning(resp.text ?? '');

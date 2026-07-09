@@ -177,7 +177,7 @@ export async function streamWithRetry(url: string, init: RequestInit, opts: Stre
         }
       }
       return;
-    } catch (err: any) {
+    } catch (err: unknown) {
       if (opts.signal?.aborted) throw new Error('interrupted');
       const reason = timedOut
         ? phase === 'connecting'

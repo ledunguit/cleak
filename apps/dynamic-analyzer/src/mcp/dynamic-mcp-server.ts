@@ -1,5 +1,17 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
+import { ok } from '@cleak/common/mcp/ok-helper';
+import type {
+  BuildTargetResponse,
+  ValgrindMemcheckResponse,
+  ValgrindGetReportResponse,
+  ValgrindListFindingsResponse,
+  ValgrindCompareRunsResponse,
+  AsanRunResponse,
+  LsanRunResponse,
+  RunBinaryResponse,
+  ListRunsResponse,
+} from '../types/mcp-responses';
 
 /**
  * The dynamic-analyzer's services, resolved from the Nest DI container. MCP
@@ -7,23 +19,18 @@ import { z } from 'zod';
  * (dynamic-analyzer.controller.ts), so both transports are behavior-identical.
  */
 export interface DynamicToolServices {
-  buildTarget: { build(projectPath: string, buildCommand: string, timeoutSec?: number): any };
+  buildTarget: { build(projectPath: string, buildCommand: string, timeoutSec?: number): Promise<BuildTargetResponse> };
   valgrind: {
-    runMemcheck(binaryPath: string, args: string[], runId?: string, timeoutSec?: number): any;
-    getReport(runId: string): any;
-    listFindings(runId: string, severity?: string, functionName?: string): any;
+    runMemcheck(binaryPath: string, args: string[], runId?: string, timeoutSec?: number): Promise<ValgrindMemcheckResponse>;
+    getReport(runId: string): Promise<ValgrindGetReportResponse>;
+    listFindings(runId: string, severity?: string, functionName?: string): Promise<ValgrindListFindingsResponse>;
   };
-  asan: { run(binaryPath: string, args: string[], timeoutSec?: number): any };
-  lsan: { run(binaryPath: string, args: string[], timeoutSec?: number): any };
-  binaryRunner: { run(binaryPath: string, args: string[], timeoutSec?: number): any };
-  compare: { compareValgrindRuns(runIdA: string, runIdB: string): any };
-  runManager: { listRuns(tool?: string, limit?: number): any };
+  asan: { run(binaryPath: string, args: string[], timeoutSec?: number): Promise<AsanRunResponse> };
+  lsan: { run(binaryPath: string, args: string[], timeoutSec?: number): Promise<LsanRunResponse> };
+  binaryRunner: { run(binaryPath: string, args: string[], timeoutSec?: number): Promise<RunBinaryResponse> };
+  compare: { compareValgrindRuns(runIdA: string, runIdB: string): Promise<ValgrindCompareRunsResponse> };
+  runManager: { listRuns(tool?: string, limit?: number): Promise<ListRunsResponse> };
 }
-
-const ok = (result: unknown) => ({
-  content: [{ type: 'text' as const, text: JSON.stringify(result ?? null) }],
-  structuredContent: (result ?? {}) as Record<string, unknown>,
-});
 
 const runArgs = { binaryPath: z.string(), args: z.array(z.string()).optional(), timeoutSec: z.number().optional() };
 

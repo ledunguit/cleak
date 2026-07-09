@@ -50,8 +50,9 @@ for (const c of cases) {
     console.log(
       `  ${c.id.padEnd(22)} ${pad(c.expected_leak_count, 3)}  ${pad(base.detected, 6)}  ${pad(llm.detected, 4)}  ${pad(signed(delta), 3)}  ${notes.join('; ')}`,
     );
-  } catch (err: any) {
-    console.log(`  ${c.id.padEnd(22)} ERROR: ${err?.message ?? err}`);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.log(`  ${c.id.padEnd(22)} ERROR: ${msg}`);
   }
 }
 

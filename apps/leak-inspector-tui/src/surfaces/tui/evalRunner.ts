@@ -125,8 +125,9 @@ export async function runTuiEval(store: TuiStore, req: TuiEvalRequest): Promise<
       cancelled ? color.warning : color.success,
     );
     store.addSystemMessage(`  artifacts: ${files.map((f) => basename(f)).join(', ')}`, color.system);
-  } catch (err: any) {
-    store.addSystemMessage(`eval failed: ${err?.message ?? String(err)}`, color.error);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    store.addSystemMessage(`eval failed: ${msg}`, color.error);
   } finally {
     store.setEvalAbort(undefined);
   }

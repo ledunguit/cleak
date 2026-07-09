@@ -131,8 +131,9 @@ export async function runTuiScan(store: TuiStore, req: TuiScanRequest): Promise<
       confirmed: result.report.summary.confirmedLeaks,
       likely: result.report.summary.likelyLeaks,
     });
-  } catch (err: any) {
-    store.failRun(err?.message ?? String(err));
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    store.failRun(msg);
   } finally {
     store.setAbortController(undefined);
     await staticClient.close();

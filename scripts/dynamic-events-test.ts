@@ -65,8 +65,9 @@ try {
   const safePerm = listRuns ? (await listRuns.checkPermissions({}, {})).behavior : 'ask';
   if (safePerm !== 'allow') fail(`listRuns should auto-allow, got '${safePerm}'`);
   console.log(`✓ dynamic tools: ${tools.length} loaded; buildTarget=ask, listRuns=allow`);
-} catch (err: any) {
-  fail(`dynamic tool load failed (${dynUrl}): ${err?.message ?? err}`);
+} catch (err: unknown) {
+  const msg = err instanceof Error ? err.message : String(err);
+  fail(`dynamic tool load failed (${dynUrl}): ${msg}`);
 } finally {
   await client.close();
 }

@@ -30,8 +30,9 @@ async function checkServer(label: string, url: string, expected: readonly string
     if (missing.length) process.stdout.write(`  ✗ MISSING: ${missing.join(', ')}\n`);
     if (extra.length) process.stdout.write(`  ⚠ extra (not in plan): ${extra.join(', ')}\n`);
     return missing.length === 0;
-  } catch (err: any) {
-    process.stdout.write(`\n${label} (${url}): ✗ ${err?.message ?? err}\n`);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    process.stdout.write(`\n${label} (${url}): ✗ ${msg}\n`);
     return false;
   } finally {
     await client.close();

@@ -4,15 +4,19 @@
  * object for safe field access and never throws (malformed/empty → {}). Shared by
  * the static-context and dynamic-evidence capture wrappers, which both fold raw
  * tool output into per-bundle state.
+ *
+ * @template T - The expected response type (defaults to Record<string, unknown>).
+ *               Use typed MCP response interfaces from static/dynamic analyzers
+ *               for compile-time safety.
  */
-export function coerceToObject(result: unknown): Record<string, any> {
-  if (result && typeof result === 'object') return result as Record<string, any>;
+export function coerceToObject<T extends Record<string, unknown> = Record<string, unknown>>(result: unknown): T {
+  if (result && typeof result === 'object') return result as T;
   if (typeof result === 'string') {
     try {
-      return JSON.parse(result);
+      return JSON.parse(result) as T;
     } catch {
-      return {};
+      return {} as T;
     }
   }
-  return {};
+  return {} as T;
 }

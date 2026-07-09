@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { execSync, execFileSync } from 'child_process';
 import { existsSync, readdirSync, statSync, writeFileSync, realpathSync } from 'fs';
 import { join } from 'path';
+import type { BuildTargetResponse } from '../types/mcp-responses';
 
 @Injectable()
 export class BuildTargetService {
@@ -11,7 +12,7 @@ export class BuildTargetService {
     projectPath: string,
     buildCommand: string,
     timeoutSec?: number,
-  ) {
+  ): Promise<BuildTargetResponse> {
     const timeout = timeoutSec || 300;
     const errors: string[] = [];
 
@@ -57,12 +58,14 @@ export class BuildTargetService {
         buildLog,
         errors: [],
       };
-    } catch (err: any) {
-      errors.push(err.stderr || err.message);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      const execErr = err as { stderr?: string; stdout?: string };
+      errors.push(execErr.stderr || msg);
       return {
         success: false,
         binaryPath: '',
-        buildLog: err.stdout || '',
+        buildLog: execErr.stdout || '',
         errors,
       };
     }
@@ -126,12 +129,14 @@ echo "---BUILD_COMPLETE---"
         errors: [],
         docker: true,
       };
-    } catch (err: any) {
-      errors.push(err.stderr || err.message);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      const execErr = err as { stderr?: string; stdout?: string };
+      errors.push(execErr.stderr || msg);
       return {
         success: false,
         binaryPath: '',
-        buildLog: err.stdout || '',
+        buildLog: execErr.stdout || '',
         errors,
         docker: true,
       };

@@ -18,14 +18,16 @@ export class FileIndexingService {
     let root: string;
     try {
       root = realpathSync(rootPath);
-    } catch (err: any) {
-      return { files, totalCount: 0, errors: [`Cannot resolve root ${rootPath}: ${err.message}`] };
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return { files, totalCount: 0, errors: [`Cannot resolve root ${rootPath}: ${msg}`] };
     }
 
     try {
       this.walkDir(root, root, files, errors, maxFiles);
-    } catch (err: any) {
-      errors.push(err.message);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      errors.push(msg);
     }
 
     return {
@@ -52,8 +54,9 @@ export class FileIndexingService {
     let entries: string[];
     try {
       entries = readdirSync(dir);
-    } catch (err: any) {
-      errors.push(`Cannot read ${dir}: ${err.message}`);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      errors.push(`Cannot read ${dir}: ${msg}`);
       return;
     }
 

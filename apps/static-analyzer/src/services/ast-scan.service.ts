@@ -1,14 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { CParserService, FunctionInfo, ControlFlowGraph, ExitPathAnalysis, LoopInfo } from './c-parser.service';
 import { readFileSync } from 'fs';
-
-const ALLOC_FUNCS = new Set([
-  'malloc', 'calloc', 'realloc', 'strdup', 'strndup',
-  'xmalloc', 'xcalloc', 'xrealloc', 'xstrdup',
-  'kmalloc', 'kcalloc', 'kzalloc', 'vmalloc',
-]);
-
-const FREE_FUNCS = new Set(['free', 'xfree', 'kfree', 'vfree']);
+import { ALLOCATION_FUNCTIONS as ALLOC_FUNCS, DEALLOCATION_FUNCTIONS as FREE_FUNCS } from '@cleak/common/constants/allocators';
 
 export interface MemoryPattern {
   patternType: string;

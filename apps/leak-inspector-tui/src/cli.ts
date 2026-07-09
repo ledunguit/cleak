@@ -65,9 +65,10 @@ program
           const phase = phaseForMcpTool(t.name) ?? '-';
           process.stdout.write(`    • ${t.name.padEnd(22)} [${flags}] ${phase.padEnd(13)} ${t.description}\n`);
         }
-      } catch (err: any) {
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
         failures++;
-        process.stdout.write(`  ✗ connection failed: ${err?.message ?? err}\n`);
+        process.stdout.write(`  ✗ connection failed: ${msg}\n`);
       } finally {
         await client.close();
       }
@@ -127,8 +128,9 @@ program
         staticUrl: opts.staticUrl,
         dynamicUrl: opts.dynamicUrl,
       });
-    } catch (err: any) {
-      process.stderr.write(`scan failed: ${err?.message ?? err}\n`);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      process.stderr.write(`scan failed: ${msg}\n`);
       process.exitCode = 1;
     }
   });
@@ -269,8 +271,9 @@ config
   .action((key, value) => {
     try {
       process.stdout.write(`set ${key} → ${setConfigKey(key, value)}\n`);
-    } catch (err: any) {
-      process.stderr.write(`${err?.message ?? err}\n`);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      process.stderr.write(`${msg}\n`);
       process.exitCode = 1;
     }
   });
