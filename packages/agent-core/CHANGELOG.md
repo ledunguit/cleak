@@ -1,5 +1,15 @@
 # @cleak/agent-core
 
+## 0.2.2
+
+### Patch Changes
+
+- Refactor monorepo: split types into domain modules, add new subpath exports (constants/allocators, mcp/\*), extract reporting modules, fix TypeScript type safety in dynamic evidence capture, rewrite README with humanizer patterns.
+
+  @cleak/common: New subpath exports (`./constants/allocators`, `./mcp/*`), types restructured from monolithic `leak-schema.types.ts` into 8 domain modules, reporting module split into per-format renderers, new peer dependencies (express, @modelcontextprotocol/sdk).
+  @cleak/cli: Fix TypeScript TS2339 errors in dynamic evidence capture, rewrite README.md.
+  @cleak/agent-core: Sync release (no public API changes).
+
 ## 0.2.1
 
 ### Patch Changes
