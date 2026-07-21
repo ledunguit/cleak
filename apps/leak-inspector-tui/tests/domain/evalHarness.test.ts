@@ -27,10 +27,6 @@ mock.module('../../src/surfaces/headless', () => ({
   runHeadless: mockRunHeadless,
 }));
 
-mock.module('../../src/domain/corpusLock', () => ({
-  checkCorpusGate: mock(() => ({ ok: true, contentHash: 'mock-hash' })),
-}));
-
 // ── Static imports ───────────────────────────────────────────────────
 
 import { selectCases } from '../../src/domain/evalHarness';
@@ -325,7 +321,7 @@ describe('runEval', () => {
 
       // Provenance (captureRunProvenance was called)
       expect(result.provenance).toBeDefined();
-      expect(result.provenance.corpusValidated).toBe(true);
+      expect(result.provenance.corpusValidated).toBe(false); // no lockfile → allowUnvalidated passes but gate.ok=false
 
       // Overall metrics: the mock snapshot has 1 TP finding vs 1 flaw → cm = { tp:1, fn:0, fp:0, tn?:0 }
       expect(result.overall.precision).toBe(1);

@@ -1,15 +1,17 @@
-import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, appendFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { afterAll, afterEach, beforeAll, describe, expect, test, mock } from 'bun:test';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, appendFileSync, unlinkSync, existsSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { corpusContentHash, readCorpusLock, checkCorpusGate } from '../../src/domain/corpusLock';
 
 let root: string;
 let corpusDir: string;
+let lockPath: string;
 
 beforeAll(() => {
   root = mkdtempSync(join(tmpdir(), 'corpuslock-'));
   corpusDir = join(root, 'mini');
+  lockPath = `${corpusDir}.lock.json`;
   mkdirSync(join(corpusDir, 'cases', 'c1'), { recursive: true });
   writeFileSync(join(corpusDir, 'cases', 'c1', 'a.c'), 'void bad(){ malloc(8); }\n');
   writeFileSync(
@@ -18,6 +20,10 @@ beforeAll(() => {
   );
 });
 afterAll(() => rmSync(root, { recursive: true, force: true }));
+
+afterEach(() => {
+  try { if (existsSync(lockPath)) unlinkSync(lockPath); } catch { /* ok */ }
+});
 
 describe('corpusLock', () => {
   test('content hash is deterministic + changes when a source byte changes', () => {

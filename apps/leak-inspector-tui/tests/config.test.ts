@@ -1,4 +1,4 @@
-import { describe, expect, test, afterEach, beforeAll, afterAll } from 'bun:test';
+import { describe, expect, test, afterEach, beforeAll, afterAll, beforeEach } from 'bun:test';
 import { mkdtempSync, rmSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
@@ -123,10 +123,14 @@ describe('toProviderSettings', () => {
 });
 
 describe('config-file precedence (CLI flag > env > config file > default)', () => {
-  afterEach(() => {
-    clearConfigFile();
+  // beforeEach ensures env is clean even when running from repo root
+  // where bun auto-loads root .env (which may set STATIC_ANALYZER_MCP_URL).
+  beforeEach(() => {
     delete process.env.STATIC_ANALYZER_MCP_URL;
     delete process.env.LLM_PROVIDER;
+  });
+  afterEach(() => {
+    clearConfigFile();
   });
 
   test('config file supplies a value when env is unset', () => {
