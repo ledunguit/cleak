@@ -1,5 +1,21 @@
 # @cleak/common
 
+## 0.4.0
+
+### Minor Changes
+
+- feat(harness): evaluation harness improvements
+  - Extract `countSourceLoc` and `listSourceFiles` to shared `@cleak/common/analysis/harness-utils` (DRY)
+  - Refactor `runEval` into 7 modular phases (loadManifest, gateCorpus, captureRunProvenance, prepareCaseCache, scoreCases, aggregateResults)
+  - Add stratify, cache/resume, and per-variant breakdowns (byFlowVariant, byFunctionalVariant, byCwe) to baseline eval
+  - Add calibration, confidence intervals, and provenance to baseline results
+  - Add `--stratify`, `--dry-run`, `--resume`, `--concurrency`, and all ablation flags to `evaluate-corpus.ts`
+  - Add `--help` and persist baseline comparison results to files
+  - Expand LaTeX output to functional-variant, CWE, and calibration tables
+  - Add `generatedAtMs` to EvalResult for CI/ML tracking
+  - Add runtime Zod validation for EvalOptions
+  - Comprehensive test coverage: 71 new tests across 5 test files
+
 ## 0.3.0
 
 ### Minor Changes
