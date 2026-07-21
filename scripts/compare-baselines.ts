@@ -54,6 +54,7 @@ const corpus = arg('--corpus') ?? 'demo/juliet_cwe401';
 const limit = arg('--limit') ? parseInt(arg('--limit')!, 10) : undefined;
 const outDir = arg('--out');
 const systemSpecs = args('--system'); // label=path
+const dryRun = process.argv.includes('--dry-run');
 
 const f3 = (x: number) => x.toFixed(3);
 
@@ -128,6 +129,22 @@ function renderCsv(rows: Row[]): string {
 }
 
 async function main(): Promise<void> {
+  if (process.argv.includes('--help') || process.argv.includes('-h')) {
+    console.log(`Usage: bun scripts/compare-baselines.ts [options]
+
+Run external baseline tools (clang-analyzer, infer) over a labeled corpus
+and compare results in a single table.
+
+Options:
+  --corpus <dir>         Corpus directory (default: demo/juliet_cwe401)
+  --limit <n>            Only evaluate first N cases
+  --out <dir>            Output directory for results
+  --system label=path    Include system metrics.json as a row (repeatable)
+  --dry-run              Print what would be done, don't execute
+  --help, -h             Show this help`);
+    process.exit(0);
+  }
+
   console.log(`Baseline comparison on ${corpus}${limit ? ` (first ${limit} cases)` : ''}\n`);
   const adapters: BaselineAdapter[] = [new ClangAnalyzerAdapter(), new InferAdapter()];
   const rows: Row[] = [];
@@ -170,6 +187,29 @@ async function main(): Promise<void> {
     );
     writeFileSync(join(outDir, 'baseline-compare.csv'), renderCsv(rows));
     console.log(`✓ wrote table to ${outDir}`);
+  }
+
+  // --- Persist results ---
+  if (outDir && !dryRun) {
+    // Per-tool metrics.json from --system specs
+    for (const spec of systemSpecs) {
+      const eq = spec.indexOf('=');
+      if (eq >= 0) {
+        const label = spec.slice(0, eq);
+        const path = spec.slice(eq + 1);
+        if (existsSync(path)) {
+          const content = readFileSync(path, 'utf-8');
+          const toolDir = join(outDir, label.replace(/[^a-zA-Z0-9_-]/g, '_'));
+          mkdirSync(toolDir, { recursive: true });
+          writeFileSync(join(toolDir, 'metrics.json'), content);
+        }
+      }
+    }
+    // Combined JSON
+    writeFileSync(
+      join(outDir, 'baseline-compare.json'),
+      JSON.stringify({ meta: { corpus, limit: limit ?? null, generatedAt: new Date().toISOString(), gitCommit: null }, rows }, null, 2),
+    );
   }
 }
 

@@ -26,6 +26,37 @@ import { loadEnvFiles } from '../apps/leak-inspector-tui/src/domain/env';
 
 loadEnvFiles();
 
+if (process.argv.includes('--help') || process.argv.includes('-h')) {
+  console.log(`Usage: bun scripts/evaluate-corpus.ts [mode] [options]
+
+Evaluate the leak-inspector-tui over a labeled corpus.
+
+Mode:
+  no_llm               Deterministic heuristic (default: llm_assisted)
+
+Options:
+  --corpus <dir>          Corpus directory (default: demo/juliet_cwe401)
+  --limit <n>             Only evaluate first N cases
+  --runs <n>              Run N times and report variance (default: 1)
+  --dynamic <off|selective|aggressive>  Dynamic analysis mode
+  --stratify [key]        Stratify sample evenly across case key
+  --resume                Resume previous eval (per-case cache)
+  --concurrency <n>       Parallel case concurrency
+  --static-tools <list>   Comma-separated static evidence tools
+  --enrich / --no-enrich  Static enrichment stage
+  --strategy <auto|off>   LLM strategist
+  --tool-select / --no-tool-select  Agentic tool selection
+  --static-discovery / --no-static-discovery  Static candidate discovery
+  --consensus-n <n>       Consensus samples (default: 1 = single LLM)
+  --consensus-rule <rule>  Consensus voting rule
+  --static-url <url>       MCP static analyzer URL
+  --dynamic-url <url>      MCP dynamic analyzer URL
+  --allow-unvalidated     Bypass corpus integrity gate
+  --dry-run               Print config and exit
+  --help, -h              Show this help`);
+  process.exit(0);
+}
+
 function flag(name: string): string | undefined {
   const i = process.argv.indexOf(`--${name}`);
   return i >= 0 ? process.argv[i + 1] : undefined;
