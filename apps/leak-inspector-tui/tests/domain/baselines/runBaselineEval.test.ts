@@ -5,7 +5,7 @@
  */
 
 import { describe, expect, test } from 'bun:test';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { runBaselineEval } from '../../../src/domain/baselines/runBaselineEval';
@@ -20,6 +20,7 @@ import type { BaselineCaseRow } from '../../../src/domain/baselines/runBaselineE
 // Going up 5 levels reaches the monorepo root.
 const repoRoot = resolve(import.meta.dirname, '../../../../..');
 const julietDir = join(repoRoot, 'demo/juliet_cwe401');
+const julietExists = existsSync(julietDir);
 
 // ── Mock adapters ─────────────────────────────────────────────────────────
 
@@ -43,7 +44,8 @@ const errorAdapter: BaselineAdapter = {
 
 // ── Tests ─────────────────────────────────────────────────────────────────
 
-describe('runBaselineEval', () => {
+const runBaselineEvalSuite = julietExists ? describe : describe.skip;
+runBaselineEvalSuite('runBaselineEval', () => {
   test('returns BaselineResult with expected structure', async () => {
     // Return a finding that matches the FIRST Juliet case's flaw (function-mode
     // match: the finding's function name equals the labeled flaw's function).

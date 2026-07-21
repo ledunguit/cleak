@@ -29,6 +29,12 @@ jobs:
       - name: Install
         run: bun install --frozen-lockfile
 
+      - name: Ingest Juliet CWE-401 corpus
+        run: |
+          curl -sL -o /tmp/juliet.zip 'https://samate.nist.gov/SARD/downloads/test-suites/2017-10-01-juliet-test-suite-for-c-cplusplus-v1-3.zip'
+          unzip -q /tmp/juliet.zip -d /tmp/juliet
+          bun scripts/juliet/ingest.ts --juliet /tmp/juliet --out demo/juliet_cwe401
+
       - name: Build
         run: bun run build
 
