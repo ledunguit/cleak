@@ -11,6 +11,7 @@
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { z } from 'zod';
 import {
   accumulate,
   computeMetrics,
@@ -110,6 +111,39 @@ export interface EvalOptions {
   onCasePhase?: (id: string, phase: string) => void;
   /** A case finished — full detail (findings vs ground truth) for the UI. */
   onCaseResult?: (detail: EvalCaseDetail) => void;
+}
+
+const EvalOptionsSchema = z.object({
+  corpusDir: z.string().min(1, 'corpusDir is required'),
+  mode: z.enum(['no_llm', 'llm_assisted']),
+  dynamic: z.enum(['off', 'selective', 'aggressive']),
+  outDir: z.string().min(1),
+  limit: z.number().int().positive().optional(),
+  stratify: z.string().optional(),
+  concurrency: z.number().int().positive().optional(),
+  resume: z.boolean().optional(),
+  runs: z.number().int().positive().optional(),
+  staticUrl: z.string().optional(),
+  dynamicUrl: z.string().optional(),
+  allowHeuristicFallback: z.boolean().optional(),
+  allowUnvalidated: z.boolean().optional(),
+  consensusN: z.number().int().positive().optional(),
+  consensusRule: z.string().optional(),
+  strategy: z.enum(['auto', 'off']).optional(),
+  enrich: z.boolean().optional(),
+  toolSelect: z.boolean().optional(),
+  staticDiscovery: z.boolean().optional(),
+  staticTools: z.array(z.string()).optional(),
+  provider: z.any().optional(),
+  signal: z.any().optional(),
+  onProgress: z.function().optional(),
+  onCaseStart: z.function().optional(),
+  onCasePhase: z.function().optional(),
+  onCaseResult: z.function().optional(),
+}).strict();
+
+export function parseEvalOptions(raw: unknown): EvalOptions {
+  return EvalOptionsSchema.parse(raw) as EvalOptions;
 }
 
 export interface CaseRow {
@@ -625,6 +659,7 @@ export function aggregateResults(cached: CachedCase[], cases: LabeledCase[], opt
 }
 
 export async function runEval(opts: EvalOptions): Promise<EvalResult> {
+  parseEvalOptions(opts); // validate upfront — throws ZodError on invalid input
   // Integrity gate: never let an LLM run quietly degrade to the heuristic baseline.
   await assertLlmAvailable(opts.mode, opts.allowHeuristicFallback, opts.provider);
 
