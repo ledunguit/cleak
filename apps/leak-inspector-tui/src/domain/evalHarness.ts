@@ -27,7 +27,7 @@ import {
 import { mapWithLimit, buildCallModel } from '@cleak/agent-core';
 import { toProviderSettings } from '../orchestrator/toolWrappers';
 import type { ConsensusRule } from '@cleak/common/analysis/consensus-judge';
-import { walkCFiles, readFileSafe } from './fileWalk';
+import { countSourceLoc } from '@cleak/common/analysis/harness-utils';
 import { EVENT_PHASE, EVENT_KIND, type ScanEventName } from '@cleak/common/flow/scan-flow-contract';
 import { runHeadless } from '../surfaces/headless';
 import { loadConfig, type Provider } from '../config';
@@ -245,24 +245,6 @@ async function assertLlmAvailable(mode: string, allowFallback?: boolean, provide
         `to the heuristic (Δ=0 confound). Fix the endpoint (e.g. --provider local), or pass --allow-heuristic-fallback.`,
     );
   }
-}
-
-/**
- * Non-blank lines of the case's IMPLEMENTATION files — the FP/KLOC denominator.
- * Counts only `.c/.cc/.cpp/.cxx` (headers excluded): FPs are flagged at allocation
- * sites in implementation code, so header declaration lines only dilute the rate.
- * Must match the baseline harness's `caseLoc` (baselines/runBaselineEval.ts) so
- * FP/KLOC is one consistent definition for our system and every baseline.
- */
-function countSourceLoc(repoDir: string): number {
-  let loc = 0;
-  for (const file of walkCFiles(repoDir)) {
-    if (!/\.(c|cc|cpp|cxx)$/.test(file)) continue; // implementation files only
-    const src = readFileSafe(file);
-    if (!src) continue;
-    for (const line of src.split('\n')) if (line.trim() !== '') loc++;
-  }
-  return loc;
 }
 
 /**

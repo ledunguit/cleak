@@ -23,9 +23,10 @@
  * `--strict-labels` promotes label-drift to HARD — for label-authoritative corpora
  * (LAMeD / real projects) where there is NO naming convention to fall back on.
  */
-import { readFileSync, existsSync, readdirSync, statSync, writeFileSync } from 'node:fs';
-import { join, basename, extname } from 'node:path';
+import { readFileSync, existsSync, writeFileSync } from 'node:fs';
+import { join, basename } from 'node:path';
 import { createHash } from 'node:crypto';
+import { listSourceFiles } from '@cleak/common/analysis/harness-utils';
 import { spawnSync } from 'node:child_process';
 import { safeParseManifest } from '@cleak/common';
 
@@ -41,7 +42,6 @@ const skipCompile = has('skip-compile');
 const strictLabels = has('strict-labels');
 const flatFileLimit = arg('flat-file-limit') ? parseInt(arg('flat-file-limit')!, 10) : 25;
 
-const SRC_EXT = new Set(['.c', '.cc', '.cpp', '.cxx', '.h', '.hh', '.hpp', '.hxx']);
 const ALLOC_LIST = ['malloc', 'calloc', 'realloc', 'strdup', 'strndup', 'new'];
 const ALLOC_RE = /\b(malloc|calloc|realloc|strdup|strndup|xmalloc|xcalloc|new\b)/;
 const INCLUDE_RE = /^\s*#\s*include\s+"([^"]+)"/gm;
@@ -58,28 +58,6 @@ function readFileSafe(f: string): string | null {
   } catch {
     return null;
   }
-}
-
-function listSourceFiles(dir: string): string[] {
-  let out: string[] = [];
-  let entries: string[] = [];
-  try {
-    entries = readdirSync(dir);
-  } catch {
-    return out;
-  }
-  for (const e of entries) {
-    const full = join(dir, e);
-    let st;
-    try {
-      st = statSync(full);
-    } catch {
-      continue;
-    }
-    if (st.isDirectory()) out = out.concat(listSourceFiles(full));
-    else if (SRC_EXT.has(extname(e).toLowerCase())) out.push(full);
-  }
-  return out;
 }
 
 /** clang -fsyntax-only per TU; returns COMPILE errors only (parse/semantic), no link. */

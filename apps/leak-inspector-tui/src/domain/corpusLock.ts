@@ -9,11 +9,10 @@
  * (unless `--allow-unvalidated`). The hash algorithm MUST stay byte-identical to the
  * validator's.
  */
-import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs';
-import { join, basename, extname } from 'node:path';
+import { readFileSync, existsSync } from 'node:fs';
+import { join, basename } from 'node:path';
 import { createHash } from 'node:crypto';
-
-const SRC_EXT = new Set(['.c', '.cc', '.cpp', '.cxx', '.h', '.hh', '.hpp', '.hxx']);
+import { listSourceFiles } from '@cleak/common/analysis/harness-utils';
 
 export interface CorpusLock {
   schema: string;
@@ -25,28 +24,6 @@ export interface CorpusLock {
   validatedAt?: string;
   validated: boolean;
   summary?: { total: number; clean: number; warned: number; quarantined: number };
-}
-
-function listSourceFiles(dir: string): string[] {
-  let out: string[] = [];
-  let entries: string[] = [];
-  try {
-    entries = readdirSync(dir);
-  } catch {
-    return out;
-  }
-  for (const e of entries) {
-    const full = join(dir, e);
-    let st;
-    try {
-      st = statSync(full);
-    } catch {
-      continue;
-    }
-    if (st.isDirectory()) out = out.concat(listSourceFiles(full));
-    else if (SRC_EXT.has(extname(e).toLowerCase())) out.push(full);
-  }
-  return out;
 }
 
 const sha256 = (buf: Buffer) => createHash('sha256').update(buf).digest('hex');
