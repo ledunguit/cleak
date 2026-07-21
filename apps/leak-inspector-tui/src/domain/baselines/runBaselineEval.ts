@@ -6,7 +6,7 @@
  * via McNemar's test.
  */
 
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import {
   accumulate,
@@ -19,6 +19,7 @@ import {
 } from '@cleak/common/analysis/metrics';
 import { mapWithLimit } from '@cleak/agent-core';
 import { countSourceLoc } from '@cleak/common/analysis/harness-utils';
+import { selectCases } from '../evalHarness';
 import { scoreCase, isFlagged, type LabeledCase, type LabeledManifest, type SnapshotFinding } from '../evalScoring';
 import type { BaselineAdapter } from './adapter';
 
@@ -52,6 +53,12 @@ export interface RunBaselineOptions {
   limit?: number;
   concurrency?: number;
   onProgress?: (done: number, total: number, id: string) => void;
+  /** Stratify the sample evenly across this case key (e.g. `functionalVariant`). */
+  stratify?: string;
+  /** Reuse cached per-case results from a previous run (requires outDir). */
+  resume?: boolean;
+  /** Output directory for per-case cache files (required for resume). */
+  outDir?: string;
 }
 
 export async function runBaselineEval(
@@ -61,11 +68,20 @@ export async function runBaselineEval(
 ): Promise<BaselineResult> {
   const manifestPath = join(corpusDir, 'corpus_manifest.json');
   const manifest = JSON.parse(readFileSync(manifestPath, 'utf-8')) as LabeledManifest;
-  const cases = (manifest.cases ?? []).slice(0, opts.limit ?? Infinity);
+  const cases = selectCases(manifest.cases ?? [], opts.limit, opts.stratify);
   let done = 0;
 
   const scoreOne = async (c: LabeledCase): Promise<{ samples: Sample[]; row: BaselineCaseRow }> => {
     const dir = resolve(corpusDir, c.repo_path);
+    // Cache hit (resume mode)
+    if (opts.resume && opts.outDir) {
+      const cachePath = join(opts.outDir, 'cases', `${c.id}.json`);
+      try {
+        const cached = JSON.parse(readFileSync(cachePath, 'utf-8')) as { samples: Sample[]; row: BaselineCaseRow };
+        opts.onProgress?.(++done, cases.length, `${c.id} (cached)`);
+        return cached;
+      } catch { /* fall through to re-run */ }
+    }
     const loc = existsSync(dir) ? countSourceLoc(dir) : 0;
     try {
       const findings: SnapshotFinding[] = await adapter.run(dir, c);
@@ -81,6 +97,12 @@ export async function runBaselineEval(
         flagged: findings.filter((f) => isFlagged(f.verdict)).length,
         loc,
       };
+      // Write cache (for resume)
+      if (opts.outDir) {
+        const cacheDir = join(opts.outDir, 'cases');
+        mkdirSync(cacheDir, { recursive: true });
+        writeFileSync(join(cacheDir, `${c.id}.json`), JSON.stringify({ samples, row }));
+      }
       opts.onProgress?.(++done, cases.length, c.id);
       return { samples, row };
     } catch (err: unknown) {

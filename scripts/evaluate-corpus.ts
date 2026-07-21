@@ -53,7 +53,66 @@ const outDir = join(process.env.RESULTS_DIR ?? 'results', `eval-${mode}-${stamp}
 mkdirSync(outDir, { recursive: true });
 
 const allowUnvalidated = process.argv.includes('--allow-unvalidated');
-const baseOpts = { corpusDir, mode, dynamic, limit, concurrency: undefined, resume: false, staticUrl, dynamicUrl, consensusN, consensusRule, allowUnvalidated };
+
+// --- Ablation / sweep flags ---
+const stratifyVal = flag('stratify');
+const hasStratify = process.argv.includes('--stratify');
+const stratify = hasStratify
+  ? !stratifyVal || stratifyVal.startsWith('--')
+    ? 'functionalVariant'
+    : stratifyVal
+  : undefined;
+
+const resume = process.argv.includes('--resume');
+
+const concurrency = flag('concurrency') ? Math.max(1, parseInt(flag('concurrency')!, 10)) : undefined;
+
+const staticToolsRaw = flag('static-tools');
+const staticTools = staticToolsRaw === undefined ? undefined
+  : staticToolsRaw === 'none' || staticToolsRaw === '' ? []
+  : staticToolsRaw.split(',').map(s => s.trim()).filter(Boolean);
+
+const enrich = process.argv.includes('--enrich') ? true
+  : process.argv.includes('--no-enrich') ? false
+  : undefined;
+
+const strategy = flag('strategy') as 'auto' | 'off' | undefined;
+
+const toolSelect = process.argv.includes('--tool-select') ? true
+  : process.argv.includes('--no-tool-select') ? false
+  : undefined;
+
+const staticDiscovery = process.argv.includes('--static-discovery') ? true
+  : process.argv.includes('--no-static-discovery') ? false
+  : undefined;
+
+// --- Dry run ---
+const dryRun = process.argv.includes('--dry-run');
+if (dryRun) {
+  console.log(`DRY RUN — evaluate-corpus.ts`);
+  console.log(`  corpus: ${corpusDir}`);
+  console.log(`  mode: ${mode}`);
+  console.log(`  dynamic: ${dynamic}`);
+  console.log(`  limit: ${limit ?? 'all'}`);
+  console.log(`  runs: ${runs}`);
+  console.log(`  stratify: ${stratify ?? 'none'}`);
+  console.log(`  resume: ${resume}`);
+  console.log(`  concurrency: ${concurrency ?? 'auto'}`);
+  console.log(`  staticUrl: ${staticUrl}`);
+  console.log(`  dynamicUrl: ${dynamicUrl}`);
+  console.log(`  consensusN: ${consensusN ?? 'default'}`);
+  console.log(`  consensusRule: ${consensusRule ?? 'default'}`);
+  console.log(`  staticTools: ${staticTools ?? 'default'}`);
+  console.log(`  enrich: ${enrich ?? 'default'}`);
+  console.log(`  strategy: ${strategy ?? 'default'}`);
+  console.log(`  toolSelect: ${toolSelect ?? 'default'}`);
+  console.log(`  staticDiscovery: ${staticDiscovery ?? 'default'}`);
+  console.log(`  outDir: ${outDir}`);
+  console.log(`  allowUnvalidated: ${allowUnvalidated}`);
+  process.exit(0);
+}
+
+const baseOpts = { corpusDir, mode, dynamic, limit, concurrency, resume, stratify, staticUrl, dynamicUrl, consensusN, consensusRule, allowUnvalidated, staticTools, enrich, strategy, toolSelect, staticDiscovery };
 const pct = (x: number) => `${(x * 100).toFixed(1)}%`;
 
 console.log(`Evaluating corpus=${corpusDir} mode=${mode} dynamic=${dynamic} runs=${runs}${limit ? ` limit=${limit}` : ''}${consensusN ? ` consensus-n=${consensusN}` : ''}\n`);
