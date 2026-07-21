@@ -13,12 +13,12 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       # Node is pinned (not the runner default) so the tree-sitter native binding
       # builds: tree-sitter@0.25.0 has no Node-24 prebuild and its C++ does not
       # compile against Node 24's V8 13.x headers.
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
 

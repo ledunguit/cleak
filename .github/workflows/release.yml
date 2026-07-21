@@ -16,7 +16,7 @@ jobs:
   release:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - uses: oven-sh/setup-bun@v2
         with:
@@ -26,7 +26,7 @@ jobs:
       # (npm under the hood) can authenticate to the registry.
       # Node 22 (current LTS): newer than the EOL-track 20, but tree-sitter@0.25.0
       # still builds on it (Node 24 has no prebuild and fails to compile its C++).
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           registry-url: https://registry.npmjs.org
