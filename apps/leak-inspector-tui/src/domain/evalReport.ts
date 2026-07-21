@@ -203,5 +203,71 @@ function latexTables(r: EvalResult): string {
     '\\end{tabular}',
     '\\end{table}',
   ];
-  return [...overall, ...byFlow].join('\n') + '\n';
+  const funcEntries = Object.entries(r.byFunctionalVariant);
+  const byFunc: string[] = [];
+  if (funcEntries.length > 0) {
+    const funcRows = funcEntries.map(
+      ([k, mm]) => `${k} & ${mm.total} & ${f3(mm.precision)} & ${f3(mm.recall)} & ${f3(mm.f1)} \\\\`,
+    );
+    byFunc.push(
+      '',
+      '% By functional variant',
+      '\\begin{table}[h]\\centering',
+      '\\caption{Metrics by functional variant}',
+      '\\begin{tabular}{lrrrr}',
+      '\\toprule',
+      'Functional variant & n & Precision & Recall & F1 \\\\',
+      '\\midrule',
+      ...funcRows,
+      '\\bottomrule',
+      '\\end{tabular}',
+      '\\end{table}',
+    );
+  }
+
+  const cweEntries = Object.entries(r.byCwe);
+  const byCwe: string[] = [];
+  if (cweEntries.length > 1) {
+    const cweRows = cweEntries.map(
+      ([k, mm]) => `${k} & ${mm.total} & ${f3(mm.precision)} & ${f3(mm.recall)} & ${f3(mm.f1)} \\\\`,
+    );
+    byCwe.push(
+      '',
+      '% By CWE',
+      '\\begin{table}[h]\\centering',
+      '\\caption{Metrics by CWE}',
+      '\\begin{tabular}{lrrrr}',
+      '\\toprule',
+      'CWE & n & Precision & Recall & F1 \\\\',
+      '\\midrule',
+      ...cweRows,
+      '\\bottomrule',
+      '\\end{tabular}',
+      '\\end{table}',
+    );
+  }
+
+  const calBins = r.calibration.filter(b => b.count > 0);
+  const calTable: string[] = [];
+  if (calBins.length > 0) {
+    const calRows = calBins.map(
+      b => `${f3(b.lo)}–${f3(b.hi)} & ${b.count} & ${f3(b.meanConfidence)} & ${f3(b.empiricalAccuracy)} \\\\`,
+    );
+    calTable.push(
+      '',
+      '% Calibration',
+      '\\begin{table}[h]\\centering',
+      `\\caption{Confidence calibration (ECE = ${f3(r.ece)})}`,
+      '\\begin{tabular}{lrrr}',
+      '\\toprule',
+      'Bin & n & Confidence & Accuracy \\\\',
+      '\\midrule',
+      ...calRows,
+      '\\bottomrule',
+      '\\end{tabular}',
+      '\\end{table}',
+    );
+  }
+
+  return [...overall, ...byFlow, ...byFunc, ...byCwe, ...calTable].join('\n') + '\n';
 }
