@@ -145,6 +145,13 @@ Options:
     process.exit(0);
   }
 
+  if (dryRun) {
+    console.log(`DRY RUN — Baseline comparison on ${corpus}${limit ? ` (first ${limit} cases)` : ''}`);
+    console.log(`  --out: ${outDir ?? 'not set'}`);
+    console.log(`  --system specs: ${systemSpecs.length ? systemSpecs.join(', ') : 'none'}`);
+    process.exit(0);
+  }
+
   console.log(`Baseline comparison on ${corpus}${limit ? ` (first ${limit} cases)` : ''}\n`);
   const adapters: BaselineAdapter[] = [new ClangAnalyzerAdapter(), new InferAdapter()];
   const rows: Row[] = [];
