@@ -44,7 +44,7 @@
     },
     "apps/leak-inspector-tui": {
       "name": "@cleak/cli",
-      "version": "0.3.0",
+      "version": "0.4.0",
       "bin": {
         "cleak": "dist/cli.js",
       },
@@ -74,7 +74,7 @@
     },
     "packages/agent-core": {
       "name": "@cleak/agent-core",
-      "version": "0.2.1",
+      "version": "0.2.2",
       "dependencies": {
         "@modelcontextprotocol/sdk": "^1.12.0",
         "zod": "^4.4.3",
@@ -82,12 +82,16 @@
     },
     "packages/common": {
       "name": "@cleak/common",
-      "version": "0.2.1",
+      "version": "0.4.0",
       "dependencies": {
         "zod": "^4.4.3",
       },
       "optionalDependencies": {
         "pdfkit": "^0.15.0",
+      },
+      "peerDependencies": {
+        "@modelcontextprotocol/sdk": "^1.12.0",
+        "express": "^5.2.1",
       },
     },
   },
