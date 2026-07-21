@@ -32,7 +32,7 @@ import { EVENT_PHASE, EVENT_KIND, type ScanEventName } from '@cleak/common/flow/
 import { runHeadless } from '../surfaces/headless';
 import { loadConfig, type Provider } from '../config';
 import { captureProvenance, summarizeStat, type EvalProvenance, type Stat } from './provenance';
-import { checkCorpusGate } from './corpusLock';
+import { checkCorpusGate, type CorpusGateResult } from './corpusLock';
 import {
   scoreCase,
   isFlagged,
@@ -280,33 +280,53 @@ export function selectCases<T extends Record<string, any>>(all: T[], limit?: num
   return out;
 }
 
-export async function runEval(opts: EvalOptions): Promise<EvalResult> {
-  // Integrity gate: never let an LLM run quietly degrade to the heuristic baseline.
-  await assertLlmAvailable(opts.mode, opts.allowHeuristicFallback, opts.provider);
+// ── Phase functions ──────────────────────────────────────────────────
 
-  const manifestPath = join(opts.corpusDir, 'corpus_manifest.json');
-  const manifest = JSON.parse(readFileSync(manifestPath, 'utf-8')) as LabeledManifest;
-  const cases = selectCases(manifest.cases ?? [], opts.limit, opts.stratify);
+/**
+ * Phase 1: Read and parse the corpus manifest.
+ * @throws Descriptive error when the manifest is missing or unparseable.
+ */
+export function loadManifest(corpusDir: string): LabeledManifest {
+  const manifestPath = join(corpusDir, 'corpus_manifest.json');
+  try {
+    return JSON.parse(readFileSync(manifestPath, 'utf-8')) as LabeledManifest;
+  } catch (err) {
+    throw new Error(
+      `Failed to parse corpus manifest at '${manifestPath}': ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+}
 
-  // Corpus integrity gate: a number is only as trustworthy as its input data. Refuse a
-  // corpus with no lockfile / a failed validation / source drift, unless explicitly
-  // overridden — in which case the run is stamped `corpus_unvalidated` so it can never
-  // pass for a clean number.
-  const gate = checkCorpusGate(opts.corpusDir);
+/**
+ * Phase 3: Check the corpus integrity gate. Refuse to run on a corpus with no
+ * lockfile, failed validation, or source drift, unless explicitly overridden.
+ * When overridden a loud warning is emitted to stderr and the gate result
+ * carries the `ok: false` but is returned instead of thrown.
+ */
+export function gateCorpus(corpusDir: string, allowUnvalidated: boolean): CorpusGateResult {
+  const gate = checkCorpusGate(corpusDir);
   if (!gate.ok) {
-    if (!opts.allowUnvalidated) {
+    if (!allowUnvalidated) {
       throw new Error(
-        `✗ corpus integrity gate FAILED for ${opts.corpusDir}: ${gate.reason}.\n` +
-          `  Run \`bun scripts/corpus/validate-corpus.ts --corpus ${opts.corpusDir} --write-lock ${opts.corpusDir}.lock.json\` ` +
+        `✗ corpus integrity gate FAILED for ${corpusDir}: ${gate.reason}.\n` +
+          `  Run \`bun scripts/corpus/validate-corpus.ts --corpus ${corpusDir} --write-lock ${corpusDir}.lock.json\` ` +
           `and commit the lockfile, or pass --allow-unvalidated to run on UNVERIFIED data.`,
       );
     }
-    process.stderr.write(`⚠ corpus UNVALIDATED (${gate.reason}) — running anyway (--allow-unvalidated); numbers are NOT trustworthy.\n`);
+    process.stderr.write(
+      `⚠ corpus UNVALIDATED (${gate.reason}) — running anyway (--allow-unvalidated); numbers are NOT trustworthy.\n`,
+    );
   }
+  return gate;
+}
 
-  // Reproducibility provenance — the exact config that produced these numbers.
+/**
+ * Phase 4: Capture reproducibility provenance — the exact config that produced
+ * these numbers (provider, model, temperature, corpus hash, consensus settings).
+ */
+export function captureRunProvenance(opts: EvalOptions, _manifest: LabeledManifest, gate: CorpusGateResult): EvalProvenance {
   const llmCfg = opts.mode === 'llm_assisted' ? loadConfig({}).llm : undefined;
-  const provenance = captureProvenance({
+  return captureProvenance({
     provider: llmCfg?.provider,
     model: llmCfg?.model,
     temperature: llmCfg?.temperature,
@@ -318,14 +338,38 @@ export async function runEval(opts: EvalOptions): Promise<EvalResult> {
       ? { consensus: { n: Math.max(1, opts.consensusN ?? 1), rule: opts.consensusRule ?? 'weighted' } }
       : {}),
   });
-  const caseCacheDir = join(opts.outDir, 'cases');
-  mkdirSync(caseCacheDir, { recursive: true });
+}
 
-  const concurrency = opts.concurrency ?? (opts.mode === 'no_llm' ? 6 : 3);
+/**
+ * Phase 5: Create the per-case cache directory and determine concurrency.
+ */
+export function prepareCaseCache(outDir: string, concurrencyOverride?: number, mode?: 'no_llm' | 'llm_assisted'): { cacheDir: string; concurrency: number } {
+  const cacheDir = join(outDir, 'cases');
+  mkdirSync(cacheDir, { recursive: true });
+  const concurrency = concurrencyOverride ?? (mode === 'no_llm' ? 6 : 3);
+  return { cacheDir, concurrency };
+}
+
+/**
+ * Phase 6: Score every case in a concurrency-limited pool. Handles cache replay,
+ * cancellation (aborted signal → skipped), per-case progress callbacks, and
+ * per-case cache persistence to disk so `--resume` can skip completed cases.
+ */
+export async function scoreCases(
+  cases: LabeledCase[],
+  opts: EvalOptions,
+  manifest: LabeledManifest,
+  cacheDir: string,
+  concurrency: number,
+  onProgress?: (done: number, total: number, id: string) => void,
+  onCaseStart?: (id: string) => void,
+  onCasePhase?: (id: string, phase: string) => void,
+  onCaseResult?: (detail: EvalCaseDetail) => void,
+): Promise<CachedCase[]> {
   let done = 0;
 
   const emitResult = (c: LabeledCase, cached: CachedCase) => {
-    opts.onCaseResult?.({
+    onCaseResult?.({
       id: c.id,
       row: cached.row,
       findings: cached.findings ?? [],
@@ -355,27 +399,27 @@ export async function runEval(opts: EvalOptions): Promise<EvalResult> {
   });
 
   const scoreOne = async (c: LabeledCase): Promise<CachedCase> => {
-    const cachePath = join(caseCacheDir, `${c.id}.json`);
+    const cachePath = join(cacheDir, `${c.id}.json`);
     if (opts.resume && existsSync(cachePath)) {
       try {
         const cached = JSON.parse(readFileSync(cachePath, 'utf-8')) as CachedCase;
-        emitResult(c, cached); // replay the cached case straight into the UI
-        opts.onProgress?.(++done, cases.length, `${c.id} (cached)`);
+        emitResult(c, cached);
+        onProgress?.(++done, cases.length, `${c.id} (cached)`);
         return cached;
       } catch {
         /* fall through to re-run */
       }
     }
-    // Cancelled before this case got a worker → skip it (don't run, don't score).
+    // Cancelled before this case got a worker → skip it.
     if (opts.signal?.aborted) {
       const result: CachedCase = { id: c.id, samples: [], row: skippedRow(c), findings: [] };
       emitResult(c, result);
-      opts.onProgress?.(++done, cases.length, `${c.id} (skipped)`);
+      onProgress?.(++done, cases.length, `${c.id} (skipped)`);
       return result;
     }
     const repo = join(opts.corpusDir, c.repo_path);
     const started = Date.now();
-    opts.onCaseStart?.(c.id);
+    onCaseStart?.(c.id);
     try {
       const r = await runHeadless({
         repo,
@@ -400,11 +444,11 @@ export async function runEval(opts: EvalOptions): Promise<EvalResult> {
           ? { consensus: { ...(opts.consensusN != null ? { n: opts.consensusN } : {}), ...(opts.consensusRule ? { rule: opts.consensusRule } : {}) } }
           : {}),
         // Stream phase transitions so the UI can show each case's live progress.
-        onEvent: opts.onCasePhase
+        onEvent: onCasePhase
           ? (ev) => {
               if (EVENT_KIND[ev.name as ScanEventName] === 'phase_start') {
                 const phase = EVENT_PHASE[ev.name as ScanEventName] ?? ev.phase;
-                if (phase) opts.onCasePhase!(c.id, String(phase));
+                if (phase) onCasePhase!(c.id, String(phase));
               }
             }
           : undefined,
@@ -449,7 +493,7 @@ export async function runEval(opts: EvalOptions): Promise<EvalResult> {
       const result: CachedCase = { id: c.id, samples, row, findings };
       writeFileSync(cachePath, JSON.stringify(result));
       emitResult(c, result);
-      opts.onProgress?.(++done, cases.length, c.id);
+      onProgress?.(++done, cases.length, c.id);
       return result;
     } catch (err: unknown) {
       // A case interrupted by cancel counts as skipped (not a real error), and is
@@ -477,14 +521,20 @@ export async function runEval(opts: EvalOptions): Promise<EvalResult> {
       };
       const result: CachedCase = { id: c.id, samples: [], row, findings: [] };
       emitResult(c, result);
-      opts.onProgress?.(++done, cases.length, `${c.id} (${aborted ? 'skipped' : 'error'})`);
+      onProgress?.(++done, cases.length, `${c.id} (${aborted ? 'skipped' : 'error'})`);
       return result;
     }
   };
 
-  const cached = await mapWithLimit(cases, concurrency, scoreOne);
+  return mapWithLimit(cases, concurrency, scoreOne);
+}
 
-  // ── Aggregate ──
+/**
+ * Phase 7: Aggregate per-case scores into the final EvalResult with breakdowns
+ * by flow variant, functional variant, and CWE, plus calibration, confidence
+ * intervals, judge-path distribution, and cost reporting.
+ */
+export function aggregateResults(cached: CachedCase[], cases: LabeledCase[], opts: EvalOptions, provenance: EvalProvenance): EvalResult {
   const allSamples: Sample[] = [];
   const byFlow = new Map<string, Sample[]>();
   const byFunc = new Map<string, Sample[]>();
@@ -569,6 +619,22 @@ export async function runEval(opts: EvalOptions): Promise<EvalResult> {
     rows,
     samples: allSamples,
   };
+}
+
+export async function runEval(opts: EvalOptions): Promise<EvalResult> {
+  // Integrity gate: never let an LLM run quietly degrade to the heuristic baseline.
+  await assertLlmAvailable(opts.mode, opts.allowHeuristicFallback, opts.provider);
+
+  const manifest = loadManifest(opts.corpusDir);
+  const cases = selectCases(manifest.cases ?? [], opts.limit, opts.stratify);
+  const gate = gateCorpus(opts.corpusDir, opts.allowUnvalidated ?? false);
+  const provenance = captureRunProvenance(opts, manifest, gate);
+  const { cacheDir, concurrency } = prepareCaseCache(opts.outDir, opts.concurrency, opts.mode);
+  const cached = await scoreCases(
+    cases, opts, manifest, cacheDir, concurrency,
+    opts.onProgress, opts.onCaseStart, opts.onCasePhase, opts.onCaseResult,
+  );
+  return aggregateResults(cached, cases, opts, provenance);
 }
 
 /** Aggregate of N independent eval runs: headline metric mean ± std across runs. */
