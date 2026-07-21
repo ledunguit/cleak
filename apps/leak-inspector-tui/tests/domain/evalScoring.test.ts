@@ -186,3 +186,115 @@ describe('classifyFunction — precedence is pinned (adversarial names)', () => 
     expect(classifyFunction('helper_bad_good', c)).toBe('good');
   });
 });
+
+describe('scoreCase — line mode', () => {
+  const lineCase: LabeledCase = {
+    id: 'line-mode-1',
+    repo_path: 'cases/lm',
+    flaws: [{ function: 'leaky_func', line: 42 }],
+    clean: [{ function: 'clean_func', line: 10 }],
+  };
+
+  test('exact line match → TP', () => {
+    const f = [finding({ function: 'leaky_func', file: 'x.c', line: 42, verdict: 'confirmed_leak' })];
+    const samples = scoreCase(f, lineCase);
+    expect(samples.filter((s) => s.actual && s.predicted)).toHaveLength(1); // TP
+  });
+
+  test('near line mismatch → FN', () => {
+    const f = [finding({ function: 'leaky_func', file: 'x.c', line: 43, verdict: 'confirmed_leak' })];
+    const samples = scoreCase(f, lineCase);
+    // The finding at line 43 doesn't match flaw line 42, so the flaw becomes FN
+    // AND the finding at line 43 has no label → unknown → excluded
+    expect(samples.filter((s) => s.actual && s.predicted)).toHaveLength(0);
+  });
+});
+
+describe('scoreCase — mixed mode', () => {
+  const mixedCase: LabeledCase = {
+    id: 'mixed-1',
+    repo_path: 'cases/mx',
+    flaws: [
+      { function: 'bad_fn', line: 42 },    // line-labelled
+      { function: 'other_bad' },           // function-only
+    ],
+    clean: [{ function: 'good_fn', line: 10 }],
+  };
+
+  test('line-labelled flaw matches by line → TP', () => {
+    const f = [finding({ function: 'bad_fn', line: 42 })];
+    const samples = scoreCase(f, mixedCase);
+    expect(samples.some((s) => s.actual && s.predicted)).toBe(true);
+  });
+
+  test('function-only flaw with no line-labelled findings → function mode fallback', () => {
+    const f = [finding({ function: 'other_bad', line: 99 })];
+    const samples = scoreCase(f, mixedCase);
+    expect(samples.some((s) => s.actual && s.predicted)).toBe(true);
+  });
+});
+
+describe('scoreCase — file-level finding', () => {
+  test('finding with no function and no line is excluded (unknown)', () => {
+    const c: LabeledCase = {
+      id: 'file-level-1',
+      repo_path: 'cases/fl',
+      flaws: [{ function: 'main' }],
+    };
+    const f: SnapshotFinding[] = [{ verdict: 'confirmed_leak', confidence: 0.9 }]; // no function, no file, no line
+    const samples = scoreCase(f, c);
+    // The finding has no function/line → classifyFinding returns 'unknown' → excluded
+    // The flaw 'main' has no finding → becomes FN
+    expect(samples).toHaveLength(1); // just the FN
+    expect(samples[0].actual).toBe(true);
+    expect(samples[0].predicted).toBe(false);
+  });
+});
+
+describe('scoreCase — zero findings', () => {
+  test('all flaws become FN when no findings', () => {
+    const c: LabeledCase = {
+      id: 'zero-1',
+      repo_path: 'cases/zero',
+      flaws: [{ function: 'flaw_a' }, { function: 'flaw_b' }],
+    };
+    const samples = scoreCase([], c);
+    const fns = samples.filter((s) => s.actual && !s.predicted);
+    expect(fns).toHaveLength(2); // both flaws become FN
+  });
+});
+
+describe('scoreCase — duplicate site collapse', () => {
+  test('two findings at same function collapse to one sample', () => {
+    const c: LabeledCase = {
+      id: 'dup-1',
+      repo_path: 'cases/dup',
+      flaws: [{ function: 'flawed' }],
+    };
+    const f: SnapshotFinding[] = [
+      { function: 'flawed', verdict: 'confirmed_leak', confidence: 0.9 },
+      { function: 'flawed', verdict: 'likely_leak', confidence: 0.7 },
+    ];
+    const samples = scoreCase(f, c);
+    const tps = samples.filter((s) => s.actual && s.predicted);
+    expect(tps).toHaveLength(1); // collapsed to one TP
+  });
+});
+
+describe('scoreCase — flagged wins over non-flagged', () => {
+  test('flagged + non-flagged on same site → flagged wins', () => {
+    const c: LabeledCase = {
+      id: 'win-1',
+      repo_path: 'cases/win',
+      flaws: [{ function: 'ambiguous_fn' }],
+    };
+    const f: SnapshotFinding[] = [
+      { function: 'ambiguous_fn', verdict: 'false_positive', confidence: 0.3 },
+      { function: 'ambiguous_fn', verdict: 'confirmed_leak', confidence: 0.9 },
+    ];
+    const samples = scoreCase(f, c);
+    const tp = samples.find((s) => s.actual && s.predicted);
+    expect(tp).toBeDefined(); // flagged finding wins over non-flagged
+    expect(tp!.confidence).toBe(0.9); // carries the flagged confidence
+  });
+});

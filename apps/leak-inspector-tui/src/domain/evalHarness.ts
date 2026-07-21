@@ -141,6 +141,8 @@ export interface EvalResult {
   mode: string;
   dynamic: string;
   generatedAt: string;
+  /** Unix milliseconds (machine-parseable counterpart to generatedAt). */
+  generatedAtMs: number;
   /** Model/provider/temperature/tool-versions/git-commit/corpus-hash for reproducibility. */
   provenance: EvalProvenance;
   caseCount: number;
@@ -595,6 +597,7 @@ export function aggregateResults(cached: CachedCase[], cases: LabeledCase[], opt
     mode: opts.mode,
     dynamic: opts.dynamic,
     generatedAt: new Date().toISOString(),
+    generatedAtMs: Date.now(),
     provenance,
     caseCount: cases.length,
     ranOk: okRows.length,

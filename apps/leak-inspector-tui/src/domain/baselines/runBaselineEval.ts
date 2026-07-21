@@ -11,16 +11,20 @@ import { join, resolve } from 'node:path';
 import {
   accumulate,
   computeMetrics,
+  calibrationBins,
+  expectedCalibrationError,
   bootstrapCI,
   makeRng,
   type Metrics,
   type Sample,
+  type CalibrationBin,
   type ConfidenceInterval,
 } from '@cleak/common/analysis/metrics';
 import { mapWithLimit } from '@cleak/agent-core';
 import { countSourceLoc } from '@cleak/common/analysis/harness-utils';
 import { selectCases } from '../evalHarness';
 import { scoreCase, isFlagged, type LabeledCase, type LabeledManifest, type SnapshotFinding } from '../evalScoring';
+import { captureProvenance, type EvalProvenance } from '../provenance';
 import type { BaselineAdapter } from './adapter';
 
 export interface BaselineCaseRow {
@@ -47,6 +51,18 @@ export interface BaselineResult {
   /** Per-site samples (with siteId) — enables McNemar pairing against the system. */
   samples: Sample[];
   rows: BaselineCaseRow[];
+  /** Breakdown metrics grouped by flow variant (e.g. `double_free`, `use_after_free`). */
+  byFlowVariant: Record<string, Metrics>;
+  /** Breakdown metrics grouped by functional variant (e.g. `missing_free`, `conditional`). */
+  byFunctionalVariant: Record<string, Metrics>;
+  /** Breakdown metrics grouped by CWE identifier. */
+  byCwe: Record<string, Metrics>;
+  /** Confidence calibration bins — how well predicted confidence matches empirical accuracy. */
+  calibration: CalibrationBin[];
+  /** Expected Calibration Error — scalar summary of calibration quality. */
+  ece: number;
+  /** Reproducibility provenance (git commit, tool versions, etc.). */
+  provenance?: EvalProvenance;
 }
 
 export interface RunBaselineOptions {
@@ -124,6 +140,30 @@ export async function runBaselineEval(
   const ci = (sel: (m: Metrics) => number) =>
     bootstrapCI(allSamples, (c) => sel(computeMetrics(c)), { iters: 1000, rng: makeRng(0xc0ffee) });
 
+  // ── Variant breakdowns ──────────────────────────────────────
+  const byFlow = new Map<string, Sample[]>();
+  const byFunc = new Map<string, Sample[]>();
+  const byCwe = new Map<string, Sample[]>();
+  for (let i = 0; i < results.length; i++) {
+    const { samples } = results[i];
+    const c = cases[i];
+    const push = (m: Map<string, Sample[]>, k: string | undefined, s: Sample[]) => {
+      const key = k || 'unknown';
+      if (!m.has(key)) m.set(key, []);
+      m.get(key)!.push(...s);
+    };
+    push(byFlow, c.flowVariant, samples);
+    push(byFunc, c.functionalVariant, samples);
+    push(byCwe, c.cwe, samples);
+  }
+  const metricsByKey = (groups: Map<string, Sample[]>): Record<string, Metrics> => {
+    const out: Record<string, Metrics> = {};
+    for (const [key, samples] of [...groups.entries()].sort()) {
+      out[key] = computeMetrics(accumulate(samples));
+    }
+    return out;
+  };
+
   return {
     name: adapter.name,
     corpus: corpusDir,
@@ -135,5 +175,11 @@ export async function runBaselineEval(
     fpPerKloc: totalLoc > 0 ? (cm.fp / totalLoc) * 1000 : 0,
     samples: allSamples,
     rows,
+    byFlowVariant: metricsByKey(byFlow),
+    byFunctionalVariant: metricsByKey(byFunc),
+    byCwe: metricsByKey(byCwe),
+    calibration: calibrationBins(allSamples, 10),
+    ece: expectedCalibrationError(allSamples, 10),
+    provenance: captureProvenance({ dynamicEnabled: false }),
   };
 }

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { join } from 'node:path';
-import { loadBaselineConfigs } from '../../src/domain/baselineConfig';
+import { loadBaselineConfigs, type Capabilities } from '../../src/domain/baselineConfig';
 import { resolveCapabilities, type ResolvedRunPlan } from '../../src/domain/capabilityResolver';
 
 const BASELINES_DIR = join(import.meta.dir, '../../../../configs/baselines');
@@ -54,5 +54,42 @@ describe('resolveCapabilities (guards)', () => {
     expect(() =>
       resolveCapabilities({ static: true, dynamic: false, planner: true, tool_selector: false, fusion: false }),
     ).toThrow(/illegal capability/i);
+  });
+});
+
+/** Default capabilities (all false) with overrides for compact test setup. */
+function caps(over: Partial<Capabilities> = {}): Capabilities {
+  return { static: false, dynamic: false, planner: false, tool_selector: false, fusion: false, ...over };
+}
+
+describe('resolveCapabilities (edge cases)', () => {
+  test('runs = 1 when fusion is off even if opts.runs = 5', () => {
+    const plan = resolveCapabilities(caps({ static: true }), { runs: 5 });
+    expect(plan.runs).toBe(1);
+  });
+
+  test('consensusN = undefined when fusion is off regardless of opts.consensusN', () => {
+    const plan = resolveCapabilities(caps({ static: true }), { consensusN: 3 });
+    expect(plan.consensusN).toBeUndefined();
+  });
+});
+
+describe('resolveCapabilities (baseline round-trip)', () => {
+  test('every baseline config round-trips through loadBaselineConfig + resolveCapabilities', () => {
+    const configs = loadBaselineConfigs(
+      join(import.meta.dir, '../../../../configs/baselines'),
+    );
+    expect(configs.length).toBeGreaterThanOrEqual(9); // B1-B7 + variants
+    for (const cfg of configs) {
+      const plan = resolveCapabilities(cfg.capabilities, {
+        consensusN: cfg.consensusN,
+        runs: cfg.runs,
+      });
+      expect(plan.mode).toBe(cfg.capabilities.fusion ? 'llm_assisted' : 'no_llm');
+      if (!cfg.capabilities.fusion) {
+        expect(plan.runs).toBe(1);
+        expect(plan.consensusN).toBeUndefined();
+      }
+    }
   });
 });
