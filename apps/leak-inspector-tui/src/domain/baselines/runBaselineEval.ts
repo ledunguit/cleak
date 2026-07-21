@@ -6,7 +6,7 @@
  * via McNemar's test.
  */
 
-import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import {
   accumulate,
@@ -18,7 +18,7 @@ import {
   type ConfidenceInterval,
 } from '@cleak/common/analysis/metrics';
 import { mapWithLimit } from '@cleak/agent-core';
-import { readFileSafe } from '../fileWalk';
+import { countSourceLoc } from '@cleak/common/analysis/harness-utils';
 import { scoreCase, isFlagged, type LabeledCase, type LabeledManifest, type SnapshotFinding } from '../evalScoring';
 import type { BaselineAdapter } from './adapter';
 
@@ -48,37 +48,6 @@ export interface BaselineResult {
   rows: BaselineCaseRow[];
 }
 
-/**
- * Non-blank lines of a case's IMPLEMENTATION files — the FP-per-KLOC denominator.
- * Counts only `.c/.cc/.cpp/.cxx` (NOT headers): false positives are flagged at
- * allocation sites in implementation code, so including header declaration lines
- * would dilute the rate without adding flaggable sites. This MUST match the
- * system eval's denominator (`countSourceLoc` in evalHarness.ts) so FP/KLOC is
- * one consistent definition across every row of the comparison table.
- */
-function caseLoc(dir: string): number {
-  let loc = 0;
-  let entries: string[];
-  try {
-    entries = readdirSync(dir);
-  } catch {
-    return 0;
-  }
-  for (const f of entries) {
-    if (!/\.(c|cc|cpp|cxx)$/.test(f)) continue;
-    const p = join(dir, f);
-    try {
-      if (!statSync(p).isFile()) continue;
-    } catch {
-      continue;
-    }
-    const src = readFileSafe(p);
-    if (!src) continue;
-    for (const line of src.split('\n')) if (line.trim() !== '') loc++;
-  }
-  return loc;
-}
-
 export interface RunBaselineOptions {
   limit?: number;
   concurrency?: number;
@@ -97,7 +66,7 @@ export async function runBaselineEval(
 
   const scoreOne = async (c: LabeledCase): Promise<{ samples: Sample[]; row: BaselineCaseRow }> => {
     const dir = resolve(corpusDir, c.repo_path);
-    const loc = existsSync(dir) ? caseLoc(dir) : 0;
+    const loc = existsSync(dir) ? countSourceLoc(dir) : 0;
     try {
       const findings: SnapshotFinding[] = await adapter.run(dir, c);
       const samples = scoreCase(findings, c);
