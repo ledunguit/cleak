@@ -9,7 +9,7 @@ import { resolve, basename, join } from 'node:path';
 import { existsSync, readFileSync } from 'node:fs';
 import { McpClient, buildCallModel } from '@cleak/agent-core';
 import { AnalysisMode, DynamicMode } from '@cleak/common/types';
-import { loadConfig, type Provider, type ConsensusJudgeConfig } from '../config';
+import { loadConfig, type Provider, type ConsensusJudgeConfig, type RunConfig } from '../config';
 import { toProviderSettings } from '../orchestrator/toolWrappers';
 import { loadOrProfileAllocators } from '../domain/allocatorProfiler';
 import { decideStrategy } from '../domain/strategist';
@@ -18,6 +18,7 @@ import { buildPathResolver } from '../domain/pathResolver';
 import { ScanEmitter, JsonlFileSink, MultiSink, CallbackSink, type EventSink, type ScanEvent } from '../orchestrator/events';
 import { runScan, type ScanResult } from '../orchestrator/scanController';
 import { buildWorkflowInvestigationPhase } from '../orchestrator/workflowInvestigation';
+import { type InvestigationPhase } from '../orchestrator/investigation';
 import { scanDir, writeReports, writeScanMetrics, type ReportFormatOpt } from '../domain/reportSink';
 import { computeScanMetrics } from '../domain/scanMetrics';
 
@@ -129,11 +130,36 @@ export async function runHeadless(opts: HeadlessOptions): Promise<HeadlessResult
       ? buildWorkflowInvestigationPhase(cfg, dynamicMode, { toolSelect: opts.toolSelect ?? true })
       : undefined;
 
-  // ── LLM allocator profiling (generalize: discover the project's alloc/free API
-  // instead of hardcoding it). Skipped when allocators are supplied explicitly (the
-  // eval harness passes a frozen manifest list ⇒ deterministic) or disabled via
-  // 'none'. Default 'auto' = profile only in llm_assisted mode. Discovered names feed
-  // the SAME extraAllocators plumbing; the result is grep-verified + cached per repo. ──
+  const { extraAllocators, extraDeallocators, ownershipNotes } = await runAllocatorProfile(repoPath, cfg, opts, analysisMode);
+
+  const adaptiveResult = await runAdaptiveStrategy(repoPath, cfg, dynamicMode, dynamicClient, opts, analysisMode, extraAllocators, extraDeallocators);
+  dynamicMode = adaptiveResult.dynamicMode;
+  dynamicClient = adaptiveResult.dynamicClient;
+
+  const startedAt = Date.now();
+  try {
+    return await runScanAndReport(cfg, dir, opts, startedAt, staticClient, dynamicClient, analysisMode, scanId, repoPath, dynamicMode, extraAllocators, extraDeallocators, ownershipNotes, emitter, pathResolver, investigation);
+  } finally {
+    await staticClient.close();
+    await dynamicClient?.close();
+  }
+}
+
+// ── Extracted sub-stages ─────────────────────────────────────────────────────
+
+/**
+ * LLM allocator profiling — discover the project's alloc/free API instead of
+ * hardcoding it. Skipped when allocators are supplied explicitly (the eval
+ * harness passes a frozen manifest list ⇒ deterministic) or disabled via 'none'.
+ * Default 'auto' = profile only in llm_assisted mode. Discovered names feed
+ * the SAME extraAllocators plumbing; the result is grep-verified + cached per repo.
+ */
+async function runAllocatorProfile(
+  repoPath: string,
+  cfg: RunConfig,
+  opts: HeadlessOptions,
+  analysisMode: AnalysisMode,
+): Promise<{ extraAllocators?: string[]; extraDeallocators?: string[]; ownershipNotes?: string[] }> {
   let extraAllocators = opts.extraAllocators;
   let extraDeallocators = opts.extraDeallocators;
   let ownershipNotes: string[] | undefined;
@@ -160,12 +186,26 @@ export async function runHeadless(opts: HeadlessOptions): Promise<HeadlessResult
       }
     }
   }
+  return { extraAllocators, extraDeallocators, ownershipNotes };
+}
 
-  // ── Adaptive strategist (the intelligent harness): an LLM planner picks the analysis
-  // plan for THIS project. v0 wires `runDynamic` — skip the expensive dynamic stage on a
-  // repo with no build system (it can't build ⇒ no recall lost). OPT-IN (--strategy auto)
-  // and never engaged by the benchmark (which passes an explicit dynamic mode), so eval
-  // determinism + the Juliet baseline are untouched. ──
+/**
+ * Adaptive strategist: an LLM planner picks the analysis plan for THIS project.
+ * v0 wires `runDynamic` — skip the expensive dynamic stage on a repo with no
+ * build system (it can't build ⇒ no recall lost). OPT-IN (--strategy auto) and
+ * never engaged by the benchmark (which passes an explicit dynamic mode), so eval
+ * determinism + the Juliet baseline are untouched.
+ */
+async function runAdaptiveStrategy(
+  repoPath: string,
+  cfg: RunConfig,
+  dynamicMode: DynamicMode,
+  dynamicClient: McpClient | undefined,
+  opts: HeadlessOptions,
+  analysisMode: AnalysisMode,
+  extraAllocators: string[] | undefined,
+  extraDeallocators: string[] | undefined,
+): Promise<{ dynamicMode: DynamicMode; dynamicClient: McpClient | undefined }> {
   if (opts.strategy === 'auto' && analysisMode === AnalysisMode.LLM_ASSISTED) {
     const callModel = buildCallModel(toProviderSettings(cfg), () => globalThis.crypto.randomUUID());
     const plan = await decideStrategy(repoPath, callModel, {
@@ -193,79 +233,97 @@ export async function runHeadless(opts: HeadlessOptions): Promise<HeadlessResult
       }
     }
   }
+  return { dynamicMode, dynamicClient };
+}
 
-  const startedAt = Date.now();
-  try {
-    const result = await runScan(
-      {
-        scanId,
-        repoPath,
-        analysisMode,
-        dynamicMode,
-        fileLimit: opts.fileLimit,
-        buildCommand: opts.build,
-        extraAllocators,
-        extraDeallocators,
-        ownershipNotes,
-        enrich: opts.enrich,
-        staticDiscovery: opts.staticDiscovery,
-        staticTools: opts.staticTools,
-      },
-      { staticClient, dynamicClient, emitter, pathResolver, investigation, abortSignal: opts.signal },
-    );
+/**
+ * Run the scan, write reports, compute metrics, and return the HeadlessResult.
+ * This is the core of the try-block body, extracted for readability.
+ */
+async function runScanAndReport(
+  cfg: RunConfig,
+  dir: string,
+  opts: HeadlessOptions,
+  startedAt: number,
+  staticClient: McpClient,
+  dynamicClient: McpClient | undefined,
+  analysisMode: AnalysisMode,
+  scanId: string,
+  repoPath: string,
+  dynamicMode: DynamicMode,
+  extraAllocators: string[] | undefined,
+  extraDeallocators: string[] | undefined,
+  ownershipNotes: string[] | undefined,
+  emitter: ScanEmitter,
+  pathResolver: ReturnType<typeof buildPathResolver>,
+  investigation: InvestigationPhase | undefined,
+): Promise<HeadlessResult> {
+  const result = await runScan(
+    {
+      scanId,
+      repoPath,
+      analysisMode,
+      dynamicMode,
+      fileLimit: opts.fileLimit,
+      buildCommand: opts.build,
+      extraAllocators,
+      extraDeallocators,
+      ownershipNotes,
+      enrich: opts.enrich,
+      staticDiscovery: opts.staticDiscovery,
+      staticTools: opts.staticTools,
+    },
+    { staticClient, dynamicClient, emitter, pathResolver, investigation, abortSignal: opts.signal },
+  );
 
-    // Sum logical MCP calls across both analyzer clients (the investigation phase
-    // reuses these same instances, so the count covers discovery + investigation).
-    const mcpCalls = staticClient.callCount + (dynamicClient?.callCount ?? 0);
+  // Sum logical MCP calls across both analyzer clients (the investigation phase
+  // reuses these same instances, so the count covers discovery + investigation).
+  const mcpCalls = staticClient.callCount + (dynamicClient?.callCount ?? 0);
 
-    const formats = parseFormats(opts.format);
-    const { files } = writeReports(
-      dir,
-      result.report,
-      formats,
-      result.investigation?.transcript as any,
-      result.investigation?.stepsLog,
-    );
-    if (existsSync(join(dir, 'snapshot.json'))) {
-      try {
-        const snap = JSON.parse(readFileSync(join(dir, 'snapshot.json'), 'utf-8'));
-        writeScanMetrics(
-          dir,
-          computeScanMetrics(snap, {
-            mode: opts.mode,
-            dynamic: opts.dynamic,
-            // Provenance only meaningful when the LLM actually drove the scan.
-            ...(analysisMode === AnalysisMode.LLM_ASSISTED
-              ? { provider: cfg.llm.provider, model: cfg.llm.model, temperature: cfg.llm.temperature }
-              : {}),
-            turns: result.investigation?.turns,
-            inputTokens: result.investigation?.usage?.inputTokens,
-            outputTokens: result.investigation?.usage?.outputTokens,
-            durationMs: Date.now() - startedAt,
-            mcpCalls,
-          }),
-        );
-      } catch {
-        /* metrics best-effort */
-      }
-    }
-
-    if (!opts.quiet) {
-      const s = result.report.summary;
-      const bundles = result.report.bundles;
-      const coverage = formatTally(tally(bundles.map((b) => b.dynamicCoverage || 'dynamic_off')));
-      const judge = formatTally(tally(bundles.map((b) => b.verdict?.tool || 'none')));
-      process.stdout.write(
-        `\n✓ scan ${scanId} complete — ${s.totalCandidates} candidates, ` +
-          `${s.confirmedLeaks} confirmed, ${s.likelyLeaks} likely. Reports in ${dir}\n` +
-          `  coverage: ${coverage} · judge: ${judge}\n`,
+  const formats = parseFormats(opts.format);
+  const { files } = writeReports(
+    dir,
+    result.report,
+    formats,
+    result.investigation?.transcript as any,
+    result.investigation?.stepsLog,
+  );
+  if (existsSync(join(dir, 'snapshot.json'))) {
+    try {
+      const snap = JSON.parse(readFileSync(join(dir, 'snapshot.json'), 'utf-8'));
+      writeScanMetrics(
+        dir,
+        computeScanMetrics(snap, {
+          mode: opts.mode,
+          dynamic: opts.dynamic,
+          // Provenance only meaningful when the LLM actually drove the scan.
+          ...(analysisMode === AnalysisMode.LLM_ASSISTED
+            ? { provider: cfg.llm.provider, model: cfg.llm.model, temperature: cfg.llm.temperature }
+            : {}),
+          turns: result.investigation?.turns,
+          inputTokens: result.investigation?.usage?.inputTokens,
+          outputTokens: result.investigation?.usage?.outputTokens,
+          durationMs: Date.now() - startedAt,
+          mcpCalls,
+        }),
       );
+    } catch {
+      /* metrics best-effort */
     }
-    return { ...result, scanId, dir, files, mcpCalls };
-  } finally {
-    await staticClient.close();
-    await dynamicClient?.close();
   }
+
+  if (!opts.quiet) {
+    const s = result.report.summary;
+    const bundles = result.report.bundles;
+    const coverage = formatTally(tally(bundles.map((b) => b.dynamicCoverage || 'dynamic_off')));
+    const judge = formatTally(tally(bundles.map((b) => b.verdict?.tool || 'none')));
+    process.stdout.write(
+      `\n✓ scan ${scanId} complete — ${s.totalCandidates} candidates, ` +
+        `${s.confirmedLeaks} confirmed, ${s.likelyLeaks} likely. Reports in ${dir}\n` +
+        `  coverage: ${coverage} · judge: ${judge}\n`,
+    );
+  }
+  return { ...result, scanId, dir, files, mcpCalls };
 }
 
 /** Count occurrences of each value (for the coverage / judge-path distributions). */
