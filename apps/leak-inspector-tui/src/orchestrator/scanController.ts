@@ -26,7 +26,6 @@ import {
 import { LeakReporting } from '@cleak/common/analysis/reporting';
 import { ScanEmitter, ScanEventName } from './events';
 import { CandidateManager, normalizeCandidate } from '../domain/candidateState';
-import { PathResolver } from '../domain/pathResolver';
 import { walkCFiles, readFileSafe } from '../domain/fileWalk';
 import { runDeterministicDynamicStage, reconcileDynamicEvidence, computeDynamicCoverage } from '../domain/dynamicEvidence';
 import { runDynamicOnlyDiscovery } from '../domain/dynamicDiscovery';
@@ -40,7 +39,8 @@ import {
   type StaticContextStore,
 } from '../domain/staticContext';
 import { coerceToObject } from '../domain/mcpResult';
-import type { InvestigationPhase, InvestigationOutcome } from './investigation';
+import type { PathResolver } from '../domain/pathResolver';
+import type { InvestigationPhase, InvestigationOutcome, OrchestratorCommonDeps } from './investigation';
 
 const reporter = new LeakReporting();
 
@@ -86,27 +86,14 @@ export interface ScanInput {
   staticTools?: string[];
 }
 
-export interface ScanDeps {
+export type ScanDeps = {
   staticClient: McpClient;
   dynamicClient?: McpClient;
   emitter: ScanEmitter;
-  pathResolver: PathResolver;
   /** The agentic investigation phase (M3). When absent, the scan is discovery + heuristic judge only. */
   investigation?: InvestigationPhase;
-  /** Optional raw agent-event sink for rich UI rendering (TUI); `agent` tags the source sub-agent. */
-  onAgentEvent?: (ev: AgentEvent, agent?: import('./investigation').AgentMeta) => void;
-  /** Optional model I/O cue ('send'/'receive') for the send/receive UI arrow. */
-  onModelActivity?: (dir: 'send' | 'receive') => void;
-  /** Optional interactive permission resolver (TUI). */
-  requestPermission?: (req: { id: string; name: string; input: unknown }) => Promise<'allow' | 'deny'>;
-  /** Abort signal to interrupt discovery + the agentic loop (e.g. ESC in the TUI). */
-  abortSignal?: AbortSignal;
-  /** Drained each agent turn — lets the user steer the agent mid-run. */
-  getSteering?: () => string[];
-  /** Called when the model fails — resume (user typed continue/guidance) or abort. */
-  awaitResume?: (reason: string) => Promise<'resume' | 'abort'>;
   now?: () => string;
-}
+} & OrchestratorCommonDeps;
 
 export interface ScanResult {
   report: ScanReport & Record<string, unknown>;
@@ -225,15 +212,8 @@ async function enrichStaticEvidence(
   });
 }
 
-export async function runScan(input: ScanInput, deps: ScanDeps): Promise<ScanResult> {
-  const { emitter, staticClient, pathResolver } = deps;
-  const now = deps.now ?? (() => new Date().toISOString());
-  const startedAt = now();
-  const candidates = new CandidateManager(now);
-
-  emitter.emit(ScanEventName.SCAN_CREATED, { scanId: input.scanId, repoPath: input.repoPath, mode: input.analysisMode });
-
-  // ── Preflight ──
+// ── Preflight ──
+async function runPreflight(staticClient: McpClient, emitter: ScanEmitter): Promise<void> {
   emitter.emit(ScanEventName.PREFLIGHT_STARTED, {});
   const staticUp = await staticClient.ping();
   if (!staticUp) {
@@ -241,16 +221,19 @@ export async function runScan(input: ScanInput, deps: ScanDeps): Promise<ScanRes
     throw new Error('Static analyzer MCP server is unreachable.');
   }
   emitter.emit(ScanEventName.PREFLIGHT_PASSED, {});
+}
 
-  // ── Workspace (host paths; no materialization in the standalone runner) ──
-  emitter.emit(ScanEventName.WORKSPACE_STARTED, { repoPath: input.repoPath });
-  if (input.buildCommand) emitter.emit(ScanEventName.BUILD_PLAN_SELECTED, { buildCommand: input.buildCommand });
-  emitter.emit(ScanEventName.WORKSPACE_FINISHED, {});
-
-  // ── Discovery (host-side): the orchestrator owns the workspace, so we walk the
-  // repo on the host and send each file's CONTENT to the stateless candidateScan
-  // tool. No shared filesystem with the analyzer — works the same whether the
-  // analyzer runs locally or on a remote host. ──
+// ── Discovery (host-side): the orchestrator owns the workspace, so we walk the
+// repo on the host and send each file's CONTENT to the stateless candidateScan
+// tool. No shared filesystem with the analyzer — works the same whether the
+// analyzer runs locally or on a remote host. ──
+async function runDiscovery(
+  input: ScanInput,
+  deps: ScanDeps,
+  candidates: CandidateManager,
+  emitter: ScanEmitter,
+  pathResolver: PathResolver,
+): Promise<{totalFiles: number; warning?: string; dynamicRanInDiscovery: boolean}> {
   emitter.emit(ScanEventName.DISCOVERY_STARTED, { repoPath: input.repoPath });
   const staticDiscovery = input.staticDiscovery !== false;
   let totalFiles = 0;
@@ -273,7 +256,7 @@ export async function runScan(input: ScanInput, deps: ScanDeps): Promise<ScanRes
       const content = readFileSafe(file);
       if (content === null) return null;
       try {
-        return (await staticClient.callTool('candidateScan', {
+        return (await deps.staticClient.callTool('candidateScan', {
           filePath: file,
           content,
           ...(input.extraAllocators?.length ? { extraAllocators: input.extraAllocators } : {}),
@@ -337,31 +320,49 @@ export async function runScan(input: ScanInput, deps: ScanDeps): Promise<ScanRes
     ...(warning ? { warning } : {}),
   });
 
-  // ── Deterministic static enrichment: populate each bundle's staticEvidence so the
-  // heuristic judge is path-aware (alloc→free pairing + feasible leak paths), even in
-  // no_llm. OPT-IN (STATIC_ENRICH=on) — the underlying exit-path analysis is a
-  // heuristic CFG (guard-subset free reconciliation; no SMT path-feasibility), so it
-  // over-reports unreconciled exits and tanks precision on the easy Juliet corpus
-  // (FP 7→44). It is the right base for HARD real-project corpora (where the leak IS
-  // path-sensitive), but must stay off by default so the reproducible Juliet baseline
-  // is preserved. ──
-  // Enrichment needs static candidates; skip it entirely for dynamic-only discovery.
+  return { totalFiles, warning, dynamicRanInDiscovery };
+}
+
+// ── Deterministic static enrichment: populate each bundle's staticEvidence so the
+// heuristic judge is path-aware (alloc→free pairing + feasible leak paths), even in
+// no_llm. OPT-IN (STATIC_ENRICH=on) — the underlying exit-path analysis is a
+// heuristic CFG (guard-subset free reconciliation; no SMT path-feasibility), so it
+// over-reports unreconciled exits and tanks precision on the easy Juliet corpus
+// (FP 7→44). It is the right base for HARD real-project corpora (where the leak IS
+// path-sensitive), but must stay off by default so the reproducible Juliet baseline
+// is preserved. ──
+// Enrichment needs static candidates; skip it entirely for dynamic-only discovery.
+async function runEnrichment(
+  discovered: number,
+  staticDiscovery: boolean,
+  bundles: LeakBundle[],
+  staticClient: McpClient,
+  input: ScanInput,
+  abortSignal?: AbortSignal,
+): Promise<void> {
   const enrichOn = staticDiscovery && (input.enrich ?? process.env.STATIC_ENRICH === 'on');
   if (discovered > 0 && enrichOn) {
-    await enrichStaticEvidence(candidates.getAllBundles(), staticClient, input, deps.abortSignal);
+    await enrichStaticEvidence(bundles, staticClient, input, abortSignal);
   }
+}
 
-  // ── Investigation (agentic; optional in M2) ──
+// ── Investigation (agentic; optional in M2) ──
+async function runInvestigation(
+  deps: ScanDeps,
+  input: ScanInput,
+  candidates: CandidateManager,
+  dynamicRanInDiscovery: boolean,
+): Promise<InvestigationOutcome | undefined> {
   let investigationOutcome: InvestigationOutcome | undefined;
   if (deps.investigation && input.analysisMode === AnalysisMode.LLM_ASSISTED) {
     investigationOutcome = await deps.investigation.run(candidates, {
       repoPath: input.repoPath,
       buildCommand: input.buildCommand,
       projectOwnershipNotes: input.ownershipNotes,
-      emitter,
-      staticClient,
+      emitter: deps.emitter,
+      staticClient: deps.staticClient,
       dynamicClient: deps.dynamicClient,
-      pathResolver,
+      pathResolver: deps.pathResolver,
       abortSignal: deps.abortSignal,
       getSteering: deps.getSteering,
       awaitResume: deps.awaitResume,
@@ -373,14 +374,24 @@ export async function runScan(input: ScanInput, deps: ScanDeps): Promise<ScanRes
       dynamicAlreadyRan: dynamicRanInDiscovery,
     });
   }
+  return investigationOutcome;
+}
 
-  // ── Deterministic dynamic stage (no_llm only): build → LSan with NO LLM, so the
-  // `--dynamic` flag is meaningful in the static mode and the heuristic judge can use
-  // runtime evidence (enables a clean 2×2 ablation: static / +dynamic / +LLM / full).
-  // llm_assisted runs dynamic INSIDE the investigation above, so this is no_llm-exclusive.
-  // SECURITY: this EXECUTES code (build + run the target) under the same confinement as
-  // llm_assisted+dynamic; gated on a known buildCommand so default no_llm stays static-only,
-  // and on dynamicMode!==OFF so `--dynamic off` leaves the reproducible baseline byte-identical. ──
+// ── Deterministic dynamic stage (no_llm only): build → LSan with NO LLM, so the
+// `--dynamic` flag is meaningful in the static mode and the heuristic judge can use
+// runtime evidence (enables a clean 2×2 ablation: static / +dynamic / +LLM / full).
+// llm_assisted runs dynamic INSIDE the investigation above, so this is no_llm-exclusive.
+// SECURITY: this EXECUTES code (build + run the target) under the same confinement as
+// llm_assisted+dynamic; gated on a known buildCommand so default no_llm stays static-only,
+// and on dynamicMode!==OFF so `--dynamic off` leaves the reproducible baseline byte-identical. ──
+async function runDynamicStage(
+  input: ScanInput,
+  deps: ScanDeps,
+  candidates: CandidateManager,
+  pathResolver: PathResolver,
+  dynamicRanInDiscovery: boolean,
+  emitter: ScanEmitter,
+): Promise<void> {
   if (
     input.analysisMode === AnalysisMode.NO_LLM &&
     input.dynamicMode !== DynamicMode.OFF &&
@@ -404,16 +415,31 @@ export async function runScan(input: ScanInput, deps: ScanDeps): Promise<ScanRes
       undefined,
     );
   }
+}
 
-  // ── Judging: deterministic heuristic finalizer for any un-verdicted bundle ──
+// ── Judging: deterministic heuristic finalizer for any un-verdicted bundle ──
+async function runJudging(
+  emitter: ScanEmitter,
+  bundles: LeakBundle[],
+  investigationOutcome?: InvestigationOutcome,
+): Promise<void> {
   emitter.emit(ScanEventName.JUDGING_STARTED, {});
-  for (const bundle of candidates.getAllBundles()) {
+  for (const bundle of bundles) {
     if (bundle.verdict) continue;
     bundle.verdict = heuristicVerdict(bundle, investigationOutcome?.staticContext?.[bundle.bundleId] ?? {});
   }
   emitter.emit(ScanEventName.JUDGING_FINISHED, {});
+}
 
-  // ── Reporting ──
+// ── Reporting ──
+async function runReporting(
+  emitter: ScanEmitter,
+  candidates: CandidateManager,
+  investigationOutcome: InvestigationOutcome | undefined,
+  input: ScanInput,
+  startedAt: string,
+  now: () => string,
+): Promise<{report: ScanReport & Record<string, unknown>; bundles: LeakBundle[]; investigation: InvestigationOutcome | undefined}> {
   emitter.emit(ScanEventName.REPORTING_STARTED, {});
   const completedAt = now();
   const metadata: ScanMetadata = {
@@ -444,4 +470,33 @@ export async function runScan(input: ScanInput, deps: ScanDeps): Promise<ScanRes
   });
 
   return { report, bundles, investigation: investigationOutcome };
+}
+
+export async function runScan(input: ScanInput, deps: ScanDeps): Promise<ScanResult> {
+  const { emitter, staticClient, pathResolver } = deps;
+  const now = deps.now ?? (() => new Date().toISOString());
+  const startedAt = now();
+  const candidates = new CandidateManager(now);
+
+  emitter.emit(ScanEventName.SCAN_CREATED, { scanId: input.scanId, repoPath: input.repoPath, mode: input.analysisMode });
+
+  await runPreflight(staticClient, emitter);
+
+  // ── Workspace (host paths; no materialization in the standalone runner) ──
+  emitter.emit(ScanEventName.WORKSPACE_STARTED, { repoPath: input.repoPath });
+  if (input.buildCommand) emitter.emit(ScanEventName.BUILD_PLAN_SELECTED, { buildCommand: input.buildCommand });
+  emitter.emit(ScanEventName.WORKSPACE_FINISHED, {});
+
+  const { totalFiles, warning, dynamicRanInDiscovery } = await runDiscovery(input, deps, candidates, emitter, pathResolver);
+
+  const discovered = candidates.getAllBundles().length;
+  const staticDiscovery = input.staticDiscovery !== false;
+  await runEnrichment(discovered, staticDiscovery, candidates.getAllBundles(), staticClient, input, deps.abortSignal);
+
+  const investigationOutcome = await runInvestigation(deps, input, candidates, dynamicRanInDiscovery);
+  await runDynamicStage(input, deps, candidates, pathResolver, dynamicRanInDiscovery, emitter);
+  await runJudging(emitter, candidates.getAllBundles(), investigationOutcome);
+  const { report, bundles, investigation } = await runReporting(emitter, candidates, investigationOutcome, input, startedAt, now);
+
+  return { report, bundles, investigation };
 }

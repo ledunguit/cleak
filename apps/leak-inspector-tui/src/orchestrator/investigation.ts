@@ -18,29 +18,26 @@ export interface AgentMeta {
   kind: 'main' | 'static' | 'dynamic';
 }
 
-export interface InvestigationContext {
+/**
+ * Shared deps between ScanDeps (scanController) and InvestigationContext (investigation).
+ * Extracted to avoid duplication of the 7 fields common to both interfaces.
+ */
+export interface OrchestratorCommonDeps {
+  pathResolver: PathResolver;
+  abortSignal?: AbortSignal;
+  onAgentEvent?: (ev: AgentEvent, agent?: AgentMeta) => void;
+  onModelActivity?: (dir: 'send' | 'receive') => void;
+  requestPermission?: (req: { id: string; name: string; input: unknown }) => Promise<'allow' | 'deny'>;
+  getSteering?: () => string[];
+  awaitResume?: (reason: string) => Promise<'resume' | 'abort'>;
+}
+
+export type InvestigationContext = {
   repoPath: string;
   buildCommand?: string;
   emitter: ScanEmitter;
   staticClient: McpClient;
   dynamicClient?: McpClient;
-  pathResolver: PathResolver;
-  /**
-   * Raw agent-loop events for rich UI rendering. `agent` identifies the emitting
-   * sub-agent (omitted/main for orchestrator-level notices) so the TUI can keep a
-   * separate log per agent instead of one flat stream.
-   */
-  onAgentEvent?: (ev: AgentEvent, agent?: AgentMeta) => void;
-  /** Model I/O cue: 'send' before a request, 'receive' on the first streamed chunk. */
-  onModelActivity?: (dir: 'send' | 'receive') => void;
-  /** Interactive permission resolver (TUI). Absent → 'ask' tools auto-allow (headless). */
-  requestPermission?: (req: { id: string; name: string; input: unknown }) => Promise<'allow' | 'deny'>;
-  /** Abort signal (ESC) to interrupt the agentic loop. */
-  abortSignal?: AbortSignal;
-  /** Drained each agent turn — user steering messages injected mid-run. */
-  getSteering?: () => string[];
-  /** Called when the model fails — resume (user typed continue/guidance) or abort. */
-  awaitResume?: (reason: string) => Promise<'resume' | 'abort'>;
   /** Project memory-ownership conventions (LLM-discovered by the allocator profiler):
    * e.g. "cJSON_Add*ToObject transfers ownership to the parent", "X returns owned
    * memory freed with Y". Passed to the LLM judge so verdicts respect project semantics
@@ -50,7 +47,7 @@ export interface InvestigationContext {
    * coverage during discovery. When true the investigation skips Stage B (no second
    * build/run) and preserves the coverage already attached to each bundle. */
   dynamicAlreadyRan?: boolean;
-}
+} & OrchestratorCommonDeps;
 
 export interface InvestigationOutcome {
   reason: string;
