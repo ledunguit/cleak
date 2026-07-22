@@ -1,0 +1,1152 @@
+<mxfile host="app.diagrams.net" pages="9">
+  <diagram name="0-Academic-Overview" id="page0"><mxGraphModel dx="1423" dy="1038" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="1100" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="l1" parent="1" style="swimlane;horizontal=0;startSize=30;fillColor=#E8F5E9;strokeColor=#81C784;html=1;fontColor=#2c3e50;fontStyle=1;" value="C/C++ Source Repository" vertex="1">
+          <mxGeometry height="340" width="1230" x="50" y="10" as="geometry" />
+        </mxCell>
+        <mxCell id="n1" parent="l1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#C8E6C9;strokeColor=#66BB6A;fontColor=#2c3e50;" value="&lt;b&gt;C/C++ Source Files&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px&quot;&gt;Allocation sites: malloc, new, strdup&lt;/font&gt;" vertex="1">
+          <mxGeometry height="50" width="240" x="110" y="30" as="geometry" />
+        </mxCell>
+        <mxCell id="l2" parent="1" style="swimlane;horizontal=0;startSize=30;fillColor=#E3F2FD;strokeColor=#64B5F6;html=1;fontColor=#2c3e50;fontStyle=1;" value="Orchestrator — LLM Agent Loop" vertex="1">
+          <mxGeometry height="230" width="1230" x="50" y="110" as="geometry" />
+        </mxCell>
+        <mxCell id="n2" parent="l2" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#BBDEFB;strokeColor=#42A5F5;fontColor=#2c3e50;" value="&lt;b&gt;Native Tool-Calling Loop&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px&quot;&gt;queryLoop: callModel → tool_use → tool_result → repeat&lt;/font&gt;" vertex="1">
+          <mxGeometry height="50" width="260" x="100" y="40" as="geometry" />
+        </mxCell>
+        <mxCell id="n3" parent="l2" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#BBDEFB;strokeColor=#42A5F5;fontColor=#2c3e50;" value="&lt;b&gt;Investigation Tools&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px&quot;&gt;File inspection · Evidence gathering · Verdict recording&lt;/font&gt;" vertex="1">
+          <mxGeometry height="50" width="260" x="505" y="40" as="geometry" />
+        </mxCell>
+        <mxCell id="note2" parent="l2" style="text;html=1;strokeColor=none;fillColor=none;fontColor=#5a7d9a;fontSize=11;fontStyle=2;" value="&lt;i&gt;LLM decides which tool to run next based on accumulated evidence&lt;/i&gt;" vertex="1">
+          <mxGeometry height="30" width="350" x="250" y="150" as="geometry" />
+        </mxCell>
+        <mxCell id="l3" parent="1" style="swimlane;horizontal=0;startSize=30;fillColor=#FFF3E0;strokeColor=#FFB74D;html=1;fontColor=#2c3e50;fontStyle=1;" value="Analysis Layer (MCP Protocol)" vertex="1">
+          <mxGeometry height="200" width="1230" x="50" y="380" as="geometry" />
+        </mxCell>
+        <mxCell id="mcp" parent="l3" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFE0B2;strokeColor=#FFA726;fontColor=#2c3e50;" value="&lt;b&gt;MCP Streamable-HTTP&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px&quot;&gt;(JSON-RPC 2.0)&lt;/font&gt;" vertex="1">
+          <mxGeometry height="48" width="290" x="490" y="42" as="geometry" />
+        </mxCell>
+        <mxCell id="static" parent="l3" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFE0B2;strokeColor=#FFA726;fontColor=#2c3e50;" value="&lt;b&gt;Static Analyzer&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px&quot;&gt;Tree-sitter AST · Call Graph · Clang scan-build&lt;/font&gt;" vertex="1">
+          <mxGeometry height="50" width="260" x="100" y="40" as="geometry" />
+        </mxCell>
+        <mxCell id="dynamic" parent="l3" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFE0B2;strokeColor=#FFA726;fontColor=#2c3e50;" value="&lt;b&gt;Dynamic Analyzer&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px&quot;&gt;Valgrind Memcheck · AddressSanitizer · LeakSanitizer&lt;/font&gt;" vertex="1">
+          <mxGeometry height="50" width="260" x="910" y="40" as="geometry" />
+        </mxCell>
+        <mxCell id="note3" parent="l3" style="text;html=1;strokeColor=none;fillColor=none;fontColor=#5a7d9a;fontSize=11;fontStyle=2;" value="&lt;i&gt;Deterministic evidence capture — no LLM in execution path&lt;/i&gt;" vertex="1">
+          <mxGeometry height="30" width="440" x="560" y="115" as="geometry" />
+        </mxCell>
+        <mxCell id="l4" parent="1" style="swimlane;horizontal=0;startSize=30;fillColor=#F3E5F5;strokeColor=#BA68C8;html=1;fontColor=#2c3e50;fontStyle=1;" value="Judge Layer" vertex="1">
+          <mxGeometry height="180" width="1230" x="50" y="620" as="geometry" />
+        </mxCell>
+        <mxCell id="heuristic" parent="l4" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E1BEE7;strokeColor=#AB47BC;fontColor=#2c3e50;" value="&lt;b&gt;Heuristic Judge&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px&quot;&gt;Path-sensitive · alloc→free pairing&lt;br&gt;Runs on EVERY bundle&lt;/font&gt;" vertex="1">
+          <mxGeometry height="60" width="260" x="100" y="40" as="geometry" />
+        </mxCell>
+        <mxCell id="llmjudge" parent="l4" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E1BEE7;strokeColor=#AB47BC;fontColor=#2c3e50;" value="&lt;b&gt;LLM Judge&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px&quot;&gt;Borderline bundles only&lt;br&gt;Project ownership conventions&lt;/font&gt;" vertex="1">
+          <mxGeometry height="60" width="290" x="490" y="40" as="geometry" />
+        </mxCell>
+        <mxCell id="consensus" parent="l4" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E1BEE7;strokeColor=#AB47BC;fontColor=#2c3e50;" value="&lt;b&gt;Consensus Judge&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px&quot;&gt;k-sample self-consistency&lt;br&gt;majority / weighted / unanimous&lt;/font&gt;" vertex="1">
+          <mxGeometry height="60" width="260" x="910" y="40" as="geometry" />
+        </mxCell>
+        <mxCell id="note4" parent="l4" style="text;html=1;strokeColor=none;fillColor=none;fontColor=#5a7d9a;fontSize=11;fontStyle=2;" value="&lt;i&gt;Two-tier determinism: no_llm (bit-identical) | llm_assisted (mean ± CI)&lt;/i&gt;" vertex="1">
+          <mxGeometry height="30" width="350" x="470" y="125" as="geometry" />
+        </mxCell>
+        <mxCell id="l5" parent="1" style="swimlane;horizontal=0;startSize=30;fillColor=#E0F7FA;strokeColor=#4DD0E1;html=1;fontColor=#2c3e50;fontStyle=1;" value="Output" vertex="1">
+          <mxGeometry height="200" width="1230" x="50" y="840" as="geometry" />
+        </mxCell>
+        <mxCell id="verdict" parent="l5" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#B2EBF2;strokeColor=#26C6DA;fontColor=#2c3e50;" value="&lt;b&gt;Verdict + Confidence&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:9px&quot;&gt;CONFIRMED / LIKELY / UNCERTAIN / LIKELY_FP / FALSE_POSITIVE&lt;/font&gt;" vertex="1">
+          <mxGeometry height="50" width="260" x="100" y="75" as="geometry" />
+        </mxCell>
+        <mxCell id="rootcause" parent="l5" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#B2EBF2;strokeColor=#26C6DA;fontColor=#2c3e50;" value="&lt;b&gt;Root Cause + Repair&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:9px&quot;&gt;Explanation · Root cause analysis · Repair suggestion&lt;/font&gt;" vertex="1">
+          <mxGeometry height="50" width="290" x="490" y="75" as="geometry" />
+        </mxCell>
+        <mxCell id="report" parent="l5" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#B2EBF2;strokeColor=#26C6DA;fontColor=#2c3e50;" value="&lt;b&gt;Report Formats&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:9px&quot;&gt;JSON · Markdown · HTML · Snapshot&lt;/font&gt;" vertex="1">
+          <mxGeometry height="50" width="260" x="910" y="75" as="geometry" />
+        </mxCell>
+        <mxCell id="e1" edge="1" parent="1" source="n1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#5a7d9a;strokeWidth=2;" target="n2" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e2" edge="1" parent="1" source="n3" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#5a7d9a;strokeWidth=2;" target="mcp" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e3" edge="1" parent="1" source="mcp" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;dashed=1;strokeColor=#5a7d9a;strokeWidth=1.5;" target="static" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e4" edge="1" parent="1" source="mcp" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;dashed=1;strokeColor=#5a7d9a;strokeWidth=1.5;" target="dynamic" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e5" edge="1" parent="1" source="static" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#5a7d9a;strokeWidth=1.5;fontColor=#2c3e50;fontSize=11;fontStyle=2;" target="heuristic" value="Static evidence">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="279.94" y="510" />
+              <mxPoint x="279.94" y="510" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e6" edge="1" parent="1" source="dynamic" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#5a7d9a;strokeWidth=1.5;fontColor=#2c3e50;fontSize=11;fontStyle=2;" target="consensus" value="Dynamic evidence">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1090" y="520" />
+              <mxPoint x="1090" y="520" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e7" edge="1" parent="1" source="heuristic" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#5a7d9a;strokeWidth=2;" target="verdict" value="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="279.94" y="840" />
+              <mxPoint x="279.94" y="840" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e8" edge="1" parent="1" source="heuristic" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;dashed=1;strokeColor=#5a7d9a;strokeWidth=1.5;fontColor=#2c3e50;fontSize=11;fontStyle=2;" target="n2" value="Investigation loop">
+          <mxGeometry relative="1" x="0.0555" as="geometry">
+            <mxPoint as="offset" />
+            <Array as="points">
+              <mxPoint x="110.03" y="690" />
+              <mxPoint x="110.03" y="244.97" />
+              <mxPoint x="280.03" y="244.97" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+      </root>
+    </mxGraphModel></diagram>
+  <diagram name="1-System-Topology" id="page1"><mxGraphModel dx="1264" dy="922" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="1100" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="2" parent="1" style="swimlane;horizontal=0;startSize=30;fillColor=#E3F2FD;strokeColor=#42A5F5;html=1;pointerEvents=0;labelBackgroundColor=none;labelBorderColor=none;" value="Client / Orchestrator" vertex="1">
+          <mxGeometry height="190" width="800" x="40" y="10" as="geometry" />
+        </mxCell>
+        <mxCell id="3" parent="2" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#BBDEFB;strokeColor=#64B5F6;" value="leak-inspector-tui" vertex="1">
+          <mxGeometry height="60" width="160" x="80" y="30" as="geometry" />
+        </mxCell>
+        <mxCell id="4" parent="2" style="text;html=1;strokeColor=none;fillColor=none;align=center;" value="bun src/cli.ts scan|tui" vertex="1">
+          <mxGeometry height="16" width="160" x="160" y="110" as="geometry" />
+        </mxCell>
+        <mxCell id="5" parent="2" style="text;html=1;strokeColor=none;fillColor=none;align=center;" value="Ink TUI (in-process)" vertex="1">
+          <mxGeometry height="16" width="160" x="160" y="140" as="geometry" />
+        </mxCell>
+        <mxCell id="6" parent="1" style="swimlane;horizontal=0;startSize=30;fillColor=#E8F5E9;strokeColor=#66BB6A;html=1;pointerEvents=0;" value="Analyzers (Docker bridge mcpvul-net)" vertex="1">
+          <mxGeometry height="270" width="800" x="40" y="210" as="geometry" />
+        </mxCell>
+        <mxCell id="I13slCO-TjMJMFcDEcIJ-20" edge="1" parent="6" source="7" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=1;exitDx=0;exitDy=0;">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="520" y="129.73913043478274" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="7" parent="6" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#C8E6C9;strokeColor=#81C784;" value="static-analyzer&lt;br&gt;MCP :50061" vertex="1">
+          <mxGeometry height="60" width="140" x="370" y="70" as="geometry" />
+        </mxCell>
+        <mxCell id="8" parent="6" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFE0B2;strokeColor=#FFB74D;" value="dynamic-analyzer&lt;br&gt;MCP :50062" vertex="1">
+          <mxGeometry height="60" width="140" x="600" y="70" as="geometry" />
+        </mxCell>
+        <mxCell id="9" parent="1" style="swimlane;horizontal=0;startSize=30;fillColor=#ECEFF1;strokeColor=#90A4AE;html=1;pointerEvents=0;" value="External" vertex="1">
+          <mxGeometry height="190" width="800" x="40" y="490" as="geometry" />
+        </mxCell>
+        <mxCell id="10" parent="9" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#CFD8DC;strokeColor=#90A4AE;" value="LLM gateway :20128" vertex="1">
+          <mxGeometry height="60" width="160" x="60" y="65" as="geometry" />
+        </mxCell>
+        <mxCell id="11" parent="9" style="text;html=1;strokeColor=none;fillColor=none;align=center;" value="mimo/mimo-v2.5-pro&lt;br&gt;(or OpenAI/Anthropic)" vertex="1">
+          <mxGeometry height="32" width="160" x="300" y="108" as="geometry" />
+        </mxCell>
+        <mxCell id="12" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E0F7FA;strokeColor=#4DD0E1;verticalAlign=top;fontStyle=1;" value="Disk" vertex="1">
+          <mxGeometry height="150" width="800" x="40" y="730" as="geometry" />
+        </mxCell>
+        <mxCell id="13" parent="12" style="text;html=0;strokeColor=none;fillColor=none;fontStyle=1;" value="results/&lt;scanId&gt;/" vertex="1">
+          <mxGeometry height="20" width="300" x="30" y="30" as="geometry" />
+        </mxCell>
+        <mxCell id="14" parent="12" style="text;html=0;strokeColor=none;fillColor=none;" value="snapshot.json" vertex="1">
+          <mxGeometry height="20" width="200" x="50" y="55" as="geometry" />
+        </mxCell>
+        <mxCell id="15" parent="12" style="text;html=0;strokeColor=none;fillColor=none;" value="report.{json,md,html}" vertex="1">
+          <mxGeometry height="20" width="200" x="50" y="75" as="geometry" />
+        </mxCell>
+        <mxCell id="16" parent="12" style="text;html=0;strokeColor=none;fillColor=none;" value="events.jsonl" vertex="1">
+          <mxGeometry height="20" width="200" x="50" y="95" as="geometry" />
+        </mxCell>
+        <mxCell id="17" edge="1" parent="1" source="3" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;jettySize=auto;orthogonalLoop=1;" target="7" value="MCP Streamable-HTTP /mcp">
+          <mxGeometry relative="1" x="-0.5122" y="-20" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="18" edge="1" parent="1" source="3" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;jettySize=auto;orthogonalLoop=1;" target="8" value="MCP Streamable-HTTP /mcp">
+          <mxGeometry relative="1" y="-20" as="geometry">
+            <mxPoint as="offset" />
+            <Array as="points">
+              <mxPoint x="710" y="70" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="19" edge="1" parent="1" source="3" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;dashed=1;jettySize=auto;orthogonalLoop=1;" target="10" value="HTTP SSE (streaming)">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="180" y="320" />
+              <mxPoint x="180" y="320" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="20" edge="1" parent="1" source="3" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;dashed=1;jettySize=auto;orthogonalLoop=1;" target="12" value="file I/O">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="200" y="280" />
+              <mxPoint x="340" y="280" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+      </root>
+    </mxGraphModel></diagram>
+  <diagram name="2-HYBRID-Pipeline" id="page2"><mxGraphModel dx="2864" dy="2222" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="1100" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="2" parent="1" style="swimlane;horizontal=0;startSize=110;fillColor=#ECEFF1;dashed=1;html=1;fontStyle=1;strokeColor=#90A4AE;" value="POLICY (LLM, host-side — skip trong eval)" vertex="1">
+          <mxGeometry height="292" width="1400" y="-253" as="geometry" />
+        </mxCell>
+        <mxCell id="10" parent="2" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#CFD8DC;strokeColor=#90A4AE;" value="profileAllocators" vertex="1">
+          <mxGeometry height="60" width="160" x="154" y="35" as="geometry" />
+        </mxCell>
+        <mxCell id="11" parent="2" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#CFD8DC;strokeColor=#90A4AE;" value="decideStrategy" vertex="1">
+          <mxGeometry height="60" width="160" x="703" y="126" as="geometry" />
+        </mxCell>
+        <mxCell id="3" parent="1" style="swimlane;horizontal=0;startSize=110;fillColor=#E3F2FD;html=1;fontStyle=1;strokeColor=#42A5F5;" value="Giai đoạn Discovery (tất định)" vertex="1">
+          <mxGeometry height="253" width="1400" y="39" as="geometry" />
+        </mxCell>
+        <mxCell id="20" parent="3" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#BBDEFB;strokeColor=#64B5F6;" value="walkCFiles" vertex="1">
+          <mxGeometry height="60" width="160" x="152" y="30" as="geometry" />
+        </mxCell>
+        <mxCell id="21" parent="3" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#BBDEFB;strokeColor=#64B5F6;" value="candidateScan (MCP)" vertex="1">
+          <mxGeometry height="60" width="160" x="514" y="30" as="geometry" />
+        </mxCell>
+        <mxCell id="22" parent="3" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#BBDEFB;strokeColor=#64B5F6;" value="&lt;b&gt;CandidateManager → LeakBundle[]&lt;/b&gt;" vertex="1">
+          <mxGeometry height="60" width="160" x="991" y="30" as="geometry" />
+        </mxCell>
+        <mxCell id="4" parent="1" style="swimlane;horizontal=0;startSize=110;fillColor=#E8F5E9;html=1;fontStyle=1;strokeColor=#66BB6A;" value="Static Enrichment (tất định, STATIC_ENRICH=on)" vertex="1">
+          <mxGeometry height="333" width="1400" y="293" as="geometry" />
+        </mxCell>
+        <mxCell id="30" parent="4" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#C8E6C9;strokeColor=#81C784;" value="functionSummary" vertex="1">
+          <mxGeometry height="60" width="160" x="248" y="94" as="geometry" />
+        </mxCell>
+        <mxCell id="31" parent="4" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#C8E6C9;strokeColor=#81C784;" value="pathConstraints" vertex="1">
+          <mxGeometry height="60" width="160" x="248" y="23" as="geometry" />
+        </mxCell>
+        <mxCell id="32" parent="4" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#C8E6C9;strokeColor=#81C784;" value="&lt;b&gt;bundle.staticEvidence&lt;/b&gt;" vertex="1">
+          <mxGeometry height="60" width="160" x="999" y="124" as="geometry" />
+        </mxCell>
+        <mxCell id="5" parent="1" style="swimlane;horizontal=0;startSize=110;fillColor=#FFF3E0;html=1;fontStyle=1;strokeColor=#FFA726;" value="Investigation (agentic, llm_assisted)" vertex="1">
+          <mxGeometry height="285" width="1400" y="627" as="geometry" />
+        </mxCell>
+        <mxCell id="40" parent="5" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFE0B2;strokeColor=#FFB74D;" value="&lt;b&gt;Stage A&lt;/b&gt;&lt;br&gt;&lt;i&gt;Static fan-out&lt;/i&gt;" vertex="1">
+          <mxGeometry height="80" width="160" x="311" y="20" as="geometry" />
+        </mxCell>
+        <mxCell id="41" parent="5" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFE0B2;strokeColor=#FFB74D;" value="&lt;b&gt;Stage B&lt;/b&gt;&lt;br&gt;&lt;i&gt;Dynamic worker&lt;/i&gt;" vertex="1">
+          <mxGeometry height="80" width="160" x="597" y="20" as="geometry" />
+        </mxCell>
+        <mxCell id="42" parent="5" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFE0B2;strokeColor=#FFB74D;" value="&lt;b&gt;Stage C&lt;/b&gt;&lt;br&gt;&lt;i&gt;Synthesize&lt;/i&gt;" vertex="1">
+          <mxGeometry height="80" width="160" x="855" y="20" as="geometry" />
+        </mxCell>
+        <mxCell id="43" parent="5" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFE0B2;strokeColor=#FFB74D;" value="&lt;b&gt;Stage D&lt;/b&gt;&lt;br&gt;&lt;i&gt;Hybrid judge&lt;/i&gt;" vertex="1">
+          <mxGeometry height="80" width="160" x="1108" y="155" as="geometry" />
+        </mxCell>
+        <mxCell id="6" parent="1" style="swimlane;horizontal=0;startSize=110;fillColor=#E0F7FA;html=1;fontStyle=1;strokeColor=#26C6DA;" value="Judging + Reporting" vertex="1">
+          <mxGeometry height="279" width="1400" y="913" as="geometry" />
+        </mxCell>
+        <mxCell id="50" parent="6" style="rhombus;whiteSpace=wrap;html=1;fillColor=#C8E6C9;strokeColor=#81C784;" value="Heuristic Judge" vertex="1">
+          <mxGeometry height="80" width="140" x="120" y="30" as="geometry" />
+        </mxCell>
+        <mxCell id="51" parent="6" style="rhombus;whiteSpace=wrap;html=1;fillColor=#FFE0B2;strokeColor=#FFB74D;" value="&lt;b&gt;LLM Judge&lt;/b&gt;&lt;br&gt;+ Consensus (k samples)" vertex="1">
+          <mxGeometry height="80" width="140" x="279" y="137" as="geometry" />
+        </mxCell>
+        <mxCell id="52" parent="6" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#B2EBF2;strokeColor=#4DD0E1;" value="LeakReporting.buildReport" vertex="1">
+          <mxGeometry height="60" width="160" x="480" y="40" as="geometry" />
+        </mxCell>
+        <mxCell id="53" parent="6" style="whiteSpace=wrap;html=1;fillColor=#B2EBF2;strokeColor=#4DD0E1;" value="results/&amp;lt;scanId&amp;gt;/&lt;br&gt;snapshot·report.{json,md,html}" vertex="1">
+          <mxGeometry height="60" width="180" x="812" y="40" as="geometry" />
+        </mxCell>
+        <mxCell id="100" edge="1" parent="1" source="10" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" target="11" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="101" edge="1" parent="1" source="11" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;dashed=1;strokeColor=#999999;" target="20" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="102" edge="1" parent="1" source="20" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" target="21" value="bỏ test/fuzz/vendor">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="103" edge="1" parent="1" source="21" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" target="22" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="104" edge="1" parent="1" source="22" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" target="30" value="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1072" y="181.31" />
+              <mxPoint x="200" y="181.31" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="105" edge="1" parent="1" source="22" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" target="31" value="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1072.03" y="246.32" />
+              <mxPoint x="331" y="246.32" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="106" edge="1" parent="1" source="30" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" target="32" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="107" edge="1" parent="1" source="31" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" target="32" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="108" edge="1" parent="1" source="32" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" target="40" value="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1079" y="530.71" />
+              <mxPoint x="179.26" y="530.71" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="109" edge="1" parent="1" source="40" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" target="41" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="110" edge="1" parent="1" source="41" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" target="42" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="111" edge="1" parent="1" source="42" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" target="43" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="112" edge="1" parent="1" source="43" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" target="50" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="113" edge="1" parent="1" source="43" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" target="51" value="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1188.03" y="879.1" />
+              <mxPoint x="349" y="879.1" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="114" edge="1" parent="1" source="32" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;dashed=1;strokeColor=#999999;" target="50" value="no_llm mode">
+          <mxGeometry relative="1" x="-0.2067" y="-15" as="geometry">
+            <mxPoint as="offset" />
+            <Array as="points">
+              <mxPoint x="1079" y="572.97" />
+              <mxPoint x="153.45" y="572.97" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="115" edge="1" parent="1" source="50" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" target="52" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="116" edge="1" parent="1" source="51" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" target="52" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="117" edge="1" parent="1" source="52" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" target="53" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel></diagram>
+  <diagram name="3-Orchestrator-Internal" id="page3"><mxGraphModel dx="1897" dy="2483" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="1100" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="10" parent="1" style="swimlane;horizontal=0;startSize=30;fillColor=#E3F2FD;strokeColor=#42A5F5;html=1;pointerEvents=0;" value="cli.ts — Entry Point" vertex="1">
+          <mxGeometry height="177" width="1100" x="40" y="-37" as="geometry" />
+        </mxCell>
+        <mxCell id="11" parent="10" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#BBDEFB;strokeColor=#64B5F6;" value="scan" vertex="1">
+          <mxGeometry height="50" width="100" x="60" y="35" as="geometry" />
+        </mxCell>
+        <mxCell id="12" parent="10" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#BBDEFB;strokeColor=#64B5F6;" value="tui" vertex="1">
+          <mxGeometry height="50" width="100" x="190" y="35" as="geometry" />
+        </mxCell>
+        <mxCell id="13" parent="10" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#BBDEFB;strokeColor=#64B5F6;" value="tools" vertex="1">
+          <mxGeometry height="50" width="100" x="320" y="35" as="geometry" />
+        </mxCell>
+        <mxCell id="14" parent="10" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#BBDEFB;strokeColor=#64B5F6;" value="eval" vertex="1">
+          <mxGeometry height="50" width="100" x="450" y="35" as="geometry" />
+        </mxCell>
+        <mxCell id="15" parent="10" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#BBDEFB;strokeColor=#64B5F6;" value="config" vertex="1">
+          <mxGeometry height="50" width="100" x="580" y="35" as="geometry" />
+        </mxCell>
+        <mxCell id="51" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ECEFF1;strokeColor=#90A4AE;" value="&lt;b&gt;agent-core&lt;/b&gt;&lt;br&gt;queryLoop&lt;br&gt;McpClient&lt;br&gt;callModel&lt;br&gt;Tool" vertex="1">
+          <mxGeometry height="140" width="380" x="1180" y="233" as="geometry" />
+        </mxCell>
+        <mxCell id="20" parent="1" style="swimlane;horizontal=0;startSize=30;fillColor=#E8F5E9;strokeColor=#66BB6A;html=1;pointerEvents=0;" value="surfaces/ — Giao diện" vertex="1">
+          <mxGeometry height="248" width="1100" x="40" y="152" as="geometry" />
+        </mxCell>
+        <mxCell id="21" parent="20" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#CFD8DC;strokeColor=#90A4AE;" value="&lt;b&gt;headless.ts&lt;/b&gt;&lt;br&gt;runHeadless(&lt;i&gt;opts&lt;/i&gt;)" vertex="1">
+          <mxGeometry height="80" width="220" x="134" y="71" as="geometry" />
+        </mxCell>
+        <mxCell id="22" parent="20" style="text;html=1;strokeColor=none;fillColor=none;align=center;fontSize=10;" value="loadConfig → profileAllocators(LLM) → decideStrategy(LLM) → runScan" vertex="1">
+          <mxGeometry height="40" width="220" x="446" y="109" as="geometry" />
+        </mxCell>
+        <mxCell id="23" parent="20" style="rounded=1;whiteSpace=wrap;html=1;container=1;pointerEvents=0;fillColor=#CFD8DC;strokeColor=#90A4AE;" value="&lt;b&gt;tui/&lt;/b&gt;" vertex="1">
+          <mxGeometry height="180" width="300" x="765" y="33" as="geometry" />
+        </mxCell>
+        <mxCell id="24" parent="23" style="text;html=1;strokeColor=none;fillColor=none;fontSize=11;" value="App.tsx" vertex="1">
+          <mxGeometry height="20" width="260" x="20" y="30" as="geometry" />
+        </mxCell>
+        <mxCell id="25" parent="23" style="text;html=1;strokeColor=none;fillColor=none;fontSize=11;" value="runner.ts" vertex="1">
+          <mxGeometry height="20" width="260" x="20" y="55" as="geometry" />
+        </mxCell>
+        <mxCell id="26" parent="23" style="text;html=1;strokeColor=none;fillColor=none;fontSize=11;" value="store.ts" vertex="1">
+          <mxGeometry height="20" width="260" x="20" y="80" as="geometry" />
+        </mxCell>
+        <mxCell id="27" parent="23" style="text;html=1;strokeColor=none;fillColor=none;fontSize=11;" value="components/" vertex="1">
+          <mxGeometry height="20" width="260" x="20" y="105" as="geometry" />
+        </mxCell>
+        <mxCell id="28" parent="23" style="text;html=1;strokeColor=none;fillColor=none;fontSize=11;" value="commands.ts" vertex="1">
+          <mxGeometry height="20" width="260" x="20" y="130" as="geometry" />
+        </mxCell>
+        <mxCell id="52" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ECEFF1;strokeColor=#90A4AE;" value="&lt;b&gt;MCP clients&lt;/b&gt;&lt;br&gt;staticClient (:50061)&lt;br&gt;dynamicClient (:50062)" vertex="1">
+          <mxGeometry height="90" width="380" x="1617" y="437" as="geometry" />
+        </mxCell>
+        <mxCell id="30" parent="1" style="swimlane;horizontal=0;startSize=30;fillColor=#FFF3E0;strokeColor=#FFA726;html=1;pointerEvents=0;" value="orchestrator/ + domain/ — Logic điều phối" vertex="1">
+          <mxGeometry height="610" width="1520" x="40" y="420" as="geometry">
+            <mxRectangle height="252" width="32" x="40" y="420" as="alternateBounds" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="31" parent="30" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFE0B2;strokeColor=#FFB74D;" value="&lt;b&gt;scanController.ts&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px&quot;&gt;runScan: preflight → workspace → discovery → enrichment → investigation → judging → reporting&lt;/font&gt;" vertex="1">
+          <mxGeometry height="124" width="249" x="51" y="56" as="geometry" />
+        </mxCell>
+        <mxCell id="32" parent="30" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFE0B2;strokeColor=#FFB74D;" value="&lt;b&gt;workflowInvestigation.ts&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px&quot;&gt;buildWorkflowInvestigationPhase&lt;br&gt;Stage A/B/C/D&lt;/font&gt;" vertex="1">
+          <mxGeometry height="85" width="248" x="52" y="271" as="geometry" />
+        </mxCell>
+        <mxCell id="33" parent="30" style="whiteSpace=wrap;html=1;fillColor=#FFE0B2;strokeColor=#FFB74D;" value="&lt;b&gt;events.ts&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px&quot;&gt;ScanEmitter + ScanEventName&lt;/font&gt;" vertex="1">
+          <mxGeometry height="55" width="180" x="85.5" y="408" as="geometry" />
+        </mxCell>
+        <mxCell id="40" parent="30" style="swimlane;horizontal=0;startSize=30;fillColor=#E0F7FA;strokeColor=#4DD0E1;html=1;pointerEvents=0;" value="domain/ — Domain layer" vertex="1">
+          <mxGeometry height="530" width="1140" x="340" y="40" as="geometry" />
+        </mxCell>
+        <mxCell id="41" parent="40" style="rounded=1;whiteSpace=wrap;html=1;container=1;pointerEvents=0;fillColor=none;strokeColor=#666666;dashed=1;" value="&lt;b&gt;Policy LLM&lt;/b&gt;" vertex="1">
+          <mxGeometry height="130" width="320" x="59" y="118" as="geometry" />
+        </mxCell>
+        <mxCell id="41a" parent="41" style="text;html=1;strokeColor=none;fillColor=none;fontSize=10;" value="allocatorProfiler.ts" vertex="1">
+          <mxGeometry height="20" width="290" x="15" y="30" as="geometry" />
+        </mxCell>
+        <mxCell id="41b" parent="41" style="text;html=1;strokeColor=none;fillColor=none;fontSize=10;" value="strategist.ts" vertex="1">
+          <mxGeometry height="20" width="290" x="15" y="55" as="geometry" />
+        </mxCell>
+        <mxCell id="41c" parent="41" style="text;html=1;strokeColor=none;fillColor=none;fontSize=10;" value="judgeTuner.ts" vertex="1">
+          <mxGeometry height="20" width="290" x="15" y="80" as="geometry" />
+        </mxCell>
+        <mxCell id="42" parent="40" style="rounded=1;whiteSpace=wrap;html=1;container=1;pointerEvents=0;fillColor=none;strokeColor=#666666;dashed=1;" value="&lt;b&gt;Judge&lt;/b&gt;" vertex="1">
+          <mxGeometry height="130" width="320" x="404" y="118" as="geometry" />
+        </mxCell>
+        <mxCell id="42a" parent="42" style="text;html=1;strokeColor=none;fillColor=none;fontSize=10;" value="judge.ts" vertex="1">
+          <mxGeometry height="20" width="290" x="15" y="30" as="geometry" />
+        </mxCell>
+        <mxCell id="42b" parent="42" style="text;html=1;strokeColor=none;fillColor=none;fontSize=10;" value="llmJudge.ts" vertex="1">
+          <mxGeometry height="20" width="290" x="15" y="55" as="geometry" />
+        </mxCell>
+        <mxCell id="42c" parent="42" style="text;html=1;strokeColor=none;fillColor=none;fontSize=10;" value="subAgentPrompts.ts" vertex="1">
+          <mxGeometry height="20" width="290" x="15" y="80" as="geometry" />
+        </mxCell>
+        <mxCell id="43" parent="40" style="rounded=1;whiteSpace=wrap;html=1;container=1;pointerEvents=0;fillColor=none;strokeColor=#666666;dashed=1;" value="&lt;b&gt;State&lt;/b&gt;" vertex="1">
+          <mxGeometry height="130" width="360" x="750" y="118" as="geometry" />
+        </mxCell>
+        <mxCell id="43a" parent="43" style="text;html=1;strokeColor=none;fillColor=none;fontSize=10;" value="candidateState.ts (CandidateManager)" vertex="1">
+          <mxGeometry height="20" width="330" x="15" y="30" as="geometry" />
+        </mxCell>
+        <mxCell id="43b" parent="43" style="text;html=1;strokeColor=none;fillColor=none;fontSize=10;" value="mcpResult.ts" vertex="1">
+          <mxGeometry height="20" width="330" x="15" y="55" as="geometry" />
+        </mxCell>
+        <mxCell id="43c" parent="43" style="text;html=1;strokeColor=none;fillColor=none;fontSize=10;" value="staticContext.ts" vertex="1">
+          <mxGeometry height="20" width="330" x="15" y="80" as="geometry" />
+        </mxCell>
+        <mxCell id="43d" parent="43" style="text;html=1;strokeColor=none;fillColor=none;fontSize=10;" value="stepLog.ts" vertex="1">
+          <mxGeometry height="20" width="330" x="15" y="105" as="geometry" />
+        </mxCell>
+        <mxCell id="44" parent="40" style="rounded=1;whiteSpace=wrap;html=1;container=1;pointerEvents=0;fillColor=none;strokeColor=#666666;dashed=1;" value="&lt;b&gt;Dynamic&lt;/b&gt;" vertex="1">
+          <mxGeometry height="100" width="320" x="57" y="339" as="geometry" />
+        </mxCell>
+        <mxCell id="44a" parent="44" style="text;html=1;strokeColor=none;fillColor=none;fontSize=10;" value="dynamicDiscovery.ts" vertex="1">
+          <mxGeometry height="20" width="290" x="15" y="30" as="geometry" />
+        </mxCell>
+        <mxCell id="44b" parent="44" style="text;html=1;strokeColor=none;fillColor=none;fontSize=10;" value="dynamicEvidence.ts" vertex="1">
+          <mxGeometry height="20" width="290" x="15" y="55" as="geometry" />
+        </mxCell>
+        <mxCell id="45" parent="40" style="rounded=1;whiteSpace=wrap;html=1;container=1;pointerEvents=0;fillColor=none;strokeColor=#666666;dashed=1;" value="&lt;b&gt;Infra&lt;/b&gt;" vertex="1">
+          <mxGeometry height="100" width="706" x="404" y="339" as="geometry" />
+        </mxCell>
+        <mxCell id="45a" parent="45" style="text;html=1;strokeColor=none;fillColor=none;fontSize=10;" value="fileWalk.ts" vertex="1">
+          <mxGeometry height="20" width="156.88888888888889" x="14.708333333333332" y="30" as="geometry" />
+        </mxCell>
+        <mxCell id="45b" parent="45" style="text;html=1;strokeColor=none;fillColor=none;fontSize=10;" value="pathResolver.ts" vertex="1">
+          <mxGeometry height="20" width="156.88888888888889" x="14.708333333333332" y="55" as="geometry" />
+        </mxCell>
+        <mxCell id="45c" parent="45" style="text;html=1;strokeColor=none;fillColor=none;fontSize=10;" value="reportSink.ts" vertex="1">
+          <mxGeometry height="20" width="156.88888888888889" x="186.30555555555554" y="30" as="geometry" />
+        </mxCell>
+        <mxCell id="45d" parent="45" style="text;html=1;strokeColor=none;fillColor=none;fontSize=10;" value="readFileTool.ts" vertex="1">
+          <mxGeometry height="20" width="156.88888888888889" x="186.30555555555554" y="55" as="geometry" />
+        </mxCell>
+        <mxCell id="45e" parent="45" style="text;html=1;strokeColor=none;fillColor=none;fontSize=10;" value="mcpToolPlan.ts" vertex="1">
+          <mxGeometry height="20" width="156.88888888888889" x="357.90277777777777" y="30" as="geometry" />
+        </mxCell>
+        <mxCell id="45f" parent="45" style="text;html=1;strokeColor=none;fillColor=none;fontSize=10;" value="thresholds.ts" vertex="1">
+          <mxGeometry height="20" width="156.88888888888889" x="357.90277777777777" y="55" as="geometry" />
+        </mxCell>
+        <mxCell id="61" edge="1" parent="1" source="11" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;jettySize=auto;orthogonalLoop=1;" target="21" value="async dispatch">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="150" y="109.71" />
+              <mxPoint x="284" y="109.71" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="62" edge="1" parent="1" source="21" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;jettySize=auto;orthogonalLoop=1;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" target="31" value="runScan()">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="284" y="364" />
+              <mxPoint x="215.5" y="364" />
+            </Array>
+            <mxPoint x="217.57" y="451.14" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="63" edge="1" parent="1" source="31" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;jettySize=auto;orthogonalLoop=1;" target="32" value="investigation phase">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="64" edge="1" parent="1" source="31" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;jettySize=auto;orthogonalLoop=1;" target="51" value="queryLoop">
+          <mxGeometry relative="1" x="0.2918" y="12" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="65" edge="1" parent="1" source="31" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;jettySize=auto;orthogonalLoop=1;" target="52" value="MCP calls">
+          <mxGeometry relative="1" x="0.5261" y="-12" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="66" edge="1" parent="1" source="31" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;jettySize=auto;orthogonalLoop=1;" target="40" value="sử dụng">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="67" edge="1" parent="1" source="30" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;dashed=1;jettySize=auto;orthogonalLoop=1;" target="40" value="sử dụng">
+          <mxGeometry relative="1" x="-0.2381" as="geometry">
+            <mxPoint as="offset" />
+            <Array as="points">
+              <mxPoint x="800" y="410" />
+              <mxPoint x="950" y="410" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+      </root>
+    </mxGraphModel></diagram>
+  <diagram name="4-AgentCore-Loop" id="page4">
+    <mxGraphModel dx="1198" dy="874" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1300" pageHeight="900" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="10" parent="1" style="swimlane;startSize=30;fillColor=#E3F2FD;strokeColor=#64B5F6;html=1;whiteSpace=wrap;fontStyle=1;fontSize=13;" value="packages/agent-core/src/ - Thành phần" vertex="1">
+          <mxGeometry height="560" width="500" x="20" y="20" as="geometry" />
+        </mxCell>
+        <mxCell id="11" parent="10" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#C8E6C9;strokeColor=#66BB6A;verticalAlign=top;fontSize=11;padding=6;" value="&lt;b&gt;loop.ts&lt;/b&gt;&lt;br&gt;queryLoop() async generator&lt;br&gt;stream → tool_use → tool_result → LoopResult" vertex="1">
+          <mxGeometry height="95" width="470" x="15" y="40" as="geometry" />
+        </mxCell>
+        <mxCell id="12" parent="10" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFE0B2;strokeColor=#FFA726;verticalAlign=top;fontSize=11;padding=6;" value="&lt;b&gt;mcp/&lt;/b&gt;&lt;br&gt;McpClient class — StreamableHTTPClientTransport, callTool, listTools, ping, retryTransient (3 retries max), callCount" vertex="1">
+          <mxGeometry height="100" width="470" x="15" y="150" as="geometry" />
+        </mxCell>
+        <mxCell id="13" parent="10" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFE0B2;strokeColor=#FFA726;verticalAlign=top;fontSize=11;padding=6;" value="&lt;b&gt;providers/&lt;/b&gt;&lt;br&gt;openaiChat.ts (chat-completions), anthropic.ts (Messages API), normalize.ts (cross-provider conversion), transport.ts (fetchWithRetry)" vertex="1">
+          <mxGeometry height="95" width="470" x="15" y="265" as="geometry" />
+        </mxCell>
+        <mxCell id="14" parent="10" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F3E5F5;strokeColor=#AB47BC;verticalAlign=top;fontSize=11;padding=6;" value="&lt;b&gt;Tool abstraction&lt;/b&gt;&lt;br&gt;buildTool(), wrapMcpTool(), loadMcpTools(), type Tool" vertex="1">
+          <mxGeometry height="85" width="470" x="15" y="375" as="geometry" />
+        </mxCell>
+        <mxCell id="15" parent="10" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ECEFF1;strokeColor=#90A4AE;verticalAlign=top;fontSize=11;padding=6;" value="&lt;b&gt;Utilities&lt;/b&gt;&lt;br&gt;compaction.ts (estimateTokens, pruneStaleToolResults), concurrency.ts (mapWithLimit)" vertex="1">
+          <mxGeometry height="75" width="470" x="15" y="475" as="geometry" />
+        </mxCell>
+        <mxCell id="20" parent="1" style="swimlane;startSize=30;fillColor=#E0F7FA;strokeColor=#4DD0E1;html=1;whiteSpace=wrap;fontStyle=1;fontSize=13;" value="queryLoop - Vòng lặp Agent" vertex="1">
+          <mxGeometry height="560" width="790" x="560" y="20" as="geometry" />
+        </mxCell>
+        <mxCell id="21" parent="20" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#333333;fontSize=12;" value="queryLoop(params)" vertex="1">
+          <mxGeometry height="45" width="200" x="250" y="50" as="geometry" />
+        </mxCell>
+        <mxCell id="22" parent="20" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#333333;fontSize=12;" value="callModel(history, tools) → stream" vertex="1">
+          <mxGeometry height="45" width="200" x="250" y="150" as="geometry" />
+        </mxCell>
+        <mxCell id="23" parent="20" style="rhombus;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#333333;fontSize=12;" value="Parse response → tool_use[]" vertex="1">
+          <mxGeometry height="60" width="200" x="250" y="230" as="geometry" />
+        </mxCell>
+        <mxCell id="24" parent="20" style="whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#333333;fontSize=12;" value="No tool_use? → LoopResult" vertex="1">
+          <mxGeometry height="35" width="180" x="600" y="242.5" as="geometry" />
+        </mxCell>
+        <mxCell id="25" parent="20" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#333333;fontSize=12;" value="Call each tool → tool_result" vertex="1">
+          <mxGeometry height="45" width="200" x="250" y="330" as="geometry" />
+        </mxCell>
+        <mxCell id="26" parent="20" style="whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#333333;fontSize=12;" value="Append result to history" vertex="1">
+          <mxGeometry height="40" width="200" x="250" y="400" as="geometry" />
+        </mxCell>
+        <mxCell id="27" parent="20" style="rhombus;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#333333;fontSize=12;" value="Terminal tool? maxTurns?" vertex="1">
+          <mxGeometry height="60" width="200" x="250" y="460" as="geometry" />
+        </mxCell>
+        <mxCell id="28" parent="20" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#333333;fontSize=12;" value="→ LoopResult" vertex="1">
+          <mxGeometry height="45" width="180" x="600" y="467.5" as="geometry" />
+        </mxCell>
+        <mxCell id="30" edge="1" parent="20" source="21" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#333333;" target="22" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="31" edge="1" parent="20" source="22" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#333333;" target="23" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="32" edge="1" parent="20" source="23" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#333333;dashed=1;fontSize=11;" target="24" value="none">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="33" edge="1" parent="20" source="23" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#333333;fontSize=11;" target="25" value="found">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="34" edge="1" parent="20" source="25" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#333333;" target="26" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="35" edge="1" parent="20" source="26" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#333333;" target="27" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="36" edge="1" parent="20" source="27" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#333333;dashed=1;fontSize=11;" target="22" value="continue">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="120" y="490" />
+              <mxPoint x="120" y="170" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="37" edge="1" parent="20" source="27" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#333333;fontSize=11;" target="28" value="terminal | maxTurns">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="38" edge="1" parent="20" source="24" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#333333;dashed=1;" target="28" value="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="690" y="320" />
+              <mxPoint x="690" y="320" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="40" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ECEFF1;strokeColor=#999999;fontSize=11;" value="&lt;b&gt;AgentEvent types&lt;/b&gt;: turn_start | text | tool_use | tool_result | notice | error" vertex="1">
+          <mxGeometry height="40" width="480" x="40" y="620" as="geometry" />
+        </mxCell>
+        <mxCell id="41" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ECEFF1;strokeColor=#999999;fontSize=11;" value="&lt;b&gt;Deps&lt;/b&gt;: CallModel, AgentDeps (productionDeps), ToolCtx" vertex="1">
+          <mxGeometry height="40" width="790" x="560" y="620" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+  <diagram name="5-Static-Analyzer" id="page5">
+    <mxGraphModel dx="2529" dy="1844" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="1100" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="10" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8F5E9;strokeColor=#999999;" value="" vertex="1">
+          <mxGeometry height="70" width="380" x="40" y="60" as="geometry" />
+        </mxCell>
+        <mxCell id="11" parent="10" style="text;html=1;strokeColor=none;fillColor=none;align=center;fontSize=11;" value="&lt;b&gt;Tree-sitter C/C++&lt;/b&gt;&lt;div&gt;.c / .h → tree-sitter-c&lt;br&gt;.cc / .cpp → tree-sitter-cpp&lt;/div&gt;" vertex="1">
+          <mxGeometry height="47.5" width="170" x="105" y="10" as="geometry" />
+        </mxCell>
+        <mxCell id="12" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF3E0;strokeColor=#FFB74D;" value="&lt;b&gt;MCP HTTP :50061&lt;/b&gt;" vertex="1">
+          <mxGeometry height="40" width="180" x="755" y="70" as="geometry" />
+        </mxCell>
+        <mxCell id="13" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8F5E9;strokeColor=#999999;" value="&lt;b&gt;Clang scan-build&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px&quot;&gt;Independent process&lt;br&gt;(intercepts build command)&lt;/font&gt;" vertex="1">
+          <mxGeometry height="90" width="180" x="1680" y="420" as="geometry" />
+        </mxCell>
+        <mxCell id="20" parent="1" style="swimlane;horizontal=0;startSize=30;fillColor=#E8F5E9;strokeColor=#81C784;html=1;pointerEvents=0;" value="NestJS static-analyzer (:50061)" vertex="1">
+          <mxGeometry height="730" width="1610" x="40" y="200" as="geometry" />
+        </mxCell>
+        <mxCell id="21" parent="20" style="text;html=1;strokeColor=none;fillColor=none;fontSize=11;fontStyle=1;align=left;" value="MCP Server (Streamable-HTTP)" vertex="1">
+          <mxGeometry height="20" width="300" x="40" y="10" as="geometry" />
+        </mxCell>
+        <mxCell id="30" parent="20" style="rounded=1;whiteSpace=wrap;html=1;container=1;pointerEvents=0;fillColor=none;strokeColor=#666666;dashed=1;" value="&lt;b&gt;1. Core Engine - Lõi phân tích&lt;/b&gt;" vertex="1">
+          <mxGeometry height="580" width="380" x="30" y="50" as="geometry" />
+        </mxCell>
+        <mxCell id="31" parent="30" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#C8E6C9;strokeColor=#66BB6A;" value="&lt;b&gt;c-parser.service.ts&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px&quot;&gt;Tree-sitter C/C++ parser&lt;br&gt;CFG path-sensitive analysis&lt;br&gt;guard-subset reconciliation&lt;br&gt;reachability (dead-code)&lt;/font&gt;" vertex="1">
+          <mxGeometry height="130" width="320" x="30" y="50" as="geometry" />
+        </mxCell>
+        <mxCell id="32" parent="30" style="text;html=1;strokeColor=none;fillColor=none;fontSize=10;fontStyle=1;" value="CParserService (injectable — @Injectable())" vertex="1">
+          <mxGeometry height="20" width="320" x="30" y="200" as="geometry" />
+        </mxCell>
+        <mxCell id="rst8VQkC9jmctgzNRH8M-86" connectable="0" parent="30" style="group;align=center;" value="" vertex="1">
+          <mxGeometry height="195" width="320" x="30" y="330" as="geometry" />
+        </mxCell>
+        <mxCell id="33" parent="rst8VQkC9jmctgzNRH8M-86" style="text;html=1;strokeColor=none;fillColor=none;fontSize=10;align=left;" value="&lt;b&gt;Các khả năng cung cấp:&lt;/b&gt;" vertex="1">
+          <mxGeometry height="20" width="320" as="geometry" />
+        </mxCell>
+        <mxCell id="34" parent="rst8VQkC9jmctgzNRH8M-86" style="text;html=1;strokeColor=none;fillColor=none;fontSize=10;align=left;" value="• AST queries — Tree-sitter S-expressions" vertex="1">
+          <mxGeometry height="20" width="320" y="25" as="geometry" />
+        </mxCell>
+        <mxCell id="35" parent="rst8VQkC9jmctgzNRH8M-86" style="text;html=1;strokeColor=none;fillColor=none;fontSize=10;align=left;" value="• CFG construction + path-sensitivity" vertex="1">
+          <mxGeometry height="20" width="320" y="50" as="geometry" />
+        </mxCell>
+        <mxCell id="36" parent="rst8VQkC9jmctgzNRH8M-86" style="text;html=1;strokeColor=none;fillColor=none;fontSize=10;align=left;" value="• Guard-subset reconciliation" vertex="1">
+          <mxGeometry height="20" width="320" y="75" as="geometry" />
+        </mxCell>
+        <mxCell id="37" parent="rst8VQkC9jmctgzNRH8M-86" style="text;html=1;strokeColor=none;fillColor=none;fontSize=10;align=left;" value="• Dead-code reachability" vertex="1">
+          <mxGeometry height="20" width="320" y="100" as="geometry" />
+        </mxCell>
+        <mxCell id="38" parent="rst8VQkC9jmctgzNRH8M-86" style="text;html=1;strokeColor=none;fillColor=none;fontSize=10;align=left;" value="• Call graph construction" vertex="1">
+          <mxGeometry height="20" width="320" y="125" as="geometry" />
+        </mxCell>
+        <mxCell id="39" parent="rst8VQkC9jmctgzNRH8M-86" style="text;html=1;strokeColor=none;fillColor=none;fontSize=10;align=left;" value="• Interprocedural dataflow" vertex="1">
+          <mxGeometry height="20" width="320" y="150" as="geometry" />
+        </mxCell>
+        <mxCell id="40" parent="rst8VQkC9jmctgzNRH8M-86" style="text;html=1;strokeColor=none;fillColor=none;fontSize=10;align=left;" value="• Ownership inference" vertex="1">
+          <mxGeometry height="20" width="320" y="175" as="geometry" />
+        </mxCell>
+        <mxCell id="50" parent="20" style="rounded=1;whiteSpace=wrap;html=1;container=1;pointerEvents=0;fillColor=none;strokeColor=#666666;dashed=1;" value="" vertex="1">
+          <mxGeometry height="155" width="960" x="610" y="50" as="geometry" />
+        </mxCell>
+        <mxCell id="51" parent="50" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#C8E6C9;strokeColor=#66BB6A;" value="&lt;b&gt;file-indexing.service&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:9px&quot;&gt;→ tool &lt;i&gt;indexFiles&lt;/i&gt;&lt;/font&gt;" vertex="1">
+          <mxGeometry height="50" width="220" x="70" y="40" as="geometry" />
+        </mxCell>
+        <mxCell id="52" parent="50" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#C8E6C9;strokeColor=#66BB6A;" value="&lt;b&gt;candidate-scan.service&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:9px&quot;&gt;→ tool &lt;i&gt;candidateScan&lt;/i&gt; (+ extraAllocators)&lt;/font&gt;" vertex="1">
+          <mxGeometry height="50" width="240" x="360" y="40" as="geometry" />
+        </mxCell>
+        <mxCell id="53" parent="50" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#C8E6C9;strokeColor=#66BB6A;" value="&lt;b&gt;ast-scan.service&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:9px&quot;&gt;→ tool &lt;i&gt;astScan&lt;/i&gt;&lt;/font&gt;" vertex="1">
+          <mxGeometry height="50" width="220" x="650" y="40" as="geometry" />
+        </mxCell>
+        <mxCell id="rst8VQkC9jmctgzNRH8M-124" parent="50" style="text;html=1;strokeColor=none;fillColor=none;fontSize=12;align=center;" value="&lt;span&gt;&lt;b&gt;2. Discovery Tools - Công cụ phát hiện&lt;/b&gt;&lt;/span&gt;" vertex="1">
+          <mxGeometry height="19.92753623188406" width="380" x="290" y="7.995507246376803" as="geometry" />
+        </mxCell>
+        <mxCell id="60" parent="20" style="rounded=1;whiteSpace=wrap;html=1;container=1;pointerEvents=0;fillColor=none;strokeColor=#666666;dashed=1;" value="" vertex="1">
+          <mxGeometry height="200" width="960" x="610" y="230" as="geometry" />
+        </mxCell>
+        <mxCell id="61" parent="60" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#C8E6C9;strokeColor=#66BB6A;" value="&lt;b&gt;call-graph.service&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:9px&quot;&gt;→ tool &lt;i&gt;callGraph&lt;/i&gt;&lt;/font&gt;" vertex="1">
+          <mxGeometry height="50" width="280" x="140" y="20" as="geometry" />
+        </mxCell>
+        <mxCell id="62" parent="60" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#C8E6C9;strokeColor=#66BB6A;" value="&lt;b&gt;function-summary.service&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:9px&quot;&gt;→ tool &lt;i&gt;functionSummary&lt;/i&gt;&lt;/font&gt;" vertex="1">
+          <mxGeometry height="50" width="280" x="500" y="20" as="geometry" />
+        </mxCell>
+        <mxCell id="63" parent="60" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#C8E6C9;strokeColor=#66BB6A;" value="&lt;b&gt;interprocedural-flow.service&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:9px&quot;&gt;→ tool &lt;i&gt;interproceduralFlow&lt;/i&gt;&lt;/font&gt;" vertex="1">
+          <mxGeometry height="50" width="280" x="130" y="120" as="geometry" />
+        </mxCell>
+        <mxCell id="64" parent="60" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#C8E6C9;strokeColor=#66BB6A;" value="&lt;b&gt;path-constraints.service&lt;/b&gt;&lt;br&gt;&lt;font style=&quot;font-size:9px&quot;&gt;→ tool &lt;i&gt;pathConstraints&lt;/i&gt;&lt;/font&gt;" vertex="1">
+          <mxGeometry height="50" width="280" x="500" y="120" as="geometry" />
+        </mxCell>
+        <mxCell id="rst8VQkC9jmctgzNRH8M-125" parent="60" style="text;html=1;strokeColor=none;fillColor=none;fontSize=12;align=center;" value="&lt;b&gt;3. Analysis Tools - Công cụ phân tích&lt;/b&gt;" vertex="1">
+          <mxGeometry height="19.92753623188406" width="380" x="280" y="79.9955072463768" as="geometry" />
+        </mxCell>
+        <mxCell id="70" parent="20" style="rounded=1;whiteSpace=wrap;html=1;container=1;pointerEvents=0;fillColor=none;strokeColor=#666666;dashed=1;" value="" vertex="1">
+          <mxGeometry height="275" width="960" x="610" y="445" as="geometry" />
+        </mxCell>
+        <mxCell id="71" parent="70" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFE0B2;strokeColor=#666666;container=0;" value="&lt;b&gt;ownership-analysis.service&lt;/b&gt;" vertex="1">
+          <mxGeometry height="143.47826086956522" width="420" x="40" y="63.768115942028984" as="geometry" />
+        </mxCell>
+        <mxCell id="74" parent="70" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFE0B2;strokeColor=#666666;" value="&lt;b&gt;scan-build-adapter.service&lt;/b&gt;" vertex="1">
+          <mxGeometry height="143.47826086956522" width="420" x="500" y="63.768115942028984" as="geometry" />
+        </mxCell>
+        <mxCell id="75" parent="74" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#C8E6C9;strokeColor=#66BB6A;" value="&lt;font style=&quot;font-size:9px&quot;&gt;→ tool &lt;i&gt;scanBuildRun&lt;/i&gt;&lt;/font&gt;" vertex="1">
+          <mxGeometry height="33.1108695652174" width="180" x="20" y="16.304347826086957" as="geometry" />
+        </mxCell>
+        <mxCell id="76" parent="74" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#C8E6C9;strokeColor=#66BB6A;" value="&lt;font style=&quot;font-size:9px&quot;&gt;→ tool &lt;i&gt;scanBuildGetReport&lt;/i&gt;&lt;/font&gt;" vertex="1">
+          <mxGeometry height="30.6" width="180" x="220" y="16.304347826086957" as="geometry" />
+        </mxCell>
+        <mxCell id="86" parent="74" style="text;html=1;strokeColor=none;fillColor=none;fontSize=9;" value="&lt;font style=&quot;font-size:9px&quot;&gt;Clang SA adapter — parses scan-build diagnostics into structured findings&lt;/font&gt;" vertex="1">
+          <mxGeometry height="33.11036789297658" width="380" x="20" y="93.81270903010031" as="geometry" />
+        </mxCell>
+        <mxCell id="rst8VQkC9jmctgzNRH8M-123" parent="70" style="text;html=1;strokeColor=none;fillColor=none;fontSize=12;" value="&lt;font&gt;&lt;b&gt;4. Ownership + Scan-build - Sở hữu &amp;amp; Clang SA&lt;/b&gt;&lt;/font&gt;" vertex="1">
+          <mxGeometry height="19.92753623188406" width="380" x="290" y="3.9855072463768115" as="geometry" />
+        </mxCell>
+        <mxCell id="72" parent="70" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#C8E6C9;strokeColor=#66BB6A;" value="&lt;font style=&quot;font-size:9px&quot;&gt;→ tool &lt;i&gt;ownershipSummary&lt;/i&gt;&lt;/font&gt;" vertex="1">
+          <mxGeometry height="34.95289855072464" width="180" x="60" y="76.6413043478261" as="geometry" />
+        </mxCell>
+        <mxCell id="73" parent="70" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#C8E6C9;strokeColor=#66BB6A;" value="&lt;font style=&quot;font-size:9px&quot;&gt;→ tool &lt;i&gt;ownershipConventions&lt;/i&gt;&lt;/font&gt;" vertex="1">
+          <mxGeometry height="34.95289855072464" width="180" x="260" y="76.6413043478261" as="geometry" />
+        </mxCell>
+        <mxCell id="80" edge="1" parent="1" source="12" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;dashed=1;jettySize=auto;orthogonalLoop=1;" target="20" value="Streamable-HTTP /mcp">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="81" edge="1" parent="1" source="10" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;jettySize=auto;orthogonalLoop=1;" target="31" value="parse C/C++">
+          <mxGeometry relative="1" x="0.6471" as="geometry">
+            <mxPoint as="offset" />
+            <Array as="points">
+              <mxPoint x="260" y="170" />
+              <mxPoint x="260" y="170" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="82" edge="1" parent="1" source="30" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;jettySize=auto;orthogonalLoop=1;" target="50" value="sử dụng">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="490" y="327.55" />
+              <mxPoint x="490" y="327.55" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="83" edge="1" parent="1" source="30" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;jettySize=auto;orthogonalLoop=1;" target="60" value="sử dụng">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="500" y="530" />
+              <mxPoint x="500" y="530" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="84" edge="1" parent="1" source="30" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;jettySize=auto;orthogonalLoop=1;" target="70" value="sử dụng">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="500" y="737.55" />
+              <mxPoint x="500" y="737.55" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="85" edge="1" parent="1" source="74" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;dashed=1;jettySize=auto;orthogonalLoop=1;" target="13" value="invokes">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+  <diagram name="6-Dynamic-Analyzer" id="page6"><mxGraphModel dx="1339" dy="976" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="1100" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="mcp" parent="1" style="rounded=1;dashed=1;fillColor=#CFD8DC;strokeColor=#90A4AE;html=1;fontSize=12;" value="MCP HTTP :50062" vertex="1">
+          <mxGeometry height="35" width="180" x="560" y="5" as="geometry" />
+        </mxCell>
+        <mxCell id="main" parent="1" style="swimlane;startSize=30;fillColor=#FFF3E0;strokeColor=#FFB74D;html=1;fontStyle=1;fontSize=14;" value="NestJS dynamic-analyzer (:50062)" vertex="1">
+          <mxGeometry height="590" width="1300" y="70" as="geometry" />
+        </mxCell>
+        <mxCell id="g1" parent="main" style="rounded=1;dashed=1;fillColor=#FFE0B2;strokeColor=#FFA726;html=1;container=1;pointerEvents=0;fontStyle=1;fontSize=12;" value="Build + Run" vertex="1">
+          <mxGeometry height="185" width="640" x="20" y="45" as="geometry" />
+        </mxCell>
+        <mxCell id="bt" parent="g1" style="rounded=1;fillColor=#ffffff;strokeColor=#FFA726;html=1;fontSize=11;" value="&lt;b&gt;build-target.service&lt;/b&gt;&lt;br&gt;&lt;font size=&#39;1&#39;&gt;tool: &lt;i&gt;buildTarget&lt;/i&gt; — build sanitizer flags&lt;/font&gt;" vertex="1">
+          <mxGeometry height="66.07142857142857" width="195" x="10" y="59.464285714285715" as="geometry" />
+        </mxCell>
+        <mxCell id="br" parent="g1" style="rounded=1;fillColor=#ffffff;strokeColor=#FFA726;html=1;fontSize=11;" value="&lt;b&gt;binary-runner.service&lt;/b&gt;&lt;br&gt;&lt;font size=&#39;1&#39;&gt;tool: &lt;i&gt;runBinary&lt;/i&gt;&lt;/font&gt;" vertex="1">
+          <mxGeometry height="60" width="195" x="240" y="10" as="geometry" />
+        </mxCell>
+        <mxCell id="se" parent="g1" style="rounded=1;fillColor=#ffffff;strokeColor=#ff6600;strokeWidth=2;html=1;fontSize=10;" value="&lt;b&gt;safe-exec.ts&lt;/b&gt;&lt;br&gt;&lt;font size=&#39;1&#39;&gt;Confinement — ulimit CPU/AS/fsize/nproc, no-shell argv&lt;/font&gt;" vertex="1">
+          <mxGeometry height="72.68" width="265" x="360" y="95" as="geometry" />
+        </mxCell>
+        <mxCell id="e_bt_br" edge="1" parent="g1" source="bt" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" target="br" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_br_se" edge="1" parent="g1" source="br" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;exitX=1;exitY=0.5;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" target="se" value="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="535.05" y="40.05" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="g2" parent="main" style="rounded=1;dashed=1;fillColor=#FFE0B2;strokeColor=#FFA726;html=1;container=1;pointerEvents=0;fontStyle=1;fontSize=12;" value="Sanitizers" vertex="1">
+          <mxGeometry height="275" width="600" x="680" y="45" as="geometry" />
+        </mxCell>
+        <mxCell id="as" parent="g2" style="rounded=1;fillColor=#ffffff;strokeColor=#FFA726;html=1;fontSize=11;" value="&lt;b&gt;asan.service&lt;/b&gt;&lt;br&gt;&lt;font size=&#39;1&#39;&gt;tool: &lt;i&gt;asanRun&lt;/i&gt;&lt;/font&gt;" vertex="1">
+          <mxGeometry height="65.47619047619048" width="185" x="60" y="163.6904761904762" as="geometry" />
+        </mxCell>
+        <mxCell id="ls" parent="g2" style="rounded=1;fillColor=#ffffff;strokeColor=#FFA726;html=1;fontSize=11;" value="&lt;b&gt;lsan.service&lt;/b&gt;&lt;br&gt;&lt;font size=&#39;1&#39;&gt;tool: &lt;i&gt;lsanRun&lt;/i&gt;&lt;/font&gt;" vertex="1">
+          <mxGeometry height="65.47619047619048" width="185" x="400" y="163.6904761904762" as="geometry" />
+        </mxCell>
+        <mxCell id="g3" parent="main" style="rounded=1;dashed=1;fillColor=#FFE0B2;strokeColor=#FFA726;html=1;container=1;pointerEvents=0;fontStyle=1;fontSize=12;" value="Infra" vertex="1">
+          <mxGeometry height="170" width="1260" x="20" y="350" as="geometry" />
+        </mxCell>
+        <mxCell id="rm" parent="g3" style="rounded=1;fillColor=#ffffff;strokeColor=#FFA726;html=1;fontSize=11;" value="&lt;b&gt;run-manager.service&lt;/b&gt;&lt;br&gt;&lt;font size=&#39;1&#39;&gt;tool: &lt;i&gt;listRuns&lt;/i&gt; — save/list runs&lt;/font&gt;" vertex="1">
+          <mxGeometry height="50.00000000000001" width="225" x="25" y="90.00000000000001" as="geometry" />
+        </mxCell>
+        <mxCell id="rp" parent="g3" style="rounded=1;fillColor=#ffffff;strokeColor=#FFA726;html=1;fontSize=11;" value="&lt;b&gt;result-parser.service&lt;/b&gt;&lt;br&gt;&lt;font size=&#39;1&#39;&gt;parse output LSan/ASan → finding&lt;/font&gt;" vertex="1">
+          <mxGeometry height="50.00000000000001" width="225" x="500" y="90.00000000000001" as="geometry" />
+        </mxCell>
+        <mxCell id="cs" parent="g3" style="rounded=1;fillColor=#ffffff;strokeColor=#FFA726;html=1;fontSize=11;" value="&lt;b&gt;compare.service&lt;/b&gt;&lt;br&gt;&lt;font size=&#39;1&#39;&gt;compare 2 runs&lt;/font&gt;" vertex="1">
+          <mxGeometry height="50.00000000000001" width="195" x="290" y="90.00000000000001" as="geometry" />
+        </mxCell>
+        <mxCell id="lb" parent="g3" style="rounded=1;fillColor=#ffffff;strokeColor=#FFA726;html=1;fontSize=11;" value="&lt;b&gt;leak-bundle-normalizer.service&lt;/b&gt;&lt;br&gt;&lt;font size=&#39;1&#39;&gt;normalize → LeakBundle&lt;/font&gt;" vertex="1">
+          <mxGeometry height="50.00000000000001" width="235" x="750" y="90.00000000000001" as="geometry" />
+        </mxCell>
+        <mxCell id="docker" parent="main" style="rounded=1;fillColor=#ECEFF1;strokeColor=#90A4AE;html=1;fontSize=11;" value="&lt;b&gt;Docker (Linux only)&lt;/b&gt;&lt;br&gt;&lt;font size=&#39;1&#39;&gt;Valgrind/ASan/LSan không chạy native trên macOS&lt;/font&gt;" vertex="1">
+          <mxGeometry height="60" width="390" x="20" y="540" as="geometry" />
+        </mxCell>
+        <mxCell id="isol" parent="main" style="rounded=1;fillColor=#ECEFF1;strokeColor=#90A4AE;html=1;fontSize=11;" value="&lt;b&gt;Build isolation&lt;/b&gt;&lt;br&gt;&lt;font size=&#39;1&#39;&gt;--network none, --memory 1g, --pids 512&lt;/font&gt;" vertex="1">
+          <mxGeometry height="60" width="390" x="430" y="540" as="geometry" />
+        </mxCell>
+        <mxCell id="vs" parent="1" style="rounded=1;fillColor=#ffffff;strokeColor=#FFA726;html=1;fontSize=10;" value="&lt;b&gt;valgrind.service&lt;/b&gt;&lt;br&gt;&lt;font size=&#39;1&#39;&gt;valgrindMemcheck&lt;br&gt;valgrindGetReport&lt;br&gt;valgrindListFindings&lt;br&gt;valgrindCompareRuns&lt;/font&gt;" vertex="1">
+          <mxGeometry height="85" width="270" x="860" y="125" as="geometry" />
+        </mxCell>
+        <mxCell id="e_mcp" edge="1" parent="1" source="mcp" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;dashed=1;" target="main" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_br_vs" edge="1" parent="1" source="br" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#333333;" target="vs" value="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="657.48" y="155" />
+              <mxPoint x="657.48" y="200" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_br_as" edge="1" parent="1" source="br" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#333333;" target="as" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_br_ls" edge="1" parent="1" source="vs" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#333333;" target="ls" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_vs_rp" edge="1" parent="1" source="vs" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#333333;" target="rp" value="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="995.05" y="370" />
+              <mxPoint x="632.53" y="370" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_as_rp" edge="1" parent="1" source="as" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#333333;" target="rp" value="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="832.53" y="440" />
+              <mxPoint x="632.53" y="440" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_ls_rp" edge="1" parent="1" source="ls" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#333333;" target="rp" value="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1172.53" y="450" />
+              <mxPoint x="710" y="450" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_rp_lb" edge="1" parent="1" source="rp" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#333333;" target="lb" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel></diagram>
+  <diagram name="7-Judge-Layer" id="page7"><mxGraphModel dx="2276" dy="1660" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="850" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="t" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F3E5F5;strokeColor=#999999;fontStyle=1;fontSize=14;" value="Judge Layer - Tầng quyết định" vertex="1">
+          <mxGeometry height="50" width="1520" x="40" y="20" as="geometry" />
+        </mxCell>
+        <mxCell id="h_sw" parent="1" style="swimlane;horizontal=0;startSize=30;fillColor=#E8F5E9;strokeColor=#81C784;html=1;fontStyle=1;" value="Heuristic Judge" vertex="1">
+          <mxGeometry height="570" width="430" x="40" y="90" as="geometry" />
+        </mxCell>
+        <mxCell id="h_in" parent="h_sw" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#C8E6C9;strokeColor=#66BB6A;" value="bundle.staticEvidence + dynamicEvidence" vertex="1">
+          <mxGeometry height="46" width="360" x="50" y="20" as="geometry" />
+        </mxCell>
+        <mxCell id="h_fn" parent="h_sw" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#C8E6C9;strokeColor=#66BB6A;fontStyle=1;" value="heuristicVerdict()" vertex="1">
+          <mxGeometry height="46" width="360" x="50" y="90" as="geometry" />
+        </mxCell>
+        <mxCell id="h_s1" parent="h_sw" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#C8E6C9;strokeColor=#66BB6A;" value="&lt;b&gt;allocFreePair.status&lt;/b&gt;: unpaired / conditional / paired&lt;br&gt;&lt;i&gt;— từ guard-subset reconciliation (path-sensitive)&lt;/i&gt;" vertex="1">
+          <mxGeometry height="40" width="360" x="50" y="160" as="geometry" />
+        </mxCell>
+        <mxCell id="h_s2" parent="h_sw" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#C8E6C9;strokeColor=#66BB6A;" value="&lt;b&gt;pathSensitiveLeak&lt;/b&gt;: FeasibleLeakPath reachable&lt;br&gt;&lt;i&gt;— tín hiệu MẠNH, chặn ownership-penalty&lt;/i&gt;" vertex="1">
+          <mxGeometry height="40" width="360" x="50" y="230" as="geometry" />
+        </mxCell>
+        <mxCell id="h_s3" parent="h_sw" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#C8E6C9;strokeColor=#66BB6A;" value="&lt;b&gt;parameter_ownership&lt;/b&gt;: tham số con trỏ free-một-số-đường" vertex="1">
+          <mxGeometry height="40" width="360" x="50" y="285" as="geometry" />
+        </mxCell>
+        <mxCell id="h_th" parent="h_sw" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#B2EBF2;strokeColor=#26C6DA;fontStyle=1;" value="&lt;b&gt;JUDGE_VERDICT_THRESHOLDS&lt;/b&gt;&lt;br&gt;confirmed: 0.7 | likely: 0.4" vertex="1">
+          <mxGeometry height="46" width="360" x="50" y="350" as="geometry" />
+        </mxCell>
+        <mxCell id="h_vr" parent="h_sw" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#C8E6C9;strokeColor=#66BB6A;fontStyle=1;" value="&lt;b&gt;VerdictResult&lt;/b&gt;&lt;br&gt;confirmed / likely / uncertain / likely_false_positive" vertex="1">
+          <mxGeometry height="46" width="360" x="50" y="430" as="geometry" />
+        </mxCell>
+        <mxCell id="h_lb" parent="h_sw" style="text;html=1;strokeColor=none;fillColor=none;fontStyle=2;align=center;" value="Heuristic chạy trên EVERY bundle" vertex="1">
+          <mxGeometry height="30" width="380" x="20" y="500" as="geometry" />
+        </mxCell>
+        <mxCell id="e_h1" edge="1" parent="h_sw" source="h_in" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" target="h_fn">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_h2" edge="1" parent="h_sw" source="h_fn" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" target="h_s1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_h3" edge="1" parent="h_sw" source="h_s1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" target="h_s2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_h4" edge="1" parent="h_sw" source="h_s2" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" target="h_s3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_h5" edge="1" parent="h_sw" source="h_s3" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" target="h_th">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_h6" edge="1" parent="h_sw" source="h_th" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" target="h_vr">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="l_sw" parent="1" style="swimlane;horizontal=0;startSize=30;fillColor=#E3F2FD;strokeColor=#64B5F6;html=1;fontStyle=1;" value="LLM Judge" vertex="1">
+          <mxGeometry height="570" width="390" x="710" y="90" as="geometry" />
+        </mxCell>
+        <mxCell id="l_in" parent="l_sw" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#BBDEFB;strokeColor=#64B5F6;" value="Bundles where &lt;b&gt;shouldEscalate() == true&lt;/b&gt;&lt;br&gt;(BORDERLINE)" vertex="1">
+          <mxGeometry height="46" width="360" x="50" y="20" as="geometry" />
+        </mxCell>
+        <mxCell id="l_fn" parent="l_sw" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#BBDEFB;strokeColor=#64B5F6;fontStyle=1;" value="judgeBundleWithLlm()" vertex="1">
+          <mxGeometry height="46" width="360" x="50" y="90" as="geometry" />
+        </mxCell>
+        <mxCell id="l_i1" parent="l_sw" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#BBDEFB;strokeColor=#64B5F6;" value="callModel — LLM API call" vertex="1">
+          <mxGeometry height="36" width="360" x="50" y="160" as="geometry" />
+        </mxCell>
+        <mxCell id="l_i2" parent="l_sw" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#BBDEFB;strokeColor=#64B5F6;" value="ownershipNotes — LLM-discovered conventions" vertex="1">
+          <mxGeometry height="36" width="360" x="50" y="220" as="geometry" />
+        </mxCell>
+        <mxCell id="l_i3" parent="l_sw" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#BBDEFB;strokeColor=#64B5F6;" value="project evidence — path-sensitive / parameter-ownership" vertex="1">
+          <mxGeometry height="36" width="360" x="50" y="280" as="geometry" />
+        </mxCell>
+        <mxCell id="l_vr" parent="l_sw" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#BBDEFB;strokeColor=#64B5F6;fontStyle=1;" value="&lt;b&gt;LLM Verdict&lt;/b&gt;&lt;br&gt;confirmed / likely / uncertain / likely_false_positive" vertex="1">
+          <mxGeometry height="46" width="360" x="50" y="335" as="geometry" />
+        </mxCell>
+        <mxCell id="l_lb" parent="l_sw" style="text;html=1;strokeColor=none;fillColor=none;fontStyle=2;align=center;" value="LLM được cung cấp ownership conventions (LLM-discovered)&lt;br&gt;+ path-sensitive / parameter-ownership rules" vertex="1">
+          <mxGeometry height="50" width="380" x="40" y="470" as="geometry" />
+        </mxCell>
+        <mxCell id="e_l1" edge="1" parent="l_sw" source="l_in" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" target="l_fn">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_l2" edge="1" parent="l_sw" source="l_fn" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" target="l_i1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_l3" edge="1" parent="l_sw" source="l_i1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" target="l_i2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_l4" edge="1" parent="l_sw" source="l_i2" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" target="l_i3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_l5" edge="1" parent="l_sw" source="l_i3" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" target="l_vr">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="c_sw" parent="1" style="swimlane;horizontal=0;startSize=30;fillColor=#FFF3E0;strokeColor=#FFB74D;html=1;fontStyle=1;" value="Consensus" vertex="1">
+          <mxGeometry height="570" width="420" x="1140" y="90" as="geometry" />
+        </mxCell>
+        <mxCell id="c_in" parent="c_sw" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFE0B2;strokeColor=#FFA726;" value="k samples (k from config)" vertex="1">
+          <mxGeometry height="46" width="350" x="50" y="20" as="geometry" />
+        </mxCell>
+        <mxCell id="c_fn" parent="c_sw" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFE0B2;strokeColor=#FFA726;fontStyle=1;" value="judgeByConsensus()" vertex="1">
+          <mxGeometry height="46" width="350" x="50" y="90" as="geometry" />
+        </mxCell>
+        <mxCell id="c_k1" parent="c_sw" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFE0B2;strokeColor=#FFA726;" value="judgeBundleWithLlm() — sample 1" vertex="1">
+          <mxGeometry height="34" width="350" x="50" y="160" as="geometry" />
+        </mxCell>
+        <mxCell id="c_k2" parent="c_sw" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFE0B2;strokeColor=#FFA726;" value="judgeBundleWithLlm() — sample 2" vertex="1">
+          <mxGeometry height="34" width="350" x="50" y="210" as="geometry" />
+        </mxCell>
+        <mxCell id="c_k3" parent="c_sw" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFE0B2;strokeColor=#FFA726;" value="judgeBundleWithLlm() — sample k …" vertex="1">
+          <mxGeometry height="34" width="350" x="50" y="260" as="geometry" />
+        </mxCell>
+        <mxCell id="c_cf" parent="c_sw" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#B2EBF2;strokeColor=#26C6DA;fontStyle=1;" value="&lt;b&gt;ConsensusConfig&lt;/b&gt;&lt;br&gt;rule: majority / weighted / unanimous" vertex="1">
+          <mxGeometry height="46" width="350" x="50" y="312" as="geometry" />
+        </mxCell>
+        <mxCell id="c_vr" parent="c_sw" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFE0B2;strokeColor=#FFA726;fontStyle=1;" value="&lt;b&gt;ConsensusVerdict&lt;/b&gt;&lt;br&gt;+ agreement score" vertex="1">
+          <mxGeometry height="46" width="350" x="50" y="380" as="geometry" />
+        </mxCell>
+        <mxCell id="c_lb" parent="c_sw" style="text;html=1;strokeColor=none;fillColor=none;fontStyle=2;align=center;" value="k=1 → single-LLM judge baseline" vertex="1">
+          <mxGeometry height="30" width="380" x="20" y="480" as="geometry" />
+        </mxCell>
+        <mxCell id="e_c1" edge="1" parent="c_sw" source="c_in" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" target="c_fn">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_c2" edge="1" parent="c_sw" source="c_fn" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" target="c_k1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_c3" edge="1" parent="c_sw" source="c_k1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" target="c_k2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_c4" edge="1" parent="c_sw" source="c_k2" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" target="c_k3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_c5" edge="1" parent="c_sw" source="c_k3" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" target="c_cf">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e_c6" edge="1" parent="c_sw" source="c_cf" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" target="c_vr">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="en" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E0F7FA;strokeColor=#4DD0E1;fontStyle=1;fontSize=12;" value="&lt;b&gt;enrichLeakVerdict()&lt;/b&gt; — adds &lt;b&gt;rootCause&lt;/b&gt; + &lt;b&gt;repairDiff&lt;/b&gt; to mỗi VerdictResult" vertex="1">
+          <mxGeometry height="44" width="1340" x="40" y="760" as="geometry" />
+        </mxCell>
+        <mxCell id="e_bl" edge="1" parent="1" source="h_vr" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;dashed=1;strokeColor=#cc0000;fontColor=#cc0000;" target="l_in" value="Borderline → shouldEscalate()">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="590" y="543" />
+              <mxPoint x="590" y="133" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_he" edge="1" parent="1" source="h_vr" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" target="en">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="270.08" y="720.08" />
+              <mxPoint x="710.08" y="720.08" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_le" edge="1" parent="1" source="l_vr" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" target="en">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="940.08" y="680.08" />
+              <mxPoint x="710.08" y="680.08" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e_ce" edge="1" parent="1" source="c_vr" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" target="en">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1365" y="720.08" />
+              <mxPoint x="710.08" y="720.08" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+      </root>
+    </mxGraphModel></diagram>
+  <diagram name="8-Data-Model" id="page8"><mxGraphModel dx="2529" dy="1844" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="900" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="lc" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E3F2FD;strokeColor=#64B5F6;" value="&lt;b&gt;LeakCandidate&lt;/b&gt;&lt;br&gt;──────────&lt;br&gt;file_path: string&lt;br&gt;function_name: string&lt;br&gt;line_number: number&lt;br&gt;allocation_type: libc / factory / new / parameter_ownership" vertex="1">
+          <mxGeometry height="200" width="240" x="50" y="290" as="geometry" />
+        </mxCell>
+        <mxCell id="lb" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8F5E9;strokeColor=#81C784;" value="&lt;b&gt;LeakBundle&lt;/b&gt;&lt;br&gt;──────────&lt;br&gt;bundleId: string&lt;br&gt;candidate: LeakCandidate&lt;br&gt;evidence: LeakEvidence[]&lt;br&gt;verdict?: VerdictResult&lt;br&gt;dynamicCoverage?: DynamicCoverage" vertex="1">
+          <mxGeometry height="200" width="240" x="370" y="290" as="geometry" />
+        </mxCell>
+        <mxCell id="ev" parent="1" style="whiteSpace=wrap;html=1;fillColor=#FFF3E0;strokeColor=#FFB74D;rounded=1;fontSize=10;" value="&lt;b&gt;Evidence Sources&lt;/b&gt;&lt;br&gt;──────────&lt;br&gt;&lt;i&gt;ToolKind:&lt;/i&gt;&lt;br&gt;  valgrind (Valgrind Memcheck)&lt;br&gt;  asan (AddressSanitizer)&lt;br&gt;  lsan (LeakSanitizer)&lt;br&gt;  scan_build (Clang SA)&lt;br&gt;  heuristic (path CFG)&lt;br&gt;&lt;i&gt;DynamicLeakKind:&lt;/i&gt;&lt;br&gt;  definitely_lost / indirectly_lost&lt;br&gt;  possibly_lost / still_reachable&lt;br&gt;  asan_leak" vertex="1">
+          <mxGeometry height="190" width="280" x="690" y="80" as="geometry" />
+        </mxCell>
+        <mxCell id="vr" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F3E5F5;strokeColor=#BA68C8;" value="&lt;b&gt;VerdictResult&lt;/b&gt;&lt;br&gt;──────────────&lt;br&gt;verdict: &lt;i&gt;InvestigationVerdict&lt;/i&gt;&lt;br&gt;  CONFIRMED_LEAK / LIKELY_LEAK /&lt;br&gt;  UNCERTAIN / LIKELY_FP /&lt;br&gt;  FALSE_POSITIVE&lt;br&gt;confidence: number&lt;br&gt;explanation: string&lt;br&gt;rootCause?: LeakRootCause&lt;br&gt;repairDiff?: RepairDiff" vertex="1">
+          <mxGeometry height="200" width="280" x="690" y="290" as="geometry" />
+        </mxCell>
+        <mxCell id="sr" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E0F7FA;strokeColor=#4DD0E1;" value="&lt;b&gt;ScanReport&lt;/b&gt;&lt;br&gt;──────────&lt;br&gt;summary: ReportSummary&lt;br&gt;bundles: LeakBundle[]&lt;br&gt;metadata: ScanMetadata" vertex="1">
+          <mxGeometry height="200" width="200" x="1090" y="290" as="geometry" />
+        </mxCell>
+        <mxCell id="e1" edge="1" parent="1" source="lc" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" target="lb" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e2" edge="1" parent="1" source="ev" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;entryX=0.5;entryY=0;" target="lb" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e3" edge="1" parent="1" source="lb" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" target="vr" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e4" edge="1" parent="1" source="vr" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;" target="sr" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="f1" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#B2EBF2;strokeColor=#26C6DA;fontSize=10;align=center;" value="&lt;b&gt;JSON&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size: 9px;&quot;&gt;machine-readable&lt;/span&gt;" vertex="1">
+          <mxGeometry height="42" width="70" x="1020" y="540" as="geometry" />
+        </mxCell>
+        <mxCell id="f2" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#B2EBF2;strokeColor=#26C6DA;fontSize=10;align=center;" value="&lt;b&gt;Markdown&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size: 9px;&quot;&gt;human-readable&lt;/span&gt;" vertex="1">
+          <mxGeometry height="42" width="70" x="1110" y="540" as="geometry" />
+        </mxCell>
+        <mxCell id="f3" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#B2EBF2;strokeColor=#26C6DA;fontSize=10;align=center;" value="&lt;b&gt;HTML&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size: 9px;&quot;&gt;styled web-viewable&lt;/span&gt;" vertex="1">
+          <mxGeometry height="42" width="70" x="1200" y="540" as="geometry" />
+        </mxCell>
+        <mxCell id="f4" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#B2EBF2;strokeColor=#26C6DA;fontSize=10;align=center;" value="&lt;b&gt;Snapshot&lt;/b&gt;&lt;br&gt;&lt;span style=&quot;font-size: 9px;&quot;&gt;experiment comparison&lt;/span&gt;" vertex="1">
+          <mxGeometry height="42" width="70" x="1290" y="540" as="geometry" />
+        </mxCell>
+        <mxCell id="e5" edge="1" parent="1" source="sr" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;entryX=0.5;entryY=0;" target="f1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e6" edge="1" parent="1" source="sr" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;entryX=0.5;entryY=0;" target="f2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e7" edge="1" parent="1" source="sr" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;entryX=0.5;entryY=0;" target="f3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e8" edge="1" parent="1" source="sr" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;entryX=0.5;entryY=0;" target="f4">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="disk" parent="1" style="swimlane;startSize=30;fillColor=#E0F7FA;strokeColor=#4DD0E1;html=1;" value="&lt;b&gt;results/&amp;lt;scanId&amp;gt;/ — Artifacts&lt;/b&gt;" vertex="1">
+          <mxGeometry height="230" width="630" x="160" y="540" as="geometry" />
+        </mxCell>
+        <mxCell id="d1" parent="disk" style="text;html=1;whiteSpace=wrap;overflow=hidden;fontSize=10;" value="&lt;b&gt;snapshot.json&lt;/b&gt; · findings so sánh được giữa các run" vertex="1">
+          <mxGeometry height="28" width="600" x="30" y="45" as="geometry" />
+        </mxCell>
+        <mxCell id="d2" parent="disk" style="text;html=1;whiteSpace=wrap;overflow=hidden;fontSize=10;" value="&lt;b&gt;transcript.json&lt;/b&gt; · lịch sử message agent" vertex="1">
+          <mxGeometry height="28" width="220" x="330" y="45" as="geometry" />
+        </mxCell>
+        <mxCell id="d3" parent="disk" style="text;html=1;whiteSpace=wrap;overflow=hidden;fontSize=10;" value="&lt;b&gt;report.{json,md,html}&lt;/b&gt; · report 3 định dạng" vertex="1">
+          <mxGeometry height="28" width="600" x="30" y="105" as="geometry" />
+        </mxCell>
+        <mxCell id="d4" parent="disk" style="text;html=1;whiteSpace=wrap;overflow=hidden;fontSize=10;" value="&lt;b&gt;steps.md&lt;/b&gt; · log từng bước investigation" vertex="1">
+          <mxGeometry height="28" width="220" x="330" y="105" as="geometry" />
+        </mxCell>
+        <mxCell id="d5" parent="disk" style="text;html=1;whiteSpace=wrap;overflow=hidden;fontSize=10;" value="&lt;b&gt;events.jsonl&lt;/b&gt; · stream ScanEvent tăng dần" vertex="1">
+          <mxGeometry height="28" width="600" x="30" y="165" as="geometry" />
+        </mxCell>
+        <mxCell id="d6" parent="disk" style="text;html=1;whiteSpace=wrap;overflow=hidden;fontSize=10;" value="&lt;b&gt;metrics.json&lt;/b&gt; · phân bố verdict, token, thời lượng" vertex="1">
+          <mxGeometry height="28" width="260" x="330" y="165" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel></diagram>
+</mxfile>
