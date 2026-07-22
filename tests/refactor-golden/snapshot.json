@@ -1,0 +1,58 @@
+{
+  "scan_id": "<SCANID>",
+  "repo_path": "<WORKSPACE>/demo/memory_leak_corpus/simple_leak",
+  "materialized_repo_path": "<WORKSPACE>/demo/memory_leak_corpus/simple_leak",
+  "generated_at": "<TIMESTAMP>",
+  "finding_count": 1,
+  "confirmed_leak_count": 0,
+  "likely_leak_count": 1,
+  "evidence_count": 0,
+  "tools_used": [
+    "heuristic"
+  ],
+  "build_plan": null,
+  "investigation_plan": null,
+  "agent_decisions": [],
+  "dynamic_execution_plan": null,
+  "findings": [
+    {
+      "id": "bundle_633a353a6d616c6c6f632f5573657273",
+      "function": "make_buffer",
+      "file": "<WORKSPACE>/demo/memory_leak_corpus/simple_leak/main.c",
+      "line": 5,
+      "allocation_type": "malloc",
+      "verdict": "likely_leak",
+      "verdict_tool": "heuristic",
+      "dynamic_coverage": "dynamic_off",
+      "confidence": 0.5,
+      "explanation": "Interprocedural leak: `make_buffer()` returns the allocation; the caller (`main`) drops `buf` without calling free(). The allocation at <WORKSPACE>/demo/memory_leak_corpus/simple_leak/main.c:5 (`buf`) has no matching free on the leaking path.",
+      "repair_suggestion": "Ensure the object allocated via malloc in make_buffer is released on every exit path. Add cleanup before each return or route ownership to a caller that clearly frees it.",
+      "root_cause": {
+        "patternType": "interprocedural_leak",
+        "description": "the function transfers ownership by returning the allocation, but the caller never frees it",
+        "allocationFunction": "make_buffer",
+        "allocationLine": 5,
+        "allocationFile": "<WORKSPACE>/demo/memory_leak_corpus/simple_leak/main.c",
+        "missingFreeLine": 20,
+        "missingFreeFunction": "main",
+        "rootCauseFunction": "main",
+        "rootCauseLine": 20,
+        "rootCauseDescription": "`make_buffer()` returns the allocation; the caller (`main`) drops `buf` without calling free()."
+      },
+      "repair_diff": {
+        "filePath": "<WORKSPACE>/demo/memory_leak_corpus/simple_leak/main.c",
+        "originalLines": [
+          "    return 0;"
+        ],
+        "suggestedLines": [
+          "    free(buf);",
+          "    return 0;"
+        ],
+        "startLine": 20,
+        "description": "Free `buf` before the exit at line 20 so every path releases the allocation."
+      },
+      "snippet": "char *buf = malloc(size);",
+      "evidence": []
+    }
+  ]
+}
