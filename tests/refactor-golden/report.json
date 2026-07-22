@@ -1,0 +1,76 @@
+{
+  "scanId": "<SCANID>",
+  "metadata": {
+    "scanId": "<SCANID>",
+    "workspacePath": "<WORKSPACE>/demo/memory_leak_corpus/simple_leak",
+    "sourceWorkspacePath": "<WORKSPACE>/demo/memory_leak_corpus/simple_leak",
+    "analysisMode": "no_llm",
+    "dynamicMode": "off",
+    "fileLimit": 0,
+    "startedAt": "<TIMESTAMP>",
+    "completedAt": "<TIMESTAMP>",
+    "status": "completed"
+  },
+  "bundles": [
+    {
+      "bundleId": "bundle_633a353a6d616c6c6f632f5573657273",
+      "candidate": {
+        "id": "static-candidate-0001",
+        "function_name": "make_buffer",
+        "file_path": "<WORKSPACE>/demo/memory_leak_corpus/simple_leak/main.c",
+        "line_number": 5,
+        "allocation_site": "<WORKSPACE>/demo/memory_leak_corpus/simple_leak/main.c:5:malloc",
+        "allocation_type": "malloc",
+        "confidence": "medium",
+        "context": "char *buf = malloc(size);"
+      },
+      "evidence": [],
+      "status": "pending",
+      "createdAt": "<TIMESTAMP>",
+      "updatedAt": "<TIMESTAMP>",
+      "verdict": {
+        "verdict": "likely_leak",
+        "confidence": 0.5,
+        "explanation": "Interprocedural leak: `make_buffer()` returns the allocation; the caller (`main`) drops `buf` without calling free(). The allocation at <WORKSPACE>/demo/memory_leak_corpus/simple_leak/main.c:5 (`buf`) has no matching free on the leaking path.",
+        "evidence": [],
+        "tool": "heuristic",
+        "repair_suggestion": "Ensure the object allocated via malloc in make_buffer is released on every exit path. Add cleanup before each return or route ownership to a caller that clearly frees it.",
+        "rootCause": {
+          "patternType": "interprocedural_leak",
+          "description": "the function transfers ownership by returning the allocation, but the caller never frees it",
+          "allocationFunction": "make_buffer",
+          "allocationLine": 5,
+          "allocationFile": "<WORKSPACE>/demo/memory_leak_corpus/simple_leak/main.c",
+          "missingFreeLine": 20,
+          "missingFreeFunction": "main",
+          "rootCauseFunction": "main",
+          "rootCauseLine": 20,
+          "rootCauseDescription": "`make_buffer()` returns the allocation; the caller (`main`) drops `buf` without calling free()."
+        },
+        "repairDiff": {
+          "filePath": "<WORKSPACE>/demo/memory_leak_corpus/simple_leak/main.c",
+          "originalLines": [
+            "    return 0;"
+          ],
+          "suggestedLines": [
+            "    free(buf);",
+            "    return 0;"
+          ],
+          "startLine": 20,
+          "description": "Free `buf` before the exit at line 20 so every path releases the allocation."
+        }
+      }
+    }
+  ],
+  "summary": {
+    "totalCandidates": 1,
+    "confirmedLeaks": 0,
+    "likelyLeaks": 1,
+    "falsePositives": 0,
+    "totalBytesLost": 0,
+    "toolsUsed": [
+      "heuristic"
+    ],
+    "durationSec": 0.044
+  }
+}
