@@ -64,74 +64,8 @@ function nextWordEnd(value: string, cursor: number): number {
 
 const clamp = (n: number, hi: number): number => Math.max(0, Math.min(hi, n));
 
-/** Apply one edit intent. Always returns a new state; out-of-range edits are no-ops. */
-export function reduce(state: EditState, intent: EditIntent): EditState {
-  const { value, cursor } = state;
-  switch (intent.type) {
-    case 'insert':
-      return {
-        value: value.slice(0, cursor) + intent.text + value.slice(cursor),
-        cursor: cursor + intent.text.length,
-      };
-    case 'left':
-      return { value, cursor: clamp(cursor - 1, value.length) };
-    case 'right':
-      return { value, cursor: clamp(cursor + 1, value.length) };
-    case 'wordLeft':
-      return { value, cursor: prevWordStart(value, cursor) };
-    case 'wordRight':
-      return { value, cursor: nextWordEnd(value, cursor) };
-    case 'home':
-      return { value, cursor: 0 };
-    case 'end':
-      return { value, cursor: value.length };
-    case 'deleteBack':
-      if (cursor === 0) return state;
-      return { value: value.slice(0, cursor - 1) + value.slice(cursor), cursor: cursor - 1 };
-    case 'deleteWordBack': {
-      if (cursor === 0) return state;
-      const start = prevWordStart(value, cursor);
-      return { value: value.slice(0, start) + value.slice(cursor), cursor: start };
-    }
-    case 'killToStart':
-      return { value: value.slice(cursor), cursor: 0 };
-    case 'killToEnd':
-      return { value: value.slice(0, cursor), cursor };
-    default:
-      return state;
-  }
-}
-
-/**
- * Map an Ink keystroke to an edit intent, or `null` for keys the input must NOT
- * consume — `↑/↓` (history), `Tab`/`Shift+Tab` (suggestions / permission mode),
- * `Enter`, `Esc`, and `Ctrl+C` all fall through to App-level handlers.
- */
-export function keyToIntent(input: string, key: InputKey): EditIntent | null {
-  if (key.return || key.tab || key.upArrow || key.downArrow || key.escape) return null;
-  if (key.ctrl) {
-    switch (input) {
-      case 'a':
-        return { type: 'home' };
-      case 'e':
-        return { type: 'end' };
-      case 'u':
-        return { type: 'killToStart' };
-      case 'k':
-        return { type: 'killToEnd' };
-      case 'w':
-        return { type: 'deleteWordBack' };
-      default:
-        return null; // Ctrl+C and other combos belong to App
-    }
-  }
-  if (key.leftArrow) return key.meta ? { type: 'wordLeft' } : { type: 'left' };
-  if (key.rightArrow) return key.meta ? { type: 'wordRight' } : { type: 'right' };
-  if (key.backspace || key.delete) return key.meta ? { type: 'deleteWordBack' } : { type: 'deleteBack' };
-  // Printable text (space included). Meta-prefixed chars (e.g. Option+letter) are ignored.
-  if (input && !key.meta) return { type: 'insert', text: input };
-  return null;
-}
+/** lineEdit now re-exports from PromptInput/keybindings module to avoid duplication.
+ *  The implementations live in components/PromptInput/keybindings. */
 
 // Re-export from PromptInput/keybindings for backward compatibility.
 export { keyToIntent, reduce } from './components/PromptInput/keybindings';
