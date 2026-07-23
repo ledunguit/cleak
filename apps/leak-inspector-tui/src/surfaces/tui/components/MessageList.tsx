@@ -1,6 +1,9 @@
 import { Box, Text } from 'ink';
+import { memo } from 'react';
 import { color, glyph } from '../theme';
 import type { ToolCardData, UiMessage } from '../store';
+import { visibleMessages, type TuiStore } from '../store';
+import { useStoreSelector } from '../store/selectors';
 
 const DEFAULT_VIEWPORT = 24;
 const THINKING_PREVIEW = 80;
@@ -10,7 +13,7 @@ const THINKING_PREVIEW = 80;
  * counts messages up from the live bottom (0 = pinned). `focusMsgId` highlights the
  * line under the focus cursor (used to expand/collapse thinking & tool output).
  */
-export function MessageList({
+export const MessageList = memo(function MessageList({
   messages,
   scrollOffset = 0,
   viewportRows = DEFAULT_VIEWPORT,
@@ -47,7 +50,38 @@ export function MessageList({
       ) : null}
     </Box>
   );
-}
+});
+
+/**
+ * Connected wrapper that subscribes to individual store slices via `useStoreSelector`.
+ * Only re-renders when `messages`, `scrollOffset`, or `focusMsgId` change — the parent
+ * can skip the full-state `useStore(store)` call if it switches to this.
+ *
+ * @example
+ * ```tsx
+ * <MessageListConnected store={store} viewportRows={viewportRows} />
+ * ```
+ */
+export const MessageListConnected = memo(function MessageListConnected({
+  store,
+  viewportRows,
+}: {
+  store: TuiStore;
+  viewportRows: number;
+}) {
+  const messages = useStoreSelector(store, visibleMessages);
+  const scrollOffset = useStoreSelector(store, (s) => s.scrollOffset);
+  const focusMsgId = useStoreSelector(store, (s) => s.focusMsgId);
+
+  return (
+    <MessageList
+      messages={messages}
+      scrollOffset={scrollOffset}
+      viewportRows={viewportRows}
+      focusMsgId={focusMsgId}
+    />
+  );
+});
 
 /** Leading marker: a pointer when focused, else padding — keeps columns aligned. */
 function focusMark(focused: boolean) {
