@@ -1,4 +1,6 @@
 import { Box, Text } from 'ink';
+import ThemedBox from '../theme/ThemedBox';
+import ThemedText from '../theme/ThemedText';
 import { color, glyph } from '../theme';
 import { CLEAK_LOGO } from '../logo';
 
@@ -16,16 +18,16 @@ export function Welcome({ provider, model, staticUrl, cwd, recentScans }: Welcom
   return (
     <Box flexDirection="column">
       {/* Compact retro wordmark, framed for a CRT vibe */}
-      <Box alignSelf="flex-start" flexDirection="column" borderStyle="round" borderColor={color.accent} paddingX={1}>
+      <ThemedBox alignSelf="flex-start" flexDirection="column" borderStyle="round" borderColor="accent" paddingX={1}>
         {BANNER.map((line, i) => (
-          <Text key={`b${i}`} color={color.accent} bold>
+          <ThemedText key={`b${i}`} color="accent" bold>
             {line}
-          </Text>
+          </ThemedText>
         ))}
         <Text dimColor>
           {provider} {glyph.bullet} {model || '?'} {glyph.bullet} {shorten(cwd)}
         </Text>
-      </Box>
+      </ThemedBox>
 
       {/* Tips + recent activity */}
       <Box flexDirection="row" marginTop={1}>

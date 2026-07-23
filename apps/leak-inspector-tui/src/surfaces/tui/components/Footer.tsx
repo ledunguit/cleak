@@ -1,8 +1,9 @@
 import { Box, Text } from 'ink';
+import { memo } from 'react';
 import { color, glyph } from '../theme';
 import type { UiState } from '../store';
 
-export function Footer({ state }: { state: UiState }) {
+export const Footer = memo(function Footer({ state }: { state: UiState }) {
   const { inputTokens, outputTokens, thinkingTokens } = state.usage;
   const auto = state.permissionMode === 'auto';
   const chips: Array<[string, string]> = [
@@ -27,4 +28,4 @@ export function Footer({ state }: { state: UiState }) {
       ))}
     </Box>
   );
-}
+});

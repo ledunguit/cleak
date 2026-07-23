@@ -1,4 +1,5 @@
 import { Box, Text } from 'ink';
+import { memo } from 'react';
 import { color, glyph } from '../theme';
 import type { AgentInfo, UiState } from '../store';
 
@@ -19,7 +20,7 @@ const STATUS_COLOR: Record<AgentInfo['status'], string> = {
  * agent's detailed log. Hidden when there are no sub-agents or when already viewing
  * one agent's log.
  */
-export function AgentList({ state }: { state: UiState }) {
+export const AgentList = memo(function AgentList({ state }: { state: UiState }) {
   if (state.agents.length === 0 || state.viewAgentId !== 'main') return null;
   const active = state.navMode === 'agentlist';
   return (
@@ -41,4 +42,4 @@ export function AgentList({ state }: { state: UiState }) {
       })}
     </Box>
   );
-}
+});
