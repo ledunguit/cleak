@@ -132,3 +132,6 @@ export function keyToIntent(input: string, key: InputKey): EditIntent | null {
   if (input && !key.meta) return { type: 'insert', text: input };
   return null;
 }
+
+// Re-export from PromptInput/keybindings for backward compatibility.
+export { keyToIntent, reduce } from './components/PromptInput/keybindings';
