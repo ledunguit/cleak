@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react';
-import { Text } from 'ink';
-import { color, glyph, formatDuration, SPINNER_FRAMES } from '../theme';
+import { useEffect, useState, memo } from 'react';
+import ThemedText from '../theme/ThemedText';
+import { glyph, formatDuration, SPINNER_FRAMES } from '../theme';
 
-export function Spinner({
+export const Spinner = memo(function Spinner({
   label,
   startedAt,
   usage,
@@ -39,13 +39,13 @@ export function Spinner({
     io === 'up' ? glyph.arrowUp : io === 'down' ? glyph.arrowDown : SPINNER_FRAMES[frame];
 
   return (
-    <Text>
-      <Text color={color.accent}>{lead} </Text>
-      <Text color={color.accent}>{label}</Text>
-      <Text dimColor>… ({meta})</Text>
-    </Text>
+    <ThemedText>
+      <ThemedText color="accent">{lead} </ThemedText>
+      <ThemedText color="accent">{label}</ThemedText>
+      <ThemedText dimColor>… ({meta})</ThemedText>
+    </ThemedText>
   );
-}
+});
 
 function formatNum(n: number): string {
   if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;

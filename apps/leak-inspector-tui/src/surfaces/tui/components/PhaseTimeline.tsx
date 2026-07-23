@@ -1,4 +1,5 @@
 import { Box, Text } from 'ink';
+import { memo } from 'react';
 import { SCAN_PHASE_ORDER, PHASE_META, ScanPhase } from '@cleak/common/flow/scan-flow-contract';
 import { color, glyph } from '../theme';
 import type { PhaseStatus, UiState } from '../store';
@@ -18,7 +19,7 @@ const COLOR: Record<PhaseStatus, string> = {
   failed: color.error,
 };
 
-export function PhaseTimeline({ phases }: { phases: UiState['phases'] }) {
+export const PhaseTimeline = memo(function PhaseTimeline({ phases }: { phases: UiState['phases'] }) {
   return (
     <Box flexDirection="row" flexWrap="wrap">
       {SCAN_PHASE_ORDER.map((p: ScanPhase, idx) => (
@@ -29,4 +30,4 @@ export function PhaseTimeline({ phases }: { phases: UiState['phases'] }) {
       ))}
     </Box>
   );
-}
+});
