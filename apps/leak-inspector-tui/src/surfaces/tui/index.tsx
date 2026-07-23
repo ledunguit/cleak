@@ -8,6 +8,7 @@ import { existsSync, readdirSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { App } from './App';
 import { TuiStore } from './store';
+import { ThemeProvider } from './theme';
 import { loadEnvFiles } from '../../domain/env';
 import { loadConfig, type Provider } from '../../config';
 import { loadConfigFile } from '../../domain/config-file';
@@ -59,14 +60,16 @@ export async function launchTui(opts: LaunchTuiOptions = {}): Promise<void> {
   });
   const resultsDir = resolve(cfg.resultsDir);
   const { waitUntilExit } = render(
-    <App
-      store={store}
-      staticUrl={opts.staticUrl ?? cfg.staticUrl}
-      dynamicUrl={opts.dynamicUrl ?? cfg.dynamicUrl}
-      cwd={process.cwd()}
-      resultsDir={resultsDir}
-      recentScans={listRecentScans(resultsDir)}
-    />,
+    <ThemeProvider>
+      <App
+        store={store}
+        staticUrl={opts.staticUrl ?? cfg.staticUrl}
+        dynamicUrl={opts.dynamicUrl ?? cfg.dynamicUrl}
+        cwd={process.cwd()}
+        resultsDir={resultsDir}
+        recentScans={listRecentScans(resultsDir)}
+      />
+    </ThemeProvider>,
     { exitOnCtrlC: false },
   );
   await waitUntilExit();
