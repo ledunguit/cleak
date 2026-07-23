@@ -1,4 +1,4 @@
-import type { ReactNode, RefObject } from 'react';
+import type { ReactNode, Ref, RefObject } from 'react';
 import { Box, Text, useStdout } from 'ink';
 import { StackLayout } from './StackLayout.js';
 import { isFullscreenEnvEnabled } from './layoutFlags.js';
@@ -78,32 +78,26 @@ export function FullscreenLayout({
         header={header}
         scrollable={
           <Box
-            ref={scrollRef as RefObject<unknown>}
+            ref={scrollRef as any}
             flexDirection="column"
             overflow="hidden"
             position="relative"
           >
             {scrollable}
 
-            {/* Invisible marker for parent to track divider Y position */}
-            {dividerYRef && (
-              <Box ref={dividerYRef as RefObject<unknown>} />
-            )}
+            {dividerYRef && <Box ref={dividerYRef as any} />}
 
             {/* "N new messages" pill — floating badge centered at the bottom */}
             {showPill && (
               <Box
                 position="absolute"
-                bottom={0}
                 width="100%"
                 justifyContent="center"
               >
-                <Box backgroundColor="#2563eb" paddingX={1}>
-                  <Text color="white">
-                    {newMessageCount} new message
-                    {newMessageCount !== 1 ? 's' : ''}
-                  </Text>
-                </Box>
+                <Text backgroundColor="#2563eb" color="white">
+                  {' '}{newMessageCount} new message
+                  {newMessageCount !== 1 ? 's' : ''}{' '}
+                </Text>
               </Box>
             )}
           </Box>
