@@ -25,6 +25,5 @@
       "@cleak/agent-core": ["packages/agent-core/src"],
       "@cleak/agent-core/*": ["packages/agent-core/src/*"]
     }
-  },
-  "include": ["apps/**/*", "packages/**/*"]
+  }
 }
