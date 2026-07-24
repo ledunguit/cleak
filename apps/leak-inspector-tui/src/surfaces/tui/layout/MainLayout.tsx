@@ -14,6 +14,8 @@ export interface MainLayoutProps {
   readonly sidebarPosition?: 'left' | 'right';
   /** Terminal columns (from useStdout). Used for responsive sidebar width. */
   readonly termCols?: number;
+  /** Terminal rows (from useStdout). Constrains total layout height. */
+  readonly termRows?: number;
 }
 
 /**
@@ -30,6 +32,7 @@ export function MainLayout({
   bottom,
   sidebarPosition = 'right',
   termCols = 100,
+  termRows = 24,
 }: MainLayoutProps) {
   const sidebarWidth = Math.max(24, Math.min(36, Math.floor(termCols * 0.3)));
 
@@ -40,7 +43,7 @@ export function MainLayout({
   );
 
   return (
-    <Box flexDirection="column" width="100%" height="100%">
+    <Box flexDirection="column" width="100%" height={termRows}>
       {/* Sticky header */}
       <Box flexShrink={0} flexDirection="column">
         {header}

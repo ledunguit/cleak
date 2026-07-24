@@ -1,6 +1,7 @@
-import { Box, Text, useStdout } from 'ink';
+import { Box, Text } from 'ink';
 import { memo } from 'react';
 import { useStore } from 'zustand';
+import { useTerminalSize } from '../hooks/useTerminalSize';
 import { color, glyph } from '../theme';
 import type { ToolCardData, UiMessage } from '../../../stores';
 import type { TuiStore } from '../../../stores';
@@ -23,9 +24,9 @@ export const MessageList = memo(function MessageList({
   scrollOffset?: number;
   focusMsgId?: string;
 }) {
-  const { stdout } = useStdout();
-  // Overhead: header(~3) + bottom chrome(~5) + margins(~2) = 10.
-  const rows = Math.max(4, (stdout.rows ?? 30) - 10);
+  const { rows: termRows } = useTerminalSize();
+  // Overhead: header(9: border2+logo6+provider1) + bottom(9: spinner2+timeline2+prompt1+footer1+agent1+margins2) + spacing(2) = 20.
+  const rows = Math.max(4, termRows - 20);
   const end = Math.max(0, messages.length - scrollOffset);
   const start = Math.max(0, end - rows);
   const visible = messages.slice(start, end);

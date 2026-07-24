@@ -14,13 +14,14 @@
  *   │  ↑/↓ move · ↵ detail · s sort · esc exit            │
  *   └─────────────────────────────────────────────────────┘
  */
-import { Box, Text, useInput, useStdout } from 'ink';
+import { Box, Text, useInput } from 'ink';
 import { join } from 'node:path';
 import { color, glyph } from '../theme';
 import { FindingsTable } from './FindingsTable';
 import { FindingsDetail } from './FindingsDetail';
 import { FindingsToolbar, Hint } from './FindingsToolbar';
 import { visibleFindings, type TuiStore, type UiState } from '../../../stores';
+import { useTerminalSize } from '../hooks/useTerminalSize';
 import type { FindingView } from '../findings/findingView';
 
 function verdictCounts(findings: FindingView[]) {
@@ -34,10 +35,10 @@ function verdictCounts(findings: FindingView[]) {
 }
 
 export function FindingsScreen({ store, state, resultsDir }: { store: TuiStore; state: UiState; resultsDir: string }) {
-  const { stdout } = useStdout();
+  const { rows: termRows } = useTerminalSize();
   const fs = state.findings;
   const visible = visibleFindings(state);
-  const tableRows = Math.max(5, (stdout.rows ?? 30) - 13);
+  const tableRows = Math.max(5, termRows - 13);
 
   useInput((input, key) => {
     if (!fs) return;

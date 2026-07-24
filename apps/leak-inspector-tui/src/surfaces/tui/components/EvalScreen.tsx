@@ -11,7 +11,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { Box, Text, useInput, useStdout } from 'ink';
+import { Box, Text, useInput } from 'ink';
+import { useTerminalSize } from '../hooks/useTerminalSize';
 import { color, glyph } from '../theme';
 import { VerdictCard } from './VerdictCard';
 import { snapshotFindingToView } from '../findings/findingView';
@@ -69,7 +70,7 @@ export function EvalScreen({
   evalState: EvalUiState;
   resultsDir: string;
 }) {
-  const { stdout } = useStdout();
+  const { rows: termRows } = useTerminalSize();
   // Tick so elapsed timers + running phases stay live between store updates.
   const [, force] = useState(0);
   useEffect(() => {
@@ -94,7 +95,7 @@ export function EvalScreen({
     }
   }, [evalState.tab, selected?.scanId, selected?.status, resultsDir]);
 
-  const logRows = Math.max(6, (stdout.rows ?? 30) - 20);
+  const logRows = Math.max(6, termRows - 20);
   const maxScroll = Math.max(0, logLines.length - logRows);
   const [logScroll, setLogScroll] = useState(0);
   // Reset the log scroll to the latest (tail) when the case changes.
@@ -260,8 +261,8 @@ function caseLine(c: EvalCaseUi, selected: boolean) {
 }
 
 function Cases({ s }: { s: EvalUiState }) {
-  const { stdout } = useStdout();
-  const rows = Math.max(5, (stdout.rows ?? 30) - 12);
+  const { rows: termRows } = useTerminalSize();
+  const rows = Math.max(5, termRows - 12);
   const n = s.cases.length;
   const start = Math.max(0, Math.min(Math.max(0, n - rows), s.cursor - Math.floor(rows / 2)));
   const window = s.cases.slice(start, start + rows);
@@ -290,7 +291,7 @@ function Detail({
   logRows: number;
   logScroll: number;
 }) {
-  const { stdout } = useStdout();
+  const { columns } = useTerminalSize();
   const c = selected;
   if (!c) return <Text dimColor>no case selected — go to Cases and press Enter</Text>;
   const labeled: LabeledCase = { id: c.id, repo_path: '', flaws: c.flaws ?? [], clean: c.clean ?? [] };
@@ -316,7 +317,7 @@ function Detail({
   const end = Math.max(0, logLines.length - logScroll);
   const start = Math.max(0, end - logRows);
   const win = logLines.slice(start, end);
-  const w = Math.max(40, (stdout.columns ?? 100) - 2);
+  const w = Math.max(40, columns - 2);
 
   return (
     <Box flexDirection="column">
@@ -339,7 +340,7 @@ function Detail({
           <Text color={color.system}>Verdict detail</Text>
           {cardFindings.map((f) => (
             <Box key={`${f.function ?? '?'}@${f.line ?? '?'}`} marginTop={1}>
-              <VerdictCard f={snapshotFindingToView(f)} width={Math.min(110, (stdout.columns ?? 100) - 2)} />
+              <VerdictCard f={snapshotFindingToView(f)} width={Math.min(110, columns - 2)} />
             </Box>
           ))}
         </Box>

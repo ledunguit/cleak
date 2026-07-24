@@ -5,7 +5,7 @@
  * sticky bottom layout. The sidebar position is configurable.
  */
 
-import { Box, Text, useStdout } from 'ink';
+import { Box, Text } from 'ink';
 import { memo } from 'react';
 import { useStore } from 'zustand';
 import { navigationStore, visibleMessages } from '../../../stores/navigation-store';
@@ -22,6 +22,7 @@ import { SuggestionList, type SuggestionListHandle } from '../components/Suggest
 import { AgentList } from '../components/AgentList';
 import { Footer } from '../components/Footer';
 import { MainLayout } from '../layout/MainLayout';
+import { useTerminalSize } from '../hooks/useTerminalSize';
 import { color, glyph } from '../theme';
 import { type TuiStore, type UiState } from '../../../stores';
 import type { CommandSpec } from '../commands';
@@ -62,7 +63,7 @@ export const MainScreen = memo(function MainScreen({
   onOverlayCancel,
   completeCommand,
 }: MainScreenProps) {
-  const { stdout } = useStdout();
+  const { columns: termCols, rows: termRows } = useTerminalSize();
   // Scan fields from Zustand scanStore
   const messages = useStore(scanStore, (s) => s.messages);
   const agents = useStore(scanStore, (s) => s.agents);
@@ -209,7 +210,8 @@ export const MainScreen = memo(function MainScreen({
       sidebar={sidebar}
       content={content}
       bottom={bottom}
-      termCols={stdout.columns ?? 100}
+      termCols={termCols}
+      termRows={termRows}
       sidebarPosition={sidebarPosition}
     />
   );

@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Box, Text, useInput, useStdout } from 'ink';
+import { Box, Text, useInput } from 'ink';
 import { color, glyph } from '../theme';
 import type { Provider } from '../../../config';
 import { configFilePath, type CleakConfig, type EndpointOverride } from '../../../domain/config-file';
+import { useTerminalSize } from '../hooks/useTerminalSize';
 
 type FieldType = 'cycle' | 'text' | 'secret' | 'number';
 
@@ -214,8 +215,7 @@ export function ConfigScreen({
   });
 
   const provider = activeProvider(draft);
-  const { stdout } = useStdout();
-  const termRows = stdout.rows ?? 30;
+  const { rows: termRows } = useTerminalSize();
 
   // Flat row list (section headers + field rows) for viewport scrolling.
   const rows = useMemo(() => {

@@ -9,6 +9,8 @@ import { join, resolve } from 'node:path';
 import { App } from './App';
 import { TuiStore } from '../../stores';
 import { ThemeProvider } from './theme';
+import { TerminalSizeProvider } from './components/TerminalSizeProvider';
+import { installSyncOutput } from './sync-output';
 import { loadConfig, type Provider } from '../../config';
 import { loadConfigFile } from '../../domain/config-file';
 
@@ -65,16 +67,20 @@ export async function launchTui(opts: LaunchTuiOptions = {}): Promise<void> {
     sidebarPosition: file.sidebarPosition ?? 'right',
   });
   const resultsDir = resolve(cfg.resultsDir);
+  // Install BSU/ESU synchronized output BEFORE first Ink render.
+  installSyncOutput();
   const { waitUntilExit } = render(
     <ThemeProvider>
-      <App
-        store={store}
-        staticUrl={opts.staticUrl ?? cfg.staticUrl}
-        dynamicUrl={opts.dynamicUrl ?? cfg.dynamicUrl}
-        cwd={process.cwd()}
-        resultsDir={resultsDir}
-        recentScans={listRecentScans(resultsDir)}
-      />
+      <TerminalSizeProvider>
+        <App
+          store={store}
+          staticUrl={opts.staticUrl ?? cfg.staticUrl}
+          dynamicUrl={opts.dynamicUrl ?? cfg.dynamicUrl}
+          cwd={process.cwd()}
+          resultsDir={resultsDir}
+          recentScans={listRecentScans(resultsDir)}
+        />
+      </TerminalSizeProvider>
     </ThemeProvider>,
     { exitOnCtrlC: false },
   );

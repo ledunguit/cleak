@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
-import { Box, useApp, useInput, useStdout } from 'ink';
+import { useEffect, useInsertionEffect, useRef, useState } from 'react';
+import { Box, useApp, useInput } from 'ink';
 import { useStore } from 'zustand';
 import { appendHistory } from './history';
 import { useHistoryNavigation } from './hooks/useHistoryNavigation';
@@ -13,6 +13,7 @@ import { saveConfigFile, loadConfigFile, type CleakConfig } from '../../domain/c
 import { visibleMessages, type TuiStore } from '../../stores';
 import { scanStore } from '../../stores/scan-store';
 import { configStore } from '../../stores/config-store';
+import { useTerminalSize } from './hooks/useTerminalSize';
 
 export interface AppProps {
   store: TuiStore; staticUrl?: string; dynamicUrl?: string;
@@ -25,14 +26,20 @@ export function App({ store, staticUrl, dynamicUrl, cwd, resultsDir, recentScans
   const scrollOffset = useStore(store, (s) => s.scrollOffset);
   const fullState = useStore(store, (s) => s);
   const { exit } = useApp();
-  const { stdout } = useStdout();
+  const { rows: termRows } = useTerminalSize();
 
-  // Use alternate screen buffer for config/eval/findings screens to reduce flicker.
-  useEffect(() => {
-    if (view !== 'main') {
-      stdout.write('\x1b[?1049h'); // enter alternate screen
-      return () => { stdout.write('\x1b[?1049l'); }; // leave alternate screen
-    }
+  // Use alternate screen buffer for ALL views to keep header/footer sticky.
+  // Without this, the terminal scrolls naturally when content exceeds rows,
+  // pushing the header off-screen.
+  //
+  // CRITICAL: useInsertionEffect (not useEffect) so the alt-screen is entered
+  // BEFORE Ink paints the first frame — avoids the blank-screen-until-keypress
+  // bug and the flash-of-main-screen flicker on view transitions.
+  // Use process.stdout directly (not useStdout()) to avoid re-triggering on
+  // resize/state changes — process.stdout is a stable singleton.
+  useInsertionEffect(() => {
+    process.stdout.write('\x1b[?1049h'); // enter alternate screen
+    return () => { process.stdout.write('\x1b[?1049l'); }; // leave alternate screen
   }, [view]);
   const [input, setInput] = useState('');
   const [inputRev, setInputRev] = useState(0);
@@ -58,12 +65,11 @@ export function App({ store, staticUrl, dynamicUrl, cwd, resultsDir, recentScans
       && (status === 'running' || status === 'paused') && !fullState.pendingPermission) scanStore.getState().abort();
   });
 
-  // Reactive terminal dimensions via useStdout() — updates on resize.
-  const termRows = stdout.rows ?? 30;
-  // Overhead estimate: header (~3) + bottom chrome (~5) = 8.
+  // Reactive terminal dimensions via useTerminalSize() — updates on resize.
+  // Overhead: header(9: border2+logo6+provider1) + bottom(9: spinner2+timeline2+prompt1+footer1+agent1+margins2) + spacing(2) = 20.
   // MainLayout clips content via flexGrow+overflow:hidden, so this is only
   // used for scroll offset math, not for actual rendering.
-  const viewportRows = Math.max(8, termRows - 8);
+  const viewportRows = Math.max(8, termRows - 20);
   const visible = visibleMessages(fullState);
   const maxOffset = Math.max(0, visible.length - viewportRows);
   const page = Math.max(1, Math.floor(viewportRows / 2));

@@ -5,7 +5,8 @@
  * uppercase labels and are omitted when empty, so the card degrades gracefully
  * (older snapshots / heuristic-only verdicts) and stays sparse.
  */
-import { Box, Text, useStdout } from 'ink';
+import { Box, Text } from 'ink';
+import { useTerminalSize } from '../hooks/useTerminalSize';
 import { color, glyph } from '../theme';
 import type { FindingView } from '../findings/findingView';
 import {
@@ -32,7 +33,7 @@ const Dot = () => <Text color={color.subtle}> {glyph.bullet} </Text>;
 const Label = ({ children }: { children: string }) => <Text color={color.system}>{children}</Text>;
 
 export function VerdictCard({ f, width }: { f: FindingView; width?: number }) {
-  const { stdout } = useStdout();
+  const { columns } = useTerminalSize();
   const vs = verdictStyle(f.verdict);
   const cov = coverageBadge(f.dynamicCoverage);
   const jc = judgeChip(f.verdictTool);
@@ -40,7 +41,7 @@ export function VerdictCard({ f, width }: { f: FindingView; width?: number }) {
   const se = f.staticEvidence;
   const diff = f.repairDiff;
   const hasDiff = !!diff && (diff.originalLines.length > 0 || diff.suggestedLines.length > 0);
-  const inner = Math.max(24, (width ?? (stdout.columns ?? 100) - 2) - 4);
+  const inner = Math.max(24, (width ?? columns - 2) - 4);
   const rule = '─'.repeat(inner);
   const evTool = Math.min(8, Math.max(4, ...f.evidence.map((e) => e.tool.length), 4));
 
