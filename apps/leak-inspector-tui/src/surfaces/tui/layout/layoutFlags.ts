@@ -2,13 +2,11 @@
  * Opt-in toggle for fullscreen environment layout mode.
  *
  * `isFullscreenEnvEnabled()` controls whether layout primitives should
- * consume the full terminal viewport. Initially returns `false` — the
- * StackLayout works inline without fullscreen assumptions.
- *
- * Fullscreen mode will be enabled in a follow-up (Task 8) via a
- * useStdoutDimensions hook that sets a flag when terminal space is ample.
+ * consume the full terminal viewport. Enabled by setting `CLEAK_FULLSCREEN=1`
+ * in the environment. Defaults to `false` — the StackLayout works inline
+ * without full-clear, avoiding flicker.
  */
 
 export function isFullscreenEnvEnabled(): boolean {
-  return true;
+  return process.env.CLEAK_FULLSCREEN === '1';
 }

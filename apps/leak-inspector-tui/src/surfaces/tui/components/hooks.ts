@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react';
-import type { TuiStore, UiState } from '../store';
+import type { TuiStore, UiState } from '../../../stores';
 
 export function useStore(store: TuiStore): UiState {
   return useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);

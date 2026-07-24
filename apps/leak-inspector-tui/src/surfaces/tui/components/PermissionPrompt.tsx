@@ -1,6 +1,6 @@
 import { Box, Text, useInput } from 'ink';
 import { color, glyph } from '../theme';
-import type { PendingPermission } from '../store';
+import type { PendingPermission } from '../../../stores';
 
 /**
  * Permission prompt rendered as a sibling overlay above the input (not inside

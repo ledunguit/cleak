@@ -2,7 +2,7 @@ import { Box, Text } from 'ink';
 import { memo } from 'react';
 import { SCAN_PHASE_ORDER, PHASE_META, ScanPhase } from '@cleak/common/flow/scan-flow-contract';
 import { color, glyph } from '../theme';
-import type { PhaseStatus, UiState } from '../store';
+import type { PhaseStatus, UiState } from '../../../stores';
 
 const ICON: Record<PhaseStatus, string> = {
   pending: '○',

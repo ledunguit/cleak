@@ -1,7 +1,8 @@
 import { describe, expect, test } from 'bun:test';
-import { TuiStore, visibleMessages } from '../../../src/surfaces/tui/store';
+import { visibleMessages } from '../../../src/stores';
 import type { AgentMeta } from '../../../src/orchestrator/investigation';
 import type { AgentEvent } from '@cleak/agent-core';
+import { createTestState } from './test-helpers';
 
 const STATIC0: AgentMeta = { id: 'static-0', label: 'static 1/2', kind: 'static' };
 const DYN: AgentMeta = { id: 'dynamic', label: 'dynamic', kind: 'dynamic' };
@@ -10,9 +11,12 @@ const thinking = (t: string): AgentEvent => ({ type: 'thinking', text: t });
 const toolUse = (id: string, name = 'functionSummary'): AgentEvent => ({ type: 'tool_use', id, name, input: {}, isReadOnly: true });
 const toolResult = (id: string, output: unknown): AgentEvent => ({ type: 'tool_result', id, name: 'functionSummary', output, isError: false, durationMs: 5 });
 
+// State isolation is handled by createTestState() which resets all Zustand
+// singleton stores before returning the adapter. No explicit beforeEach needed.
+
 describe('per-agent tagging + registry', () => {
   test('tags messages with agentId and registers non-main agents', () => {
-    const s = new TuiStore();
+    const s = createTestState();
     s.applyAgentEvent(thinking('hmm'), STATIC0);
     s.applyAgentEvent({ type: 'assistant_text', text: 'hi' }, STATIC0);
     const st = s.getSnapshot();
@@ -23,14 +27,14 @@ describe('per-agent tagging + registry', () => {
   });
 
   test('main-flow events are not registered as selectable agents', () => {
-    const s = new TuiStore();
+    const s = createTestState();
     s.applyAgentEvent({ type: 'notice', text: 'Stage A' }); // default = main
     expect(s.getSnapshot().agents).toHaveLength(0);
     expect(s.getSnapshot().messages.some((m) => m.agentId === 'main')).toBe(true);
   });
 
   test('tool_result keeps a short preview + a full (capped) output; thinking/tool collapse by default', () => {
-    const s = new TuiStore();
+    const s = createTestState();
     s.applyAgentEvent(toolUse('tu1'), STATIC0);
     s.applyAgentEvent(toolResult('tu1', 'x'.repeat(5000)), STATIC0);
     const tool = s.getSnapshot().messages.find((m) => m.kind === 'tool')!;
@@ -41,7 +45,7 @@ describe('per-agent tagging + registry', () => {
   });
 
   test('turn_end increments the agent turn count; done sets status', () => {
-    const s = new TuiStore();
+    const s = createTestState();
     s.applyAgentEvent(thinking('a'), STATIC0);
     s.applyAgentEvent({ type: 'turn_end', turn: 1, usage: { inputTokens: 10, outputTokens: 5, thinkingTokens: 0 } }, STATIC0);
     expect(s.getSnapshot().agents[0].turns).toBe(1);
@@ -52,7 +56,7 @@ describe('per-agent tagging + registry', () => {
 
 describe('visibleMessages', () => {
   test('filters by viewAgentId', () => {
-    const s = new TuiStore();
+    const s = createTestState();
     s.applyAgentEvent({ type: 'notice', text: 'main line' });
     s.applyAgentEvent(thinking('static line'), STATIC0);
     const st = s.getSnapshot();
@@ -63,7 +67,7 @@ describe('visibleMessages', () => {
 
 describe('agent-log navigation', () => {
   function withTwoAgents() {
-    const s = new TuiStore();
+    const s = createTestState();
     s.applyAgentEvent(thinking('s1'), STATIC0);
     s.applyAgentEvent(thinking('d1'), DYN);
     return s;
@@ -92,7 +96,7 @@ describe('agent-log navigation', () => {
   });
 
   test('logFocusMove moves the focus cursor; toggleFocusedCollapse flips collapse', () => {
-    const s = new TuiStore();
+    const s = createTestState();
     s.applyAgentEvent(thinking('t1'), STATIC0);
     s.applyAgentEvent(thinking('t2'), STATIC0);
     s.enterAgentList();

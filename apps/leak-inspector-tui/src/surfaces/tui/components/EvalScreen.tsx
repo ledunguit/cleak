@@ -16,8 +16,7 @@ import { color, glyph } from '../theme';
 import { VerdictCard } from './VerdictCard';
 import { snapshotFindingToView } from '../findings/findingView';
 import { classifyFinding, isFlagged, type LabeledCase, type SnapshotFinding } from '../../../domain/evalScoring';
-import type { TuiStore } from '../store';
-import type { EvalUiState, EvalCaseUi } from '../store';
+import type { TuiStore, EvalUiState, EvalCaseUi } from '../../../stores';
 
 /** Color a steps.md log line by its leading marker (thinking / tool / result). */
 function logLineColor(line: string): string | undefined {

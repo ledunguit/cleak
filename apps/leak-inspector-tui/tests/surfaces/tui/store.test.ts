@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { visibleMessages, visibleFindings } from '../../../src/surfaces/tui/store';
+import { visibleMessages, visibleFindings } from '../../../src/stores';
 import type { FindingView } from '../../../src/surfaces/tui/findings/findingView';
 
 const fv = (over: Partial<FindingView>): FindingView => ({

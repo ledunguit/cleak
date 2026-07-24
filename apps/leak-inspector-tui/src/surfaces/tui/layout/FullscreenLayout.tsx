@@ -1,5 +1,5 @@
 import type { ReactNode, Ref, RefObject } from 'react';
-import { Box, Text, useStdout } from 'ink';
+import { Box, Text } from 'ink';
 import { StackLayout } from './StackLayout.js';
 import { isFullscreenEnvEnabled } from './layoutFlags.js';
 
@@ -66,14 +66,11 @@ export function FullscreenLayout({
     );
   }
 
-  const { stdout } = useStdout();
-  const terminalRows = Math.max(12, stdout.rows ?? 30);
-
   // Show "N new messages" pill when scrolled up and there are new items
   const showPill = !hidePill && newMessageCount > 0;
 
   return (
-    <Box flexDirection="column" width="100%" height={terminalRows}>
+    <Box flexDirection="column" width="100%" flexGrow={1}>
       <StackLayout
         header={header}
         scrollable={
