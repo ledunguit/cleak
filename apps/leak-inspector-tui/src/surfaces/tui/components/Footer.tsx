@@ -1,7 +1,7 @@
 import { Box, Text } from 'ink';
 import { memo } from 'react';
 import { color, glyph } from '../theme';
-import type { UiState } from '../store';
+import type { UiState } from '../../../stores';
 
 export const Footer = memo(function Footer({ state }: { state: UiState }) {
   const { inputTokens, outputTokens, thinkingTokens } = state.usage;

@@ -17,7 +17,7 @@ import { buildWorkflowInvestigationPhase } from '../../orchestrator/workflowInve
 import { scanDir, writeReports, writeScanMetrics } from '../../domain/reportSink';
 import { computeScanMetrics } from '../../domain/scanMetrics';
 import { readFileSync } from 'node:fs';
-import type { TuiStore } from './store';
+import type { TuiStore } from '../../stores';
 
 export interface TuiScanRequest {
   repo: string;

@@ -5,10 +5,10 @@
  * Returns refs and controls the submit handler and onChange use to persist
  * history and reset the recall cursor.
  */
-import { useRef, useState, type Dispatch, type MutableRefObject, type SetStateAction } from 'react';
+import { useRef, type Dispatch, type MutableRefObject, type SetStateAction } from 'react';
 import { matchCommands, type CommandSpec } from '../commands';
 import { loadHistory, historyStep } from '../history';
-import type { TuiStore } from '../store';
+import type { TuiStore } from '../../../stores';
 
 /** Minimal overlay shape — enough to gate `showSuggest`. */
 interface Overlay {
@@ -27,12 +27,8 @@ export interface UseHistoryNavigationReturn {
   completeCommand: (name: string) => void;
   /** Commands matching the current slash-token (empty when not in suggest mode). */
   matches: CommandSpec[];
-  /** Clamped suggestion index (safe to use as array index). */
-  idx: number;
   /** Whether the suggestion popup should render (typed `/` & no overlay). */
   showSuggest: boolean;
-  /** Setter for the raw suggestion index (used by onChange and submit). */
-  setSuggestIndex: Dispatch<SetStateAction<number>>;
   /**
    * Reset the history cursor back to the live draft (called after submit and
    * when the user starts typing after recalling an entry).
@@ -57,8 +53,6 @@ export function useHistoryNavigation(
   overlay: Overlay | null,
   setInputRev: Dispatch<SetStateAction<number>>,
 ): UseHistoryNavigationReturn {
-  const [suggestIndex, setSuggestIndex] = useState(0);
-
   // ── Prompt history (shell-style ↑/↓, persisted across sessions) ──
   // `histIndex === -1` is the live draft; `histDraft` stashes it on the first ↑.
   const history = useRef<string[]>(loadHistory());
@@ -71,17 +65,14 @@ export function useHistoryNavigation(
     if (r.index === histIndex.current) return; // no movement — let other handlers act
     histIndex.current = r.index;
     setInput(r.value);
-    setSuggestIndex(0);
     setInputRev((x) => x + 1); // snap cursor to end
   };
 
   const showSuggest = input.startsWith('/') && !overlay;
   const matches = showSuggest ? matchCommands(input) : [];
-  const idx = Math.min(suggestIndex, Math.max(0, matches.length - 1));
 
   const completeCommand = (name: string): void => {
     setInput(`${name} `);
-    setSuggestIndex(0);
     setInputRev((r) => r + 1); // snap cursor to end
   };
 
@@ -95,9 +86,7 @@ export function useHistoryNavigation(
     recallHistory,
     completeCommand,
     matches,
-    idx,
     showSuggest,
-    setSuggestIndex,
     resetHistoryCursor,
   };
 }

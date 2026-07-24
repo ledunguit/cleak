@@ -11,7 +11,7 @@
  */
 import { Box, Text } from 'ink';
 import { color, glyph } from '../theme';
-import type { FindingsTab } from '../store/types';
+import type { FindingsTab } from '../../../stores';
 
 // ── Inline helpers ────────────────────────────────────────────────────────
 

@@ -1,9 +1,9 @@
 import { Box, Text } from 'ink';
 import { memo } from 'react';
+import { useStore } from 'zustand';
 import { color, glyph } from '../theme';
-import type { ToolCardData, UiMessage } from '../store';
-import { visibleMessages, type TuiStore } from '../store';
-import { useStoreSelector } from '../store/selectors';
+import type { ToolCardData, UiMessage } from '../../../stores';
+import type { TuiStore } from '../../../stores';
 
 const DEFAULT_VIEWPORT = 24;
 const THINKING_PREVIEW = 80;
@@ -69,9 +69,13 @@ export const MessageListConnected = memo(function MessageListConnected({
   store: TuiStore;
   viewportRows: number;
 }) {
-  const messages = useStoreSelector(store, visibleMessages);
-  const scrollOffset = useStoreSelector(store, (s) => s.scrollOffset);
-  const focusMsgId = useStoreSelector(store, (s) => s.focusMsgId);
+  const allMessages = useStore(store, (s) => s.messages);
+  const viewAgentId = useStore(store, (s) => s.viewAgentId);
+  const scrollOffset = useStore(store, (s) => s.scrollOffset);
+  const focusMsgId = useStore(store, (s) => s.focusMsgId);
+  const messages = viewAgentId
+    ? allMessages.filter((m) => m.agentId === viewAgentId)
+    : allMessages;
 
   return (
     <MessageList

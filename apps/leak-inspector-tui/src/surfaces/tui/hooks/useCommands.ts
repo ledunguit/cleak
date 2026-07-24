@@ -12,7 +12,7 @@ import { glyph, color, formatDuration } from '../theme';
 import { runTuiScan } from '../runner';
 import { runTuiEval } from '../evalRunner';
 import { snapshotFindingToView } from '../findings/findingView';
-import type { TuiStore } from '../store';
+import type { TuiStore } from '../../../stores';
 import type { SelectOption } from '../components/Select';
 
 // ── Types ──

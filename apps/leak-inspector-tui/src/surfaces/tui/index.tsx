@@ -7,7 +7,7 @@ import { render } from 'ink';
 import { existsSync, readdirSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { App } from './App';
-import { TuiStore } from './store';
+import { TuiStore } from '../../stores';
 import { ThemeProvider } from './theme';
 import { loadEnvFiles } from '../../domain/env';
 import { loadConfig, type Provider } from '../../config';

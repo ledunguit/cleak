@@ -4,7 +4,7 @@
  */
 
 import { SCAN_PHASE_ORDER, type ScanPhase } from '@cleak/common/flow/scan-flow-contract';
-import type { PhaseStatus } from './types';
+import type { PhaseStatus } from '../../../stores';
 
 export function initialPhases(): Record<ScanPhase, PhaseStatus> {
   const p = {} as Record<ScanPhase, PhaseStatus>;

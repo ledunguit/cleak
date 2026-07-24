@@ -12,7 +12,7 @@ import { loadConfig } from '../../config';
 import { runEval } from '../../domain/evalHarness';
 import { writeEval } from '../../domain/evalReport';
 import { color, glyph } from './theme';
-import type { TuiStore } from './store';
+import type { TuiStore } from '../../stores';
 
 export interface TuiEvalRequest {
   corpus: string;

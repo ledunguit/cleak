@@ -20,7 +20,7 @@ import { color, glyph } from '../theme';
 import { FindingsTable } from './FindingsTable';
 import { FindingsDetail } from './FindingsDetail';
 import { FindingsToolbar, Hint } from './FindingsToolbar';
-import { visibleFindings, type TuiStore, type UiState } from '../store';
+import { visibleFindings, type TuiStore, type UiState } from '../../../stores';
 import type { FindingView } from '../findings/findingView';
 
 function verdictCounts(findings: FindingView[]) {

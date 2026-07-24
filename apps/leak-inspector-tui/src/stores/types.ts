@@ -1,14 +1,18 @@
 /**
  * Shared types for the TUI store domain sub-stores. Extracted from the
  * monolithic store.ts to allow focused imports without circular deps.
+ *
+ * This is the canonical location for store types as part of the Zustand
+ * refactor. Old surfaces/tui/store/types.ts remains for backward compat
+ * during migration.
  */
 
-import type { AgentMeta } from '../../../orchestrator/investigation';
-import type { ToolSource } from '../../../domain/mcpToolPlan';
-import type { EvalResult } from '../../../domain/evalHarness';
-import type { SnapshotFinding, LabeledFlaw, CleanSite } from '../../../domain/evalScoring';
+import type { AgentMeta } from '../orchestrator/investigation';
+import type { ToolSource } from '../domain/mcpToolPlan';
+import type { EvalResult } from '../domain/evalHarness';
+import type { SnapshotFinding, LabeledFlaw, CleanSite } from '../domain/evalScoring';
 import type { ScanPhase } from '@cleak/common/flow/scan-flow-contract';
-import type { FindingView } from '../findings/findingView';
+import type { FindingView } from '../surfaces/tui/findings/findingView';
 
 export type PhaseStatus = 'pending' | 'active' | 'done' | 'skipped' | 'failed';
 export type RunStatus = 'idle' | 'running' | 'paused' | 'done' | 'error';
@@ -140,10 +144,4 @@ export interface UiState {
   navMode: NavMode;
   navIndex: number;
   focusMsgId?: string;
-}
-
-/** Read/write handle shared by all sub-stores. */
-export interface StoreAccess {
-  get: () => UiState;
-  set: (patch: Partial<UiState>) => void;
 }

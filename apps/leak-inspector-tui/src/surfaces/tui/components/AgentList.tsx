@@ -1,7 +1,7 @@
 import { Box, Text } from 'ink';
 import { memo } from 'react';
 import { color, glyph } from '../theme';
-import type { AgentInfo, UiState } from '../store';
+import type { AgentInfo, UiState } from '../../../stores';
 
 const STATUS_ICON: Record<AgentInfo['status'], string> = {
   running: glyph.running,
