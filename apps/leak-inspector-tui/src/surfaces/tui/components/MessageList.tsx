@@ -74,7 +74,7 @@ export const MessageListConnected = memo(function MessageListConnected({
   const scrollOffset = useStore(store, (s) => s.scrollOffset);
   const focusMsgId = useStore(store, (s) => s.focusMsgId);
   const messages = viewAgentId
-    ? allMessages.filter((m) => m.agentId === viewAgentId)
+    ? allMessages.filter((m: UiMessage) => m.agentId === viewAgentId)
     : allMessages;
 
   return (

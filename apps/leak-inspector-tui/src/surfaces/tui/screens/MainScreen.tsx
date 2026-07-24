@@ -198,7 +198,7 @@ export const MainScreen = memo(function MainScreen({
           <>
             {showSuggest ? (
               <SuggestionList
-                ref={suggestRef}
+                ref={suggestRef as any}
                 commands={matches}
                 showSuggest={showSuggest}
               />
