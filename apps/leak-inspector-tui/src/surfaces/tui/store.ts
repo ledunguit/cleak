@@ -64,7 +64,7 @@ export class TuiStore {
       messages: [], phases: initialPhases(), status: 'idle', statusText: 'idle',
       usage: { inputTokens: 0, outputTokens: 0, thinkingTokens: 0 },
       mode: 'llm_assisted', dynamic: 'off', provider: 'local', model: '',
-      view: 'main', autoShowReport: false, permissionMode: 'ask',
+      view: 'main', autoShowReport: false, fullscreen: false, permissionMode: 'ask',
       ranDynamicTool: false, scrollOffset: 0, agents: [],
       viewAgentId: 'main', navMode: 'normal', navIndex: 0,
       ...init,
@@ -92,6 +92,7 @@ export class TuiStore {
   setView(view: UiState['view']): void {
     navigationStore.getState().setView(view);
     this.state = { ...this.state, view };
+    this.notify();
   }
   enterAgentList(): void {
     navigationStore.getState().enterAgentList();
@@ -148,6 +149,7 @@ export class TuiStore {
     configStore.getState().setOptions(opts); this.syncConfig();
   }
   setAutoShowReport(auto: boolean): void { configStore.getState().setAutoShowReport(auto); this.syncConfig(); }
+  setFullscreen(fullscreen: boolean): void { configStore.getState().setFullscreen(fullscreen); this.syncConfig(); }
   cyclePermissionMode(): 'ask' | 'auto' { const r = configStore.getState().cyclePermissionMode(); this.syncConfig(); return r; }
   requestPermission(req: { id: string; name: string; input: unknown }): Promise<'allow' | 'deny'> {
     const result = configStore.getState().requestPermission(req);
@@ -159,10 +161,15 @@ export class TuiStore {
     this.syncConfig();
   }
 
+  // ── Notify Zustand useStore subscribers of a state change ──
+  private notify(): void {
+    this.listeners.forEach((l) => l(this.state, this.state));
+  }
+
   // ── Sync helpers — pull Zustand state back into this.state for getSnapshot() callers ──
   private syncConfig(): void {
     const c = configStore.getState();
-    this.state = { ...this.state, mode: c.mode, dynamic: c.dynamic, provider: c.provider, model: c.model, baseUrl: c.baseUrl, apiKey: c.apiKey, autoShowReport: c.autoShowReport, permissionMode: c.permissionMode, pendingPermission: c.pendingPermission };
+    this.state = { ...this.state, mode: c.mode, dynamic: c.dynamic, provider: c.provider, model: c.model, baseUrl: c.baseUrl, apiKey: c.apiKey, autoShowReport: c.autoShowReport, fullscreen: c.fullscreen, permissionMode: c.permissionMode, pendingPermission: c.pendingPermission };
   }
   private syncScan(): void {
     const s = scanStore.getState();

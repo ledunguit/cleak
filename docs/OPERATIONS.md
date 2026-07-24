@@ -49,8 +49,8 @@ bun src/cli.ts                       # mở TUI (lệnh mặc định)
   `~/.config/cleak/config.json` (chmod 600). Provider **`openai-compat`** trỏ tới mọi endpoint
   kiểu OpenAI `/chat/completions` (LM Studio, vLLM, Ollama, OpenRouter, gateway riêng).
 - Ngoài TUI, chỉnh từ CLI: `cleak config set staticUrl http://…` · `cleak config get` ·
-  `cleak config init`. Cài global (npm i -g) không cần `.env` — config file là nguồn cấu hình.
-  **Ưu tiên:** CLI flag > biến env (gồm `.env`) > config file > default.
+  `cleak config init`. Config file là nguồn cấu hình duy nhất.
+  **Ưu tiên:** CLI flag > config file > default.
 
 ### 2b. Headless (CI / script)
 ```bash

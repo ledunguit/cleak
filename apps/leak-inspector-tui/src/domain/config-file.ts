@@ -4,8 +4,8 @@
  * JSON under the XDG config dir (`$XDG_CONFIG_HOME|~/.config` + `cleak/config.json`).
  *
  * Read at the single `loadConfig()` chokepoint (src/config.ts), so every surface
- * (tui / scan / eval / tools) honours it. Precedence is CLI flag > env > THIS file
- * > built-in default — env always wins over the file (see config.ts `pick*`).
+ * (tui / scan / eval / tools) honours it. Precedence is CLI flag > THIS file >
+ * built-in default.
  *
  * The file may hold an apiKey, so it is written chmod 600. Validated with Zod:
  * invalid keys are dropped (with a one-line stderr warning), never fatal.
@@ -69,7 +69,7 @@ export const CleakConfigSchema = z
       .partial(),
     compaction: z.object({ thresholdTokens: zNum, keepRecentTurns: zNum }).partial(),
     workflow: z
-      .object({ staticConcurrency: zNum, staticGroupSize: zNum, judgeConcurrency: zNum })
+      .object({ staticConcurrency: zNum, staticGroupSize: zNum, judgeConcurrency: zNum, discoveryConcurrency: zNum })
       .partial(),
     consensus: z
       .object({
@@ -79,13 +79,25 @@ export const CleakConfigSchema = z
         concurrency: zNum,
       })
       .partial(),
+    // UI / runtime flags (previously env-only).
+    fullscreen: zBool,
+    inContainer: zBool,
+    staticEnrich: zBool,
+    // Judge thresholds (previously env-only).
+    thresholds: z
+      .object({ borderlineLow: zNum, borderlineHigh: zNum })
+      .partial(),
+    // External tool paths (previously env-only).
+    baselines: z.object({ clangBin: z.string(), inferBin: z.string() }).partial(),
+    // Eval-time path remapping (previously env-only).
+    eval: z.object({ staticPathMap: z.string() }).partial(),
   })
   .partial();
 
 export type CleakConfig = z.infer<typeof CleakConfigSchema>;
 export type EndpointOverride = z.infer<typeof endpointSchema>;
 
-/** The TUI session defaults that aren't otherwise represented in env/RunConfig. */
+/** The TUI session defaults that aren't otherwise represented in RunConfig. */
 export const DEFAULT_CONFIG: CleakConfig = {
   defaultMode: 'llm_assisted',
   defaultDynamic: 'off',
@@ -129,7 +141,13 @@ function rawFileObject(): Record<string, unknown> {
   const path = configFilePath();
   if (existsSync(path)) {
     try {
-      return JSON.parse(readFileSync(path, 'utf-8')) as Record<string, unknown>;
+      const data = JSON.parse(readFileSync(path, 'utf-8')) as Record<string, unknown>;
+      // Zustand persist middleware wraps config in { state: {...}, version: N }.
+      // Unwrap it so the old config system reads flat keys directly.
+      if (data && typeof data === 'object' && 'state' in data) {
+        return data.state as Record<string, unknown>;
+      }
+      return data;
     } catch {
       warn(`${path} is not valid JSON — ignored`);
       return {};
@@ -250,8 +268,13 @@ export function configTemplate(): CleakConfig {
       jsonMode: true,
     },
     compaction: { thresholdTokens: 100000, keepRecentTurns: 3 },
-    workflow: { staticConcurrency: 3, staticGroupSize: 4, judgeConcurrency: 3 },
+    workflow: { staticConcurrency: 3, staticGroupSize: 4, judgeConcurrency: 3, discoveryConcurrency: 8 },
     consensus: { n: 1, rule: 'weighted', temperature: 0.7, concurrency: 3 },
+    fullscreen: false,
+    inContainer: false,
+    staticEnrich: false,
+    thresholds: { borderlineLow: 0.35, borderlineHigh: 0.7 },
+    baselines: { clangBin: 'clang', inferBin: 'infer' },
   };
 }
 

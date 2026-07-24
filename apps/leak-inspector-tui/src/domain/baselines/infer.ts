@@ -52,7 +52,11 @@ export function parseInferLeaks(report: unknown): SnapshotFinding[] {
 
 export class InferAdapter implements BaselineAdapter {
   readonly name = 'infer';
-  private readonly bin = process.env.INFER_BIN || 'infer';
+  private readonly bin: string;
+
+  constructor(bin?: string) {
+    this.bin = bin || 'infer';
+  }
 
   async available(): Promise<boolean> {
     try {

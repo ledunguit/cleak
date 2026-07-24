@@ -106,7 +106,11 @@ function caseSourceFiles(caseDir: string): string[] {
 
 export class ClangAnalyzerAdapter implements BaselineAdapter {
   readonly name = 'clang-analyzer';
-  private readonly bin = process.env.CLANG_BIN || 'clang';
+  private readonly bin: string;
+
+  constructor(bin?: string) {
+    this.bin = bin || 'clang';
+  }
 
   async available(): Promise<boolean> {
     try {

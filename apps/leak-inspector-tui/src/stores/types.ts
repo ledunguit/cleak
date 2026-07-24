@@ -137,6 +137,7 @@ export interface UiState {
   eval?: EvalUiState;
   findings?: FindingsUiState;
   autoShowReport: boolean;
+  fullscreen: boolean;
   ranDynamicTool: boolean;
   scrollOffset: number;
   agents: AgentInfo[];

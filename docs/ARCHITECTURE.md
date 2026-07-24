@@ -166,9 +166,9 @@ flowchart TB
   **`openai-compat`** (endpoint OpenAI-tương-thích tuỳ chỉnh: base URL + model + key, route
   qua đường `/chat/completions`). Khoá tách biệt theo provider.
 - **Điều phối TUI:** `agent-core/providers` (`openaiChat`/`anthropic`) — streaming SSE, idle-timeout,
-  function-calling thật. Provider/endpoint chọn được qua `/config`, CLI (`--provider/--base-url/
-  --model/--api-key`), hoặc env (`OPENAI_COMPAT_*`).
-- **Khoá LLM** đọc từ `<root>/.env` hoặc `apps/leak-inspector-tui/.env`.
+  function-calling thật. Provider/endpoint chọn được qua `/config` hoặc CLI (`--provider/--base-url/
+  --model/--api-key`).
+- **Khoá LLM** đọc từ config file (`~/.config/cleak/config.json`). Ưu tiên: CLI flag > config file > default.
 
 > **Tầng judge** có 3 cấu hình so-sánh-được: **heuristic** (thuần, tất định) · **single-LLM**
 > (`--consensus-n 1`) · **consensus** (bỏ phiếu k mẫu + hợp nhất static/dynamic,

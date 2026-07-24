@@ -9,10 +9,7 @@
  */
 
 import { createStore } from 'zustand/vanilla';
-import { devtools, subscribeWithSelector, persist, createJSONStorage, type StateStorage } from 'zustand/middleware';
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
-import { join } from 'node:path';
-import { homedir } from 'node:os';
+import { devtools, subscribeWithSelector } from 'zustand/middleware';
 import type { PendingPermission } from './types';
 
 // ─── State & Actions interfaces ──────────────────────────────────────────────
@@ -25,6 +22,7 @@ export interface ConfigState {
   baseUrl?: string;
   apiKey?: string;
   autoShowReport: boolean;
+  fullscreen: boolean;
   permissionMode: 'ask' | 'auto';
   pendingPermission?: PendingPermission;
 }
@@ -34,6 +32,7 @@ export interface ConfigActions {
     opts: Partial<Pick<ConfigState, 'mode' | 'dynamic' | 'provider' | 'model' | 'baseUrl' | 'apiKey'>>,
   ) => void;
   setAutoShowReport: (auto: boolean) => void;
+  setFullscreen: (fullscreen: boolean) => void;
   cyclePermissionMode: () => 'ask' | 'auto';
   requestPermission: (req: { id: string; name: string; input: unknown }) => Promise<'allow' | 'deny'>;
   resolvePermission: (decision: 'allow' | 'deny') => void;
@@ -41,29 +40,11 @@ export interface ConfigActions {
   setPushSystem: (fn: (text: string, color?: string) => void) => void;
 }
 
-// ─── Filesystem storage adapter for persist middleware ────────────────────────
-
-const configDir = join(process.env.XDG_CONFIG_HOME ?? join(homedir(), '.config'), 'cleak');
-const configPath = join(configDir, 'config.json');
-
-const fsStorage: StateStorage = {
-  getItem: (name) => {
-    try { return readFileSync(name, 'utf-8'); } catch { return null; }
-  },
-  setItem: (name, value) => {
-    const dir = name.slice(0, name.lastIndexOf('/'));
-    if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-    writeFileSync(name, value, 'utf-8');
-  },
-  removeItem: () => {},
-};
-
 // ─── Store creation ──────────────────────────────────────────────────────────
 
 export const configStore = createStore<ConfigState & ConfigActions>()(
-  persist(
-    devtools(
-      subscribeWithSelector((set, get) => {
+  devtools(
+    subscribeWithSelector((set, get) => {
   // Cross-store callback — set by adapter after creation
   let pushSystem: (text: string, color?: string) => void = () => {};
 
@@ -74,6 +55,7 @@ export const configStore = createStore<ConfigState & ConfigActions>()(
     provider: 'local',
     model: '',
     autoShowReport: false,
+    fullscreen: false,
     permissionMode: 'ask' as const,
 
     // ─── Actions ──────────────────────────────────────────────────────
@@ -81,6 +63,8 @@ export const configStore = createStore<ConfigState & ConfigActions>()(
     setOptions: (opts) => set(opts),
 
     setAutoShowReport: (autoShowReport) => set({ autoShowReport }),
+
+    setFullscreen: (fullscreen) => set({ fullscreen }),
 
     setPushSystem: (fn) => {
       pushSystem = fn;
@@ -123,20 +107,6 @@ export const configStore = createStore<ConfigState & ConfigActions>()(
 }),
     { name: 'cleak-config', enabled: process.env.NODE_ENV !== 'production' },
   ),
-  {
-    name: configPath,
-    storage: createJSONStorage(() => fsStorage),
-    partialize: (state) => ({
-      mode: state.mode,
-      dynamic: state.dynamic,
-      provider: state.provider,
-      model: state.model,
-      baseUrl: state.baseUrl,
-      apiKey: state.apiKey,
-      autoShowReport: state.autoShowReport,
-      permissionMode: state.permissionMode,
-    }),
-  },
-));
+);
 
 export type ConfigStore = typeof configStore;

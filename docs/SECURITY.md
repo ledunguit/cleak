@@ -52,5 +52,5 @@ trust boundary it is built for and the controls that enforce it.
 1. Do not publish analyzer MCP ports beyond localhost; if the analyzers must be
    reachable, put them behind an authenticating reverse proxy.
 2. Run the dynamic stage inside a network-less container for any untrusted repo.
-3. Keep the LLM API key (read from `<root>/.env` or `apps/leak-inspector-tui/.env`)
+3. Keep the LLM API key (stored in `~/.config/cleak/config.json`, chmod 600)
    out of version control and scoped to the operator.

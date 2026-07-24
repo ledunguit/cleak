@@ -13,7 +13,6 @@ import { loadConfig, type Provider, type ConsensusJudgeConfig, type RunConfig } 
 import { toProviderSettings } from '../orchestrator/toolWrappers';
 import { loadOrProfileAllocators } from '../domain/allocatorProfiler';
 import { decideStrategy } from '../domain/strategist';
-import { loadEnvFiles } from '../domain/env';
 import { buildPathResolver } from '../domain/pathResolver';
 import { ScanEmitter, JsonlFileSink, MultiSink, CallbackSink, type EventSink, type ScanEvent } from '../orchestrator/events';
 import { runScan, type ScanResult } from '../orchestrator/scanController';
@@ -62,6 +61,10 @@ export interface HeadlessOptions {
   fileLimit?: number;
   staticUrl?: string;
   dynamicUrl?: string;
+  /** Host repo root (for path mapping when analyzers run in Docker). */
+  hostRoot?: string;
+  /** Analyzer-visible root, e.g. /workspace (Docker mount). */
+  analyzerRoot?: string;
   quiet?: boolean;
   /** Consensus-judge override (ablation): partial knobs merged over env defaults. */
   consensus?: Partial<ConsensusJudgeConfig>;
@@ -81,13 +84,14 @@ export interface HeadlessResult extends ScanResult {
 }
 
 export async function runHeadless(opts: HeadlessOptions): Promise<HeadlessResult> {
-  loadEnvFiles();
   const nz = (s?: string) => (s && s.trim() ? s : undefined);
   const cfg = loadConfig({
     provider: opts.provider,
     llm: { baseUrl: nz(opts.baseUrl), model: nz(opts.model), apiKey: nz(opts.apiKey) },
     ...(opts.staticUrl ? { staticUrl: opts.staticUrl } : {}),
     ...(opts.dynamicUrl ? { dynamicUrl: opts.dynamicUrl } : {}),
+    ...(opts.hostRoot ? { hostRoot: opts.hostRoot } : {}),
+    ...(opts.analyzerRoot ? { analyzerRoot: opts.analyzerRoot } : {}),
     ...(opts.consensus ? { consensus: opts.consensus as ConsensusJudgeConfig } : {}),
   });
 
@@ -98,8 +102,8 @@ export async function runHeadless(opts: HeadlessOptions): Promise<HeadlessResult
   // Loud guard: a custom OpenAI-compatible endpoint can't run without a base URL + model.
   if (analysisMode === AnalysisMode.LLM_ASSISTED && cfg.llm.provider === 'openai-compat' && (!cfg.llm.baseUrl || !cfg.llm.model)) {
     throw new Error(
-      `provider 'openai-compat' needs a base URL AND a model — set OPENAI_COMPAT_BASE_URL + ` +
-        `OPENAI_COMPAT_MODEL or pass --base-url/--model. Got baseUrl='${cfg.llm.baseUrl}', model='${cfg.llm.model}'.`,
+      `provider 'openai-compat' needs a base URL AND a model — set them in the config file ` +
+        `or pass --base-url/--model. Got baseUrl='${cfg.llm.baseUrl}', model='${cfg.llm.model}'.`,
     );
   }
   let dynamicMode =

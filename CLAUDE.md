@@ -41,7 +41,7 @@ The workspace consists of these main components:
     + optional consensus (k samples).
 - Writes report artifacts (JSON / Markdown / HTML / snapshot) to
   `results/<scanId>/` on disk.
-- Reads the LLM key from `<root>/.env` or `apps/leak-inspector-tui/.env`.
+- Reads config from `~/.config/cleak/config.json` (CLI flag > config file > default).
 
 ### apps/static-analyzer (Static Analysis — NestJS)
 - NestJS service serving **MCP/HTTP on port 50061** to the TUI.
@@ -127,17 +127,21 @@ turbo run dev --filter=static-analyzer        # static analyzer (MCP, port 50061
 turbo run dev --filter=dynamic-analyzer        # dynamic analyzer (MCP, port 50062)
 ```
 
-## Environment Configuration
+## Configuration
 
-### LLM Key
-- The LLM key is read from `<root>/.env` or `apps/leak-inspector-tui/.env`.
+All TUI/CLI configuration is persisted in a single JSON file at `~/.config/cleak/config.json`. Precedence: **CLI flag > config file > built-in default**. No `.env` files are used.
 
-### Static Server
+- `cleak config init` — write a fully-keyed template
+- `cleak config get` — print the resolved (effective) config
+- `cleak config set <key> <value>` — update one key
+- `/config` in the TUI — interactive settings screen
+
+### Static Server (Docker)
 - `SCAN_BUILD_BIN`: Path to the `scan-build` binary (default `scan-build`)
 - `RUNS_DIR`: Directory for scan-build run artifacts (default `./runs`)
 - `MCP_HTTP_PORT`: MCP/HTTP port (default 50061)
 
-### Dynamic Server
+### Dynamic Server (Docker)
 - `WORKSPACE_ROOT`: Root for allowed execution paths
 - `RUNS_DIR`: Directory for storing run artifacts
 - `VALGRIND_BIN`: Path to Valgrind binary

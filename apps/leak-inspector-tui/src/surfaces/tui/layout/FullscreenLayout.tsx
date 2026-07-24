@@ -30,6 +30,9 @@ export interface FullscreenLayoutProps {
 
   /** Force-hide the pill badge (e.g. when user is at the bottom) */
   readonly hidePill?: boolean;
+
+  /** Enable fullscreen mode (from config file). */
+  readonly fullscreen?: boolean;
 }
 
 /**
@@ -53,9 +56,10 @@ export function FullscreenLayout({
   newMessageCount = 0,
   onPillClick: _onPillClick,
   hidePill = false,
+  fullscreen,
 }: FullscreenLayoutProps) {
   // Fallback: when fullscreen is not enabled, delegate to StackLayout as-is
-  if (!isFullscreenEnvEnabled()) {
+  if (!isFullscreenEnvEnabled(fullscreen)) {
     return (
       <StackLayout
         header={header}

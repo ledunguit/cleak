@@ -81,6 +81,17 @@ const FIELDS: FieldDef[] = [
   { section: 'Consensus judge', path: 'consensus.rule', label: 'Rule', type: 'cycle', scope: 'config', options: RULE_OPTIONS },
   { section: 'Consensus judge', path: 'consensus.temperature', label: 'Sampling temperature', type: 'number', scope: 'config', placeholder: '0.7' },
   { section: 'Consensus judge', path: 'consensus.concurrency', label: 'Concurrency', type: 'number', scope: 'config', placeholder: '3' },
+
+  { section: 'Advanced', path: 'fullscreen', label: 'Fullscreen mode', type: 'cycle', scope: 'config', options: ONOFF },
+  { section: 'Advanced', path: 'inContainer', label: 'Running inside container', type: 'cycle', scope: 'config', options: ONOFF },
+  { section: 'Advanced', path: 'staticEnrich', label: 'Static enrichment (no_llm)', type: 'cycle', scope: 'config', options: ONOFF },
+  { section: 'Advanced', path: 'workflow.discoveryConcurrency', label: 'Discovery concurrency', type: 'number', scope: 'config', placeholder: '8' },
+  { section: 'Advanced', path: 'thresholds.borderlineLow', label: 'Borderline low threshold', type: 'number', scope: 'config', placeholder: '0.35' },
+  { section: 'Advanced', path: 'thresholds.borderlineHigh', label: 'Borderline high threshold', type: 'number', scope: 'config', placeholder: '0.7' },
+
+  { section: 'Baselines', path: 'baselines.clangBin', label: 'clang binary path', type: 'text', scope: 'config', placeholder: 'clang' },
+  { section: 'Baselines', path: 'baselines.inferBin', label: 'infer binary path', type: 'text', scope: 'config', placeholder: 'infer' },
+  { section: 'Baselines', path: 'eval.staticPathMap', label: 'Eval path map (from=to)', type: 'text', scope: 'config', placeholder: '(unset)' },
 ];
 
 export const activeProvider = (d: CleakConfig): Provider => (d.provider ?? 'local') as Provider;
@@ -257,7 +268,7 @@ export function ConfigScreen({
       ) : null}
       <Box marginTop={1}>
         <Text dimColor>
-          Saved to {configFilePath()} (chmod 600) {glyph.bullet} env still overrides the file {glyph.bullet} applies to new scans this session
+          Saved to {configFilePath()} (chmod 600) {glyph.bullet} applies to new scans this session
         </Text>
       </Box>
     </Box>

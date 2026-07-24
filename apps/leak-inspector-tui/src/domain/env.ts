@@ -1,13 +1,9 @@
 /**
- * Minimal .env loader. The LLM key and gateway settings live in the repo-root
- * `.env` (or the TUI app's own `.env`); loading it here lets the TUI "just work"
- * without a separate config. The repo root is located independently of the
- * current working directory (so `bun run tui` from the app dir still finds the
- * key). Already-set process.env values always win (CLI/shell overrides take
- * precedence); the first file to define a key wins over later files.
+ * Workspace root detection. Locates the monorepo root from a starting dir by
+ * walking up to a marker (turbo.json + apps/, or docker-compose.yml).
  */
 
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -27,9 +23,6 @@ function findMarkerRoot(start: string): string | undefined {
 /** Candidate repo roots: this module's location (deterministic) + the cwd walk. */
 function repoRoots(cwd: string): string[] {
   const roots = new Set<string>();
-  // This file is at <root>/apps/leak-inspector-tui/src/domain/env.ts → up 4 = root.
-  // `import.meta.url` works in both Node ESM and Bun (Bun-only `import.meta.dir`
-  // is undefined under Node and breaks the published bundle).
   const moduleDir = ((): string | undefined => {
     try {
       return dirname(fileURLToPath(import.meta.url));
@@ -43,7 +36,7 @@ function repoRoots(cwd: string): string[] {
   }
   const fromCwd = findMarkerRoot(cwd);
   if (fromCwd) roots.add(fromCwd);
-  roots.add(cwd); // last resort
+  roots.add(cwd);
   return [...roots];
 }
 
@@ -58,40 +51,4 @@ export function monorepoRoot(cwd = process.cwd()): string | undefined {
       return root;
   }
   return undefined;
-}
-
-/** Default search order: <root>/.env, then <root>/apps/leak-inspector-tui/.env (LLM key). */
-export function defaultEnvFiles(cwd = process.cwd()): string[] {
-  const files: string[] = [];
-  for (const root of repoRoots(cwd)) {
-    files.push(join(root, '.env'), join(root, 'apps', 'leak-inspector-tui', '.env'));
-  }
-  return files;
-}
-
-export function loadEnvFiles(paths: string[] = defaultEnvFiles()): void {
-  for (const path of paths) {
-    if (!existsSync(path)) continue;
-    let text: string;
-    try {
-      text = readFileSync(path, 'utf-8');
-    } catch {
-      continue;
-    }
-    for (const raw of text.split('\n')) {
-      const line = raw.trim();
-      if (!line || line.startsWith('#')) continue;
-      const eq = line.indexOf('=');
-      if (eq < 0) continue;
-      const key = line.slice(0, eq).trim();
-      let val = line.slice(eq + 1).trim();
-      if (
-        (val.startsWith('"') && val.endsWith('"')) ||
-        (val.startsWith("'") && val.endsWith("'"))
-      ) {
-        val = val.slice(1, -1);
-      }
-      if (process.env[key] === undefined) process.env[key] = val;
-    }
-  }
 }

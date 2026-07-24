@@ -15,7 +15,6 @@ import { Command } from 'commander';
 import { McpClient, loadMcpTools } from '@cleak/agent-core';
 import { loadConfig, type Provider } from './config';
 import { mcpToolFlags, phaseForMcpTool } from './domain/mcpToolPlan';
-import { loadEnvFiles } from './domain/env';
 import { VERSION } from './version';
 import {
   configFilePath,
@@ -45,7 +44,6 @@ program
   .option('--static-url <url>', 'static analyzer MCP url')
   .option('--dynamic-url <url>', 'dynamic analyzer MCP url')
   .action(async (opts) => {
-    loadEnvFiles(); // pick up .env (and, via loadConfig, the persisted config file)
     const cfg = loadConfig({
       ...(opts.staticUrl ? { staticUrl: opts.staticUrl } : {}),
       ...(opts.dynamicUrl ? { dynamicUrl: opts.dynamicUrl } : {}),
@@ -106,8 +104,6 @@ program
   .option('--host-root <path>', 'host repo root (for path mapping when analyzers run in Docker)')
   .option('--analyzer-root <path>', 'analyzer-visible root, e.g. /workspace (Docker mount)')
   .action(async (opts) => {
-    if (opts.hostRoot) process.env.HOST_ROOT = opts.hostRoot;
-    if (opts.analyzerRoot) process.env.ANALYZER_ROOT = opts.analyzerRoot;
     const { runHeadless } = await import('./surfaces/headless');
     try {
       await runHeadless({
@@ -127,6 +123,8 @@ program
         fileLimit: opts.fileLimit,
         staticUrl: opts.staticUrl,
         dynamicUrl: opts.dynamicUrl,
+        hostRoot: opts.hostRoot,
+        analyzerRoot: opts.analyzerRoot,
       });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -153,8 +151,6 @@ program
   .option('--host-root <path>', 'host repo root (for path mapping when analyzers run in Docker)')
   .option('--analyzer-root <path>', 'analyzer-visible root, e.g. /workspace (Docker mount)')
   .action(async (opts) => {
-    if (opts.hostRoot) process.env.HOST_ROOT = opts.hostRoot;
-    if (opts.analyzerRoot) process.env.ANALYZER_ROOT = opts.analyzerRoot;
     const { launchTui } = await import('./surfaces/tui/index');
     await launchTui({
       provider: opts.provider,
@@ -165,6 +161,8 @@ program
       dynamic: opts.dynamic,
       staticUrl: opts.staticUrl,
       dynamicUrl: opts.dynamicUrl,
+      hostRoot: opts.hostRoot,
+      analyzerRoot: opts.analyzerRoot,
     });
   });
 
@@ -184,14 +182,13 @@ program
   .option('--static-url <url>', 'static analyzer MCP url')
   .option('--dynamic-url <url>', 'dynamic analyzer MCP url')
   .action(async (opts) => {
-    const { loadEnvFiles } = await import('./domain/env');
     const { runEval } = await import('./domain/evalHarness');
     const { writeEval } = await import('./domain/evalReport');
     const { basename } = await import('node:path');
-    loadEnvFiles();
+    const cfg = loadConfig({});
     const stamp = new Date().toISOString().replace(/[:.]/g, '-');
     const outDir =
-      opts.out ?? `${process.env.RESULTS_DIR ?? 'results'}/eval-${basename(opts.corpus)}-${opts.mode}-${stamp}`;
+      opts.out ?? `${cfg.resultsDir}/eval-${basename(opts.corpus)}-${opts.mode}-${stamp}`;
     process.stdout.write(`Evaluating ${opts.corpus} (mode=${opts.mode}, dynamic=${opts.dynamic}) → ${outDir}\n`);
     const result = await runEval({
       corpusDir: opts.corpus,
@@ -218,11 +215,11 @@ program
   });
 
 // ── config: manage the persisted config file (~/.config/cleak/config.json) ──
-// For globally-installed users who configure WITHOUT env vars. Precedence at run
-// time stays CLI flag > env > config file > default.
+// The config file is the single source of truth. Precedence at run time:
+// CLI flag > config file > default.
 const config = program
   .command('config')
-  .description('manage the persisted cleak config file (CLI flag > env > this file > default)');
+  .description('manage the persisted cleak config file (CLI flag > config file > default)');
 
 config
   .command('path')
@@ -251,7 +248,6 @@ config
   .option('--json', 'compact JSON output', false)
   .option('--show-secrets', 'reveal the apiKey (masked by default)', false)
   .action((key, opts) => {
-    loadEnvFiles();
     const cfg = loadConfig({}) as Record<string, any>;
     if (!opts.showSecrets && cfg.llm?.apiKey) cfg.llm = { ...cfg.llm, apiKey: '••••••' };
     const val = key ? key.split('.').reduce((o: any, k: string) => (o == null ? o : o[k]), cfg) : cfg;

@@ -89,6 +89,7 @@ export const MainScreen = memo(function MainScreen({
   const mode = useStore(configStore, (s) => s.mode);
   const permissionMode = useStore(configStore, (s) => s.permissionMode);
   const dynamic = useStore(configStore, (s) => s.dynamic);
+  const fullscreen = useStore(configStore, (s) => s.fullscreen);
   // Fields still on legacy TuiStore (not yet migrated to Zustand)
   const viewAgentId = useStore(store, (s) => s.viewAgentId);
   const navIndex = useStore(store, (s) => s.navIndex);
@@ -226,6 +227,7 @@ export const MainScreen = memo(function MainScreen({
       header={header}
       scrollable={scrollable}
       bottom={bottom}
+      fullscreen={fullscreen}
     />
   );
 });

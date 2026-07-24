@@ -1,6 +1,6 @@
 /**
- * Launch the interactive Ink TUI. Loads env (LLM key), seeds the store with the
- * resolved provider/model, and renders the App.
+ * Launch the interactive Ink TUI. Seeds the store with the resolved
+ * provider/model from the config file, and renders the App.
  */
 
 import { render } from 'ink';
@@ -9,18 +9,21 @@ import { join, resolve } from 'node:path';
 import { App } from './App';
 import { TuiStore } from '../../stores';
 import { ThemeProvider } from './theme';
-import { loadEnvFiles } from '../../domain/env';
 import { loadConfig, type Provider } from '../../config';
 import { loadConfigFile } from '../../domain/config-file';
 
 export interface LaunchTuiOptions {
   provider?: Provider;
-  /** Custom LLM endpoint overrides (CLI flags; win over saved prefs + env). */
+  /** Custom LLM endpoint overrides (CLI flags; win over saved prefs). */
   baseUrl?: string;
   model?: string;
   apiKey?: string;
   staticUrl?: string;
   dynamicUrl?: string;
+  /** Host repo root (for path mapping when analyzers run in Docker). */
+  hostRoot?: string;
+  /** Analyzer-visible root, e.g. /workspace (Docker mount). */
+  analyzerRoot?: string;
   mode?: 'no_llm' | 'llm_assisted';
   dynamic?: 'off' | 'selective' | 'aggressive';
 }
@@ -37,10 +40,9 @@ export async function launchTui(opts: LaunchTuiOptions = {}): Promise<void> {
     process.exitCode = 1;
     return;
   }
-  loadEnvFiles();
   const file = loadConfigFile();
-  // Precedence: CLI flag > env > config file > default. Only real flags become
-  // overrides here; the config file is absorbed INSIDE loadConfig (below env), so
+  // Precedence: CLI flag > config file > default. Only real flags become
+  // overrides here; the config file is absorbed INSIDE loadConfig, so
   // provider/endpoints/staticUrl/… resolve with the right precedence. The TUI-only
   // session defaults (mode/dynamic/autoShowReport) aren't in RunConfig → read direct.
   const cfg = loadConfig({
@@ -48,6 +50,8 @@ export async function launchTui(opts: LaunchTuiOptions = {}): Promise<void> {
     llm: { baseUrl: nonEmpty(opts.baseUrl), model: nonEmpty(opts.model), apiKey: nonEmpty(opts.apiKey) },
     ...(nonEmpty(opts.staticUrl) ? { staticUrl: opts.staticUrl } : {}),
     ...(nonEmpty(opts.dynamicUrl) ? { dynamicUrl: opts.dynamicUrl } : {}),
+    ...(nonEmpty(opts.hostRoot) ? { hostRoot: opts.hostRoot } : {}),
+    ...(nonEmpty(opts.analyzerRoot) ? { analyzerRoot: opts.analyzerRoot } : {}),
   });
   const store = new TuiStore({
     provider: cfg.provider,
@@ -57,6 +61,7 @@ export async function launchTui(opts: LaunchTuiOptions = {}): Promise<void> {
     mode: opts.mode ?? file.defaultMode ?? 'llm_assisted',
     dynamic: opts.dynamic ?? file.defaultDynamic ?? 'off',
     autoShowReport: file.autoShowReport ?? false,
+    fullscreen: file.fullscreen ?? false,
   });
   const resultsDir = resolve(cfg.resultsDir);
   const { waitUntilExit } = render(

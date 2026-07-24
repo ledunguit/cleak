@@ -11,7 +11,6 @@ import { EvalScreen } from './components/EvalScreen';
 import { FindingsScreen } from './components/FindingsScreen';
 import { saveConfigFile, loadConfigFile, type CleakConfig } from '../../domain/config-file';
 import { visibleMessages, type TuiStore } from '../../stores';
-import { navigationStore } from '../../stores/navigation-store';
 import { scanStore } from '../../stores/scan-store';
 import { configStore } from '../../stores/config-store';
 
@@ -129,13 +128,14 @@ export function App({ store, staticUrl, dynamicUrl, cwd, resultsDir, recentScans
       provider: eff.provider, model: eff.llm.model, baseUrl: eff.llm.baseUrl, apiKey: eff.llm.apiKey,
     });
     configStore.getState().setAutoShowReport(cfg.autoShowReport ?? fullState.autoShowReport);
-    navigationStore.getState().setView('main');
+    configStore.getState().setFullscreen(cfg.fullscreen ?? fullState.fullscreen);
+    store.setView('main');
     scanStore.getState().addSystemMessage(
-      `settings saved${savedPath ? ` → ${savedPath}` : ''} · provider ${eff.provider}${eff.llm.model ? `:${eff.llm.model}` : ''} · mode ${cfg.defaultMode ?? fullState.mode}, dynamic ${cfg.defaultDynamic ?? fullState.dynamic}, auto-report ${(cfg.autoShowReport ?? fullState.autoShowReport) ? 'on' : 'off'}`,
+      `settings saved${savedPath ? ` → ${savedPath}` : ''} · provider ${eff.provider}${eff.llm.model ? `:${eff.llm.model}` : ''} · mode ${cfg.defaultMode ?? fullState.mode}, dynamic ${cfg.defaultDynamic ?? fullState.dynamic}`,
     );
   };
 
-  if (view === 'config') return <Box flexDirection="column"><ConfigScreen initial={{ ...loadConfigFile(), defaultMode: fullState.mode, defaultDynamic: fullState.dynamic, autoShowReport: fullState.autoShowReport, provider: fullState.provider as CleakConfig['provider'] }} onSave={saveConfig} onCancel={() => navigationStore.getState().setView('main')} /></Box>;
+  if (view === 'config') return <Box flexDirection="column"><ConfigScreen initial={{ ...loadConfigFile(), defaultMode: fullState.mode, defaultDynamic: fullState.dynamic, autoShowReport: fullState.autoShowReport, fullscreen: fullState.fullscreen, provider: fullState.provider as CleakConfig['provider'] }} onSave={saveConfig} onCancel={() => store.setView('main')} /></Box>;
   if (view === 'eval' && fullState.eval) return <Box flexDirection="column"><EvalScreen store={store} evalState={fullState.eval} resultsDir={resultsDir} /></Box>;
   if (view === 'findings' && fullState.findings) return <Box flexDirection="column"><FindingsScreen store={store} state={fullState} resultsDir={resultsDir} /></Box>;
 

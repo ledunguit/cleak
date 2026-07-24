@@ -93,6 +93,10 @@ export type ScanDeps = {
   /** The agentic investigation phase (M3). When absent, the scan is discovery + heuristic judge only. */
   investigation?: InvestigationPhase;
   now?: () => string;
+  /** Config-level static enrichment default (replaces STATIC_ENRICH env var). */
+  configStaticEnrich?: boolean;
+  /** Eval-time path remapping (replaces EVAL_STATIC_PATH_MAP env var). */
+  evalStaticPathMap?: string;
 } & OrchestratorCommonDeps;
 
 export interface ScanResult {
@@ -113,18 +117,17 @@ export interface ScanResult {
 /**
  * Map a host path into the ANALYZER's filesystem for server-side-file tools
  * (interproceduralFlow, scanBuild). When the analyzer runs in Docker its paths differ
- * from the host; set `EVAL_STATIC_PATH_MAP=/host/prefix=/container/prefix` to remap.
+ * from the host; set `eval.staticPathMap` in config to remap (format: "from=to").
  * Unset (host-run analyzer) ⇒ identity (just absolutize). content-based tools
  * (functionSummary/pathConstraints) send file content inline and never use this.
  */
-function analyzerPath(hostPath: string): string {
+function analyzerPath(hostPath: string, pathMap?: string): string {
   const abs = resolvePath(hostPath);
-  const map = process.env.EVAL_STATIC_PATH_MAP;
-  if (!map) return abs;
-  const eq = map.indexOf('=');
+  if (!pathMap) return abs;
+  const eq = pathMap.indexOf('=');
   if (eq < 0) return abs;
-  const from = map.slice(0, eq);
-  const to = map.slice(eq + 1);
+  const from = pathMap.slice(0, eq);
+  const to = pathMap.slice(eq + 1);
   return abs.startsWith(from) ? to + abs.slice(from.length) : abs;
 }
 
@@ -133,6 +136,7 @@ async function enrichStaticEvidence(
   staticClient: McpClient,
   input: ScanInput,
   abortSignal?: AbortSignal,
+  evalStaticPathMap?: string,
 ): Promise<void> {
   const allocArgs = {
     ...(input.extraAllocators?.length ? { extraAllocators: input.extraAllocators } : {}),
@@ -151,7 +155,7 @@ async function enrichStaticEvidence(
   // which neutered it on multi-file real projects). Walk the repo once + remap to the
   // analyzer's filesystem. Bounded by fileLimit (walkCFiles default 2000).
   const ipFiles = tools.has('interproceduralFlow')
-    ? walkCFiles(input.repoPath, input.fileLimit).map(analyzerPath)
+    ? walkCFiles(input.repoPath, input.fileLimit).map((f) => analyzerPath(f, evalStaticPathMap))
     : [];
 
   // ── Project-level Clang scan-build (opt-in): run ONCE over the whole build, then
@@ -161,7 +165,7 @@ async function enrichStaticEvidence(
   if (tools.has('scanBuild') && input.buildCommand) {
     try {
       const run = coerceToObject(
-        await staticClient.callTool('scanBuildRun', { projectPath: analyzerPath(input.repoPath), buildCommand: input.buildCommand }),
+        await staticClient.callTool('scanBuildRun', { projectPath: analyzerPath(input.repoPath, evalStaticPathMap), buildCommand: input.buildCommand }),
       );
       const runId = typeof run.runId === 'string' ? run.runId : undefined;
       if (runId) {
@@ -339,10 +343,12 @@ async function runEnrichment(
   staticClient: McpClient,
   input: ScanInput,
   abortSignal?: AbortSignal,
+  configStaticEnrich?: boolean,
+  evalStaticPathMap?: string,
 ): Promise<void> {
-  const enrichOn = staticDiscovery && (input.enrich ?? process.env.STATIC_ENRICH === 'on');
+  const enrichOn = staticDiscovery && (input.enrich ?? configStaticEnrich === true);
   if (discovered > 0 && enrichOn) {
-    await enrichStaticEvidence(bundles, staticClient, input, abortSignal);
+    await enrichStaticEvidence(bundles, staticClient, input, abortSignal, evalStaticPathMap);
   }
 }
 
@@ -491,7 +497,7 @@ export async function runScan(input: ScanInput, deps: ScanDeps): Promise<ScanRes
 
   const discovered = candidates.getAllBundles().length;
   const staticDiscovery = input.staticDiscovery !== false;
-  await runEnrichment(discovered, staticDiscovery, candidates.getAllBundles(), staticClient, input, deps.abortSignal);
+  await runEnrichment(discovered, staticDiscovery, candidates.getAllBundles(), staticClient, input, deps.abortSignal, deps.configStaticEnrich, deps.evalStaticPathMap);
 
   const investigationOutcome = await runInvestigation(deps, input, candidates, dynamicRanInDiscovery);
   await runDynamicStage(input, deps, candidates, pathResolver, dynamicRanInDiscovery, emitter);
