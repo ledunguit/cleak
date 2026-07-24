@@ -66,6 +66,13 @@ const DEFAULT_UI_STATE: UiState = {
 export class TuiStore {
   private listeners = new Set<Listener>();
   private initialState: UiState;
+  /** Cached composed state — returned by getState()/getSnapshot(). Only
+   *  recomposed when a sub-store notifies us (dirty flag). This prevents
+   *  infinite re-render loops: Zustand's useSyncExternalStore compares
+   *  snapshots with Object.is, so we must return the same reference when
+   *  nothing has changed. */
+  private _cached!: UiState;
+  private _dirty = true;
 
   constructor(init: Partial<UiState> = {}) {
     // Seed the configStore with the resolved startup values from the config file.
@@ -78,19 +85,23 @@ export class TuiStore {
     });
     if (init.autoShowReport !== undefined) cs.setAutoShowReport(init.autoShowReport);
     if (init.fullscreen !== undefined) cs.setFullscreen(init.fullscreen);
+    this._dirty = true;
     this.initialState = this.composeState();
   }
 
   // ── State composition — the single source of truth ──────────────────────
 
-  /** Compose UiState from all sub-stores on every call. */
+  /** Compose UiState from all sub-stores. Returns cached reference when
+   *  nothing has changed (dirty flag is cleared by subscribe callbacks). */
   private composeState(): UiState {
+    if (!this._dirty) return this._cached;
+    this._dirty = false;
     const c = configStore.getState();
     const s = scanStore.getState();
     const n = navigationStore.getState();
     const es = evalStore.getState();
     const fs = findingsStore.getState();
-    return {
+    this._cached = {
       // scan
       messages: s.messages,
       phases: s.phases,
@@ -139,6 +150,13 @@ export class TuiStore {
         tab: fs.tab, detailId: fs.detailId,
       } : undefined,
     };
+    return this._cached;
+  }
+
+  /** Mark dirty and notify all listeners. Called by sub-store subscriptions. */
+  private invalidate(): void {
+    this._dirty = true;
+    this.listeners.forEach((l) => l());
   }
 
   // ── Zustand-compatible interface ────────────────────────────────────────
@@ -146,13 +164,12 @@ export class TuiStore {
   /** Subscribe to all sub-stores; any change triggers a notification. */
   subscribe = (l: Listener): (() => void) => {
     this.listeners.add(l);
-    // Subscribe to each sub-store; Zustand returns an unsubscribe function.
     const unsubs = [
-      configStore.subscribe(() => this.notify(l)),
-      scanStore.subscribe(() => this.notify(l)),
-      navigationStore.subscribe(() => this.notify(l)),
-      evalStore.subscribe(() => this.notify(l)),
-      findingsStore.subscribe(() => this.notify(l)),
+      configStore.subscribe(() => this.invalidate()),
+      scanStore.subscribe(() => this.invalidate()),
+      navigationStore.subscribe(() => this.invalidate()),
+      evalStore.subscribe(() => this.invalidate()),
+      findingsStore.subscribe(() => this.invalidate()),
     ];
     return () => {
       this.listeners.delete(l);
@@ -160,7 +177,7 @@ export class TuiStore {
     };
   };
 
-  /** Compose current state from all sub-stores. */
+  /** Compose current state from all sub-stores (cached). */
   getState = (): UiState => this.composeState();
 
   /** Initial state snapshot — required by Zustand's ReadonlyStoreApi<T>. */
@@ -168,11 +185,6 @@ export class TuiStore {
 
   /** Alias for getState — fulfills the Zustand useStore interface. */
   getSnapshot = (): UiState => this.composeState();
-
-  private notify(l: Listener): void {
-    const state = this.composeState();
-    l(state, state);
-  }
 
   // ── Navigation (delegated to navigationStore) ──────────────────────────
 
