@@ -226,8 +226,8 @@ export function ConfigScreen({
     return rows.findIndex((r) => r.kind === 'field' && r.idx === row);
   }, [rows, row]);
 
-  // Viewport: header(2) + footer(2) + margin(1) = 5 lines overhead.
-  const viewportRows = Math.max(8, termRows - 5);
+  // Overhead: title(1) + keybindings(1) + marginTop(1) + footerMargin(1) + footer(1) = 5.
+  const viewportRows = Math.max(8, termRows - 6);
   // Scroll so the selected row stays visible with a 1-line margin.
   const scrollOffset = Math.max(0, selectedFlatIdx - viewportRows + 2);
   const visibleRows = rows.slice(scrollOffset, scrollOffset + viewportRows);
@@ -240,8 +240,8 @@ export function ConfigScreen({
       <Text dimColor>
         {glyph.arrowUp}/{glyph.arrowDown} row {glyph.bullet} ←/→ cycle {glyph.bullet} Enter edit/change {glyph.bullet} s save {glyph.bullet} Esc {editing ? 'cancel edit' : 'cancel'}
       </Text>
-      <Box flexDirection="column" marginTop={1} height={viewportRows} overflow="hidden">
-        {visibleRows.map((r, vi) => {
+      <Box flexDirection="column" marginTop={1}>
+        {visibleRows.map((r) => {
           if (r.kind === 'header') {
             return (
               <Text key={`h-${r.label}`} color={color.subtle} bold>
