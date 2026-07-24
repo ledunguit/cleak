@@ -1,9 +1,8 @@
 /**
  * MainScreen — subscribes directly to the store for the fields it renders.
  *
- * Receives the `store` ref and non-store props; reads all slice values via
- * internal `useStoreSelector` calls so re-renders are driven by the specific
- * fields this screen displays — not by unrelated store changes in App.tsx.
+ * Uses MainLayout for a sticky header + sidebar + scrollable content +
+ * sticky bottom layout. The sidebar position is configurable.
  */
 
 import { Box, Text } from 'ink';
@@ -12,7 +11,7 @@ import { useStore } from 'zustand';
 import { navigationStore, visibleMessages } from '../../../stores/navigation-store';
 import { scanStore } from '../../../stores/scan-store';
 import { configStore } from '../../../stores/config-store';
-import { Welcome } from '../components/Welcome';
+import { WelcomeBanner, WelcomeSidebar } from '../components/Welcome';
 import { MessageList } from '../components/MessageList';
 import { Spinner } from '../components/Spinner';
 import { PhaseTimeline } from '../components/PhaseTimeline';
@@ -22,7 +21,7 @@ import { PromptInput } from '../components/PromptInput/index';
 import { SuggestionList, type SuggestionListHandle } from '../components/SuggestionList';
 import { AgentList } from '../components/AgentList';
 import { Footer } from '../components/Footer';
-import { FullscreenLayout } from '../layout/FullscreenLayout';
+import { MainLayout } from '../layout/MainLayout';
 import { color, glyph } from '../theme';
 import { type TuiStore, type UiState } from '../../../stores';
 import type { CommandSpec } from '../commands';
@@ -65,9 +64,6 @@ export const MainScreen = memo(function MainScreen({
   onOverlayCancel,
   completeCommand,
 }: MainScreenProps) {
-  // Individual primitive-returning selectors to prevent infinite re-render
-  // loops. An inline object selector (s => ({...})) creates a new reference
-  // on every call, causing useSyncExternalStore to always detect a "change".
   // Scan fields from Zustand scanStore
   const messages = useStore(scanStore, (s) => s.messages);
   const agents = useStore(scanStore, (s) => s.agents);
@@ -89,11 +85,12 @@ export const MainScreen = memo(function MainScreen({
   const mode = useStore(configStore, (s) => s.mode);
   const permissionMode = useStore(configStore, (s) => s.permissionMode);
   const dynamic = useStore(configStore, (s) => s.dynamic);
-  const fullscreen = useStore(configStore, (s) => s.fullscreen);
-  // Fields still on legacy TuiStore (not yet migrated to Zustand)
+  const sidebarPosition = useStore(configStore, (s) => s.sidebarPosition);
+  // Navigation
   const viewAgentId = useStore(store, (s) => s.viewAgentId);
   const navIndex = useStore(store, (s) => s.navIndex);
   const navMode = useStore(navigationStore, (s) => s.navMode);
+
   const state: UiState = {
     messages, provider, model, viewAgentId, agents, scrollOffset, focusMsgId,
     status, statusText, startedAt, usage, io, summary, reportDir, phases,
@@ -101,20 +98,14 @@ export const MainScreen = memo(function MainScreen({
   } as unknown as UiState;
   const visible = visibleMessages(messages, viewAgentId);
 
+  // ── Sticky header: logo banner + agent breadcrumb ──
   const header = (
     <>
-      <Welcome
-        provider={state.provider}
-        model={state.model}
-        staticUrl={staticUrl}
-        cwd={cwd}
-        recentScans={recentScans}
-      />
-
-      {state.viewAgentId !== 'main' ? (
+      <WelcomeBanner provider={provider} model={model} cwd={cwd} />
+      {viewAgentId !== 'main' ? (
         <Box marginTop={1}>
           <Text color={color.accent}>
-            ▸ {state.agents.find((a) => a.id === state.viewAgentId)?.label ?? state.viewAgentId} log
+            ▸ {agents.find((a) => a.id === viewAgentId)?.label ?? viewAgentId} log
           </Text>
           <Text dimColor> {glyph.bullet} ↑/↓ focus · enter expand/collapse · ← back to main</Text>
         </Box>
@@ -122,63 +113,59 @@ export const MainScreen = memo(function MainScreen({
     </>
   );
 
-  const scrollable = (
+  // ── Sidebar: tips + recent scans ──
+  const sidebar = <WelcomeSidebar recentScans={recentScans} />;
+
+  // ── Scrollable content: messages ──
+  const content = (
     <Box flexDirection="column" marginTop={1}>
       <MessageList
         messages={visible}
-        scrollOffset={state.scrollOffset}
+        scrollOffset={scrollOffset}
         viewportRows={viewportRows}
-        focusMsgId={state.focusMsgId}
+        focusMsgId={focusMsgId}
       />
     </Box>
   );
 
+  // ── Sticky bottom: status + timeline + input + footer ──
   const bottom = (
     <>
-      {state.status === 'running' ? (
+      {status === 'running' ? (
         <Box marginTop={1}>
-          <Spinner
-            label={state.statusText}
-            startedAt={state.startedAt}
-            usage={state.usage}
-            io={state.io}
-          />
+          <Spinner label={statusText} startedAt={startedAt} usage={usage} io={io} />
         </Box>
       ) : null}
 
-      {state.status === 'paused' ? (
+      {status === 'paused' ? (
         <Box marginTop={1}>
-          <Text color={color.warning} bold>
-            ⏸ {state.statusText}
-          </Text>
+          <Text color={color.warning} bold>⏸ {statusText}</Text>
         </Box>
       ) : null}
 
-      {state.summary && state.status === 'done' ? (
+      {summary && status === 'done' ? (
         <Box marginTop={1}>
           <Text>
             <Text color={color.success}>{glyph.mark} </Text>
             <Text>
-              {state.summary.candidates} candidates {glyph.bullet}{' '}
-              <Text color={color.error}>{state.summary.confirmed} confirmed</Text>{' '}
+              {summary.candidates} candidates {glyph.bullet}{' '}
+              <Text color={color.error}>{summary.confirmed} confirmed</Text>{' '}
               {glyph.bullet}{' '}
-              <Text color={color.warning}>{state.summary.likely} likely</Text>
+              <Text color={color.warning}>{summary.likely} likely</Text>
             </Text>
-            {state.reportDir ? (
-              <Text dimColor> {glyph.bullet} {state.reportDir}</Text>
-            ) : null}
+            {reportDir ? <Text dimColor> {glyph.bullet} {reportDir}</Text> : null}
             <Text dimColor> {glyph.bullet} /report to browse findings</Text>
           </Text>
         </Box>
       ) : null}
 
       <Box marginTop={1}>
-        <PhaseTimeline phases={state.phases} />
+        <PhaseTimeline phases={phases} />
       </Box>
 
-      {state.pendingPermission ? (
+      {pendingPermission ? (
         <Box marginTop={1}>
-          <PermissionPrompt pending={state.pendingPermission} />
+          <PermissionPrompt pending={pendingPermission} />
         </Box>
       ) : null}
 
@@ -198,18 +185,14 @@ export const MainScreen = memo(function MainScreen({
         ) : (
           <>
             {showSuggest ? (
-              <SuggestionList
-                ref={suggestRef as any}
-                commands={matches}
-                showSuggest={showSuggest}
-              />
+              <SuggestionList ref={suggestRef as any} commands={matches} showSuggest={showSuggest} />
             ) : null}
             <PromptInput
               rev={inputRev}
-              disabled={!!state.pendingPermission}
-              running={state.status === 'running'}
-              paused={state.status === 'paused'}
-              mode={state.mode}
+              disabled={!!pendingPermission}
+              running={status === 'running'}
+              paused={status === 'paused'}
+              mode={mode}
               value={input}
               onChange={onInputChange}
               onSubmit={onInputSubmit}
@@ -223,11 +206,12 @@ export const MainScreen = memo(function MainScreen({
   );
 
   return (
-    <FullscreenLayout
+    <MainLayout
       header={header}
-      scrollable={scrollable}
+      sidebar={sidebar}
+      content={content}
       bottom={bottom}
-      fullscreen={fullscreen}
+      sidebarPosition={sidebarPosition}
     />
   );
 });

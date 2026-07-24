@@ -138,6 +138,7 @@ export interface UiState {
   findings?: FindingsUiState;
   autoShowReport: boolean;
   fullscreen: boolean;
+  sidebarPosition: 'left' | 'right';
   ranDynamicTool: boolean;
   scrollOffset: number;
   agents: AgentInfo[];

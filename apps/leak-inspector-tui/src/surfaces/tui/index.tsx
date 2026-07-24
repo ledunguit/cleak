@@ -62,6 +62,7 @@ export async function launchTui(opts: LaunchTuiOptions = {}): Promise<void> {
     dynamic: opts.dynamic ?? file.defaultDynamic ?? 'off',
     autoShowReport: file.autoShowReport ?? false,
     fullscreen: file.fullscreen ?? false,
+    sidebarPosition: file.sidebarPosition ?? 'right',
   });
   const resultsDir = resolve(cfg.resultsDir);
   const { waitUntilExit } = render(

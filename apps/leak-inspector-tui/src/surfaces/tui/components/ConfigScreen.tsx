@@ -37,6 +37,10 @@ const ONOFF = [
   { value: false, label: 'off' },
   { value: true, label: 'on' },
 ];
+const SIDEBAR_POS = [
+  { value: 'left', label: 'left' },
+  { value: 'right', label: 'right' },
+];
 const RULE_OPTIONS = [
   { value: 'weighted', label: 'weighted' },
   { value: 'majority', label: 'majority' },
@@ -82,7 +86,9 @@ const FIELDS: FieldDef[] = [
   { section: 'Consensus judge', path: 'consensus.temperature', label: 'Sampling temperature', type: 'number', scope: 'config', placeholder: '0.7' },
   { section: 'Consensus judge', path: 'consensus.concurrency', label: 'Concurrency', type: 'number', scope: 'config', placeholder: '3' },
 
-  { section: 'Advanced', path: 'fullscreen', label: 'Fullscreen mode', type: 'cycle', scope: 'config', options: ONOFF },
+  { section: 'UI', path: 'fullscreen', label: 'Fullscreen mode', type: 'cycle', scope: 'config', options: ONOFF },
+  { section: 'UI', path: 'sidebarPosition', label: 'Sidebar position', type: 'cycle', scope: 'config', options: SIDEBAR_POS },
+
   { section: 'Advanced', path: 'inContainer', label: 'Running inside container', type: 'cycle', scope: 'config', options: ONOFF },
   { section: 'Advanced', path: 'staticEnrich', label: 'Static enrichment (no_llm)', type: 'cycle', scope: 'config', options: ONOFF },
   { section: 'Advanced', path: 'workflow.discoveryConcurrency', label: 'Discovery concurrency', type: 'number', scope: 'config', placeholder: '8' },

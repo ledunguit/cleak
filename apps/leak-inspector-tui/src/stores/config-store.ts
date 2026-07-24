@@ -23,6 +23,7 @@ export interface ConfigState {
   apiKey?: string;
   autoShowReport: boolean;
   fullscreen: boolean;
+  sidebarPosition: 'left' | 'right';
   permissionMode: 'ask' | 'auto';
   pendingPermission?: PendingPermission;
 }
@@ -33,6 +34,7 @@ export interface ConfigActions {
   ) => void;
   setAutoShowReport: (auto: boolean) => void;
   setFullscreen: (fullscreen: boolean) => void;
+  setSidebarPosition: (pos: 'left' | 'right') => void;
   cyclePermissionMode: () => 'ask' | 'auto';
   requestPermission: (req: { id: string; name: string; input: unknown }) => Promise<'allow' | 'deny'>;
   resolvePermission: (decision: 'allow' | 'deny') => void;
@@ -56,6 +58,7 @@ export const configStore = createStore<ConfigState & ConfigActions>()(
     model: '',
     autoShowReport: false,
     fullscreen: false,
+    sidebarPosition: 'right' as const,
     permissionMode: 'ask' as const,
 
     // ─── Actions ──────────────────────────────────────────────────────
@@ -65,6 +68,8 @@ export const configStore = createStore<ConfigState & ConfigActions>()(
     setAutoShowReport: (autoShowReport) => set({ autoShowReport }),
 
     setFullscreen: (fullscreen) => set({ fullscreen }),
+
+    setSidebarPosition: (sidebarPosition) => set({ sidebarPosition }),
 
     setPushSystem: (fn) => {
       pushSystem = fn;

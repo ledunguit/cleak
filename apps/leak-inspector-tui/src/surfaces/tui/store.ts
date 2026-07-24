@@ -58,7 +58,7 @@ const DEFAULT_UI_STATE: UiState = {
   messages: [], phases: initialPhases(), status: 'idle', statusText: 'idle',
   usage: { inputTokens: 0, outputTokens: 0, thinkingTokens: 0 },
   mode: 'llm_assisted', dynamic: 'off', provider: 'local', model: '',
-  view: 'main', autoShowReport: false, fullscreen: false, permissionMode: 'ask',
+  view: 'main', autoShowReport: false, fullscreen: false, sidebarPosition: 'right', permissionMode: 'ask',
   ranDynamicTool: false, scrollOffset: 0, agents: [],
   viewAgentId: 'main', navMode: 'normal', navIndex: 0,
 };
@@ -127,6 +127,7 @@ export class TuiStore {
       apiKey: c.apiKey,
       autoShowReport: c.autoShowReport,
       fullscreen: c.fullscreen,
+      sidebarPosition: c.sidebarPosition,
       permissionMode: c.permissionMode,
       pendingPermission: c.pendingPermission,
       // navigation

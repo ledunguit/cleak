@@ -83,6 +83,7 @@ export const CleakConfigSchema = z
     fullscreen: zBool,
     inContainer: zBool,
     staticEnrich: zBool,
+    sidebarPosition: z.enum(['left', 'right']),
     // Judge thresholds (previously env-only).
     thresholds: z
       .object({ borderlineLow: zNum, borderlineHigh: zNum })
@@ -102,6 +103,7 @@ export const DEFAULT_CONFIG: CleakConfig = {
   defaultMode: 'llm_assisted',
   defaultDynamic: 'off',
   autoShowReport: false,
+  sidebarPosition: 'right',
 };
 
 function warn(msg: string): void {
@@ -273,6 +275,7 @@ export function configTemplate(): CleakConfig {
     fullscreen: false,
     inContainer: false,
     staticEnrich: false,
+    sidebarPosition: 'right',
     thresholds: { borderlineLow: 0.35, borderlineHigh: 0.7 },
     baselines: { clangBin: 'clang', inferBin: 'infer' },
   };

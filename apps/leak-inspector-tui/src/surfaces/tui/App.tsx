@@ -138,13 +138,14 @@ export function App({ store, staticUrl, dynamicUrl, cwd, resultsDir, recentScans
     });
     configStore.getState().setAutoShowReport(cfg.autoShowReport ?? fullState.autoShowReport);
     configStore.getState().setFullscreen(cfg.fullscreen ?? fullState.fullscreen);
+    configStore.getState().setSidebarPosition(cfg.sidebarPosition ?? fullState.sidebarPosition);
     store.setView('main');
     scanStore.getState().addSystemMessage(
       `settings saved${savedPath ? ` → ${savedPath}` : ''} · provider ${eff.provider}${eff.llm.model ? `:${eff.llm.model}` : ''} · mode ${cfg.defaultMode ?? fullState.mode}, dynamic ${cfg.defaultDynamic ?? fullState.dynamic}`,
     );
   };
 
-  if (view === 'config') return <Box flexDirection="column"><ConfigScreen initial={{ ...loadConfigFile(), defaultMode: fullState.mode, defaultDynamic: fullState.dynamic, autoShowReport: fullState.autoShowReport, fullscreen: fullState.fullscreen, provider: fullState.provider as CleakConfig['provider'] }} onSave={saveConfig} onCancel={() => store.setView('main')} /></Box>;
+  if (view === 'config') return <Box flexDirection="column"><ConfigScreen initial={{ ...loadConfigFile(), defaultMode: fullState.mode, defaultDynamic: fullState.dynamic, autoShowReport: fullState.autoShowReport, fullscreen: fullState.fullscreen, sidebarPosition: fullState.sidebarPosition, provider: fullState.provider as CleakConfig['provider'] }} onSave={saveConfig} onCancel={() => store.setView('main')} /></Box>;
   if (view === 'eval' && fullState.eval) return <Box flexDirection="column"><EvalScreen store={store} evalState={fullState.eval} resultsDir={resultsDir} /></Box>;
   if (view === 'findings' && fullState.findings) return <Box flexDirection="column"><FindingsScreen store={store} state={fullState} resultsDir={resultsDir} /></Box>;
 
