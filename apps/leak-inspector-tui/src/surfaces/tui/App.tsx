@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Box, useApp, useInput } from 'ink';
+import { Box, useApp, useInput, useStdout } from 'ink';
 import { useStore } from 'zustand';
 import { appendHistory } from './history';
 import { useHistoryNavigation } from './hooks/useHistoryNavigation';
@@ -25,6 +25,15 @@ export function App({ store, staticUrl, dynamicUrl, cwd, resultsDir, recentScans
   const scrollOffset = useStore(store, (s) => s.scrollOffset);
   const fullState = useStore(store, (s) => s);
   const { exit } = useApp();
+  const { stdout } = useStdout();
+
+  // Use alternate screen buffer for config/eval/findings screens to reduce flicker.
+  useEffect(() => {
+    if (view !== 'main') {
+      stdout.write('\x1b[?1049h'); // enter alternate screen
+      return () => { stdout.write('\x1b[?1049l'); }; // leave alternate screen
+    }
+  }, [view]);
   const [input, setInput] = useState('');
   const [inputRev, setInputRev] = useState(0);
   const [overlay, setOverlay] = useState<Overlay | null>(null);
