@@ -30,7 +30,7 @@ import { visibleFindings as _visibleFindings } from '../../stores/findings-store
 
 /** Filter messages by the active agent (takes full UiState, not (messages[], viewAgentId)). */
 export function visibleMessages(state: UiState): UiMessage[] {
-  return state.messages.filter((m) => m.agentId === state.viewAgentId);
+  return state.messages.filter((m: UiMessage) => m.agentId === state.viewAgentId);
 }
 
 export function visibleFindings(state: UiState): FindingView[] {
@@ -40,12 +40,13 @@ export type {
   PhaseStatus, RunStatus, ToolCardData, UiMessage, AgentInfo, NavMode,
   PendingPermission, EvalCaseStatus, EvalCaseUi, EvalTab, EvalUiState,
   FindingsTab, FindingsSort, FindingsUiState, UiState,
-} from './store/types';
+} from '../../stores/types';
 
-import type { NavMode, UiMessage, UiState } from './store/types';
+import type { NavMode, UiMessage, UiState } from '../../stores/types';
 import { SCAN_PHASE_ORDER, ScanPhase } from '@cleak/common/flow/scan-flow-contract';
 
-type Listener = () => void;
+/** Listener signature compatible with Zustand's ReadonlyStoreApi.subscribe. */
+type Listener = (state?: unknown, prevState?: unknown) => void;
 
 function initialPhases(): Record<ScanPhase, 'pending'> {
   const p = {} as Record<ScanPhase, 'pending'>;
@@ -55,6 +56,7 @@ function initialPhases(): Record<ScanPhase, 'pending'> {
 
 export class TuiStore {
   private state: UiState;
+  private _initialState: UiState;
   private listeners = new Set<Listener>();
 
   constructor(init: Partial<UiState> = {}) {
@@ -67,6 +69,7 @@ export class TuiStore {
       viewAgentId: 'main', navMode: 'normal', navIndex: 0,
       ...init,
     };
+    this._initialState = { ...this.state };
 
     // Initialize cross-store callback for configStore
     configStore.getState().setPushSystem((text, color) => scanStore.getState().addSystemMessage(text, color));
@@ -79,6 +82,9 @@ export class TuiStore {
 
   /** Alias for getSnapshot — fulfills the Zustand useStore interface. */
   getState = (): UiState => this.state;
+
+  /** Initial state snapshot — required by Zustand's ReadonlyStoreApi<T>. */
+  getInitialState = (): UiState => this._initialState;
 
   getSnapshot = (): UiState => this.state;
 
