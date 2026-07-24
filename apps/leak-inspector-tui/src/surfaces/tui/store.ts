@@ -1,12 +1,11 @@
 /**
- * The TUI's UI state + a tiny observable store (no external state lib). The
- * store ingests two streams — ScanEvents (phase/timeline) and raw AgentEvents
- * (assistant text + tool cards) — into a unified message list + phase map that
- * the React/Ink components render.
+ * The TUI's UI state facade — composes five Zustand sub-stores into a single
+ * UiState snapshot so `useStore(store, selector)` works across the app.
  *
- * This file is now a thin facade that composes five domain sub-stores while
- * preserving the original TuiStore public API for runner.ts, evalRunner.ts,
- * App.tsx, and all component subscribers.
+ * This class owns NO state of its own. `getState()` / `getSnapshot()` compose
+ * from the sub-stores on every call, and `subscribe()` fans out to all five.
+ * The config file is the single source of truth at startup; the constructor
+ * seeds all sub-stores from the resolved config values.
  */
 
 import type { AgentEvent } from '@cleak/agent-core';
@@ -54,25 +53,22 @@ function initialPhases(): Record<ScanPhase, 'pending'> {
   return p;
 }
 
+/** Default UiState snapshot — used by getInitialState(). */
+const DEFAULT_UI_STATE: UiState = {
+  messages: [], phases: initialPhases(), status: 'idle', statusText: 'idle',
+  usage: { inputTokens: 0, outputTokens: 0, thinkingTokens: 0 },
+  mode: 'llm_assisted', dynamic: 'off', provider: 'local', model: '',
+  view: 'main', autoShowReport: false, fullscreen: false, permissionMode: 'ask',
+  ranDynamicTool: false, scrollOffset: 0, agents: [],
+  viewAgentId: 'main', navMode: 'normal', navIndex: 0,
+};
+
 export class TuiStore {
-  private state: UiState;
-  private _initialState: UiState;
   private listeners = new Set<Listener>();
+  private initialState: UiState;
 
   constructor(init: Partial<UiState> = {}) {
-    this.state = {
-      messages: [], phases: initialPhases(), status: 'idle', statusText: 'idle',
-      usage: { inputTokens: 0, outputTokens: 0, thinkingTokens: 0 },
-      mode: 'llm_assisted', dynamic: 'off', provider: 'local', model: '',
-      view: 'main', autoShowReport: false, fullscreen: false, permissionMode: 'ask',
-      ranDynamicTool: false, scrollOffset: 0, agents: [],
-      viewAgentId: 'main', navMode: 'normal', navIndex: 0,
-      ...init,
-    };
-    this._initialState = { ...this.state };
-
-    // Seed the configStore so components reading from it (MainScreen, etc.)
-    // see the resolved startup values — not the hardcoded defaults.
+    // Seed the configStore with the resolved startup values from the config file.
     const cs = configStore.getState();
     cs.setPushSystem((text, color) => scanStore.getState().addSystemMessage(text, color));
     cs.setOptions({
@@ -82,35 +78,112 @@ export class TuiStore {
     });
     if (init.autoShowReport !== undefined) cs.setAutoShowReport(init.autoShowReport);
     if (init.fullscreen !== undefined) cs.setFullscreen(init.fullscreen);
-    this.syncConfig();
+    this.initialState = this.composeState();
   }
 
+  // ── State composition — the single source of truth ──────────────────────
+
+  /** Compose UiState from all sub-stores on every call. */
+  private composeState(): UiState {
+    const c = configStore.getState();
+    const s = scanStore.getState();
+    const n = navigationStore.getState();
+    const es = evalStore.getState();
+    const fs = findingsStore.getState();
+    return {
+      // scan
+      messages: s.messages,
+      phases: s.phases,
+      currentPhase: s.currentPhase,
+      status: s.status,
+      statusText: s.statusText,
+      usage: s.usage,
+      io: s.io,
+      scanId: s.scanId,
+      reportDir: s.reportDir,
+      summary: s.summary,
+      startedAt: s.startedAt,
+      ranDynamicTool: s.ranDynamicTool,
+      scrollOffset: s.scrollOffset,
+      agents: s.agents,
+      focusMsgId: s.focusMsgId,
+      // config
+      mode: c.mode,
+      dynamic: c.dynamic,
+      provider: c.provider,
+      model: c.model,
+      baseUrl: c.baseUrl,
+      apiKey: c.apiKey,
+      autoShowReport: c.autoShowReport,
+      fullscreen: c.fullscreen,
+      permissionMode: c.permissionMode,
+      pendingPermission: c.pendingPermission,
+      // navigation
+      view: n.view,
+      viewAgentId: n.viewAgentId,
+      navMode: n.navMode,
+      navIndex: n.navIndex,
+      // eval (only when an eval is active)
+      eval: es.corpus ? {
+        corpus: es.corpus, mode: es.mode, dynamic: es.dynamic,
+        total: es.total, done: es.done, concurrency: es.concurrency,
+        startedAt: es.startedAt, finishedAt: es.finishedAt,
+        running: es.running, cancelling: es.cancelling,
+        cases: es.cases, tab: es.tab, cursor: es.cursor,
+        selectedId: es.selectedId, result: es.result, outDir: es.outDir,
+      } : undefined,
+      // findings (only when findings are open)
+      findings: fs.scanId ? {
+        scanId: fs.scanId, source: fs.source, findings: fs.findings,
+        cursor: fs.cursor, sort: fs.sort, filter: fs.filter,
+        tab: fs.tab, detailId: fs.detailId,
+      } : undefined,
+    };
+  }
+
+  // ── Zustand-compatible interface ────────────────────────────────────────
+
+  /** Subscribe to all sub-stores; any change triggers a notification. */
   subscribe = (l: Listener): (() => void) => {
     this.listeners.add(l);
-    return () => this.listeners.delete(l);
+    // Subscribe to each sub-store; Zustand returns an unsubscribe function.
+    const unsubs = [
+      configStore.subscribe(() => this.notify(l)),
+      scanStore.subscribe(() => this.notify(l)),
+      navigationStore.subscribe(() => this.notify(l)),
+      evalStore.subscribe(() => this.notify(l)),
+      findingsStore.subscribe(() => this.notify(l)),
+    ];
+    return () => {
+      this.listeners.delete(l);
+      unsubs.forEach((u) => u());
+    };
   };
 
-  /** Alias for getSnapshot — fulfills the Zustand useStore interface. */
-  getState = (): UiState => this.state;
+  /** Compose current state from all sub-stores. */
+  getState = (): UiState => this.composeState();
 
   /** Initial state snapshot — required by Zustand's ReadonlyStoreApi<T>. */
-  getInitialState = (): UiState => this._initialState;
+  getInitialState = (): UiState => this.initialState;
 
-  getSnapshot = (): UiState => this.state;
+  /** Alias for getState — fulfills the Zustand useStore interface. */
+  getSnapshot = (): UiState => this.composeState();
 
-  // ── Navigation (delegated to Zustand navigationStore) ──
+  private notify(l: Listener): void {
+    const state = this.composeState();
+    l(state, state);
+  }
+
+  // ── Navigation (delegated to navigationStore) ──────────────────────────
+
   setView(view: UiState['view']): void {
     navigationStore.getState().setView(view);
-    this.state = { ...this.state, view };
-    this.notify();
   }
   enterAgentList(): void {
     navigationStore.getState().enterAgentList();
-    this.syncNav();
   }
   navMove(delta: number): void {
     navigationStore.getState().navMove(delta);
-    this.syncNav();
   }
   openFocusedAgent(): void {
     const navState = navigationStore.getState();
@@ -120,88 +193,64 @@ export class TuiStore {
     const agentId = agent?.id ?? 'main';
     const messages = scanStore.getState().messages;
     const firstMsg = messages.find((m) => m.agentId === agentId);
-    this.state = {
-      ...this.state,
-      viewAgentId: agentId,
-      navMode: 'agentlog' as NavMode,
-      focusMsgId: firstMsg?.id,
-    };
+    // Update viewAgentId and focusMsgId in the navigation store.
+    // The navigationStore.openFocusedAgent sets viewAgentId='', so we patch it.
+    navigationStore.setState({ viewAgentId: agentId, focusMsgId: firstMsg?.id });
   }
   backToMain(): void {
     navigationStore.getState().backToMain();
-    this.syncNav();
   }
   logFocusMove(delta: number, viewportRows: number): void {
-    const agentId = this.state.viewAgentId;
+    const n = navigationStore.getState();
+    const agentId = n.viewAgentId;
     const messages = scanStore.getState().messages.filter((m) => m.agentId === agentId);
-    const currentIdx = messages.findIndex((m) => m.id === this.state.focusMsgId);
+    const currentIdx = messages.findIndex((m) => m.id === n.focusMsgId);
     let nextIdx: number;
     if (currentIdx < 0) {
       nextIdx = delta > 0 ? 0 : Math.max(0, messages.length - 1);
     } else {
       nextIdx = Math.max(0, Math.min(messages.length - 1, currentIdx + delta));
     }
-    this.state = { ...this.state, focusMsgId: messages[nextIdx]?.id };
+    navigationStore.setState({ focusMsgId: messages[nextIdx]?.id });
   }
   toggleFocusedCollapse(): void {
-    const { focusMsgId } = this.state;
+    const { focusMsgId } = navigationStore.getState();
     if (focusMsgId) {
       scanStore.getState().updateMessage(focusMsgId, (m) => ({
         ...m,
         collapsed: !m.collapsed,
       }));
-      this.syncScan();
     }
   }
 
-  // ── Config (delegated to Zustand configStore) ──
+  // ── Config (delegated to configStore) ───────────────────────────────────
+
   setOptions(opts: Partial<Pick<UiState, 'mode' | 'dynamic' | 'provider' | 'model' | 'baseUrl' | 'apiKey'>>): void {
-    configStore.getState().setOptions(opts); this.syncConfig();
+    configStore.getState().setOptions(opts);
   }
-  setAutoShowReport(auto: boolean): void { configStore.getState().setAutoShowReport(auto); this.syncConfig(); }
-  setFullscreen(fullscreen: boolean): void { configStore.getState().setFullscreen(fullscreen); this.syncConfig(); }
-  cyclePermissionMode(): 'ask' | 'auto' { const r = configStore.getState().cyclePermissionMode(); this.syncConfig(); return r; }
+  setAutoShowReport(auto: boolean): void { configStore.getState().setAutoShowReport(auto); }
+  setFullscreen(fullscreen: boolean): void { configStore.getState().setFullscreen(fullscreen); }
+  cyclePermissionMode(): 'ask' | 'auto' { return configStore.getState().cyclePermissionMode(); }
   requestPermission(req: { id: string; name: string; input: unknown }): Promise<'allow' | 'deny'> {
-    const result = configStore.getState().requestPermission(req);
-    this.syncConfig();
-    return result;
+    return configStore.getState().requestPermission(req);
   }
   resolvePermission(decision: 'allow' | 'deny'): void {
     configStore.getState().resolvePermission(decision);
-    this.syncConfig();
   }
 
-  // ── Notify Zustand useStore subscribers of a state change ──
-  private notify(): void {
-    this.listeners.forEach((l) => l(this.state, this.state));
-  }
+  // ── Scan (delegated to scanStore) ───────────────────────────────────────
 
-  // ── Sync helpers — pull Zustand state back into this.state for getSnapshot() callers ──
-  private syncConfig(): void {
-    const c = configStore.getState();
-    this.state = { ...this.state, mode: c.mode, dynamic: c.dynamic, provider: c.provider, model: c.model, baseUrl: c.baseUrl, apiKey: c.apiKey, autoShowReport: c.autoShowReport, fullscreen: c.fullscreen, permissionMode: c.permissionMode, pendingPermission: c.pendingPermission };
-  }
-  private syncScan(): void {
-    const s = scanStore.getState();
-    this.state = { ...this.state, messages: s.messages, phases: s.phases, currentPhase: s.currentPhase, status: s.status, statusText: s.statusText, usage: s.usage, io: s.io, scanId: s.scanId, reportDir: s.reportDir, summary: s.summary, startedAt: s.startedAt, ranDynamicTool: s.ranDynamicTool, scrollOffset: s.scrollOffset, agents: s.agents, focusMsgId: s.focusMsgId };
-  }
-  private syncNav(): void {
-    const n = navigationStore.getState();
-    this.state = { ...this.state, view: n.view, navMode: n.navMode, navIndex: n.navIndex, viewAgentId: n.viewAgentId, focusMsgId: n.focusMsgId };
-  }
-
-  // ── Scan (delegated to Zustand scanStore) ──
-  push(msg: Parameters<ScanActions['push']>[0]): string { const r = scanStore.getState().push(msg); this.syncScan(); return r; }
-  updateMessage(id: Parameters<ScanActions['updateMessage']>[0], updater: Parameters<ScanActions['updateMessage']>[1]): void { scanStore.getState().updateMessage(id, updater); this.syncScan(); }
-  scrollBy(delta: number, maxOffset: number): void { scanStore.getState().scrollBy(delta, maxOffset); this.syncScan(); }
-  scrollToBottom(): void { scanStore.getState().scrollToBottom(); this.syncScan(); }
-  addUserMessage(text: string): void { scanStore.getState().addUserMessage(text); this.syncScan(); }
-  addSystemMessage(text: string, color?: string): void { scanStore.getState().addSystemMessage(text, color); this.syncScan(); }
-  setIo(io: UiState['io']): void { scanStore.getState().setIo(io); this.syncScan(); }
+  push(msg: Parameters<ScanActions['push']>[0]): string { return scanStore.getState().push(msg); }
+  updateMessage(id: Parameters<ScanActions['updateMessage']>[0], updater: Parameters<ScanActions['updateMessage']>[1]): void { scanStore.getState().updateMessage(id, updater); }
+  scrollBy(delta: number, maxOffset: number): void { scanStore.getState().scrollBy(delta, maxOffset); }
+  scrollToBottom(): void { scanStore.getState().scrollToBottom(); }
+  addUserMessage(text: string): void { scanStore.getState().addUserMessage(text); }
+  addSystemMessage(text: string, color?: string): void { scanStore.getState().addSystemMessage(text, color); }
+  setIo(io: UiState['io']): void { scanStore.getState().setIo(io); }
   setAbortController(ac: AbortController | undefined): void { scanStore.getState().setAbortController(ac); }
-  abort(): void { scanStore.getState().abort(); this.syncScan(); }
+  abort(): void { scanStore.getState().abort(); }
   awaitResume(): Promise<'resume' | 'abort'> { return scanStore.getState().awaitResume(); }
-  resume(): void { scanStore.getState().resume(); this.syncScan(); }
+  resume(): void { scanStore.getState().resume(); }
   isPaused(): boolean { return scanStore.getState().isPaused(); }
   isRunning(): boolean { return scanStore.getState().isRunning(); }
   enqueueSteering(text: string): void { scanStore.getState().enqueueSteering(text); }
@@ -209,82 +258,54 @@ export class TuiStore {
   beginRun(scanId: string, mode: UiState['mode']): void {
     scanStore.getState().beginRun(scanId);
     navigationStore.getState().resetForNewScan();
-    this.syncScan();
   }
   finishRun(reportDir: string, summary: UiState['summary']): void {
+    const s = this.composeState();
     const scanState = scanStore.getState();
-    if (this.state.dynamic !== 'off' && !this.state.ranDynamicTool && !scanState.ranDynamicTool) {
+    if (s.dynamic !== 'off' && !s.ranDynamicTool && !scanState.ranDynamicTool) {
       this.addSystemMessage('⚠ dynamic was enabled but the agent ran no dynamic tools — the model judged static evidence sufficient (selective). Use /config or /dynamic → aggressive to force a run.');
     }
     scanState.finishRun(reportDir, summary);
-    this.syncScan();
   }
-  failRun(message: string): void { scanStore.getState().failRun(message); this.syncScan(); }
-  applyScanEvent(ev: ScanEvent): void { scanStore.getState().applyScanEvent(ev); this.syncScan(); }
-  applyAgentEvent(ev: AgentEvent, agent?: AgentMeta): void { scanStore.getState().applyAgentEvent(ev, agent); this.syncScan(); }
+  failRun(message: string): void { scanStore.getState().failRun(message); }
+  applyScanEvent(ev: ScanEvent): void { scanStore.getState().applyScanEvent(ev); }
+  applyAgentEvent(ev: AgentEvent, agent?: AgentMeta): void { scanStore.getState().applyAgentEvent(ev, agent); }
 
-  // ── Sync helpers ──
-  private syncFindings(): void {
-    const fs = findingsStore.getState();
-    this.state = {
-      ...this.state,
-      findings: {
-        scanId: fs.scanId, source: fs.source, findings: fs.findings,
-        cursor: fs.cursor, sort: fs.sort, filter: fs.filter,
-        tab: fs.tab, detailId: fs.detailId,
-      },
-    };
-  }
-  private syncEval(): void {
-    const es = evalStore.getState();
-    this.state = {
-      ...this.state,
-      eval: {
-        corpus: es.corpus, mode: es.mode, dynamic: es.dynamic,
-        total: es.total, done: es.done, concurrency: es.concurrency,
-        startedAt: es.startedAt, finishedAt: es.finishedAt,
-        running: es.running, cancelling: es.cancelling,
-        cases: es.cases, tab: es.tab, cursor: es.cursor,
-        selectedId: es.selectedId, result: es.result, outDir: es.outDir,
-      },
-    };
-  }
+  // ── Eval (delegated to evalStore + navigationStore) ─────────────────────
 
-  // ── Eval (delegated to Zustand evalStore, then sync) ──
   beginEval(meta: Parameters<EvalActions['beginEval']>[0]): void {
     evalStore.getState().beginEval(meta);
-    this.syncEval();
-    this.state = { ...this.state, view: 'eval' };
+    navigationStore.getState().setView('eval');
   }
-  evalCaseStart(id: string): void { evalStore.getState().evalCaseStart(id); this.syncEval(); }
-  evalCasePhase(id: string, phase: string): void { evalStore.getState().evalCasePhase(id, phase); this.syncEval(); }
-  evalCaseResult(detail: Parameters<EvalActions['evalCaseResult']>[0]): void { evalStore.getState().evalCaseResult(detail); this.syncEval(); }
-  endEval(result: EvalResult, outDir: string): void { evalStore.getState().endEval(result, outDir); this.syncEval(); }
+  evalCaseStart(id: string): void { evalStore.getState().evalCaseStart(id); }
+  evalCasePhase(id: string, phase: string): void { evalStore.getState().evalCasePhase(id, phase); }
+  evalCaseResult(detail: Parameters<EvalActions['evalCaseResult']>[0]): void { evalStore.getState().evalCaseResult(detail); }
+  endEval(result: EvalResult, outDir: string): void { evalStore.getState().endEval(result, outDir); }
   setEvalAbort(ac: AbortController | undefined): void { evalStore.getState().setEvalAbort(ac); }
-  evalAbort(): void { evalStore.getState().evalAbort(); this.syncEval(); }
-  evalCycleTab(dir: 1 | -1): void { evalStore.getState().evalCycleTab(dir); this.syncEval(); }
-  evalSetTab(tab: Parameters<EvalActions['evalSetTab']>[0]): void { evalStore.getState().evalSetTab(tab); this.syncEval(); }
-  evalMove(delta: number): void { evalStore.getState().evalMove(delta); this.syncEval(); }
-  evalOpenDetail(): void { evalStore.getState().evalOpenDetail(); this.syncEval(); }
+  evalAbort(): void { evalStore.getState().evalAbort(); }
+  evalCycleTab(dir: 1 | -1): void { evalStore.getState().evalCycleTab(dir); }
+  evalSetTab(tab: Parameters<EvalActions['evalSetTab']>[0]): void { evalStore.getState().evalSetTab(tab); }
+  evalMove(delta: number): void { evalStore.getState().evalMove(delta); }
+  evalOpenDetail(): void { evalStore.getState().evalOpenDetail(); }
   evalExit(): void {
     evalStore.getState().evalExit();
-    this.state = { ...this.state, view: 'main' };
+    navigationStore.getState().setView('main');
   }
 
-  // ── Findings (delegated to Zustand findingsStore, then sync) ──
+  // ── Findings (delegated to findingsStore + navigationStore) ─────────────
+
   openFindings(scanId: string, source: 'live' | 'snapshot', findings: FindingView[]): void {
     findingsStore.getState().openFindings(scanId, source, findings);
-    this.syncFindings();
-    this.state = { ...this.state, view: 'findings' };
+    navigationStore.getState().setView('findings');
   }
-  findingsMove(delta: number): void { findingsStore.getState().findingsMove(delta); this.syncFindings(); }
-  findingsCycleSort(dir: 1 | -1 = 1): void { findingsStore.getState().findingsCycleSort(dir); this.syncFindings(); }
-  findingsCycleFilter(kind: 'verdict' | 'coverage', dir: 1 | -1 = 1): void { findingsStore.getState().findingsCycleFilter(kind, dir); this.syncFindings(); }
-  findingsOpenDetail(): void { findingsStore.getState().findingsOpenDetail(); this.syncFindings(); }
-  findingsDetailStep(delta: number): void { findingsStore.getState().findingsDetailStep(delta); this.syncFindings(); }
-  findingsBackToTable(): void { findingsStore.getState().findingsBackToTable(); this.syncFindings(); }
+  findingsMove(delta: number): void { findingsStore.getState().findingsMove(delta); }
+  findingsCycleSort(dir: 1 | -1 = 1): void { findingsStore.getState().findingsCycleSort(dir); }
+  findingsCycleFilter(kind: 'verdict' | 'coverage', dir: 1 | -1 = 1): void { findingsStore.getState().findingsCycleFilter(kind, dir); }
+  findingsOpenDetail(): void { findingsStore.getState().findingsOpenDetail(); }
+  findingsDetailStep(delta: number): void { findingsStore.getState().findingsDetailStep(delta); }
+  findingsBackToTable(): void { findingsStore.getState().findingsBackToTable(); }
   findingsExit(): void {
     findingsStore.getState().findingsExit();
-    this.state = { ...this.state, view: 'main' };
+    navigationStore.getState().setView('main');
   }
 }
