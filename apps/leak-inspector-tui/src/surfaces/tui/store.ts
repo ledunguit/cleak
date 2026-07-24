@@ -71,8 +71,18 @@ export class TuiStore {
     };
     this._initialState = { ...this.state };
 
-    // Initialize cross-store callback for configStore
-    configStore.getState().setPushSystem((text, color) => scanStore.getState().addSystemMessage(text, color));
+    // Seed the configStore so components reading from it (MainScreen, etc.)
+    // see the resolved startup values — not the hardcoded defaults.
+    const cs = configStore.getState();
+    cs.setPushSystem((text, color) => scanStore.getState().addSystemMessage(text, color));
+    cs.setOptions({
+      mode: init.mode, dynamic: init.dynamic,
+      provider: init.provider, model: init.model,
+      baseUrl: init.baseUrl, apiKey: init.apiKey,
+    });
+    if (init.autoShowReport !== undefined) cs.setAutoShowReport(init.autoShowReport);
+    if (init.fullscreen !== undefined) cs.setFullscreen(init.fullscreen);
+    this.syncConfig();
   }
 
   subscribe = (l: Listener): (() => void) => {
