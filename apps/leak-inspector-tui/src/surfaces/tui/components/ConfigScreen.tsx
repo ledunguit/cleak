@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Box, Text, useInput } from 'ink';
 import { color, glyph } from '../theme';
 import type { Provider } from '../../../config';
@@ -7,9 +7,7 @@ import { configFilePath, type CleakConfig, type EndpointOverride } from '../../.
 type FieldType = 'cycle' | 'text' | 'secret' | 'number';
 
 interface FieldDef {
-  /** Section header this field is grouped under. */
   section: string;
-  /** Dot-path into CleakConfig (scope 'config') or the endpoint leaf key (scope 'endpoint'). */
   path: string;
   label: string;
   type: FieldType;
@@ -47,7 +45,6 @@ const RULE_OPTIONS = [
   { value: 'unanimous-to-flag', label: 'unanimous-to-flag' },
 ];
 
-// Every RunConfig knob, grouped. Endpoint rows bind to the active provider.
 const FIELDS: FieldDef[] = [
   { section: 'Session defaults', path: 'defaultMode', label: 'Default analysis mode', type: 'cycle', scope: 'config', options: MODE_OPTIONS },
   { section: 'Session defaults', path: 'defaultDynamic', label: 'Default dynamic analysis', type: 'cycle', scope: 'config', options: DYNAMIC_OPTIONS },
@@ -102,17 +99,12 @@ const FIELDS: FieldDef[] = [
 
 export const activeProvider = (d: CleakConfig): Provider => (d.provider ?? 'local') as Provider;
 
-/** Read one per-provider endpoint override field ('' when unset). Pure — unit-tested. */
 export function getEndpointField(draft: CleakConfig, provider: Provider, key: keyof EndpointOverride): string {
   return draft.endpoints?.[provider]?.[key] ?? '';
 }
 
-/** Set one per-provider endpoint override field, returning a new config object. Pure. */
 export function setEndpointField(
-  draft: CleakConfig,
-  provider: Provider,
-  key: keyof EndpointOverride,
-  value: string,
+  draft: CleakConfig, provider: Provider, key: keyof EndpointOverride, value: string,
 ): CleakConfig {
   const endpoints = { ...(draft.endpoints ?? {}) };
   endpoints[provider] = { ...(endpoints[provider] ?? {}), [key]: value };
@@ -145,8 +137,10 @@ function setValue(draft: CleakConfig, field: FieldDef, value: string | boolean |
   return setByPath(draft, field.path, value);
 }
 
-/** A dedicated settings screen over the full CleakConfig. Cycle rows toggle with
- * ←/→; text/secret/number rows open an inline editor with Enter. */
+function isDraftDirty(draft: CleakConfig, initial: CleakConfig): boolean {
+  return JSON.stringify(draft) !== JSON.stringify(initial);
+}
+
 export function ConfigScreen({
   initial,
   onSave,
@@ -160,6 +154,17 @@ export function ConfigScreen({
   const [row, setRow] = useState(0);
   const [editing, setEditing] = useState(false);
   const [buffer, setBuffer] = useState('');
+  const [saveFlash, setSaveFlash] = useState(false);
+  const saveFlashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const dirty = isDraftDirty(draft, initial);
+
+  const flashSaved = () => {
+    if (saveFlashTimer.current) clearTimeout(saveFlashTimer.current);
+    setSaveFlash(true);
+    saveFlashTimer.current = setTimeout(() => setSaveFlash(false), 2000);
+  };
+  useEffect(() => () => { if (saveFlashTimer.current) clearTimeout(saveFlashTimer.current); }, []);
 
   const cycle = (dir: 1 | -1) => {
     const field = FIELDS[row];
@@ -179,7 +184,7 @@ export function ConfigScreen({
     const t = buffer.trim();
     if (field.type === 'number') {
       const n = t === '' ? undefined : Number(t);
-      if (n !== undefined && Number.isNaN(n)) return setEditing(false); // reject non-numeric, keep old
+      if (n !== undefined && Number.isNaN(n)) return setEditing(false);
       setDraft((d) => setValue(d, field, n));
     } else {
       setDraft((d) => setValue(d, field, t === '' && field.scope === 'config' ? undefined : t));
@@ -190,13 +195,13 @@ export function ConfigScreen({
   useInput((input, key) => {
     if (editing) {
       if (key.return) return commitEdit();
-      if (key.escape) return setEditing(false); // cancel edit, keep old value
+      if (key.escape) return setEditing(false);
       if (key.backspace || key.delete) return setBuffer((b) => b.slice(0, -1));
       if (input && !key.ctrl && !key.meta && !key.tab) setBuffer((b) => b + input);
       return;
     }
     if (key.escape) return onCancel();
-    if (input === 's') return onSave(draft);
+    if (input === 's') { flashSaved(); return onSave(draft); }
     if (key.upArrow) return setRow((r) => (r - 1 + FIELDS.length) % FIELDS.length);
     if (key.downArrow) return setRow((r) => (r + 1) % FIELDS.length);
     const field = FIELDS[row];
@@ -211,7 +216,7 @@ export function ConfigScreen({
   const provider = activeProvider(draft);
   const termRows = process.stdout.rows ?? 30;
 
-  // Build flat row list (section headers + field rows) for viewport scrolling.
+  // Flat row list (section headers + field rows) for viewport scrolling.
   const rows = useMemo(() => {
     const result: Array<{ kind: 'header'; label: string } | { kind: 'field'; idx: number }> = [];
     let lastSection = '';
@@ -226,30 +231,43 @@ export function ConfigScreen({
     return result;
   }, []);
 
-  // Map FIELDS index → flat row index for the selected field.
   const selectedFlatIdx = useMemo(() => {
     return rows.findIndex((r) => r.kind === 'field' && r.idx === row);
   }, [rows, row]);
 
-  // Overhead: title(1) + keybindings(1) + marginTop(1) + footerMargin(1) + footer(1) = 5.
-  const viewportRows = Math.max(8, termRows - 6);
-  // Scroll so the selected row stays visible with a 1-line margin.
+  // Overhead: header(2) + footer border(2) = 4 lines.
+  const viewportRows = Math.max(8, termRows - 4);
   const scrollOffset = Math.max(0, selectedFlatIdx - viewportRows + 2);
   const visibleRows = rows.slice(scrollOffset, scrollOffset + viewportRows);
 
+  // ── Status indicator ──
+  const StatusIndicator = () => {
+    if (editing) return <><Text color={color.warning} bold> ▌ editing</Text></>;
+    if (saveFlash) return <><Text color={color.success} bold> ✓ saved</Text></>;
+    if (dirty) return <><Text color={color.warning}> ● draft</Text></>;
+    return <><Text color={color.subtle}> · clean</Text></>;
+  };
+
   return (
-    <Box flexDirection="column">
-      <Text color={color.accent} bold>
-        {glyph.star} Settings
-      </Text>
-      <Text dimColor>
-        {glyph.arrowUp}/{glyph.arrowDown} row {glyph.bullet} ←/→ cycle {glyph.bullet} Enter edit/change {glyph.bullet} s save {glyph.bullet} Esc {editing ? 'cancel edit' : 'cancel'}
-      </Text>
-      <Box flexDirection="column" marginTop={1}>
+    <Box flexDirection="column" width="100%" height="100%">
+      {/* ── Sticky header ── */}
+      <Box flexShrink={0} flexDirection="column">
+        <Box>
+          <Text color={color.accent} bold>{glyph.star} Settings</Text>
+          <Text dimColor> — {FIELDS.length} fields across {new Set(FIELDS.map(f => f.section)).size} sections</Text>
+        </Box>
+        <Text dimColor>
+          {glyph.arrowUp}{glyph.arrowDown} navigate {glyph.bullet} ←/→ change {glyph.bullet} Enter edit {glyph.bullet}{' '}
+          <Text color={color.accent}>s</Text> save {glyph.bullet} <Text color={color.accent}>Esc</Text> cancel
+        </Text>
+      </Box>
+
+      {/* ── Scrollable fields ── */}
+      <Box flexGrow={1} flexDirection="column" marginTop={1} overflow="hidden">
         {visibleRows.map((r) => {
           if (r.kind === 'header') {
             return (
-              <Text key={`h-${r.label}`} color={color.subtle} bold>
+              <Text key={`h-${r.label}`} color={color.accent} bold>
                 {' '}{r.label}
               </Text>
             );
@@ -271,34 +289,34 @@ export function ConfigScreen({
               ? f.type === 'secret' && !isEditing
                 ? '•'.repeat(Math.min(raw.length, 24))
                 : raw
-              : isEditing
-                ? ''
-                : f.placeholder ?? '';
+              : isEditing ? '' : f.placeholder ?? '';
           }
           const curVal = getValue(draft, f);
           const empty = f.type !== 'cycle' && (curVal === undefined || curVal === '') && !isEditing;
           return (
             <Text key={f.path + f.section}>
-              <Text color={selected ? color.accent : color.subtle}>{selected ? glyph.pointer : ' '} </Text>
+              <Text color={selected ? color.accent : color.subtle} bold={selected}>{selected ? ` ${glyph.pointer} ` : '   '}</Text>
               <Text color={selected ? undefined : color.subtle}>{f.label.padEnd(38)}</Text>
-              <Text color={isEditing ? color.accent : empty ? color.subtle : selected ? color.accent : color.system} bold={selected && !empty}>
-                {' '}{shown}{isEditing ? <Text color={color.accent}>▌</Text> : null}
+              <Text color={isEditing ? color.warning : empty ? color.subtle : selected ? color.accent : color.system} bold={selected && !empty}>
+                {' '}{shown}{isEditing ? <Text color={color.warning}>▌</Text> : null}
               </Text>
             </Text>
           );
         })}
       </Box>
-      {provider === 'openai-compat' ? (
-        <Box marginTop={1}>
-          <Text color={color.warning}>
-            {glyph.bullet} OpenAI-compatible: Base URL + Model required (any OpenAI-style /chat/completions endpoint)
-          </Text>
+
+      {/* ── Sticky footer ── */}
+      <Box flexShrink={0} flexDirection="column" marginTop={1} borderStyle="single" borderColor={color.subtle} paddingX={1}>
+        <Box>
+          <Text dimColor>{configFilePath()}</Text>
+          <Text dimColor> {glyph.bullet} chmod 600</Text>
         </Box>
-      ) : null}
-      <Box marginTop={1}>
-        <Text dimColor>
-          Saved to {configFilePath()} (chmod 600) {glyph.bullet} applies to new scans this session
-        </Text>
+        <Box>
+          <StatusIndicator />
+          {provider === 'openai-compat' ? (
+            <Text color={color.warning}> {glyph.bullet} openai-compat: baseUrl + model required</Text>
+          ) : null}
+        </Box>
       </Box>
     </Box>
   );
