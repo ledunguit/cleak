@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Box, Text, useInput } from 'ink';
+import { useMemo, useState } from 'react';
+import { Box, Text, useInput, useStdout } from 'ink';
 import { color, glyph } from '../theme';
 import type { Provider } from '../../../config';
 import { configFilePath, type CleakConfig, type EndpointOverride } from '../../../domain/config-file';
@@ -203,7 +203,34 @@ export function ConfigScreen({
   });
 
   const provider = activeProvider(draft);
-  let lastSection = '';
+  const { stdout } = useStdout();
+  const termRows = stdout.rows ?? 30;
+
+  // Build flat row list (section headers + field rows) for viewport scrolling.
+  const rows = useMemo(() => {
+    const result: Array<{ kind: 'header'; label: string } | { kind: 'field'; idx: number }> = [];
+    let lastSection = '';
+    for (let i = 0; i < FIELDS.length; i++) {
+      const f = FIELDS[i];
+      if (f.section !== lastSection) {
+        result.push({ kind: 'header', label: f.section });
+        lastSection = f.section;
+      }
+      result.push({ kind: 'field', idx: i });
+    }
+    return result;
+  }, []);
+
+  // Map FIELDS index → flat row index for the selected field.
+  const selectedFlatIdx = useMemo(() => {
+    return rows.findIndex((r) => r.kind === 'field' && r.idx === row);
+  }, [rows, row]);
+
+  // Viewport: header(2) + footer(2) + margin(1) = 5 lines overhead.
+  const viewportRows = Math.max(8, termRows - 5);
+  // Scroll so the selected row stays visible with a 1-line margin.
+  const scrollOffset = Math.max(0, selectedFlatIdx - viewportRows + 2);
+  const visibleRows = rows.slice(scrollOffset, scrollOffset + viewportRows);
 
   return (
     <Box flexDirection="column">
@@ -213,12 +240,19 @@ export function ConfigScreen({
       <Text dimColor>
         {glyph.arrowUp}/{glyph.arrowDown} row {glyph.bullet} ←/→ cycle {glyph.bullet} Enter edit/change {glyph.bullet} s save {glyph.bullet} Esc {editing ? 'cancel edit' : 'cancel'}
       </Text>
-      <Box flexDirection="column" marginTop={1}>
-        {FIELDS.map((f, i) => {
+      <Box flexDirection="column" marginTop={1} height={viewportRows} overflow="hidden">
+        {visibleRows.map((r, vi) => {
+          if (r.kind === 'header') {
+            return (
+              <Text key={`h-${r.label}`} color={color.subtle} bold>
+                {' '}{r.label}
+              </Text>
+            );
+          }
+          const i = r.idx;
+          const f = FIELDS[i];
           const selected = i === row;
           const isEditing = selected && editing;
-          const header = f.section !== lastSection ? f.section : '';
-          lastSection = f.section;
           let shown: string;
           if (f.type === 'cycle') {
             const v = getValue(draft, f);
@@ -239,23 +273,13 @@ export function ConfigScreen({
           const curVal = getValue(draft, f);
           const empty = f.type !== 'cycle' && (curVal === undefined || curVal === '') && !isEditing;
           return (
-            <Box flexDirection="column" key={f.path + f.section}>
-              {header ? (
-                <Text color={color.subtle} bold>
-                  {' '}
-                  {header}
-                </Text>
-              ) : null}
-              <Text>
-                <Text color={selected ? color.accent : color.subtle}>{selected ? glyph.pointer : ' '} </Text>
-                <Text color={selected ? undefined : color.subtle}>{f.label.padEnd(38)}</Text>
-                <Text color={isEditing ? color.accent : empty ? color.subtle : selected ? color.accent : color.system} bold={selected && !empty}>
-                  {' '}
-                  {shown}
-                  {isEditing ? <Text color={color.accent}>▌</Text> : null}
-                </Text>
+            <Text key={f.path + f.section}>
+              <Text color={selected ? color.accent : color.subtle}>{selected ? glyph.pointer : ' '} </Text>
+              <Text color={selected ? undefined : color.subtle}>{f.label.padEnd(38)}</Text>
+              <Text color={isEditing ? color.accent : empty ? color.subtle : selected ? color.accent : color.system} bold={selected && !empty}>
+                {' '}{shown}{isEditing ? <Text color={color.accent}>▌</Text> : null}
               </Text>
-            </Box>
+            </Text>
           );
         })}
       </Box>
