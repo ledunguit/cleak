@@ -39,12 +39,12 @@ export interface FullscreenLayoutProps {
  * Fullscreen-aware layout wrapper around StackLayout.
  *
  * Features:
- * - Calculates viewport from terminal dimensions via `useStdout`
  * - Wraps content in a viewport-constrained Box when `isFullscreenEnvEnabled()` is true
  * - Renders a "N new messages" pill overlay when scrolled up and new messages arrive
  * - Falls back to plain StackLayout when fullscreen is disabled
  *
- * Viewport formula (matching App.tsx): `Math.max(8, rows - 12)`
+ * Note: Viewport dimensions are handled by individual components (MessageList,
+ * ConfigScreen, etc.) via `useStdout()`, not by this layout wrapper.
  */
 export function FullscreenLayout({
   header,

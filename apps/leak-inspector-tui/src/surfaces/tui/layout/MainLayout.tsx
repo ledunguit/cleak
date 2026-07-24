@@ -12,8 +12,8 @@ export interface MainLayoutProps {
   readonly bottom: ReactNode;
   /** Which side the sidebar sits on. */
   readonly sidebarPosition?: 'left' | 'right';
-  /** Sidebar width in columns (default 32). */
-  readonly sidebarWidth?: number;
+  /** Terminal columns (from useStdout). Used for responsive sidebar width. */
+  readonly termCols?: number;
 }
 
 /**
@@ -21,6 +21,7 @@ export interface MainLayoutProps {
  *
  * The sidebar is rendered on the left or right based on `sidebarPosition`.
  * The content area fills remaining space with overflow hidden (scroll clipping).
+ * Sidebar width is responsive: 30% of terminal width, clamped to [24, 36].
  */
 export function MainLayout({
   header,
@@ -28,8 +29,10 @@ export function MainLayout({
   content,
   bottom,
   sidebarPosition = 'right',
-  sidebarWidth = 32,
+  termCols = 100,
 }: MainLayoutProps) {
+  const sidebarWidth = Math.max(24, Math.min(36, Math.floor(termCols * 0.3)));
+
   const sidebarBox = (
     <Box width={sidebarWidth} flexShrink={0} flexDirection="column" overflow="hidden">
       {sidebar}

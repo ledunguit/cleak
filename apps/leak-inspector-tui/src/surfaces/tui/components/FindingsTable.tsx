@@ -7,7 +7,7 @@
  * cursor. Purely presentational — the parent owns sort/filter/cursor and passes the
  * already-visible slice in.
  */
-import { Box, Text } from 'ink';
+import { Box, Text, useStdout } from 'ink';
 import { color } from '../theme';
 import type { FindingView } from '../findings/findingView';
 import { verdictStyle, coverageBadge, judgeChip, bestCorrelation } from '../findings/verdictStyle';
@@ -52,11 +52,12 @@ export function FindingsTable({
   cursor: number;
   viewportRows: number;
 }) {
+  const { stdout } = useStdout();
   const n = findings.length;
   const rows = Math.max(3, viewportRows);
   const start = Math.max(0, Math.min(Math.max(0, n - rows), cursor - Math.floor(rows / 2)));
   const win = findings.slice(start, start + rows);
-  const ruleWidth = Math.min(HEADER.length, (process.stdout.columns ?? 100) - 2);
+  const ruleWidth = Math.min(HEADER.length, (stdout.columns ?? 100) - 2);
   return (
     <Box flexDirection="column">
       <Text dimColor>{HEADER}</Text>

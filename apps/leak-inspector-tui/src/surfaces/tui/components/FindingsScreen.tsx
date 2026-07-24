@@ -14,7 +14,7 @@
  *   │  ↑/↓ move · ↵ detail · s sort · esc exit            │
  *   └─────────────────────────────────────────────────────┘
  */
-import { Box, Text, useInput } from 'ink';
+import { Box, Text, useInput, useStdout } from 'ink';
 import { join } from 'node:path';
 import { color, glyph } from '../theme';
 import { FindingsTable } from './FindingsTable';
@@ -34,9 +34,10 @@ function verdictCounts(findings: FindingView[]) {
 }
 
 export function FindingsScreen({ store, state, resultsDir }: { store: TuiStore; state: UiState; resultsDir: string }) {
+  const { stdout } = useStdout();
   const fs = state.findings;
   const visible = visibleFindings(state);
-  const tableRows = Math.max(5, (process.stdout.rows ?? 30) - 13);
+  const tableRows = Math.max(5, (stdout.rows ?? 30) - 13);
 
   useInput((input, key) => {
     if (!fs) return;

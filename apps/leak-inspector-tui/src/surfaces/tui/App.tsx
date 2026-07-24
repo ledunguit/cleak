@@ -58,7 +58,12 @@ export function App({ store, staticUrl, dynamicUrl, cwd, resultsDir, recentScans
       && (status === 'running' || status === 'paused') && !fullState.pendingPermission) scanStore.getState().abort();
   });
 
-  const viewportRows = Math.max(8, (process.stdout.rows ?? 30) - 12);
+  // Reactive terminal dimensions via useStdout() — updates on resize.
+  const termRows = stdout.rows ?? 30;
+  // Overhead estimate: header (~3) + bottom chrome (~5) = 8.
+  // MainLayout clips content via flexGrow+overflow:hidden, so this is only
+  // used for scroll offset math, not for actual rendering.
+  const viewportRows = Math.max(8, termRows - 8);
   const visible = visibleMessages(fullState);
   const maxOffset = Math.max(0, visible.length - viewportRows);
   const page = Math.max(1, Math.floor(viewportRows / 2));
@@ -150,7 +155,7 @@ export function App({ store, staticUrl, dynamicUrl, cwd, resultsDir, recentScans
   if (view === 'findings' && fullState.findings) return <Box flexDirection="column"><FindingsScreen store={store} state={fullState} resultsDir={resultsDir} /></Box>;
 
   return (
-    <MainScreen store={store} viewportRows={viewportRows} resultsDir={resultsDir}
+    <MainScreen store={store} resultsDir={resultsDir}
       recentScans={recentScans} staticUrl={staticUrl ?? 'localhost:50061/mcp'} cwd={cwd}
       input={input} inputRev={inputRev} overlay={overlay} suggestRef={suggestRef}
       showSuggest={showSuggest} matches={matches}

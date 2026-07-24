@@ -1,30 +1,31 @@
-import { Box, Text } from 'ink';
+import { Box, Text, useStdout } from 'ink';
 import { memo } from 'react';
 import { useStore } from 'zustand';
 import { color, glyph } from '../theme';
 import type { ToolCardData, UiMessage } from '../../../stores';
 import type { TuiStore } from '../../../stores';
 
-const DEFAULT_VIEWPORT = 24;
 const THINKING_PREVIEW = 80;
 
 /**
  * A scrollable viewport over the (already agent-filtered) message log. `scrollOffset`
  * counts messages up from the live bottom (0 = pinned). `focusMsgId` highlights the
  * line under the focus cursor (used to expand/collapse thinking & tool output).
+ *
+ * Viewport height is derived from terminal rows via useStdout() (reactive).
  */
 export const MessageList = memo(function MessageList({
   messages,
   scrollOffset = 0,
-  viewportRows = DEFAULT_VIEWPORT,
   focusMsgId,
 }: {
   messages: UiMessage[];
   scrollOffset?: number;
-  viewportRows?: number;
   focusMsgId?: string;
 }) {
-  const rows = Math.max(4, viewportRows);
+  const { stdout } = useStdout();
+  // Overhead: header(~3) + bottom chrome(~5) + margins(~2) = 10.
+  const rows = Math.max(4, (stdout.rows ?? 30) - 10);
   const end = Math.max(0, messages.length - scrollOffset);
   const start = Math.max(0, end - rows);
   const visible = messages.slice(start, end);
@@ -64,10 +65,8 @@ export const MessageList = memo(function MessageList({
  */
 export const MessageListConnected = memo(function MessageListConnected({
   store,
-  viewportRows,
 }: {
   store: TuiStore;
-  viewportRows: number;
 }) {
   const allMessages = useStore(store, (s) => s.messages);
   const viewAgentId = useStore(store, (s) => s.viewAgentId);
@@ -81,7 +80,6 @@ export const MessageListConnected = memo(function MessageListConnected({
     <MessageList
       messages={messages}
       scrollOffset={scrollOffset}
-      viewportRows={viewportRows}
       focusMsgId={focusMsgId}
     />
   );

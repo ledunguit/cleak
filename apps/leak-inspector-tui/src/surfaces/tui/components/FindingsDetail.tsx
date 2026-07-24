@@ -5,7 +5,7 @@
  * the structured verdict, evidence, static analysis, and repair diff for the
  * selected candidate. Stateless — the parent owns cursor/tab state.
  */
-import { Box, Text } from 'ink';
+import { Box, Text, useStdout } from 'ink';
 import { glyph } from '../theme';
 import { VerdictCard } from './VerdictCard';
 import type { FindingView } from '../findings/findingView';
@@ -21,6 +21,7 @@ export function FindingsDetail({
   total: number;
   reportPath: string;
 }) {
+  const { stdout } = useStdout();
   return (
     <Box flexDirection="column">
       <Text dimColor>
@@ -29,7 +30,7 @@ export function FindingsDetail({
       <Box marginTop={1}>
         <VerdictCard
           f={finding}
-          width={Math.min(110, (process.stdout.columns ?? 100) - 2)}
+          width={Math.min(110, (stdout.columns ?? 100) - 2)}
         />
       </Box>
     </Box>
