@@ -7,7 +7,7 @@ import { render } from 'ink';
 import { existsSync, readdirSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { App } from './App';
-import { TuiStore } from '../../stores';
+import { TuiStore, configStore } from '../../stores';
 import { ThemeProvider } from './theme';
 import { TerminalSizeProvider } from './components/TerminalSizeProvider';
 import { installSyncOutput } from './sync-output';
@@ -55,6 +55,9 @@ export async function launchTui(opts: LaunchTuiOptions = {}): Promise<void> {
     ...(nonEmpty(opts.hostRoot) ? { hostRoot: opts.hostRoot } : {}),
     ...(nonEmpty(opts.analyzerRoot) ? { analyzerRoot: opts.analyzerRoot } : {}),
   });
+  // Seed the runtime config store with the resolved provider/endpoint.
+  // Must be SYNCHRONOUS before render so components read correct values.
+  configStore.getState().seedFromConfig(cfg);
   const store = new TuiStore({
     provider: cfg.provider,
     model: cfg.llm.model,

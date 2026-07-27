@@ -11,6 +11,7 @@
 import { createStore } from 'zustand/vanilla';
 import { devtools, subscribeWithSelector } from 'zustand/middleware';
 import type { PendingPermission } from './types';
+import type { RunConfig } from '@cleak/config';
 
 // ─── State & Actions interfaces ──────────────────────────────────────────────
 
@@ -35,6 +36,7 @@ export interface ConfigActions {
   setAutoShowReport: (auto: boolean) => void;
   setFullscreen: (fullscreen: boolean) => void;
   setSidebarPosition: (pos: 'left' | 'right') => void;
+  seedFromConfig: (cfg: RunConfig) => void;
   cyclePermissionMode: () => 'ask' | 'auto';
   requestPermission: (req: { id: string; name: string; input: unknown }) => Promise<'allow' | 'deny'>;
   resolvePermission: (decision: 'allow' | 'deny') => void;
@@ -70,6 +72,13 @@ export const configStore = createStore<ConfigState & ConfigActions>()(
     setFullscreen: (fullscreen) => set({ fullscreen }),
 
     setSidebarPosition: (sidebarPosition) => set({ sidebarPosition }),
+
+    seedFromConfig: (cfg) => set({
+      provider: cfg.provider,
+      model: cfg.llm.model,
+      baseUrl: cfg.llm.baseUrl,
+      apiKey: cfg.llm.apiKey,
+    }),
 
     setPushSystem: (fn) => {
       pushSystem = fn;

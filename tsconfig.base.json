@@ -23,7 +23,9 @@
       "@cleak/common": ["packages/common/src"],
       "@cleak/common/*": ["packages/common/src/*"],
       "@cleak/agent-core": ["packages/agent-core/src"],
-      "@cleak/agent-core/*": ["packages/agent-core/src/*"]
+      "@cleak/agent-core/*": ["packages/agent-core/src/*"],
+      "@cleak/config": ["packages/config/src"],
+      "@cleak/config/*": ["packages/config/src/*"]
     }
   }
 }
