@@ -12,6 +12,7 @@ import { glyph, color, formatDuration } from '../theme';
 import { runTuiScan } from '../runner';
 import { runTuiEval } from '../evalRunner';
 import { snapshotFindingToView } from '../findings/findingView';
+import { generateScanPlan } from '../../../domain/scanPlan';
 import type { TuiStore } from '../../../stores';
 import type { SelectOption } from '../components/Select';
 
@@ -174,12 +175,33 @@ export function useCommands(
           return;
         }
         store.addUserMessage(`/scan ${arg} (mode ${snap.mode}, dynamic ${snap.dynamic})`);
-        void runTuiScan(store, {
-          repo: arg,
-          mode: snap.mode,
-          dynamic: snap.dynamic,
-          staticUrl,
-          dynamicUrl,
+
+        // Generate and show scan plan
+        const plan = generateScanPlan(arg, snap.mode, snap.dynamic);
+        store.addSystemMessage('── Scan Plan ──');
+        for (const step of plan.steps) {
+          if (step.skipped) continue;
+          const icon = step.optional ? '◻' : '■';
+          store.addSystemMessage(`  ${icon} ${step.label}  ${step.detail}`);
+        }
+
+        setOverlay({
+          title: `Scan this repo? · ${plan.mandatoryCount} mandatory + ${plan.optionalCount} optional steps`,
+          options: [
+            { label: `${glyph.tick} Approve & scan`, value: 'approve' },
+            { label: `${glyph.cross} Cancel`, value: 'cancel' },
+          ],
+          onSubmit: (vals) => {
+            if (vals[0] === 'approve') {
+              void runTuiScan(store, {
+                repo: arg,
+                mode: snap.mode,
+                dynamic: snap.dynamic,
+                staticUrl,
+                dynamicUrl,
+              });
+            }
+          },
         });
         return;
       }
