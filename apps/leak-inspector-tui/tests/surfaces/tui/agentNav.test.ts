@@ -33,12 +33,12 @@ describe('per-agent tagging + registry', () => {
     expect(s.getSnapshot().messages.some((m) => m.agentId === 'main')).toBe(true);
   });
 
-  test('tool_result keeps a short preview + a full (capped) output; thinking/tool collapse by default', () => {
+  test('tool_result keeps a short preview + a full (capped) output; tool starts expanded, thinking collapsed by default', () => {
     const s = createTestState();
     s.applyAgentEvent(toolUse('tu1'), STATIC0);
     s.applyAgentEvent(toolResult('tu1', 'x'.repeat(5000)), STATIC0);
     const tool = s.getSnapshot().messages.find((m) => m.kind === 'tool')!;
-    expect(tool.collapsed).toBe(true);
+    expect(tool.collapsed).toBe(false);
     expect(tool.tool!.preview!.length).toBe(160);
     expect(tool.tool!.output!.length).toBe(4000);
     expect(tool.tool!.status).toBe('ok');

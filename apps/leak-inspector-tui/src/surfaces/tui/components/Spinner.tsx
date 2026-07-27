@@ -28,7 +28,7 @@ export const Spinner = memo(function Spinner({
   const tokenStr =
     total > 0
       ? `${formatNum(usage.inputTokens)}↑ ${formatNum(usage.outputTokens)}↓` +
-        (usage.thinkingTokens > 0 ? ` ${formatNum(usage.thinkingTokens)}🧠` : '') +
+        (usage.thinkingTokens > 0 ? ` ◎${formatNum(usage.thinkingTokens)}` : '') +
         ' tok'
       : '';
   const meta = [elapsed, tokenStr, 'esc to interrupt'].filter(Boolean).join(` ${glyph.bullet} `);

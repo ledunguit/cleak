@@ -307,7 +307,7 @@ export const scanStore = createStore<ScanState & ScanActions>()(subscribeWithSel
           const msgId = get().push({
             kind: 'tool',
             agentId,
-            collapsed: true,
+            collapsed: false,
             tool: { name: ev.name, title, source: toolSource(ev.name), status: 'running' },
           });
           toolMsgByUseId.set(ev.id, msgId);
@@ -351,10 +351,16 @@ export const scanStore = createStore<ScanState & ScanActions>()(subscribeWithSel
           if (s.io) set({ io: undefined });
           break;
         }
-        case 'notice':
-          get().push({ kind: 'system', text: `↻ ${ev.text}`, agentId });
-          set({ statusText: ev.text });
+        case 'notice': {
+          const text = ev.text ?? '';
+          if (text.startsWith('►') || text.startsWith('◎')) {
+            get().push({ kind: 'system', text, agentId });
+          } else {
+            get().push({ kind: 'system', text: `↻ ${text}`, agentId });
+          }
+          set({ statusText: ev.text ?? '' });
           break;
+        }
         case 'paused':
           get().push({
             kind: 'system',

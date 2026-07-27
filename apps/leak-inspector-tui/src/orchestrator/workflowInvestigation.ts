@@ -149,6 +149,21 @@ async function runSubAgent(
     bridge.handle(ev);
     ctx.onAgentEvent?.(ev, agent);
     state.stepLog.record(ev);
+    // Emit agent-activity notices for the TUI timeline
+    if (ev.type === 'tool_use') {
+      const argsPreview = JSON.stringify(ev.input).slice(0, 60);
+      const isReadFile = ev.name === 'read_file' || ev.name === 'readFile';
+      ctx.onAgentEvent?.({
+        type: 'notice',
+        text: `► ${isReadFile ? 'reading_file' : 'calling_mcp'} ${ev.name} ${argsPreview}`,
+      } as any, agent);
+    }
+    if (ev.type === 'thinking' && ev.text?.trim()) {
+      ctx.onAgentEvent?.({
+        type: 'notice',
+        text: `◎ ${ev.text.trim().slice(0, 60)}`,
+      } as any, agent);
+    }
   }
   state.usage.inputTokens += res.usage.inputTokens;
   state.usage.outputTokens += res.usage.outputTokens;

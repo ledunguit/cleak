@@ -19,27 +19,27 @@ export const color = {
 
 export const glyph = {
   /** Message / tool marker. */
-  mark: process.platform === 'darwin' ? '⏺' : '●',
+  mark: '▸',
   /** Spinner + brand star. */
-  star: '✻',
+  star: '✦',
   /** Tool-result tree connector. */
-  tree: '⎿',
+  tree: '▹',
   /** User prompt pointer. */
-  pointer: '❯',
-  tick: '✔',
+  pointer: '▸',
+  tick: '✓',
   cross: '✗',
   bullet: '·',
-  running: '◐',
+  running: '◌',
   /** Sending a request to the model. */
-  arrowUp: '↑',
+  arrowUp: '▲',
   /** Receiving the streamed response. */
-  arrowDown: '↓',
+  arrowDown: '▼',
   /** Collapsed (click to expand) / expanded disclosure markers. */
-  collapsed: '▶',
-  expanded: '▼',
+  collapsed: '▸',
+  expanded: '▾',
 } as const;
 
-export const SPINNER_FRAMES = ['✶', '✸', '✹', '✺', '✹', '✷'];
+export const SPINNER_FRAMES = ['◴', '◷', '◶', '◵'];
 
 /**
  * Human-readable elapsed time: seconds under a minute, `Nm Ss` under an hour,

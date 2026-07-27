@@ -27,14 +27,22 @@ export interface ToolCardData {
   output?: string;
 }
 
+export interface AgentActivityMessage {
+  kind: 'agent_activity';
+  activityType: 'calling_mcp' | 'reading_file' | 'thinking' | 'planning' | 'done';
+  text: string;
+  agentId: string;
+}
+
 export interface UiMessage {
   id: string;
-  kind: 'user' | 'assistant' | 'tool' | 'system' | 'phase' | 'thinking';
+  kind: 'user' | 'assistant' | 'tool' | 'system' | 'phase' | 'thinking' | 'agent_activity';
   text?: string;
   color?: string;
   tool?: ToolCardData;
   agentId: string;
   collapsed?: boolean;
+  activityType?: 'calling_mcp' | 'reading_file' | 'thinking' | 'planning' | 'done';
 }
 
 export interface AgentInfo {

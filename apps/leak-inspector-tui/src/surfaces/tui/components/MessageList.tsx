@@ -96,6 +96,14 @@ function chevron(collapsed: boolean | undefined, focused: boolean) {
   return <Text color={focused ? color.accent : color.subtle}> {ch}</Text>;
 }
 
+const ACTIVITY_ICONS: Record<string, string> = {
+  calling_mcp: '►',
+  reading_file: '✎',
+  thinking: '◎',
+  planning: '⚑',
+  done: '✓',
+};
+
 function MessageRow({ message, focused }: { message: UiMessage; focused: boolean }) {
   switch (message.kind) {
     case 'user':
@@ -111,7 +119,7 @@ function MessageRow({ message, focused }: { message: UiMessage; focused: boolean
       return (
         <Box flexDirection="column">
           <Text color={focused ? color.accent : color.subtle}>
-            {focused ? glyph.pointer : ' '} 💭 {collapsed ? truncate(full, THINKING_PREVIEW) : ''}
+            {focused ? glyph.pointer : ' '} ◎ {collapsed ? truncate(full, THINKING_PREVIEW) : ''}
             {chevron(collapsed, focused)}
           </Text>
           {!collapsed ? <Text color={color.subtle}>{'     '}{full.trim()}</Text> : null}
@@ -132,6 +140,14 @@ function MessageRow({ message, focused }: { message: UiMessage; focused: boolean
       return <Text color={color.subtle}>{divider(message.text ?? '')}</Text>;
     case 'tool':
       return message.tool ? <ToolCard tool={message.tool} collapsed={message.collapsed !== false} focused={focused} /> : null;
+    case 'agent_activity': {
+      const icon = ACTIVITY_ICONS[message.activityType ?? ''] ?? '*';
+      return (
+        <Text color={color.subtle}>
+          {'  '}{icon} {message.text}
+        </Text>
+      );
+    }
     default:
       return null;
   }
