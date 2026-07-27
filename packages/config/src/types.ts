@@ -1,4 +1,5 @@
 import type { ConsensusRule } from "@cleak/common/analysis/consensus-judge";
+export type { ConsensusRule };
 
 export type Provider = "local" | "openai" | "anthropic" | "openai-compat";
 export type AnalysisModeOpt = "no_llm" | "llm_assisted";
