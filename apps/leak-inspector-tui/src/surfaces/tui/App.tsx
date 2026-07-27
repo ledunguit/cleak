@@ -9,7 +9,7 @@ import { MainScreen } from './screens/MainScreen';
 import { ConfigScreen } from './components/ConfigScreen';
 import { EvalScreen } from './components/EvalScreen';
 import { FindingsScreen } from './components/FindingsScreen';
-import { saveConfigFile, loadConfigFile, type CleakConfig } from '../../domain/config-file';
+import { saveConfigFile, loadConfigFile, configTemplate, type CleakConfig } from '../../domain/config-file';
 import { visibleMessages, type TuiStore } from '../../stores';
 import { scanStore } from '../../stores/scan-store';
 import { configStore } from '../../stores/config-store';
@@ -141,10 +141,12 @@ export function App({ store, staticUrl, dynamicUrl, cwd, resultsDir, recentScans
   const saveConfig = async (cfg: CleakConfig) => {
     let savedPath = '';
     try {
-      // Merge draft with existing file data so a partial draft never drops keys
-      const { loadConfigFile } = await import('../../domain/config-file');
+      // Merge draft with (template + existing file) so ALL keys are always present.
+      // configTemplate() provides the complete default surface; existing keys from
+      // the file fill in user settings; the draft (ConfigScreen edits) wins last.
+      const template = configTemplate() as Record<string, unknown>;
       const existing = loadConfigFile() as Record<string, unknown>;
-      const merged = { ...existing, ...cfg } as Record<string, unknown>;
+      const merged = { ...template, ...existing, ...cfg } as Record<string, unknown>;
       savedPath = saveConfigFile(merged);
     } catch (err: any) { scanStore.getState().addSystemMessage(`failed to save settings: ${err?.message ?? err}`); }
     const { loadConfig } = await import('../../config');
@@ -162,7 +164,7 @@ export function App({ store, staticUrl, dynamicUrl, cwd, resultsDir, recentScans
     );
   };
 
-  if (view === 'config') return <Box flexDirection="column"><ConfigScreen initial={{ ...loadConfigFile(), defaultMode: fullState.mode, defaultDynamic: fullState.dynamic, autoShowReport: fullState.autoShowReport, fullscreen: fullState.fullscreen, sidebarPosition: fullState.sidebarPosition, provider: fullState.provider as CleakConfig['provider'] }} onSave={saveConfig} onCancel={() => store.setView('main')} /></Box>;
+  if (view === 'config') return <Box flexDirection="column"><ConfigScreen initial={{ ...configTemplate(), ...loadConfigFile(), defaultMode: fullState.mode, defaultDynamic: fullState.dynamic, autoShowReport: fullState.autoShowReport, fullscreen: fullState.fullscreen, sidebarPosition: fullState.sidebarPosition, provider: fullState.provider as CleakConfig['provider'] }} onSave={saveConfig} onCancel={() => store.setView('main')} /></Box>;
   if (view === 'eval' && fullState.eval) return <Box flexDirection="column"><EvalScreen store={store} evalState={fullState.eval} resultsDir={resultsDir} /></Box>;
   if (view === 'findings' && fullState.findings) return <Box flexDirection="column"><FindingsScreen store={store} state={fullState} resultsDir={resultsDir} /></Box>;
 
