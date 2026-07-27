@@ -22,8 +22,9 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { join, basename } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { z } from 'zod';
-import { runEval, runEvalRepeated, type EvalResult, type RepeatedEvalResult } from '../apps/leak-inspector-tui/src/domain/evalHarness';
+import { runEval, type EvalResult, type RepeatedEvalResult, type EvalCaseDetail } from '../apps/leak-inspector-tui/src/domain/evalHarness';
 import { writeEval } from '../apps/leak-inspector-tui/src/domain/evalReport';
+import { captureProvenance, summarizeStat } from '../apps/leak-inspector-tui/src/domain/provenance';
 import { loadConfig } from '@cleak/config';
 
 const cfg = loadConfig();
@@ -54,6 +55,7 @@ Options:
   --static-url <url>       MCP static analyzer URL
   --dynamic-url <url>      MCP dynamic analyzer URL
   --allow-unvalidated     Bypass corpus integrity gate
+  --verbose, -v           Show phase-level detail during scan
   --dry-run               Print config and exit
   --help, -h              Show this help`);
   process.exit(0);
@@ -84,6 +86,7 @@ const CorpusEvalOptionsSchema = z.object({
   toolSelect: z.boolean().optional(),
   staticDiscovery: z.boolean().optional(),
   dryRun: z.boolean().default(false),
+  verbose: z.boolean().optional(),
 }).passthrough();
 
 type CorpusEvalOptions = z.infer<typeof CorpusEvalOptionsSchema> & { outDir: string };
@@ -141,12 +144,13 @@ function parseCorpusArgs(): CorpusEvalOptions {
     : undefined;
 
   const dryRun = process.argv.includes('--dry-run');
+  const verbose = process.argv.includes('--verbose') || process.argv.includes('-v');
 
   const parsed = CorpusEvalOptionsSchema.parse({
     mode, limit, runs, dynamic, corpusDir, staticUrl, dynamicUrl,
     consensusN, consensusRule, allowUnvalidated, stratify,
     resume, concurrency, staticTools, enrich, strategy,
-    toolSelect, staticDiscovery, dryRun,
+    toolSelect, staticDiscovery, dryRun, verbose,
   });
 
   const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
@@ -180,6 +184,7 @@ export async function main(): Promise<void> {
     console.log(`  toolSelect: ${opts.toolSelect ?? 'default'}`);
     console.log(`  staticDiscovery: ${opts.staticDiscovery ?? 'default'}`);
     console.log(`  outDir: ${opts.outDir}`);
+    console.log(`  verbose: ${opts.verbose}`);
     console.log(`  allowUnvalidated: ${opts.allowUnvalidated}`);
     process.exit(0);
   }
@@ -187,10 +192,75 @@ export async function main(): Promise<void> {
   const baseOpts = { corpusDir: opts.corpusDir, mode: opts.mode, dynamic: opts.dynamic, limit: opts.limit, concurrency: opts.concurrency, resume: opts.resume, stratify: opts.stratify, staticUrl: opts.staticUrl, dynamicUrl: opts.dynamicUrl, consensusN: opts.consensusN, consensusRule: opts.consensusRule, allowUnvalidated: opts.allowUnvalidated, staticTools: opts.staticTools, enrich: opts.enrich, strategy: opts.strategy, toolSelect: opts.toolSelect, staticDiscovery: opts.staticDiscovery };
   const pct = (x: number) => `${(x * 100).toFixed(1)}%`;
 
+  let runningTP = 0, runningFP = 0, runningFN = 0, runningTN = 0;
+  let runningDone = 0, runningTokens = 0, runningMcpCalls = 0;
+  let runningOk = 0, runningErr = 0, runningSkp = 0;
+
+  function makeCallbacks(verbose: boolean) {
+    runningTP = 0; runningFP = 0; runningFN = 0; runningTN = 0;
+    runningDone = 0; runningTokens = 0; runningMcpCalls = 0;
+    runningOk = 0; runningErr = 0; runningSkp = 0;
+    let totalCases = 0;
+
+    const onProgress = (_done: number, total: number, _id: string) => {
+      if (totalCases === 0 && total > 0) totalCases = total;
+    };
+
+    const onCaseStart = (id: string) => {
+      process.stderr.write(`  ▶ ${id} ...\n`);
+    };
+
+    const onCasePhase = verbose ? (id: string, phase: string) => {
+      process.stderr.write(`    ${id}: ${phase}\n`);
+    } : undefined;
+
+    const onCaseResult = (detail: EvalCaseDetail) => {
+      const r = detail.row;
+      runningDone++;
+      if (r.status === 'ok') {
+        runningOk++;
+        runningTP += r.tp; runningFP += r.fp; runningFN += r.fn; runningTN += r.tn;
+        runningTokens += r.tokens ?? 0; runningMcpCalls += r.mcpCalls ?? 0;
+      } else if (r.status === 'error') runningErr++;
+      else runningSkp++;
+
+      const jp = r.judgePathCounts
+        ? Object.entries(r.judgePathCounts).sort((a, b) => b[1] - a[1]).map(([k]) => k)[0] ?? '?'
+        : '?';
+      const fv = r.functionalVariant ? ` [${r.functionalVariant}]` : '';
+      const icon = r.status === 'ok' ? '✓' : r.status === 'error' ? '✗' : '⊘';
+
+      if (r.status === 'ok') {
+        const dur = r.durationMs >= 1000
+          ? `${(r.durationMs / 1000).toFixed(1)}s` : `${r.durationMs}ms`;
+        const tok = r.tokens
+          ? (r.tokens >= 1000 ? `${(r.tokens / 1000).toFixed(1)}Ktok` : `${r.tokens}tok`)
+          : '0tok';
+        process.stderr.write(
+          `  ${icon} ${detail.id}${fv} · TP=${r.tp} FP=${r.fp} FN=${r.fn} TN=${r.tn}` +
+          ` · cand=${r.candidates} flg=${r.flagged} · ${dur} · ${r.mcpCalls ?? 0}MCP · ${tok} · ${jp}\n`,
+        );
+      } else {
+        process.stderr.write(`  ${icon} ${detail.id}${fv} · ${r.error ?? 'skipped'}\n`);
+      }
+
+      const denom = totalCases || runningDone;
+      const sumTok = runningTokens >= 1000
+        ? `${(runningTokens / 1000).toFixed(1)}Ktok` : `${runningTokens}tok`;
+      process.stderr.write(
+        `  ─ ${runningDone}/${denom} · TP=${runningTP} FP=${runningFP} FN=${runningFN} TN=${runningTN}` +
+        ` · ∑${sumTok} · ∑${runningMcpCalls}MCP · ${runningOk}ok ${runningErr}err ${runningSkp}skp\n`,
+      );
+    };
+
+    return { onCaseStart, onCasePhase, onCaseResult, onProgress };
+  }
+
   console.log(`Evaluating corpus=${opts.corpusDir} mode=${opts.mode} dynamic=${opts.dynamic} runs=${opts.runs}${opts.limit ? ` limit=${opts.limit}` : ''}${opts.consensusN ? ` consensus-n=${opts.consensusN}` : ''}\n`);
 
   if (opts.runs <= 1) {
-    const result: EvalResult = await runEval({ ...baseOpts, outDir: opts.outDir });
+    const cb = makeCallbacks(opts.verbose);
+    const result: EvalResult = await runEval({ ...baseOpts, outDir: opts.outDir, ...cb });
     const files = writeEval(opts.outDir, result);
     const m = result.overall;
     console.log(`\n── ${opts.mode} ── ${result.ranOk}/${result.caseCount} scored`);
@@ -199,8 +269,30 @@ export async function main(): Promise<void> {
     console.log(`  provenance: model=${result.provenance.model ?? '—'} temp=${result.provenance.temperature ?? '—'} commit=${result.provenance.gitCommit?.slice(0, 8) ?? '—'}`);
     console.log(`\n✓ artifacts: ${files.map((f) => basename(f)).join(', ')} in ${opts.outDir}`);
   } else {
-    const rep: RepeatedEvalResult = await runEvalRepeated({ ...baseOpts, outDir: opts.outDir }, opts.runs);
-    for (let i = 0; i < rep.perRun.length; i++) writeEval(join(opts.outDir, `run-${i + 1}`), rep.perRun[i]);
+    const perRun: EvalResult[] = [];
+    for (let k = 0; k < opts.runs; k++) {
+      const runDir = join(opts.outDir, `run-${k + 1}`);
+      process.stderr.write(`\n  ── Run ${k + 1}/${opts.runs} ──\n`);
+      const cb = makeCallbacks(opts.verbose);
+      const result = await runEval({ ...baseOpts, outDir: runDir, ...cb });
+      perRun.push(result);
+      writeEval(runDir, result);
+    }
+    const rep: RepeatedEvalResult = {
+      runs: perRun.length,
+      mode: opts.mode,
+      dynamic: opts.dynamic,
+      provenance: perRun[0]?.provenance ?? captureProvenance({ dynamicEnabled: opts.dynamic !== 'off', runs: opts.runs }),
+      aggregate: {
+        precision: summarizeStat(perRun.map((r) => r.overall.precision)),
+        recall: summarizeStat(perRun.map((r) => r.overall.recall)),
+        f1: summarizeStat(perRun.map((r) => r.overall.f1)),
+        accuracy: summarizeStat(perRun.map((r) => r.overall.accuracy)),
+        mcc: summarizeStat(perRun.map((r) => r.overall.mcc)),
+        ece: summarizeStat(perRun.map((r) => r.ece)),
+      },
+      perRun,
+    };
     writeFileSync(join(opts.outDir, 'variance.json'), JSON.stringify(rep, null, 2));
     writeFileSync(join(opts.outDir, 'variance.md'), varianceMarkdown(rep));
     const a = rep.aggregate;
