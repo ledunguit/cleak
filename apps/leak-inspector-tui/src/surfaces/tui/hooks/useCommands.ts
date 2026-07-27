@@ -316,41 +316,47 @@ async function doPreflight(store: TuiStore, staticUrl?: string, dynamicUrl?: str
   });
   store.addSystemMessage('── preflight ──');
 
-  const checks: Promise<void>[] = [];
-
-  // 1. LLM provider — resolve the validation message immediately,
-  //    then push the actual connectivity test as a parallel promise.
+  // Resolve the LLM validation message synchronously
   const llm = cfg.llm;
+  let syncError: string | null = null;
   if (llm.provider === 'local' || llm.provider === 'openai-compat') {
     if (!llm.baseUrl) {
-      store.addSystemMessage(`✗ LLM ${llm.provider} — no base URL configured (set in /config or ~/.config/cleak/config.json)`);
+      syncError = `✗ LLM ${llm.provider} — no base URL configured (set in /config or ~/.config/cleak/config.json)`;
     } else if (!llm.model) {
-      store.addSystemMessage(`✗ LLM ${llm.provider} — no model configured (set in /config or ~/.config/cleak/config.json)`);
-    } else {
-      checks.push(testLlm(store, cfg));
+      syncError = `✗ LLM ${llm.provider} — no model configured (set in /config or ~/.config/cleak/config.json)`;
     }
   } else if (llm.provider === 'openai' || llm.provider === 'anthropic') {
     if (!llm.apiKey) {
       const envKey = llm.provider === 'openai' ? 'OPENAI_API_KEY' : 'ANTHROPIC_API_KEY';
-      store.addSystemMessage(`✗ LLM ${llm.provider} — no API key (set ${envKey})`);
-    } else {
-      checks.push(testLlm(store, cfg));
+      syncError = `✗ LLM ${llm.provider} — no API key (set ${envKey})`;
     }
   } else {
-    store.addSystemMessage(`✗ LLM — unknown provider "${llm.provider}"`);
+    syncError = `✗ LLM — unknown provider "${llm.provider}"`;
   }
 
-  // 2. Static analyzer
-  checks.push(checkMcp(store, 'static', cfg.staticUrl));
+  if (syncError) {
+    store.addSystemMessage(syncError);
+  }
 
-  // 3. Dynamic analyzer
-  checks.push(checkMcp(store, 'dynamic', cfg.dynamicUrl));
+  // Show a single loading status
+  const loadingId = store.push({ kind: 'system', text: '⟳ checking LLM + static + dynamic…' });
 
-  // Run all connectivity checks in parallel
-  await Promise.all(checks);
+  // Run all checks in parallel, collecting result strings
+  const checks: Promise<string>[] = [];
+  if (!syncError) checks.push(testLlmResult(store, cfg));
+  checks.push(checkMcpResult(store, 'static', cfg.staticUrl));
+  checks.push(checkMcpResult(store, 'dynamic', cfg.dynamicUrl));
+
+  const checkResults = await Promise.all(checks);
+
+  // Update the loading message in-place with results
+  store.updateMessage(loadingId, (m) => ({
+    ...m,
+    text: checkResults.join('\n'),
+  }));
 }
 
-async function testLlm(store: TuiStore, cfg: RunConfig) {
+async function testLlmResult(store: TuiStore, cfg: RunConfig): Promise<string> {
   const { buildCallModel } = await import('@cleak/agent-core');
   const { toProviderSettings } = await import('@cleak/config');
   const provider = cfg.llm.provider;
@@ -367,24 +373,23 @@ async function testLlm(store: TuiStore, cfg: RunConfig) {
     const elapsed = Date.now() - startedAt;
     const text = (response.text ?? '').trim();
     if (text.toUpperCase().includes('OK')) {
-      store.addSystemMessage(`✓ LLM ${provider}:${model} — responded in ${elapsed}ms`);
-    } else {
-      store.addSystemMessage(`✓ LLM ${provider}:${model} — responded (${elapsed}ms, reply: "${text.slice(0, 40)}")`);
+      return `✓ LLM ${provider}:${model} — responded in ${elapsed}ms`;
     }
+    return `✓ LLM ${provider}:${model} — responded (${elapsed}ms, reply: "${text.slice(0, 40)}")`;
   } catch (err: any) {
     const elapsed = Date.now() - startedAt;
-    store.addSystemMessage(`✗ LLM ${provider}:${model} — ${err?.message ?? err} (${elapsed}ms)`);
+    return `✗ LLM ${provider}:${model} — ${err?.message ?? err} (${elapsed}ms)`;
   }
 }
 
-async function checkMcp(store: TuiStore, label: string, url: string) {
+async function checkMcpResult(store: TuiStore, label: string, url: string): Promise<string> {
   const { McpClient } = await import('@cleak/agent-core');
   const client = new McpClient(url, label);
   try {
     const tools = await client.listTools();
-    store.addSystemMessage(`✓ ${label} ${url} — ${tools.length} tools`);
+    return `✓ ${label} ${url} — ${tools.length} tools`;
   } catch (err: any) {
-    store.addSystemMessage(`✗ ${label} ${url} — ${err?.message ?? err}`);
+    return `✗ ${label} ${url} — ${err?.message ?? err}`;
   } finally {
     await client.close();
   }
