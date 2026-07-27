@@ -14,6 +14,7 @@ import { runTuiEval } from '../evalRunner';
 import { snapshotFindingToView } from '../findings/findingView';
 import { generateScanPlan } from '../../../domain/scanPlan';
 import type { TuiStore } from '../../../stores';
+import type { RunConfig } from '../../../config';
 import type { SelectOption } from '../components/Select';
 
 // ── Types ──
@@ -307,26 +308,80 @@ function mostRecentScanId(resultsDir: string): string | undefined {
 
 /** Standalone connectivity check (the scan does its own, but this lets you verify before scanning). */
 async function doPreflight(store: TuiStore, staticUrl?: string, dynamicUrl?: string) {
-  const { McpClient } = await import('@cleak/agent-core');
+  const { McpClient, buildCallModel } = await import('@cleak/agent-core');
   const { loadConfig } = await import('../../../config');
+  const { toProviderSettings } = await import('../../../orchestrator/toolWrappers');
   const cfg = loadConfig({
     ...(staticUrl ? { staticUrl } : {}),
     ...(dynamicUrl ? { dynamicUrl } : {}),
   });
-  store.addSystemMessage('preflight: checking analyzers…');
-  for (const [label, url] of [
-    ['static', cfg.staticUrl],
-    ['dynamic', cfg.dynamicUrl],
-  ] as const) {
-    const client = new McpClient(url, label);
-    try {
-      const tools = await client.listTools();
-      store.addSystemMessage(`✓ ${label} ${url} — ${tools.length} tools`);
-    } catch (err: any) {
-      store.addSystemMessage(`✗ ${label} ${url} — ${err?.message ?? err}`);
-    } finally {
-      await client.close();
+  store.addSystemMessage('── preflight ──');
+
+  // 1. LLM provider
+  const llm = cfg.llm;
+  if (llm.provider === 'local' || llm.provider === 'openai-compat') {
+    if (!llm.baseUrl) {
+      store.addSystemMessage(`✗ LLM ${llm.provider} — no base URL configured (set in /config or ~/.config/cleak/config.json)`);
+    } else if (!llm.model) {
+      store.addSystemMessage(`✗ LLM ${llm.provider} — no model configured (set in /config or ~/.config/cleak/config.json)`);
+    } else {
+      await testLlm(store, cfg);
     }
+  } else if (llm.provider === 'openai' || llm.provider === 'anthropic') {
+    if (!llm.apiKey) {
+      const envKey = llm.provider === 'openai' ? 'OPENAI_API_KEY' : 'ANTHROPIC_API_KEY';
+      store.addSystemMessage(`✗ LLM ${llm.provider} — no API key (set ${envKey})`);
+    } else {
+      await testLlm(store, cfg);
+    }
+  } else {
+    store.addSystemMessage(`✗ LLM — unknown provider "${llm.provider}"`);
+  }
+
+  // 2. Static analyzer
+  await checkMcp(store, 'static', cfg.staticUrl);
+
+  // 3. Dynamic analyzer
+  await checkMcp(store, 'dynamic', cfg.dynamicUrl);
+}
+
+async function testLlm(store: TuiStore, cfg: RunConfig) {
+  const { buildCallModel } = await import('@cleak/agent-core');
+  const { toProviderSettings } = await import('../../../orchestrator/toolWrappers');
+  const provider = cfg.llm.provider;
+  const model = cfg.llm.model || '?';
+  const startedAt = Date.now();
+  try {
+    const callModel = buildCallModel(toProviderSettings(cfg), () => globalThis.crypto.randomUUID());
+    const response = await callModel({
+      systemPrompt: '',
+      messages: [{ role: 'user', content: 'Respond with exactly one word: OK' }],
+      tools: [],
+      temperature: 0,
+    });
+    const elapsed = Date.now() - startedAt;
+    const text = (response.text ?? '').trim();
+    if (text.toUpperCase().includes('OK')) {
+      store.addSystemMessage(`✓ LLM ${provider}:${model} — responded in ${elapsed}ms`);
+    } else {
+      store.addSystemMessage(`✓ LLM ${provider}:${model} — responded (${elapsed}ms, reply: "${text.slice(0, 40)}")`);
+    }
+  } catch (err: any) {
+    const elapsed = Date.now() - startedAt;
+    store.addSystemMessage(`✗ LLM ${provider}:${model} — ${err?.message ?? err} (${elapsed}ms)`);
+  }
+}
+
+async function checkMcp(store: TuiStore, label: string, url: string) {
+  const { McpClient } = await import('@cleak/agent-core');
+  const client = new McpClient(url, label);
+  try {
+    const tools = await client.listTools();
+    store.addSystemMessage(`✓ ${label} ${url} — ${tools.length} tools`);
+  } catch (err: any) {
+    store.addSystemMessage(`✗ ${label} ${url} — ${err?.message ?? err}`);
+  } finally {
+    await client.close();
   }
 }
 
