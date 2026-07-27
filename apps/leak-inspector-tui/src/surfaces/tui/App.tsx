@@ -140,7 +140,13 @@ export function App({ store, staticUrl, dynamicUrl, cwd, resultsDir, recentScans
 
   const saveConfig = async (cfg: CleakConfig) => {
     let savedPath = '';
-    try { savedPath = saveConfigFile(cfg); } catch (err: any) { scanStore.getState().addSystemMessage(`failed to save settings: ${err?.message ?? err}`); }
+    try {
+      // Merge draft with existing file data so a partial draft never drops keys
+      const { loadConfigFile } = await import('../../domain/config-file');
+      const existing = loadConfigFile() as Record<string, unknown>;
+      const merged = { ...existing, ...cfg } as Record<string, unknown>;
+      savedPath = saveConfigFile(merged);
+    } catch (err: any) { scanStore.getState().addSystemMessage(`failed to save settings: ${err?.message ?? err}`); }
     const { loadConfig } = await import('../../config');
     const eff = loadConfig({});
     configStore.getState().setOptions({
