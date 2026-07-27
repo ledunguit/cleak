@@ -28,11 +28,8 @@ describe('formatDuration', () => {
 
 describe('config file round-trip', () => {
   const dir = mkdtempSync(join(tmpdir(), 'leakcfg-'));
-  const prev = process.env.XDG_CONFIG_HOME;
-  process.env.XDG_CONFIG_HOME = dir;
+  beforeEach(() => { process.env.XDG_CONFIG_HOME = dir; });
   afterEach(() => {
-    if (prev === undefined) delete process.env.XDG_CONFIG_HOME;
-    else process.env.XDG_CONFIG_HOME = prev;
     rmSync(dir, { recursive: true, force: true });
   });
 
