@@ -14,7 +14,9 @@
 import { z } from 'zod';
 import { homedir } from 'node:os';
 import { join, dirname } from 'node:path';
-import { existsSync, readFileSync, writeFileSync, mkdirSync, chmodSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync, copyFileSync, mkdirSync, chmodSync } from 'node:fs';
+
+const CONFIG_BACKUP_SUFFIX = '.bak';
 
 const PROVIDERS = ['local', 'openai', 'anthropic', 'openai-compat'] as const;
 
@@ -138,35 +140,64 @@ function readLegacy(): Record<string, unknown> | undefined {
   }
 }
 
-/** The file object exactly as on disk (NO defaults merged), {} if absent/unreadable. */
+/** The file object exactly as on disk (NO defaults merged), {} if absent/unreadable.
+ * On parse error, tries `<path>.bak` before giving up — prevents data loss from a
+ * transiently corrupted file (partial write, concurrent access, etc.). */
 function rawFileObject(): Record<string, unknown> {
   const path = configFilePath();
-  if (existsSync(path)) {
-    try {
-      const data = JSON.parse(readFileSync(path, 'utf-8')) as Record<string, unknown>;
-      // Zustand persist middleware wraps config in { state: {...}, version: N }.
-      // Unwrap it so the old config system reads flat keys directly.
-      if (data && typeof data === 'object' && 'state' in data) {
-        return data.state as Record<string, unknown>;
-      }
-      return data;
-    } catch {
-      warn(`${path} is not valid JSON — ignored`);
-      return {};
+  if (!existsSync(path)) return readLegacy() ?? {};
+  try {
+    const raw = readFileSync(path, 'utf-8');
+    const data = JSON.parse(raw) as Record<string, unknown>;
+    // Zustand persist middleware wraps config in { state: {...}, version: N }.
+    // Unwrap it so the old config system reads flat keys directly.
+    if (data && typeof data === 'object' && 'state' in data) {
+      return data.state as Record<string, unknown>;
     }
+    return data;
+  } catch {
+    warn(`${path} is not valid JSON`);
+    // Try the backup before giving up
+    const bak = path + CONFIG_BACKUP_SUFFIX;
+    if (existsSync(bak)) {
+      try {
+        const raw = readFileSync(bak, 'utf-8');
+        const data = JSON.parse(raw) as Record<string, unknown>;
+        if (data && typeof data === 'object' && 'state' in data) {
+          return data.state as Record<string, unknown>;
+        }
+        return data;
+      } catch {
+        warn(`${bak} also unreadable — returning empty config`);
+      }
+    }
+    return {};
   }
-  return readLegacy() ?? {};
 }
 
-/** Validate top-level keys INDEPENDENTLY so one bad key doesn't discard the rest. */
+/** Validate top-level keys INDEPENDENTLY so one bad key doesn't discard the rest.
+ * Keys that exist in the schema but have an invalid value are dropped (otherwise
+ * downstream code would crash on bad data). Keys NOT in the schema are preserved
+ * as-is so a downgrade or schema rollback does not silently wipe them. */
 function lenientParse(raw: Record<string, unknown>): CleakConfig {
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(raw)) {
     const one = CleakConfigSchema.safeParse({ [k]: v });
     if (one.success && (one.data as Record<string, unknown>)[k] !== undefined) {
       out[k] = (one.data as Record<string, unknown>)[k];
+    } else if (one.success && (one.data as Record<string, unknown>)[k] === undefined) {
+      // Key successfully validated but coerced to undefined — treat as present
+      // (e.g. `fullscreen: false` in the schema passes but false was coerced).
+      out[k] = v;
+    } else if (k in CleakConfigSchema.shape) {
+      // Key is known to the schema but value failed validation — drop to avoid
+      // crashing downstream with junk data (e.g. provider='not-a-provider').
+      warn(`config key "${k}" has an invalid value — dropped`);
     } else {
-      warn(`ignoring invalid config key "${k}"`);
+      // Key is NOT in the schema at all — preserve raw value for forward compat
+      // (e.g. a future version's settings survive a downgrade).
+      warn(`config key "${k}" is not recognized — preserving raw value`);
+      out[k] = v;
     }
   }
   return out as CleakConfig;
@@ -177,10 +208,16 @@ export function loadConfigFile(): CleakConfig {
   return { ...DEFAULT_CONFIG, ...lenientParse(rawFileObject()) };
 }
 
-/** Persist a config object (lenient-validated). Returns the path. chmod 600 (apiKey). */
+/** Persist a config object (lenient-validated). Returns the path. chmod 600 (apiKey).
+ * Creates a `.bak` copy of the existing file before overwriting, so a crash during
+ * write cannot wipe the config entirely. */
 export function saveConfigFile(cfg: Record<string, unknown>): string {
   const clean = lenientParse(cfg as Record<string, unknown>);
   const path = configFilePath();
+  // Backup the existing file before overwriting
+  if (existsSync(path)) {
+    try { copyFileSync(path, path + CONFIG_BACKUP_SUFFIX); } catch { /* best-effort */ }
+  }
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, JSON.stringify(clean, null, 2) + '\n', 'utf-8');
   try {

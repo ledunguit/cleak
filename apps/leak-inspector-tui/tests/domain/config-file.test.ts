@@ -41,14 +41,15 @@ describe('load/save round-trip', () => {
 });
 
 describe('lenient parse — one bad key never discards the rest', () => {
-  test('keeps valid keys, drops invalid ones', () => {
+  test('keeps valid keys, drops invalid known keys, preserves unknown keys for forward compat', () => {
     const p = configFilePath();
     mkdirSync(dirname(p), { recursive: true });
     writeFileSync(p, JSON.stringify({ staticUrl: 'http://ok/mcp', provider: 'not-a-provider', bogusKey: 1 }), 'utf-8');
     const loaded = loadConfigFile();
     expect(loaded.staticUrl).toBe('http://ok/mcp');
-    expect(loaded.provider).toBeUndefined(); // invalid enum dropped
-    expect((loaded as Record<string, unknown>).bogusKey).toBeUndefined();
+    expect(loaded.provider).toBeUndefined(); // invalid enum dropped (known schema key)
+    // Unknown keys are preserved for forward compat (schema downgrade)
+    expect((loaded as Record<string, unknown>).bogusKey).toBe(1);
   });
 });
 

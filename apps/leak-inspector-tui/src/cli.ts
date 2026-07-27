@@ -10,7 +10,7 @@
  *   eval   --corpus <p>   batch-evaluate a labeled corpus
  */
 
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { Command } from 'commander';
 import { McpClient, loadMcpTools } from '@cleak/agent-core';
 import { loadConfig, type Provider } from './config';
@@ -234,10 +234,25 @@ config
   .option('--force', 'overwrite an existing config file', false)
   .action((opts) => {
     const path = configFilePath();
-    if (existsSync(path) && !opts.force) {
-      process.stderr.write(`refusing to overwrite ${path} (use --force)\n`);
-      process.exitCode = 1;
-      return;
+    if (!opts.force) {
+      // Use readFileSync (not existsSync) to avoid a TOCTOU race: if the file
+      // exists between the stat and the write, we want to refuse. readFileSync
+      // throws ENOENT if the path doesn't exist, which is the only safe case to
+      // create a new template.
+      try {
+        readFileSync(path, 'utf-8');
+        process.stderr.write(`refusing to overwrite ${path} (use --force)\n`);
+        process.exitCode = 1;
+        return;
+      } catch (err: unknown) {
+        const nodeErr = err as NodeJS.ErrnoException;
+        if (nodeErr.code !== 'ENOENT') {
+          process.stderr.write(`cannot read ${path}: ${nodeErr.message}\n`);
+          process.exitCode = 1;
+          return;
+        }
+        // ENOENT — file doesn't exist, safe to create
+      }
     }
     process.stdout.write(`wrote config template → ${saveConfigFile(configTemplate() as Record<string, unknown>)}\n`);
   });
