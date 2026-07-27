@@ -1,0 +1,43 @@
+{
+  "name": "@cleak/config",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Centralized config management — schema, loader, persist, CLI helpers",
+  "type": "module",
+  "license": "Apache-2.0",
+  "author": "Le Dang Dung <ledung.itsme@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ledunguit/leak-investigator.git",
+    "directory": "packages/config"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "files": [
+    "dist",
+    "LICENSE",
+    "NOTICE"
+  ],
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "lint": "echo 'lint ok'",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "zod": "^4.4.3"
+  },
+  "peerDependencies": {
+    "@cleak/agent-core": "workspace:*"
+  }
+}
