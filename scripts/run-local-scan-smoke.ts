@@ -7,13 +7,13 @@
  */
 
 import { runHeadless } from '../apps/leak-inspector-tui/src/surfaces/headless';
-import { loadEnvFiles } from '../apps/leak-inspector-tui/src/domain/env';
+import { loadConfig } from '@cleak/config';
 
-loadEnvFiles();
+const cfg = loadConfig();
 
 const mode = (process.argv[2] as 'no_llm' | 'llm_assisted') ?? 'no_llm';
 const repo = process.argv[3] ?? 'demo/memory_leak_corpus/simple_leak';
-const staticUrl = process.env.EVAL_STATIC_URL ?? 'http://127.0.0.1:50071/mcp';
+const staticUrl = cfg.staticUrl;
 
 const r = await runHeadless({ repo, mode, dynamic: 'off', format: 'snapshot,json', staticUrl, quiet: true });
 const s = r.report.summary;

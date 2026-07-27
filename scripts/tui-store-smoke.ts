@@ -7,15 +7,15 @@
 
 import { TuiStore } from '../apps/leak-inspector-tui/src/surfaces/tui/store';
 import { runTuiScan } from '../apps/leak-inspector-tui/src/surfaces/tui/runner';
-import { loadEnvFiles } from '../apps/leak-inspector-tui/src/domain/env';
+import { loadConfig } from '@cleak/config';
 
-loadEnvFiles();
+const cfg = loadConfig();
 
 const mode = (process.argv[2] as 'no_llm' | 'llm_assisted') ?? 'no_llm';
 const repo = process.argv[3] ?? 'demo/memory_leak_corpus/simple_leak';
 // In this dev environment the docker stack holds 50061/50062 in gRPC mode, so the
 // MCP analyzers run on 50071/50072. Override via SMOKE_STATIC_URL if needed.
-const staticUrl = process.env.SMOKE_STATIC_URL ?? 'http://127.0.0.1:50071/mcp';
+const staticUrl = cfg.staticUrl;
 
 const store = new TuiStore({ provider: 'local', model: process.env.LOCAL_LLM_MODEL ?? '', mode, dynamic: 'off' });
 
