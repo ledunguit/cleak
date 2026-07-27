@@ -40,6 +40,9 @@ function readEnvOverrides(): EnvOverrides {
   }
   if (e.STATIC_ANALYZER_MCP_URL) out.staticUrl = e.STATIC_ANALYZER_MCP_URL;
   if (e.DYNAMIC_ANALYZER_MCP_URL) out.dynamicUrl = e.DYNAMIC_ANALYZER_MCP_URL;
+  if (e.EVAL_STATIC_URL && !out.staticUrl) out.staticUrl = e.EVAL_STATIC_URL;
+  if (e.EVAL_DYNAMIC_URL && !out.dynamicUrl) out.dynamicUrl = e.EVAL_DYNAMIC_URL;
+  if (e.RESULTS_DIR) out.resultsDir = e.RESULTS_DIR;
   const llm: Partial<ProviderConfig> = {};
   if (e.OPENAI_COMPAT_BASE_URL) llm.baseUrl = e.OPENAI_COMPAT_BASE_URL;
   if (e.OPENAI_COMPAT_MODEL) llm.model = e.OPENAI_COMPAT_MODEL;
@@ -155,7 +158,7 @@ export function loadConfig(
     llm: resolveProvider(provider, fileWithEnv),
     hostRoot: pickOpt(file.hostRoot),
     analyzerRoot: pickOpt(file.analyzerRoot),
-    resultsDir: pickStr(file.resultsDir, "results"),
+    resultsDir: pickStr(env.resultsDir ?? file.resultsDir, "results"),
     maxTurns: pickNum(file.maxTurns, 15),
     compaction: {
       thresholdTokens: pickNum(file.compaction?.thresholdTokens, 100000),

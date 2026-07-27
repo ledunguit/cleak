@@ -74,4 +74,5 @@ export interface EnvOverrides {
   provider?: Provider;
   llm?: Partial<ProviderConfig>;
   consensus?: { n?: number };
+  resultsDir?: string;
 }
