@@ -210,9 +210,17 @@ export function loadConfigFile(): CleakConfig {
 
 /** Persist a config object (lenient-validated). Returns the path. chmod 600 (apiKey).
  * Creates a `.bak` copy of the existing file before overwriting, so a crash during
- * write cannot wipe the config entirely. */
-export function saveConfigFile(cfg: Record<string, unknown>): string {
-  const clean = lenientParse(cfg as Record<string, unknown>);
+ * write cannot wipe the config entirely.
+ * When `fillDefaults` is true, the config is merged with `configTemplate()` + the
+ * existing file before writing — guaranteeing ALL keys are present even when the
+ * caller passes a partial object (defense against stale in-memory drafts). */
+export function saveConfigFile(cfg: Record<string, unknown>, opts?: { fillDefaults?: boolean }): string {
+  // When fillDefaults is set, overlay cfg on top of the full template + existing
+  // file data so a partial caller (e.g. ConfigScreen save) never drops keys.
+  const target = opts?.fillDefaults
+    ? { ...configTemplate(), ...(loadConfigFile() as Record<string, unknown>), ...cfg }
+    : cfg;
+  const clean = lenientParse(target);
   const path = configFilePath();
   // Backup the existing file before overwriting
   if (existsSync(path)) {

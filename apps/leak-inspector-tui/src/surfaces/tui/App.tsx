@@ -141,13 +141,10 @@ export function App({ store, staticUrl, dynamicUrl, cwd, resultsDir, recentScans
   const saveConfig = async (cfg: CleakConfig) => {
     let savedPath = '';
     try {
-      // Merge draft with (template + existing file) so ALL keys are always present.
-      // configTemplate() provides the complete default surface; existing keys from
-      // the file fill in user settings; the draft (ConfigScreen edits) wins last.
-      const template = configTemplate() as Record<string, unknown>;
-      const existing = loadConfigFile() as Record<string, unknown>;
-      const merged = { ...template, ...existing, ...cfg } as Record<string, unknown>;
-      savedPath = saveConfigFile(merged);
+      // saveConfigFile with fillDefaults merges cfg on top of configTemplate() +
+      // existing file data — guaranteeing ALL keys are present even if the
+      // in-memory draft is partial.
+      savedPath = saveConfigFile(cfg as Record<string, unknown>, { fillDefaults: true });
     } catch (err: any) { scanStore.getState().addSystemMessage(`failed to save settings: ${err?.message ?? err}`); }
     const { loadConfig } = await import('../../config');
     const eff = loadConfig({});
