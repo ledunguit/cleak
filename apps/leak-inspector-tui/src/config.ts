@@ -97,11 +97,59 @@ function pickBool(fileVal: boolean | undefined, fallback: boolean): boolean {
   return fallback;
 }
 
+interface EnvOverrides {
+  staticUrl?: string;
+  dynamicUrl?: string;
+  provider?: Provider;
+  llm?: Partial<ProviderConfig>;
+  consensus?: { n?: number };
+}
+
+function readEnvOverrides(): EnvOverrides {
+  const out: EnvOverrides = {};
+  const e = process.env;
+  if (e.LLM_PROVIDER && ["local", "openai", "anthropic", "openai-compat"].includes(e.LLM_PROVIDER)) {
+    out.provider = e.LLM_PROVIDER as Provider;
+  }
+  if (e.STATIC_ANALYZER_MCP_URL) out.staticUrl = e.STATIC_ANALYZER_MCP_URL;
+  if (e.DYNAMIC_ANALYZER_MCP_URL) out.dynamicUrl = e.DYNAMIC_ANALYZER_MCP_URL;
+  const llm: Partial<ProviderConfig> = {};
+  if (e.OPENAI_COMPAT_BASE_URL) llm.baseUrl = e.OPENAI_COMPAT_BASE_URL;
+  if (e.OPENAI_COMPAT_MODEL) llm.model = e.OPENAI_COMPAT_MODEL;
+  if (e.OPENAI_COMPAT_API_KEY) llm.apiKey = e.OPENAI_COMPAT_API_KEY;
+  if (e.OPENAI_COMPAT_JSON_MODE !== undefined) {
+    llm.jsonMode = e.OPENAI_COMPAT_JSON_MODE === "true" || e.OPENAI_COMPAT_JSON_MODE === "1";
+  }
+  if (Object.keys(llm).length > 0) out.llm = llm;
+  if (e.CONSENSUS_N !== undefined) {
+    const n = parseInt(e.CONSENSUS_N, 10);
+    if (!isNaN(n) && n >= 1) out.consensus = { n };
+  }
+  return out;
+}
+
+function injectEnvIntoFile(file: CleakConfig): CleakConfig {
+  const env = readEnvOverrides();
+  if (!env.llm) return file;
+  const result: CleakConfig = { ...file };
+  result.endpoints = { ...file.endpoints };
+  const compat = { ...file.endpoints?.["openai-compat"] };
+  if (env.llm.baseUrl) compat.baseUrl = env.llm.baseUrl;
+  if (env.llm.model) compat.model = env.llm.model;
+  if (env.llm.apiKey) compat.apiKey = env.llm.apiKey;
+  result.endpoints["openai-compat"] = compat;
+  if (env.llm.jsonMode !== undefined) {
+    result.llm = { ...file.llm, jsonMode: env.llm.jsonMode };
+  }
+  return result;
+}
+
 /** Resolve the per-provider LLM settings (separate keys so they never collide).
  * Reads tuning from the config file's `llm` block and per-provider `endpoints`. */
-export function resolveProvider(provider: Provider, file: CleakConfig = loadConfigFile()): ProviderConfig {
-  const llm = file.llm ?? {};
-  const ep = (p: Provider): { baseUrl?: string; model?: string; apiKey?: string } => file.endpoints?.[p] ?? {};
+export function resolveProvider(provider: Provider, file?: CleakConfig): ProviderConfig {
+  const resolvedFile = file ?? injectEnvIntoFile(loadConfigFile());
+  const llm = resolvedFile.llm ?? {};
+  const ep = (p: Provider): { baseUrl?: string; model?: string; apiKey?: string } => resolvedFile.endpoints?.[p] ?? {};
   const timeoutMs = pickNum(llm.timeoutMs, 75000);
   // Streaming path: an *idle* gap timer (no bytes for this long = hung), not a
   // total deadline — so a model that keeps emitting tokens is never killed.
@@ -165,15 +213,19 @@ export function resolveProvider(provider: Provider, file: CleakConfig = loadConf
 export function loadConfig(
   overrides: Omit<Partial<RunConfig>, "llm"> & { provider?: Provider; llm?: Partial<ProviderConfig> } = {},
 ): RunConfig {
-  // Read the persisted config file once.
   const file = loadConfigFile();
+  const env = readEnvOverrides();
+
   const provider =
-    overrides.provider ?? (pickOpt(file.provider) as Provider | undefined) ?? "local";
+    overrides.provider ?? env.provider ?? (pickOpt(file.provider) as Provider | undefined) ?? "local";
+
+  const fileWithEnv = injectEnvIntoFile(file);
+
   const base: RunConfig = {
-    staticUrl: pickStr(file.staticUrl, "http://localhost:50061/mcp"),
-    dynamicUrl: pickStr(file.dynamicUrl, "http://localhost:50062/mcp"),
+    staticUrl: pickStr(env.staticUrl ?? file.staticUrl, "http://localhost:50061/mcp"),
+    dynamicUrl: pickStr(env.dynamicUrl ?? file.dynamicUrl, "http://localhost:50062/mcp"),
     provider,
-    llm: resolveProvider(provider, file),
+    llm: resolveProvider(provider, fileWithEnv),
     hostRoot: pickOpt(file.hostRoot),
     analyzerRoot: pickOpt(file.analyzerRoot),
     resultsDir: pickStr(file.resultsDir, "results"),
@@ -183,17 +235,14 @@ export function loadConfig(
       keepRecentTurns: pickNum(file.compaction?.keepRecentTurns, 3),
     },
     workflow: {
-      // Bounded: many concurrent sub-agents would overload a single local gateway.
       staticConcurrency: Math.max(1, pickNum(file.workflow?.staticConcurrency, 3)),
       staticGroupSize: Math.max(1, pickNum(file.workflow?.staticGroupSize, 4)),
       judgeConcurrency: Math.max(1, pickNum(file.workflow?.judgeConcurrency, 3)),
       discoveryConcurrency: Math.max(1, pickNum(file.workflow?.discoveryConcurrency, 8)),
     },
     consensus: {
-      // n=1 ⇒ single-LLM judge (default). The eval ablation bumps this to 3/5.
       n: Math.max(1, pickNum(file.consensus?.n, 1)),
       rule: parseConsensusRule(pickStr(file.consensus?.rule, "weighted")),
-      // Sampling diversity for self-consistency: >0 so the N samples differ.
       temperature: pickNum(file.consensus?.temperature, 0.7),
       concurrency: Math.max(1, pickNum(file.consensus?.concurrency, 3)),
     },
@@ -207,10 +256,16 @@ export function loadConfig(
     },
     evalStaticPathMap: pickOpt(file.eval?.staticPathMap),
   };
-  // Apply only DEFINED overrides so an absent flag (e.g. --provider) never
-  // clobbers a resolved value with undefined. `consensus` and `llm` are merged
-  // FIELD-WISE so a partial override (just `n`, or just `model`) keeps the rest of
-  // the resolved block instead of replacing the whole object.
+
+  if (env.llm?.baseUrl !== undefined) base.llm.baseUrl = env.llm.baseUrl;
+  if (env.llm?.model !== undefined) base.llm.model = env.llm.model;
+  if (env.llm?.apiKey !== undefined) base.llm.apiKey = env.llm.apiKey;
+  if (env.llm?.jsonMode !== undefined) base.llm.jsonMode = env.llm.jsonMode;
+
+  if (env.consensus?.n !== undefined) {
+    base.consensus.n = env.consensus.n;
+  }
+
   const { consensus: consensusOverride, llm: llmOverride, ...rest } = overrides;
   const defined = Object.fromEntries(
     Object.entries(rest).filter(([, value]) => value !== undefined),
