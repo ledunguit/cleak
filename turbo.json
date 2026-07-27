@@ -19,6 +19,11 @@
     "test": {
       "dependsOn": ["build"],
       "outputs": []
+    },
+    "config#build": {
+      "dependsOn": ["^build"],
+      "outputs": ["dist/**"],
+      "inputs": ["src/**", "tsconfig*.json", "tsup.config.ts"]
     }
   }
 }

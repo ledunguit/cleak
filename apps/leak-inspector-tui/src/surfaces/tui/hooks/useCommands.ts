@@ -421,7 +421,7 @@ function listScans(store: TuiStore, resultsDir: string) {
 
 async function listTools(store: TuiStore, staticUrl?: string, dynamicUrl?: string) {
   const { McpClient } = await import('@cleak/agent-core');
-  const { loadConfig } = await import('../../../config');
+  const { loadConfig } = await import('@cleak/config');
   const cfg = loadConfig({
     ...(staticUrl ? { staticUrl } : {}),
     ...(dynamicUrl ? { dynamicUrl } : {}),

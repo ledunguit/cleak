@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync, existsSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { formatDuration } from '../../../src/surfaces/tui/theme';
-import { loadConfigFile, saveConfigFile, DEFAULT_CONFIG } from '../../../src/domain/config-file';
+import { loadConfigFile, saveConfigFile, DEFAULT_CONFIG } from '@cleak/config';
 import { visibleFindings } from '../../../src/stores';
 import type { FindingView } from '../../../src/surfaces/tui/findings/findingView';
 import type { AgentEvent } from '@cleak/agent-core';
