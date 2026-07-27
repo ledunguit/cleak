@@ -7,5 +7,6 @@
  */
 
 export function isFullscreenEnvEnabled(configFullscreen?: boolean): boolean {
-  return configFullscreen === true;
+  if (configFullscreen !== undefined) return configFullscreen === true;
+  return process.env.CLEAK_FULLSCREEN === '1';
 }
