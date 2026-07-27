@@ -17,6 +17,8 @@ export default defineConfig({
   target: 'node18',
   platform: 'node',
   bundle: true,
+  jsx: 'automatic',
+  jsxImportSource: 'react',
   noExternal: [/^@cleak\//],
   external: [
     'ink',
