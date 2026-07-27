@@ -1,3 +1,4 @@
+export * from './types.js';
 export {
   CleakConfigSchema,
   DEFAULT_CONFIG,

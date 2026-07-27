@@ -96,6 +96,17 @@
         "express": "^5.2.1",
       },
     },
+    "packages/config": {
+      "name": "@cleak/config",
+      "version": "0.1.0",
+      "dependencies": {
+        "@cleak/common": "workspace:*",
+        "zod": "^4.4.3",
+      },
+      "peerDependencies": {
+        "@cleak/agent-core": "workspace:*",
+      },
+    },
   },
   "trustedDependencies": [
     "tree-sitter-c",
@@ -162,6 +173,8 @@
     "@cleak/cli": ["@cleak/cli@workspace:apps/leak-inspector-tui"],
 
     "@cleak/common": ["@cleak/common@workspace:packages/common"],
+
+    "@cleak/config": ["@cleak/config@workspace:packages/config"],
 
     "@colors/colors": ["@colors/colors@1.5.0", "https://registry.npmmirror.com/@colors/colors/-/colors-1.5.0.tgz", {}, "sha512-ooWCrlZP11i8GImSjTHYHLkvFDP48nS4+204nGb1RiX/WXYHmJA2III9/e2DWVabCESdW7hBAEzHRqUn9OUVvQ=="],
 

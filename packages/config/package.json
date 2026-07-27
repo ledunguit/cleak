@@ -35,6 +35,7 @@
     "test": "bun test"
   },
   "dependencies": {
+    "@cleak/common": "workspace:*",
     "zod": "^4.4.3"
   },
   "peerDependencies": {
