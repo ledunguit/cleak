@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Box, Text, useInput } from 'ink';
 import { color, glyph } from '../theme';
-import type { Provider } from '../../../config';
-import { configFilePath, type CleakConfig, type EndpointOverride } from '../../../domain/config-file';
+import type { Provider } from '@cleak/config';
+import { configFilePath, type CleakConfig, type EndpointOverride } from '@cleak/config';
 import { useTerminalSize } from '../hooks/useTerminalSize';
 
 type FieldType = 'cycle' | 'text' | 'secret' | 'number';

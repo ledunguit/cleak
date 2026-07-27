@@ -9,7 +9,7 @@ import { MainScreen } from './screens/MainScreen';
 import { ConfigScreen } from './components/ConfigScreen';
 import { EvalScreen } from './components/EvalScreen';
 import { FindingsScreen } from './components/FindingsScreen';
-import { saveConfigFile, loadConfigFile, configTemplate, type CleakConfig } from '../../domain/config-file';
+import { saveConfigFile, loadConfigFile, configTemplate, type CleakConfig } from '@cleak/config';
 import { visibleMessages, type TuiStore } from '../../stores';
 import { scanStore } from '../../stores/scan-store';
 import { configStore } from '../../stores/config-store';
@@ -146,7 +146,7 @@ export function App({ store, staticUrl, dynamicUrl, cwd, resultsDir, recentScans
       // in-memory draft is partial.
       savedPath = saveConfigFile(cfg as Record<string, unknown>, { fillDefaults: true });
     } catch (err: any) { scanStore.getState().addSystemMessage(`failed to save settings: ${err?.message ?? err}`); }
-    const { loadConfig } = await import('../../config');
+    const { loadConfig } = await import('@cleak/config');
     const eff = loadConfig({});
     configStore.getState().setOptions({
       mode: cfg.defaultMode ?? fullState.mode, dynamic: cfg.defaultDynamic ?? fullState.dynamic,

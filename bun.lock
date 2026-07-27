@@ -64,6 +64,7 @@
       "devDependencies": {
         "@cleak/agent-core": "workspace:*",
         "@cleak/common": "workspace:*",
+        "@cleak/config": "workspace:*",
         "@types/react": "^18.3.12",
       },
     },
