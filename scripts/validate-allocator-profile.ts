@@ -14,7 +14,6 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { buildCallModel } from '@cleak/agent-core';
-import { loadEnvFiles } from '../apps/leak-inspector-tui/src/domain/env';
 import { loadConfig } from '../apps/leak-inspector-tui/src/config';
 import { toProviderSettings } from '../apps/leak-inspector-tui/src/orchestrator/toolWrappers';
 import { profileAllocators } from '../apps/leak-inspector-tui/src/domain/allocatorProfiler';
@@ -58,7 +57,6 @@ function score(discovered: string[], truth: string[]): Score {
 }
 
 async function main() {
-  loadEnvFiles();
   const corpusDir = flag('corpus');
   if (!corpusDir) {
     console.error('usage: bun scripts/validate-allocator-profile.ts --corpus <dir>');

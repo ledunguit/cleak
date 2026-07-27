@@ -32,9 +32,9 @@ import {
 } from '../apps/leak-inspector-tui/src/domain/baselineSweep';
 import { runEval, runEvalRepeated } from '../apps/leak-inspector-tui/src/domain/evalHarness';
 import { writeEval } from '../apps/leak-inspector-tui/src/domain/evalReport';
-import { loadEnvFiles } from '../apps/leak-inspector-tui/src/domain/env';
+import { loadConfig } from '@cleak/config';
 
-loadEnvFiles();
+const cfg = loadConfig();
 
 function flag(name: string): string | undefined {
   const i = process.argv.indexOf(`--${name}`);
@@ -46,8 +46,8 @@ const baselinesDir = flag('baselines') ?? 'configs/baselines';
 const corpusDir = flag('corpus') ?? process.env.CORPUS_DIR ?? 'demo/juliet_cwe401';
 const limit = flag('limit') ? parseInt(flag('limit')!, 10) : undefined;
 const only = flag('only')?.split(',').map((s) => s.trim());
-const staticUrl = process.env.EVAL_STATIC_URL ?? 'http://127.0.0.1:50071/mcp';
-const dynamicUrl = process.env.EVAL_DYNAMIC_URL ?? 'http://127.0.0.1:50072/mcp';
+const staticUrl = cfg.staticUrl;
+const dynamicUrl = cfg.dynamicUrl;
 const dryRun = has('dry-run');
 const includeUnwired = has('include-unwired');
 // Escape hatch for the corpus integrity gate (no lockfile / failed validation / drift).
@@ -82,7 +82,7 @@ const stratify = has('stratify')
   : undefined;
 
 const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-const outDir = flag('out') ?? join(process.env.RESULTS_DIR ?? 'results', `baseline-sweep-${stamp}`);
+const outDir = flag('out') ?? join(cfg.resultsDir, `baseline-sweep-${stamp}`);
 
 let configs = loadBaselineConfigs(baselinesDir);
 if (only) configs = configs.filter((c) => only.includes(c.id));
