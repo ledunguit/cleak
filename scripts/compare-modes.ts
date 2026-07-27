@@ -11,13 +11,13 @@
 import { readFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { runHeadless } from '../apps/leak-inspector-tui/src/surfaces/headless';
-import { loadEnvFiles } from '../apps/leak-inspector-tui/src/domain/env';
+import { loadConfig } from '@cleak/config';
 
-loadEnvFiles();
+const cfg = loadConfig();
 
 const limit = process.argv[2] ? parseInt(process.argv[2], 10) : Infinity;
 const corpusDir = process.env.CORPUS_DIR ?? 'demo/memory_leak_corpus';
-const staticUrl = process.env.EVAL_STATIC_URL ?? 'http://127.0.0.1:50071/mcp';
+const staticUrl = cfg.staticUrl;
 
 const manifest = JSON.parse(readFileSync(join(corpusDir, 'corpus_manifest.json'), 'utf-8')) as {
   cases: Array<{ id: string; repo_path: string; build_command?: string; expected_leak_count: number }>;

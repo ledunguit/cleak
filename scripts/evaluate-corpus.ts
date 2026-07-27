@@ -24,9 +24,9 @@ import { pathToFileURL } from 'node:url';
 import { z } from 'zod';
 import { runEval, runEvalRepeated, type EvalResult, type RepeatedEvalResult } from '../apps/leak-inspector-tui/src/domain/evalHarness';
 import { writeEval } from '../apps/leak-inspector-tui/src/domain/evalReport';
-import { loadEnvFiles } from '../apps/leak-inspector-tui/src/domain/env';
+import { loadConfig } from '@cleak/config';
 
-loadEnvFiles();
+const cfg = loadConfig();
 
 if (process.argv.includes('--help') || process.argv.includes('-h')) {
   console.log(`Usage: bun scripts/evaluate-corpus.ts [mode] [options]
@@ -96,14 +96,14 @@ function parseCorpusArgs(): CorpusEvalOptions {
   const runs = flag('runs') ? Math.max(1, parseInt(flag('runs')!, 10)) : 1;
   const dynamic = (flag('dynamic') as 'off' | 'selective' | 'aggressive') ?? 'off';
   const corpusDir = flag('corpus') ?? process.env.CORPUS_DIR ?? 'demo/juliet_cwe401';
-  const staticUrl = process.env.EVAL_STATIC_URL ?? 'http://127.0.0.1:50071/mcp';
-  const dynamicUrl = process.env.EVAL_DYNAMIC_URL ?? 'http://127.0.0.1:50072/mcp';
+  const staticUrl = cfg.staticUrl;
+  const dynamicUrl = cfg.dynamicUrl;
   // Consensus-judge ablation: n=1 is the single-LLM baseline; n>1 activates
   // multi-agent consensus (llm_assisted only). Falls back to CONSENSUS_N so it can
   // be driven by env too.
   const consensusN = (flag('consensus-n') ?? process.env.CONSENSUS_N)
     ? Math.max(1, parseInt((flag('consensus-n') ?? process.env.CONSENSUS_N)!, 10))
-    : undefined;
+    : cfg.consensus.n > 1 ? cfg.consensus.n : undefined;
   const consensusRule = flag('consensus-rule') as 'majority' | 'weighted' | 'unanimous-to-flag' | undefined;
 
   const allowUnvalidated = process.argv.includes('--allow-unvalidated');
@@ -150,7 +150,7 @@ function parseCorpusArgs(): CorpusEvalOptions {
   });
 
   const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-  const outDir = join(process.env.RESULTS_DIR ?? 'results', `eval-${parsed.mode}-${stamp}`);
+  const outDir = join(cfg.resultsDir, `eval-${parsed.mode}-${stamp}`);
   mkdirSync(outDir, { recursive: true });
 
   return { ...parsed, outDir };
