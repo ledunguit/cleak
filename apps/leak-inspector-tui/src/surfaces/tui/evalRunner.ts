@@ -8,7 +8,7 @@
 
 import { resolve, basename, join } from 'node:path';
 import { existsSync, readFileSync } from 'node:fs';
-import { loadConfig } from '../../config';
+import { loadConfig } from '@cleak/config';
 import { runEval } from '../../domain/evalHarness';
 import { writeEval } from '../../domain/evalReport';
 import { color, glyph } from './theme';

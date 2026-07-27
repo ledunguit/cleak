@@ -14,7 +14,7 @@ import { runTuiEval } from '../evalRunner';
 import { snapshotFindingToView } from '../findings/findingView';
 import { generateScanPlan } from '../../../domain/scanPlan';
 import type { TuiStore } from '../../../stores';
-import type { RunConfig } from '../../../config';
+import type { RunConfig } from '@cleak/config';
 import type { SelectOption } from '../components/Select';
 
 // ── Types ──
@@ -309,8 +309,7 @@ function mostRecentScanId(resultsDir: string): string | undefined {
 /** Standalone connectivity check (the scan does its own, but this lets you verify before scanning). */
 async function doPreflight(store: TuiStore, staticUrl?: string, dynamicUrl?: string) {
   const { McpClient, buildCallModel } = await import('@cleak/agent-core');
-  const { loadConfig } = await import('../../../config');
-  const { toProviderSettings } = await import('../../../orchestrator/toolWrappers');
+  const { loadConfig, toProviderSettings } = await import('@cleak/config');
   const cfg = loadConfig({
     ...(staticUrl ? { staticUrl } : {}),
     ...(dynamicUrl ? { dynamicUrl } : {}),
@@ -353,7 +352,7 @@ async function doPreflight(store: TuiStore, staticUrl?: string, dynamicUrl?: str
 
 async function testLlm(store: TuiStore, cfg: RunConfig) {
   const { buildCallModel } = await import('@cleak/agent-core');
-  const { toProviderSettings } = await import('../../../orchestrator/toolWrappers');
+  const { toProviderSettings } = await import('@cleak/config');
   const provider = cfg.llm.provider;
   const model = cfg.llm.model || '?';
   const startedAt = Date.now();

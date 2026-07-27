@@ -28,7 +28,7 @@ import {
   type ToolCtx,
 } from '@cleak/agent-core';
 import { AgentActionKind, DynamicMode, type AgentDecision, type LeakBundle } from '@cleak/common/types';
-import type { RunConfig } from '../config';
+import { toProviderSettings, type RunConfig } from '@cleak/config';
 import type { AgentMeta, InvestigationContext, InvestigationOutcome, InvestigationPhase } from './investigation';
 import { mcpToolFlags, CONTENT_CAPABLE_TOOLS } from '../domain/mcpToolPlan';
 import { buildReadFileTool } from '../domain/readFileTool';
@@ -36,7 +36,7 @@ import { heuristicVerdict } from '../domain/judge';
 import { StepLog } from '../domain/stepLog';
 import { ScanEventName } from './events';
 import { type AgentEventBridge, makeAgentEventHandler } from './toAgentEvents';
-import { withHostContent, withHostPathMapping, toProviderSettings } from './toolWrappers';
+import { withHostContent, withHostPathMapping } from './toolWrappers';
 import { type StaticContextStore, withStaticContextCapture } from '../domain/staticContext';
 import {
   createDynamicRunStore,

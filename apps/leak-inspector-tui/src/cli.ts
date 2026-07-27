@@ -13,16 +13,10 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { Command } from 'commander';
 import { McpClient, loadMcpTools } from '@cleak/agent-core';
-import { loadConfig, type Provider } from './config';
+import { loadConfig, type Provider, saveConfigFile, setConfigKey, unsetConfigKey, configTemplate, configFilePath, loadConfigFile } from '@cleak/config';
+import type { CleakConfig, EndpointOverride } from '@cleak/config';
 import { mcpToolFlags, phaseForMcpTool } from './domain/mcpToolPlan';
 import { VERSION } from './version';
-import {
-  configFilePath,
-  saveConfigFile,
-  setConfigKey,
-  unsetConfigKey,
-  configTemplate,
-} from './domain/config-file';
 
 const program = new Command();
 

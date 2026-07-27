@@ -2,10 +2,8 @@ import { describe, expect, test, afterEach, beforeAll, afterAll, beforeEach } fr
 import { mkdtempSync, rmSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
-import { resolveProvider, loadConfig, clampConfig } from '../src/config';
-import { toProviderSettings } from '../src/orchestrator/toolWrappers';
+import { resolveProvider, loadConfig, clampConfig, toProviderSettings, configFilePath } from '@cleak/config';
 import { getEndpointField, setEndpointField } from '../src/surfaces/tui/components/ConfigScreen';
-import { configFilePath } from '../src/domain/config-file';
 
 // Hermetic config-file location: point XDG at an EMPTY temp dir so loadConfig's
 // file layer is empty (env-only behaviour) unless a test writes one explicitly.

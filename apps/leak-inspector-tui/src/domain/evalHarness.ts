@@ -26,12 +26,11 @@ import {
   type Sample,
 } from '@cleak/common/analysis/metrics';
 import { mapWithLimit, buildCallModel } from '@cleak/agent-core';
-import { toProviderSettings } from '../orchestrator/toolWrappers';
 import type { ConsensusRule } from '@cleak/common/analysis/consensus-judge';
 import { countSourceLoc } from '@cleak/common/analysis/harness-utils';
 import { EVENT_PHASE, EVENT_KIND, type ScanEventName } from '@cleak/common/flow/scan-flow-contract';
 import { runHeadless } from '../surfaces/headless';
-import { loadConfig, type Provider } from '../config';
+import { loadConfig, type Provider, toProviderSettings } from '@cleak/config';
 import { captureProvenance, summarizeStat, type EvalProvenance, type Stat } from './provenance';
 import { checkCorpusGate, type CorpusGateResult } from './corpusLock';
 import {

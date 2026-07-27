@@ -9,7 +9,7 @@ import { resolve, basename, join } from 'node:path';
 import { existsSync } from 'node:fs';
 import { McpClient } from '@cleak/agent-core';
 import { AnalysisMode, DynamicMode } from '@cleak/common/types';
-import { loadConfig } from '../../config';
+import { loadConfig } from '@cleak/config';
 import { buildPathResolver } from '../../domain/pathResolver';
 import { ScanEmitter, CallbackSink, JsonlFileSink, MultiSink } from '../../orchestrator/events';
 import { runScan } from '../../orchestrator/scanController';
