@@ -317,7 +317,10 @@ async function doPreflight(store: TuiStore, staticUrl?: string, dynamicUrl?: str
   });
   store.addSystemMessage('── preflight ──');
 
-  // 1. LLM provider
+  const checks: Promise<void>[] = [];
+
+  // 1. LLM provider — resolve the validation message immediately,
+  //    then push the actual connectivity test as a parallel promise.
   const llm = cfg.llm;
   if (llm.provider === 'local' || llm.provider === 'openai-compat') {
     if (!llm.baseUrl) {
@@ -325,24 +328,27 @@ async function doPreflight(store: TuiStore, staticUrl?: string, dynamicUrl?: str
     } else if (!llm.model) {
       store.addSystemMessage(`✗ LLM ${llm.provider} — no model configured (set in /config or ~/.config/cleak/config.json)`);
     } else {
-      await testLlm(store, cfg);
+      checks.push(testLlm(store, cfg));
     }
   } else if (llm.provider === 'openai' || llm.provider === 'anthropic') {
     if (!llm.apiKey) {
       const envKey = llm.provider === 'openai' ? 'OPENAI_API_KEY' : 'ANTHROPIC_API_KEY';
       store.addSystemMessage(`✗ LLM ${llm.provider} — no API key (set ${envKey})`);
     } else {
-      await testLlm(store, cfg);
+      checks.push(testLlm(store, cfg));
     }
   } else {
     store.addSystemMessage(`✗ LLM — unknown provider "${llm.provider}"`);
   }
 
   // 2. Static analyzer
-  await checkMcp(store, 'static', cfg.staticUrl);
+  checks.push(checkMcp(store, 'static', cfg.staticUrl));
 
   // 3. Dynamic analyzer
-  await checkMcp(store, 'dynamic', cfg.dynamicUrl);
+  checks.push(checkMcp(store, 'dynamic', cfg.dynamicUrl));
+
+  // Run all connectivity checks in parallel
+  await Promise.all(checks);
 }
 
 async function testLlm(store: TuiStore, cfg: RunConfig) {
