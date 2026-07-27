@@ -338,22 +338,21 @@ async function doPreflight(store: TuiStore, staticUrl?: string, dynamicUrl?: str
     store.addSystemMessage(syncError);
   }
 
-  // Show a single loading status
-  const loadingId = store.push({ kind: 'system', text: '⟳ checking LLM + static + dynamic…' });
+  const llmId = store.push({ kind: 'system', text: `○ LLM ${llm.provider}:${llm.model || '?'} — waiting…` });
+  const staticId = store.push({ kind: 'system', text: `○ static ${cfg.staticUrl} — waiting…` });
+  const dynamicId = store.push({ kind: 'system', text: `○ dynamic ${cfg.dynamicUrl} — waiting…` });
 
-  // Run all checks in parallel, collecting result strings
-  const checks: Promise<string>[] = [];
-  if (!syncError) checks.push(testLlmResult(store, cfg));
-  checks.push(checkMcpResult(store, 'static', cfg.staticUrl));
-  checks.push(checkMcpResult(store, 'dynamic', cfg.dynamicUrl));
+  const llmPromise = syncError
+    ? Promise.resolve(syncError)
+    : testLlmResult(store, cfg);
+  const staticPromise = checkMcpResult(store, 'static', cfg.staticUrl);
+  const dynamicPromise = checkMcpResult(store, 'dynamic', cfg.dynamicUrl);
 
-  const checkResults = await Promise.all(checks);
+  llmPromise.then((r) => store.updateMessage(llmId, (m) => ({ ...m, text: r })));
+  staticPromise.then((r) => store.updateMessage(staticId, (m) => ({ ...m, text: r })));
+  dynamicPromise.then((r) => store.updateMessage(dynamicId, (m) => ({ ...m, text: r })));
 
-  // Update the loading message in-place with results
-  store.updateMessage(loadingId, (m) => ({
-    ...m,
-    text: checkResults.join('\n'),
-  }));
+  await Promise.all([llmPromise, staticPromise, dynamicPromise]);
 }
 
 async function testLlmResult(store: TuiStore, cfg: RunConfig): Promise<string> {
