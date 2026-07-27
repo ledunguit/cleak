@@ -11,8 +11,7 @@ import { TuiStore, configStore } from '../../stores';
 import { ThemeProvider } from './theme';
 import { TerminalSizeProvider } from './components/TerminalSizeProvider';
 import { installSyncOutput } from './sync-output';
-import { loadConfig, type Provider } from '../../config';
-import { loadConfigFile } from '../../domain/config-file';
+import { loadConfig, type Provider, loadConfigFile } from '@cleak/config';
 
 export interface LaunchTuiOptions {
   provider?: Provider;

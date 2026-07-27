@@ -11,7 +11,7 @@ import {
   configTemplate,
   redactConfig,
   DEFAULT_CONFIG,
-} from '../../src/domain/config-file';
+} from '@cleak/config';
 
 const xdgDir = mkdtempSync(join(tmpdir(), 'cleak-cfgfile-'));
 const prevXdg = process.env.XDG_CONFIG_HOME;
