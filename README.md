@@ -28,7 +28,7 @@ và định vị: [xem mục Tham khảo](#tham-khảo--baseline).
 
 ### `apps/static-analyzer`, Phân tích tĩnh (NestJS)
 - Phục vụ MCP Streamable-HTTP (cổng 50061) cho TUI.
-- Tree-sitter AST (C + C++), lexical scan, call graph, ownership, ràng buộc đường đi (Z3),
+- Tree-sitter AST (C + C++), lexical scan, call graph, ownership, ràng buộc đường đi heuristic (không SMT solver),
   Clang Static Analyzer (`scan-build`) tự chứa (submodule LeakGuard đã gỡ).
 - Xem thêm: [apps/static-analyzer/README.md](apps/static-analyzer/README.md)
 
@@ -47,9 +47,46 @@ và định vị: [xem mục Tham khảo](#tham-khảo--baseline).
   đánh giá + render report. Dùng chung qua `@cleak/common`.
 - Xem thêm: [packages/common/README.md](packages/common/README.md)
 
-> MCP/HTTP là transport duy nhất. Server gRPC + thư mục `proto/` của bản web cũ đã bị
-> xoá khỏi `master` (không còn consumer sau khi bỏ control-plane). Tool I/O khai báo bằng
+### `packages/config` (`@cleak/config`), Quản lý cấu hình tập trung
+- Zod schema, JSON loader/persister tại `~/.config/cleak/config.json`,
+  CLI helpers (`config init/get/set/unset`), chuyển đổi provider settings.
+
+> TUI/CLI đọc config từ `~/.config/cleak/config.json`, KHÔNG dùng .env.
+> Các Docker analyzer dùng .env riêng (`.env.example` trong mỗi thư mục app).
+
+> MCP/HTTP là transport duy nhất. Server gRPC + thư mục `proto/` đã được gỡ khỏi
+> `master` (không còn consumer sau khi bỏ control-plane web). Tool I/O khai báo bằng
 > Zod `inputSchema` ngay trong MCP server của từng analyzer.
+
+### Cây thư mục
+
+```
+cleak/
+├── apps/
+│   ├── static-analyzer/           ← Phân tích tĩnh MCP (cổng 50061)
+│   ├── dynamic-analyzer/          ← Phân tích động MCP (cổng 50062)
+│   └── leak-inspector-tui/        ← ORCHESTRATOR (CLI/TUI)
+├── packages/
+│   ├── common/                    ← Kiểu, Zod, judge, render (@cleak/common)
+│   ├── config/                    ← Zod schema, loader/persister CLI (@cleak/config)
+│   └── agent-core/                ← Native tool-calling loop, MCP client, callModel
+├── configs/
+│   └── baselines/                 ← 9 YAML baseline (b1–b7)
+├── scripts/                       ← Eval/test scripts
+├── docs/                          ← Tài liệu
+├── paper/references/              ← Bibliography
+├── demo/memory_leak_corpus/       ← Corpus kiểm thử
+├── results/                       ← Artifact (git-ignored)
+├── researchs/                     ← Ghi chép khảo sát
+├── docker-compose.yml
+├── package.json
+├── turbo.json
+└── tsconfig.base.json
+```
+
+> Xem [docs/MCP-TOOLS.md](docs/MCP-TOOLS.md) cho chi tiết từng MCP tool (input schema,
+> return type, JSON-RPC example). Xem [CLAUDE.md](CLAUDE.md) cho project overview
+> dành cho AI assistant.
 
 ## Luồng hệ thống
 
@@ -74,30 +111,43 @@ Xem [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) cho thành phần, giao thức,
 
 ## Bắt đầu nhanh
 
-1. Tạo `.env` cho từng service từ template (mọi biến tuỳ chọn, có default):
+### 1. Cấu hình TUI/CLI (config.json)
+
+Bộ điều phối (`leak-inspector-tui`) đọc config từ `~/.config/cleak/config.json`:
 
 ```bash
-cp .env.example .env                                   # (tuỳ chọn) LLM config dùng chung
-cp apps/static-analyzer/.env.example  apps/static-analyzer/.env
-cp apps/dynamic-analyzer/.env.example apps/dynamic-analyzer/.env
-cp apps/leak-inspector-tui/.env.example apps/leak-inspector-tui/.env   # điền LLM key ở đây
+cd apps/leak-inspector-tui
+bun install
+cleak config init            # tạo template đầy đủ
+cleak config set LLM_API_KEY sk-...   # thêm key LLM (nếu cần)
 ```
 
-2. Bật analyzer (static + dynamic, MCP) bằng Docker Compose, mỗi container đọc `.env` riêng:
+Thứ tự ưu tiên: **CLI flag > config file > built-in default**.
+Xem thêm: [apps/leak-inspector-tui/README.md](apps/leak-inspector-tui/README.md).
+
+### 2. Cấu hình Docker analyzer (.env)
+
+Các analyzer dùng Docker đọc `.env` riêng:
+
+```bash
+cp apps/static-analyzer/.env.example  apps/static-analyzer/.env
+cp apps/dynamic-analyzer/.env.example apps/dynamic-analyzer/.env
+```
+
+### 3. Bật analyzer (static + dynamic, MCP)
 
 ```bash
 docker compose up --build
 ```
 
-3. Chạy TUI scanner:
+### 4. Chạy TUI scanner
 
 ```bash
 cd apps/leak-inspector-tui
-bun install
 bun run dev
 ```
 
-## Build toàn bộ (Turbo)
+### Build toàn bộ (Turbo)
 
 ```bash
 bun run build
@@ -117,38 +167,75 @@ Bắt đầu ở [docs/THESIS.md](docs/THESIS.md); chỉ mục đầy đủ ở 
 - [docs/PROMPTS.md](docs/PROMPTS.md) danh mục mọi prompt LLM + mô tả tool
 - [docs/sequence-diagrams.md](docs/sequence-diagrams.md) luồng tuần tự runtime
 - [docs/GLOSSARY.md](docs/GLOSSARY.md) · [docs/DATASETS.md](docs/DATASETS.md) · [docs/SECURITY.md](docs/SECURITY.md) · [docs/GOAL.md](docs/GOAL.md)
+- [docs/MCP-TOOLS.md](docs/MCP-TOOLS.md) — tham chiếu đầy đủ 20 MCP tools (input schema, handler, return type, JSON-RPC example)
+- [CLAUDE.md](CLAUDE.md) — project overview dành cho AI assistant
+
+## Kết quả đánh giá
+
+Đánh giá trên **30 ca Juliet CWE-401 (Memory Leak)**, baseline sweep
+`baseline-sweep-2026-07-27T09-03-51`. Mỗi baseline LLM chạy 3 lần
+(temperature 0) trên model **oc/deepseek-v4-flash-free**, git `b97483f`.
+
+| ID | Baseline | Precision | Recall | F1 | FP/KLOC | ECE | Tokens/case | ms/case |
+|----|----------|-----------|--------|----|---------|-----|-------------|---------|
+| B1 | Static only | 77.4% | 72.7% | 0.750 | 0.733 | 0.517 | 0 | 161 |
+| B2 | Dynamic only | 100.0% | 54.1% | 0.702 | 0.000 | 0.043 | 0 | 760 |
+| B3 | Rule-based ensemble | 80.0% | 84.8% | 0.824 | 0.733 | 0.158 | 0 | 599 |
+| B4 | LLM + static | 78.4% | 87.9% | 0.829 | 0.838 | 0.075 | 13496 | 11972 |
+| B5 | LLM + dynamic | 100.0% | 55.9% | 0.717 | 0.000 | 0.004 | 468 | 1309 |
+| B6 | LLM + all (no planner/selector) | 97.6% | 81.8% | 0.890 | 0.070 | 0.108 | 5745 | 7101 |
+| B6a | + planner only | 97.6% | 82.8% | 0.896 | 0.070 | 0.125 | 5756 | 17233 |
+| B6b | + tool_selector only | 95.3% | 80.8% | 0.874 | 0.140 | 0.118 | 50742 | 28467 |
+| B7 | Proposed (full adaptive) | 95.3% | 80.8% | 0.874 | 0.140 | 0.110 | 44392 | 41230 |
+
+File cấu hình baseline: `configs/baselines/b1-static-only.yaml` … `b7-proposed.yaml`.
+Chi tiết: [docs/BASELINE-COMPARISON.md](docs/BASELINE-COMPARISON.md), [docs/EVALUATION.md](docs/EVALUATION.md).
 
 ## Tham khảo & Baseline
 
-Các công trình, công cụ, dataset mà luận văn so sánh (baseline) hoặc kế thừa. Chi tiết
-kỹ thuật, số liệu, log kiểm chứng đối kháng (3 phiếu/claim, có cả claim bị bác bỏ) ở
-[docs/RELATED-WORK.md](docs/RELATED-WORK.md) và [`researchs/`](researchs/).
+Chỉ liệt kê các công trình, công cụ, dataset mà **cleak thực sự dùng hoặc so sánh trực tiếp**.
+Chi tiết từng paper (so sánh, số liệu, kiểm chứng): [docs/RELATED-WORK.md](docs/RELATED-WORK.md)
+và [`researchs/`](researchs/). Đầy đủ 43 tham khảo có đánh số:
+[paper/references/bibliography.md](paper/references/bibliography.md).
 
-> Vài mục là preprint arXiv 2026 rất mới. Kiểm lại venue/peer-review và số liệu từ
-> PDF gốc trước bản nộp (xem `researchs/04-nguon-va-kiem-chung.md`).
+### A. Công cụ tích hợp (triển khai trực tiếp trong code)
 
-Baseline leak C/C++ trực tiếp gồm LAMeD (LLM-generated Annotations for Memory Leak Detection,
-EASE 2025 CORE-A, peer-reviewed, arXiv:2505.02376, DOI:10.1145/3756681.3756999, artifact
-Zenodo 10.5281/zenodo.15089703) là baseline leak-only đã phản biện duy nhất, minh hoạ đánh
-đổi recall/FP. MemHint (neuro-symbolic static + Z3 + LLM-confirm, arXiv:2603.27224, preprint)
-có số liệu leak C/C++ trên dự án thực (52-54 leak trên 7 dự án).
+- **Clang Static Analyzer** (scan-build) — phân tích tĩnh, tích hợp trong `static-analyzer`
+- **Infer** (Facebook) — baseline so sánh
+  (`apps/leak-inspector-tui/src/domain/baselines/infer.ts`)
+- **Valgrind Memcheck** — phân tích động (`dynamic-analyzer`)
+- **AddressSanitizer** (ASan) — phân tích động (`dynamic-analyzer`)
+- **LeakSanitizer** (LSan) — phân tích động (`dynamic-analyzer`)
+- **Tree-sitter** — parsing C/C++ AST (npm dep)
+- **Model Context Protocol** (MCP) — giao thức transport (npm dep)
+- **NestJS + Express** — framework backend
+- **Ink + React** — TUI framework
 
-Baseline analogue kiến trúc (agentic, judge, static+dynamic, MCP) gồm RepoAudit (agent audit
-repo + validator path-condition SAT, arXiv:2501.18160, ICML 2025 poster, đa defect, đa ngôn
-ngữ, không leak-only) và FuzzingBrain V2 (multi-agent trên MCP, static + dynamic,
-arXiv:2605.21779, preprint, gần nhất về kiến trúc nhưng xác minh bằng crash, leak chỉ
-incidental). ATLANTIS (vô địch AIxCC 2025, arXiv:2509.14589) và Buttercup (Trail of Bits,
-AGPL-3.0) là hệ agentic static+dynamic, đều xác minh bằng crash, tương phản với lớp
-non-crash leak của luận văn.
+### B. Baseline leak C/C++ (so sánh trực tiếp)
 
-Phụ trợ formal/dataset gồm POM (CMU SEI, LLM gán nhãn pointer + SAT, hướng prevention,
-CMU/SEI-2025-TR-008) và SecVulEval (dataset vuln C/C++ 25.4K hàm, arXiv:2505.19828).
+- **LAMeD** — EASE 2025 (CORE-A), peer-reviewed, baseline leak-only duy nhất có phản biện.
+  Dùng AllocSource/FreeSink annotation — khái niệm cleak mượn làm `extraAllocators`/`extraDeallocators`.
+- **MemHint** — arXiv 2026, neuro-symbolic static + Z3 + LLM-confirm, số liệu trên dự án thực
+  (52–54 leak / 7 dự án).
 
-Dataset và corpus gồm NIST Juliet CWE-401 (benchmark tổng hợp Tier-1, NIST SARD, public
-domain), DiverseVul wagner-group (nguồn corpus dự án thực cho LAMeD), và LAMeD Zenodo
-artifact (corpus cJSON 152 hàm gán nhãn leak, DOI ở trên).
+### C. Hệ agentic (so sánh kiến trúc)
 
-Công cụ kế thừa: tĩnh có Clang Static Analyzer (`scan-build`, tích hợp trực tiếp), CodeQL,
-Infer (baseline so sánh); động có Valgrind, AddressSanitizer, LeakSanitizer; hạ tầng có
-Z3 (path feasibility), Tree-sitter (AST C/C++), Model Context Protocol (MCP) (chuẩn
-tool/transport cho mọi analyzer).
+- **RepoAudit** — ICML 2025 poster, agent audit repo + SAT validator
+- **FuzzingBrain V2** — arXiv 2026, multi-agent trên MCP, static + dynamic
+- **ATLANTIS** — AIxCC 2025 winner, static + dynamic agentic
+- **Buttercup** — Trail of Bits, static + dynamic agentic
+
+### D. Nền tảng thiết kế
+
+- **ReAct** (Yao et al., ICLR 2023) — nền tảng agent tool-calling loop
+- **Self-Consistency** (Wang et al., ICLR 2023) — nền tảng consensus judge (k mẫu, bỏ phiếu)
+
+### E. Corpus đánh giá
+
+- **NIST Juliet CWE-401** (NIST SARD, public domain) — benchmark tổng hợp Tier-1, eval chính
+- **LAMeD Zenodo artifact** (cJSON 152 hàm, DOI: 10.5281/zenodo.15089703) — corpus so sánh
+
+---
+
+> Xem thêm: [docs/MCP-TOOLS.md](docs/MCP-TOOLS.md) — chi tiết từng MCP tool.
+> [CLAUDE.md](CLAUDE.md) — overview dành cho AI assistant.
