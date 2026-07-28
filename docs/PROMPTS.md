@@ -348,6 +348,9 @@ nguyên `description` và `inputSchema` của tool từ xa. Chính sách thực 
 timeout 30s; tool nặng (`SERIAL_HEAVY`: build/sanitizer/scan-build) read-only + **tuần tự** +
 **cần phê duyệt (`ask`)**, timeout 300s.
 
+> Chi tiết từng tool (input schema, handler, return type, JSON-RPC example, known issues):
+> [MCP-TOOLS.md](./MCP-TOOLS.md) (sections 2.2–2.12).
+
 ### Static analyzer (11 tool) — `apps/static-analyzer/src/mcp/static-mcp-server.ts:38-127`
 
 | Tool | `description` (verbatim) | Phơi cho TUI? |
@@ -371,6 +374,9 @@ timeout 30s; tool nặng (`SERIAL_HEAVY`: build/sanitizer/scan-build) read-only 
 > **Thay đổi so với bản cũ:** 5 tool — candidateScan, callGraph, functionSummary, interproceduralFlow, pathConstraints — đã được thêm mô tả về extraAllocators/extraDeallocators (≈ LAMeD AllocSource/FreeSink) để engine tất định nhận diện allocator wrapper theo dự án.
 
 ### Dynamic analyzer (9 tool) — `apps/dynamic-analyzer/src/mcp/dynamic-mcp-server.ts:41-93`
+
+> Chi tiết từng tool (input schema, handler, return type, JSON-RPC example, known issues):
+> [MCP-TOOLS.md](./MCP-TOOLS.md) (sections 3.2–3.10).
 
 | Tool | `description` (verbatim) |
 |---|---|
@@ -645,6 +651,8 @@ Heuristics: heavy smart-pointer/RAII or refcounting (false positives likely) →
 
 ### 10.7. Static tool descriptions bảng (5 content-capable tool)
 
+> Chi tiết từng tool: [MCP-TOOLS.md](./MCP-TOOLS.md) (section 2).
+
 | Tool | `description` (verbatim) |
 |---|---|
 | `candidateScan` | *Scan a file for allocation sites (malloc, calloc, realloc, strdup, new). Optionally supply per-project factory allocators / custom deallocators (≈ LAMeD AllocSource/FreeSink) so wrapper-named allocators (e.g. cJSON_Duplicate) become candidates.* |
@@ -656,6 +664,8 @@ Heuristics: heavy smart-pointer/RAII or refcounting (false positives likely) →
 Lọc bởi `CONTENT_CAPABLE_TOOLS` (`mcpToolPlan.ts:103-109`). Các tool tĩnh còn lại (indexFiles, callGraph, interproceduralFlow, ownershipSummary, scanBuildRun, scanBuildGetReport) không phơi cho TUI vì cần filesystem mount chung.
 
 ### 10.8. Dynamic tool descriptions bảng (9 tool)
+
+> Chi tiết từng tool: [MCP-TOOLS.md](./MCP-TOOLS.md) (section 3).
 
 | Tool | `description` (verbatim) |
 |---|---|
@@ -670,6 +680,8 @@ Lọc bởi `CONTENT_CAPABLE_TOOLS` (`mcpToolPlan.ts:103-109`). Các tool tĩnh 
 | `listRuns` | *List stored dynamic analysis runs* |
 
 ### 10.9. Domain tool (read_file) + done tools
+
+> Chi tiết: [MCP-TOOLS.md](./MCP-TOOLS.md) (section 4).
 
 | Tool | `description` (verbatim) |
 |---|---|
