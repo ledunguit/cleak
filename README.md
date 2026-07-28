@@ -6,6 +6,9 @@ phần của luận văn ở cùng một cấp. `master` là TUI-only (bản web
 
 > Tài liệu luận văn: bắt đầu ở [docs/THESIS.md](docs/THESIS.md) (đọc trước),
 > chỉ mục đầy đủ ở [docs/README.md](docs/README.md).
+>
+> [![CI](https://github.com/ledunguit/cleak/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/ledunguit/cleak/actions/workflows/ci.yml)
+> [![Release](https://github.com/ledunguit/cleak/actions/workflows/release.yml/badge.svg)](https://github.com/ledunguit/cleak/actions/workflows/release.yml)
 
 ## Định vị
 
