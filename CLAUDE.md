@@ -46,7 +46,8 @@ The workspace consists of these main components:
 ### apps/static-analyzer (Static Analysis — NestJS)
 - NestJS service serving **MCP/HTTP on port 50061** to the TUI.
 - Tree-sitter AST, lexical scan, call graph, ownership analysis, Clang Static
-  Analyzer / `scan-build`.
+  Analyzer / `scan-build`. All analysis routes through `CParserService` (tree-sitter
+  C/C++ parser with a 512-entry SHA1-content LRU cache).
 - **MCP/HTTP is the only transport.** The old gRPC server (+ `proto/` + `@grpc/*`
   / `@nestjs/microservices`) had no consumer once the web path was removed and has
   been **deleted**; `main.ts` just builds a DI context and serves MCP.
@@ -59,6 +60,11 @@ The workspace consists of these main components:
 - Framework-free native tool-calling loop, MCP client, multi-provider
   `callModel` (local / openai / anthropic / openai-compat), context compaction.
 
+### packages/config (@cleak/config)
+- Centralized config management — Zod schema, JSON loader/persister at
+  `~/.config/cleak/config.json`, CLI helpers (`config init/get/set/unset`),
+  provider settings conversion. Used by the TUI and common packages.
+
 ### packages/common (@cleak/common)
 - Shared types, Zod schemas, the heuristic judge, consensus judge, leak analysis,
   and report renderers — TypeScript + Zod.
@@ -69,6 +75,11 @@ The workspace consists of these main components:
 - [docs/EVALUATION.md](docs/EVALUATION.md) — metrics, scoring model, reproducibility & baseline protocol
 - [docs/SECURITY.md](docs/SECURITY.md) — trust model & controls for executing untrusted code
 - [docs/DATASETS.md](docs/DATASETS.md) — obtaining/rebuilding Juliet + demo corpora (not committed)
+- Additional: [docs/MCP-TOOLS.md](docs/MCP-TOOLS.md) (detailed tool reference),
+  [docs/GLOSSARY.md](docs/GLOSSARY.md), [docs/OPERATIONS.md](docs/OPERATIONS.md),
+  [docs/SYSTEM-DIAGRAM.md](docs/SYSTEM-DIAGRAM.md),
+  [docs/sequence-diagrams.md](docs/sequence-diagrams.md), and thesis artifacts
+  ([docs/THESIS.md](docs/THESIS.md) et al. in Vietnamese).
 
 ### MCP tool surface (no proto/)
 - Tool I/O is declared with **Zod `inputSchema`** inside each analyzer's MCP server
@@ -96,6 +107,7 @@ Thesis/
 │   └── leak-inspector-tui/         ← Standalone agentic TUI/CLI scanner (HYBRID, MCP) — the orchestrator
 ├── packages/
 │   ├── common/                     ← Shared types, DTOs, entities, Zod schemas, analysis (@cleak/common)
+│   ├── config/                     ← Config schema, loader, persist, CLI helpers (@cleak/config)
 │   └── agent-core/                 ← Framework-free native tool-calling loop + providers + MCP client
 ├── docs/                           ← Canonical docs (ARCHITECTURE, PROMPTS, EVALUATION, SECURITY, DATASETS)
 ├── docker-compose.yml              ← static-analyzer + dynamic-analyzer (MCP)
@@ -103,9 +115,10 @@ Thesis/
 ├── package.json                    ← Root workspace config + turbo scripts
 ├── turbo.json                      ← Task pipeline (build/dev/lint/test)
 ├── tsconfig.base.json              ← Shared TypeScript config for NestJS apps
-└── demo/memory_leak_corpus/        ← Test corpus (sources committed; binaries/results git-ignored)
+├── demo/memory_leak_corpus/        ← Test corpus (sources committed; binaries/results git-ignored)
+└── scripts/                        ← 21 eval/test scripts, 2 shell scripts, 5 data subdirs
 ```
-(`tools/leak_guard_tool/`, `proto/`, and `results/` are gone / git-ignored — see the notes above.)
+(`tools/leak_guard_tool/`, `proto/`, `mcp-dynamic-analysis-server/`, `mcp-memory-common/`, `mcp-memory-static-analysis-server/`, and `results/` are gone / git-ignored — see the notes above. `.gitmodules` retains stale entries for the three old MCP submodules.)
 
 ## Common Commands
 
@@ -118,18 +131,40 @@ docker compose up --build
 ### Build All (Turbo)
 ```bash
 bun run build        # Builds all NestJS apps + the TUI via turbo pipeline
+bun run typecheck    # Type-check all packages (separate turbo task)
+
+# Package manager: bun@1.3.14 (per root package.json)
+# Global install:  bun run cleak:install (builds @cleak/cli then npm i -g)
 ```
+
+### Development / Test Scripts
+```bash
+bun run scan:smoke        # bun scripts/run-local-scan-smoke.ts
+bun run eval:corpus       # bun scripts/evaluate-corpus.ts
+bun run eval:compare      # bun scripts/compare-modes.ts
+bun run mcp:contract      # bun scripts/mcp-contract-test.ts
+```
+
+Development scripts live in `scripts/` — 21 TypeScript evaluation/test files,
+2 shell scripts (`consensus-ablation.sh`, `determinism-gate.sh`), and 5 data
+subdirectories (`corpus/`, `juliet/`, `lamed/`, `real-projects/`, `tests/`).
 
 ### Run the TUI / Analyzers
 ```bash
 turbo run dev --filter=leak-inspector-tui     # run the agentic TUI scanner
 turbo run dev --filter=static-analyzer        # static analyzer (MCP, port 50061)
 turbo run dev --filter=dynamic-analyzer        # dynamic analyzer (MCP, port 50062)
+
+# Or run the TUI directly:
+bun src/cli.ts tui                    # default: interactive TUI
+bun src/cli.ts scan --repo <path>     # headless scan
+bun src/cli.ts eval --corpus <path>   # corpus evaluation
+bun src/cli.ts tools                  # MCP connectivity check
 ```
 
 ## Configuration
 
-All TUI/CLI configuration is persisted in a single JSON file at `~/.config/cleak/config.json`. Precedence: **CLI flag > config file > built-in default**. No `.env` files are used.
+All TUI/CLI configuration is persisted in a single JSON file at `~/.config/cleak/config.json`. Precedence: **CLI flag > config file > built-in default**. The TUI/CLI does not use `.env` files; the analyzer Docker services use `.env` (with `.env.example` templates checked in) for environment-specific overrides.
 
 - `cleak config init` — write a fully-keyed template
 - `cleak config get` — print the resolved (effective) config
@@ -148,26 +183,38 @@ All TUI/CLI configuration is persisted in a single JSON file at `~/.config/cleak
 
 ## Key MCP Tools
 
-### Static Server Tools
-- `repo.index_files`: Index repository files
-- `memory.candidate_scan`: Lexical candidate discovery
-- `memory.ast_scan`: AST-based structural analysis
-- `memory.function_summary`: Function-level summaries
-- `memory.call_graph`: Call graph extraction
-- `memory.path_constraints`: Path constraint analysis
-- `memory.interprocedural_flow`: Interprocedural dataflow
-- `scanBuildRun`: Execute the project-level Clang Static Analyzer (scan-build)
-- `scanBuildGetReport`: Retrieve scan-build findings
+> Full reference (input schema, return type, handler, JSON-RPC examples):
+> [docs/MCP-TOOLS.md](docs/MCP-TOOLS.md)
 
-### Dynamic Server Tools
-- `valgrind.analyze_memcheck`: Run Valgrind Memcheck
-- `valgrind.get_report`: Retrieve normalized report
-- `valgrind.list_findings`: Query findings with filters
-- `valgrind.compare_runs`: Compare two analysis runs
-- `asan.run`: Run AddressSanitizer-instrumented binary
-- `lsan.run`: Run LeakSanitizer-instrumented binary
-- `dynamic.run_binary`: Generic binary execution entrypoint
-- `dynamic.list_runs`: List stored analysis runs
+### Static Server Tools (11 tools — port 50061)
+- `indexFiles`: *Index all C/C++ source files recursively from a root path*
+- `candidateScan`: *Scan a file for allocation sites (malloc, calloc, realloc, strdup, new). Optionally supply per-project factory allocators / custom deallocators (≈ LAMeD AllocSource/FreeSink) so wrapper-named allocators (e.g. cJSON_Duplicate) become candidates.*
+- `astScan`: *AST-based structural analysis for memory leak patterns*
+- `callGraph`: *Extract call graph edges and nodes. Optionally supply per-project allocators/deallocators so the alloc→free reachability chains track factory allocators.*
+- `functionSummary`: *Summarize a function: alloc/free balance, local vars, calls. Optionally supply per-project allocators/deallocators so factory-allocated vars are paired.*
+- `interproceduralFlow`: *Interprocedural alloc/free flow tracing for a function. Optionally supply per-project allocators/deallocators so the trace tracks factory allocators (cJSON_malloc/_TIFFfree/…) — without them it is blind to non-libc memory APIs.*
+- `pathConstraints`: *Analyze path constraints and feasible paths around an allocation. Optionally supply per-project allocators/deallocators so factory allocations are tracked on exit paths.*
+- `ownershipSummary`: *Summarize ownership conventions across files*
+- `ownershipConventions`: *Detect ownership-transfer conventions in a file*
+- `scanBuildRun`: *Run the project-level Clang Static Analyzer (scan-build) over the project build*
+- `scanBuildGetReport`: *Retrieve Clang Static Analyzer (scan-build) findings*
+
+> 5 content-capable tools exposed to the LLM sub-agent in Stage A: `candidateScan`,
+> `astScan`, `functionSummary`, `pathConstraints`, `ownershipConventions`.
+> The other 6 require a shared filesystem and are driven by the orchestrator.
+
+### Dynamic Server Tools (9 tools — port 50062)
+- `buildTarget`: *Build the project with sanitizer-instrumented compiler flags*
+- `valgrindMemcheck`: *Run Valgrind Memcheck for detailed leak analysis*
+- `valgrindGetReport`: *Retrieve a normalized Valgrind report*
+- `valgrindListFindings`: *Query Valgrind findings with optional filters*
+- `valgrindCompareRuns`: *Compare two Valgrind analysis runs*
+- `asanRun`: *Run the binary under AddressSanitizer for leak detection*
+- `lsanRun`: *Run the binary under LeakSanitizer*
+- `runBinary`: *Run a binary without instrumentation*
+- `listRuns`: *List stored dynamic analysis runs*
+
+> All dynamic tools are driven by the deterministic Stage B recipe, not by the LLM.
 
 ## Important Notes
 
