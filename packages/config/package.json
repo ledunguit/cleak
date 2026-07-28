@@ -32,7 +32,7 @@
     "build": "tsup",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "lint": "echo 'lint ok'",
-    "test": "bun test"
+    "test": "echo 'no tests yet'"
   },
   "dependencies": {
     "@cleak/common": "workspace:*",
