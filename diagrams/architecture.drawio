@@ -1,5 +1,6 @@
-<mxfile host="app.diagrams.net" pages="9">
-  <diagram name="0-Academic-Overview" id="page0"><mxGraphModel dx="1423" dy="1038" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="1100" math="0" shadow="0">
+<mxfile host="app.diagrams.net" pages="10">
+  <diagram name="0-Academic-Overview" id="page0">
+    <mxGraphModel dx="1423" dy="1038" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="1100" math="0" shadow="0">
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
@@ -110,8 +111,10 @@
           </mxGeometry>
         </mxCell>
       </root>
-    </mxGraphModel></diagram>
-  <diagram name="1-System-Topology" id="page1"><mxGraphModel dx="1264" dy="922" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="1100" math="0" shadow="0">
+    </mxGraphModel>
+  </diagram>
+  <diagram name="1-System-Topology" id="page1">
+    <mxGraphModel dx="1264" dy="922" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="1100" math="0" shadow="0">
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
@@ -195,8 +198,10 @@
           </mxGeometry>
         </mxCell>
       </root>
-    </mxGraphModel></diagram>
-  <diagram name="2-HYBRID-Pipeline" id="page2"><mxGraphModel dx="2864" dy="2222" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="1100" math="0" shadow="0">
+    </mxGraphModel>
+  </diagram>
+  <diagram name="2-HYBRID-Pipeline" id="page2">
+    <mxGraphModel dx="2864" dy="2222" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="1100" math="0" shadow="0">
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
@@ -344,8 +349,10 @@
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
       </root>
-    </mxGraphModel></diagram>
-  <diagram name="3-Orchestrator-Internal" id="page3"><mxGraphModel dx="1897" dy="2483" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="1100" math="0" shadow="0">
+    </mxGraphModel>
+  </diagram>
+  <diagram name="3-Orchestrator-Internal" id="page3">
+    <mxGraphModel dx="1897" dy="2483" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="1100" math="0" shadow="0">
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
@@ -529,7 +536,8 @@
           </mxGeometry>
         </mxCell>
       </root>
-    </mxGraphModel></diagram>
+    </mxGraphModel>
+  </diagram>
   <diagram name="4-AgentCore-Loop" id="page4">
     <mxGraphModel dx="1198" dy="874" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1300" pageHeight="900" math="0" shadow="0">
       <root>
@@ -787,7 +795,8 @@
       </root>
     </mxGraphModel>
   </diagram>
-  <diagram name="6-Dynamic-Analyzer" id="page6"><mxGraphModel dx="1339" dy="976" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="1100" math="0" shadow="0">
+  <diagram name="6-Dynamic-Analyzer" id="page6">
+    <mxGraphModel dx="1339" dy="976" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="1100" math="0" shadow="0">
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
@@ -897,8 +906,10 @@
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
       </root>
-    </mxGraphModel></diagram>
-  <diagram name="7-Judge-Layer" id="page7"><mxGraphModel dx="2276" dy="1660" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="850" math="0" shadow="0">
+    </mxGraphModel>
+  </diagram>
+  <diagram name="7-Judge-Layer" id="page7">
+    <mxGraphModel dx="2276" dy="1660" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="850" math="0" shadow="0">
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
@@ -1070,8 +1081,10 @@
           </mxGeometry>
         </mxCell>
       </root>
-    </mxGraphModel></diagram>
-  <diagram name="8-Data-Model" id="page8"><mxGraphModel dx="2529" dy="1844" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="900" math="0" shadow="0">
+    </mxGraphModel>
+  </diagram>
+  <diagram name="8-Data-Model" id="page8">
+    <mxGraphModel dx="2529" dy="1844" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="900" math="0" shadow="0">
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
@@ -1148,5 +1161,122 @@
           <mxGeometry height="28" width="260" x="330" y="165" as="geometry" />
         </mxCell>
       </root>
-    </mxGraphModel></diagram>
+    </mxGraphModel>
+  </diagram>
+  <diagram name="9-Tổng-quan-Pipeline" id="page9">
+    <mxGraphModel dx="1983" dy="1262" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="1100" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="pd_title" parent="1" style="text;html=1;fontSize=16;fontStyle=1;align=center;fillColor=none;strokeColor=none;" value="&lt;b&gt;CLEAK — Hệ thống phát hiện rò rỉ bộ nhớ C/C++ do LLM điều phối&lt;/b&gt;" vertex="1">
+          <mxGeometry height="30" width="1560" x="20" y="10" as="geometry" />
+        </mxCell>
+        <mxCell id="pd_input" parent="1" style="swimlane;horizontal=0;startSize=26;fillColor=#E8F5E9;strokeColor=#66BB6A;html=1;fontColor=#2c3e50;fontStyle=1;fontSize=11;" value="ĐẦU VÀO (Input)" vertex="1">
+          <mxGeometry height="80" width="1080" x="20" y="55" as="geometry" />
+        </mxCell>
+        <mxCell id="pd_input_src" parent="pd_input" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#C8E6C9;strokeColor=#66BB6A;fontColor=#2c3e50;fontSize=11;" value="&lt;b&gt;Mã nguồn C/C++&lt;/b&gt;" vertex="1">
+          <mxGeometry height="30" width="280" x="200" y="36" as="geometry" />
+        </mxCell>
+        <mxCell id="pd_input_cfg" parent="pd_input" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#C8E6C9;strokeColor=#66BB6A;fontColor=#2c3e50;fontSize=11;" value="&lt;b&gt;Cấu hình người dùng&lt;/b&gt;" vertex="1">
+          <mxGeometry height="30" width="230" x="580" y="36" as="geometry" />
+        </mxCell>
+        <mxCell id="pd_ph1" parent="1" style="swimlane;horizontal=0;startSize=26;fillColor=#E3F2FD;strokeColor=#42A5F5;html=1;fontColor=#2c3e50;fontStyle=1;fontSize=11;" value="❶ KẾT NỐI (Preflight) — Kiểm tra MCP analyzer" vertex="1">
+          <mxGeometry height="90" width="1080" x="20" y="165" as="geometry" />
+        </mxCell>
+        <mxCell id="pd_ph1_inner" parent="pd_ph1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#BBDEFB;strokeColor=#42A5F5;fontColor=#2c3e50;fontSize=11;" value="static-analyzer ping → xác nhận sẵn sàng" vertex="1">
+          <mxGeometry height="36" width="680" x="200" y="42" as="geometry" />
+        </mxCell>
+        <mxCell id="pd_ph2" parent="1" style="swimlane;horizontal=0;startSize=26;fillColor=#E3F2FD;strokeColor=#42A5F5;html=1;fontColor=#2c3e50;fontStyle=1;fontSize=11;" value="❷ PHÁT HIỆN (Discovery) — Tất định (deterministic)" vertex="1">
+          <mxGeometry height="90" width="1080" x="20" y="285" as="geometry" />
+        </mxCell>
+        <mxCell id="pd_ph2_inner" parent="pd_ph2" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#BBDEFB;strokeColor=#42A5F5;fontColor=#2c3e50;fontSize=11;" value="&lt;b&gt;Quét mã nguồn C/C++ → Tìm vị trí cấp phát → CandidateManager → LeakBundle[]&lt;/b&gt;&lt;br&gt;&lt;font&gt;MCP: candidateScan · AST scan&lt;/font&gt;" vertex="1">
+          <mxGeometry height="42" width="680" x="200" y="36" as="geometry" />
+        </mxCell>
+        <mxCell id="pd_ph3" parent="1" style="swimlane;horizontal=0;startSize=26;fillColor=#E3F2FD;strokeColor=#42A5F5;html=1;fontColor=#2c3e50;fontStyle=1;fontSize=11;" value="❸ LÀM GIÀU TĨNH (Static Enrichment) — Tất định (deterministic)" vertex="1">
+          <mxGeometry height="90" width="1080" x="20" y="405" as="geometry" />
+        </mxCell>
+        <mxCell id="pd_ph3_inner" parent="pd_ph3" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#BBDEFB;strokeColor=#42A5F5;fontColor=#2c3e50;fontSize=10;" value="&lt;b&gt;Phân tích call graph + ràng buộc đường đi + quyền sở hữu&lt;/b&gt;&lt;br&gt;&lt;font&gt;MCP: functionSummary · pathConstraints · callGraph&lt;/font&gt;" vertex="1">
+          <mxGeometry height="42" width="680" x="200" y="36" as="geometry" />
+        </mxCell>
+        <mxCell id="pd_ph4" parent="1" style="swimlane;horizontal=0;startSize=26;fillColor=#FFF3E0;strokeColor=#FF9800;html=1;fontColor=#2c3e50;fontStyle=1;fontSize=11;" value="❹ ĐIỀU TRA (Investigation) — HYBRID: LLM-driven + Deterministic" vertex="1">
+          <mxGeometry height="160" width="1080" x="20" y="525" as="geometry" />
+        </mxCell>
+        <mxCell id="pd_ph4_a" parent="pd_ph4" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFE0B2;strokeColor=#FFB74D;fontColor=#2c3e50;fontSize=11;" value="&lt;b&gt;A: Static fan-out&lt;/b&gt;&lt;br&gt;&lt;font&gt;LLM sub-agent gọi MCP tĩnh&lt;br&gt;gom bằng chứng&lt;/font&gt;" vertex="1">
+          <mxGeometry height="70" width="200" x="70" y="50" as="geometry" />
+        </mxCell>
+        <mxCell id="pd_ph4_b" parent="pd_ph4" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFE0B2;strokeColor=#FFB74D;fontColor=#2c3e50;fontSize=10;" value="&lt;b&gt;B: Dynamic worker&lt;/b&gt;&lt;br&gt;&lt;font&gt;buildTarget → lsanRun&lt;br&gt;tất định hoặc LLM worker&lt;/font&gt;" vertex="1">
+          <mxGeometry height="70" width="200" x="300" y="50" as="geometry" />
+        </mxCell>
+        <mxCell id="pd_ph4_c" parent="pd_ph4" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFE0B2;strokeColor=#FFB74D;fontColor=#2c3e50;fontSize=12;" value="&lt;b&gt;C: Tổng hợp&lt;/b&gt;&lt;br&gt;&lt;font&gt;Hợp nhất static + dynamic&lt;br&gt;evidence (không LLM)&lt;/font&gt;" vertex="1">
+          <mxGeometry height="70" width="200" x="530" y="50" as="geometry" />
+        </mxCell>
+        <mxCell id="pd_ph4_d" parent="pd_ph4" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFE0B2;strokeColor=#FFB74D;fontColor=#2c3e50;fontSize=11;" value="&lt;b&gt;D: Phán xét hybrid&lt;/b&gt;&lt;br&gt;&lt;font&gt;Heuristic → LLM (borderline)&lt;br&gt;→ Consensus (k mẫu)&lt;/font&gt;" vertex="1">
+          <mxGeometry height="70" width="200" x="760" y="50" as="geometry" />
+        </mxCell>
+        <mxCell id="pd_e_a_b" edge="1" parent="pd_ph4" source="pd_ph4_a" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#FF9800;strokeWidth=2;" target="pd_ph4_b">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="pd_e_b_c" edge="1" parent="pd_ph4" source="pd_ph4_b" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#FF9800;strokeWidth=2;" target="pd_ph4_c">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="pd_e_c_d" edge="1" parent="pd_ph4" source="pd_ph4_c" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#FF9800;strokeWidth=2;" target="pd_ph4_d">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="pd_e_d_a" edge="1" parent="pd_ph4" source="pd_ph4_d" style="curved=1;html=1;dashed=1;strokeColor=#FF9800;strokeWidth=1.5;fontSize=10;fontColor=#e65100;" target="pd_ph4_a" value="Vòng lặp agent">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="pd_ph5" parent="1" style="swimlane;horizontal=0;startSize=26;fillColor=#E0F7FA;strokeColor=#26C6DA;html=1;fontColor=#2c3e50;fontStyle=1;fontSize=11;" value="❺ BÁO CÁO (Reporting)" vertex="1">
+          <mxGeometry height="100" width="1080" x="20" y="715" as="geometry" />
+        </mxCell>
+        <mxCell id="pd_ph5_verdict" parent="pd_ph5" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#B2EBF2;strokeColor=#26C6DA;fontColor=#2c3e50;fontSize=10;" value="&lt;b&gt;Phán quyết&lt;/b&gt;&lt;br&gt;&lt;font&gt;Đã xác nhận / Có khả năng / Không chắc chắn / Dương tính giả&lt;/font&gt;" vertex="1">
+          <mxGeometry height="45" width="400" x="100" y="40" as="geometry" />
+        </mxCell>
+        <mxCell id="pd_ph5_report" parent="pd_ph5" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#B2EBF2;strokeColor=#26C6DA;fontColor=#2c3e50;fontSize=10;" value="&lt;b&gt;Báo cáo&lt;/b&gt;&lt;br&gt;&lt;font&gt;JSON · Markdown · HTML · Snapshot&lt;/font&gt;" vertex="1">
+          <mxGeometry height="45" width="350" x="600" y="40" as="geometry" />
+        </mxCell>
+        <mxCell id="pd_sa" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8F5E9;strokeColor=#81C784;fontColor=#2c3e50;fontSize=11;" value="&lt;b&gt;Static Analyzer&lt;/b&gt;&lt;br&gt;MCP Streamable-HTTP :50061&lt;br&gt;&lt;font&gt;Tree-sitter AST · Call graph&lt;br&gt;Ràng buộc đường đi · scan-build&lt;/font&gt;" vertex="1">
+          <mxGeometry height="100" width="430" x="1130" y="285" as="geometry" />
+        </mxCell>
+        <mxCell id="pd_da" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF3E0;strokeColor=#FFB74D;fontColor=#2c3e50;fontSize=11;" value="&lt;b&gt;Dynamic Analyzer&lt;/b&gt;&lt;br&gt;MCP Streamable-HTTP :50062&lt;br&gt;&lt;font&gt;Valgrind Memcheck · ASan · LSan&lt;/font&gt;" vertex="1">
+          <mxGeometry height="95" width="430" x="1130" y="525" as="geometry" />
+        </mxCell>
+        <mxCell id="pd_llm" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F3E5F5;strokeColor=#BA68C8;fontColor=#2c3e50;fontSize=11;" value="&lt;b&gt;LLM Gateway&lt;/b&gt;&lt;br&gt;HTTP SSE (streaming)&lt;br&gt;&lt;font&gt;mimo-v2.5-pro / OpenAI / Anthropic&lt;/font&gt;" vertex="1">
+          <mxGeometry height="85" width="430" x="1130" y="635" as="geometry" />
+        </mxCell>
+        <mxCell id="pd_e_in_ph1" edge="1" parent="1" source="pd_input" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#546E7A;strokeWidth=2;" target="pd_ph1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="pd_e_ph1_ph2" edge="1" parent="1" source="pd_ph1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#546E7A;strokeWidth=2;" target="pd_ph2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="pd_e_ph2_ph3" edge="1" parent="1" source="pd_ph2" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#546E7A;strokeWidth=2;" target="pd_ph3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="pd_e_ph3_ph4" edge="1" parent="1" source="pd_ph3" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#546E7A;strokeWidth=2;" target="pd_ph4">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="pd_e_ph4_ph5" edge="1" parent="1" source="pd_ph4" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#546E7A;strokeWidth=2;" target="pd_ph5">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="pd_e_mcp1" edge="1" parent="1" source="pd_ph2" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;dashed=1;strokeColor=#78909C;strokeWidth=1.5;fontSize=10;fontColor=#546E7A;" target="pd_sa" value="MCP">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="pd_e_mcp2" edge="1" parent="1" source="pd_ph3" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;dashed=1;strokeColor=#78909C;strokeWidth=1.5;fontSize=10;fontColor=#546E7A;" target="pd_sa" value="MCP">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="pd_e_mcp3" edge="1" parent="1" source="pd_ph4" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;dashed=1;strokeColor=#78909C;strokeWidth=1.5;fontSize=10;fontColor=#546E7A;" target="pd_da" value="MCP">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="pd_e_mcp4" edge="1" parent="1" source="pd_ph4" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;dashed=1;strokeColor=#78909C;strokeWidth=1.5;fontSize=10;fontColor=#546E7A;" target="pd_llm" value="HTTP SSE">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="pd_e_d_llm" edge="1" parent="1" source="pd_ph4_d" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;dashed=1;strokeColor=#BA68C8;strokeWidth=1.5;fontSize=10;fontColor=#7B1FA2;" target="pd_llm" value="Phán xét LLM">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="2DN19qleE9_SQE18W1y3-1" edge="1" parent="1" source="pd_ph4_c" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" target="pd_ph3_inner" value="">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
 </mxfile>
