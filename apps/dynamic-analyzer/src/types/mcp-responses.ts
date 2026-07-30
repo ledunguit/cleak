@@ -119,6 +119,28 @@ export interface RunBinaryResponse {
   exitCode: number;
 }
 
+// ─── buildHarness ───────────────────────────────────────────────────
+
+export interface HarnessBuildResponse {
+  success: boolean;
+  binaryPath: string;
+  runId: string;
+  errors: string[];
+  /** Set when the harness could not be compiled for a structural reason (no
+   * compile_commands.json entry, unsupported build system) — the caller should fall
+   * back gracefully rather than retry. */
+  reason?: 'harness_unresolvable';
+}
+
+// ─── libfuzzerRun ───────────────────────────────────────────────────
+
+export interface LibfuzzerRunResponse {
+  success: boolean;
+  runId: string;
+  findings: RawFinding[];
+  rawOutput: string;
+}
+
 // ─── listRuns ───────────────────────────────────────────────────────
 
 export interface RunSummary {
@@ -143,5 +165,7 @@ export type DynamicMcpResponse =
   | ValgrindCompareRunsResponse
   | AsanRunResponse
   | LsanRunResponse
+  | HarnessBuildResponse
+  | LibfuzzerRunResponse
   | RunBinaryResponse
   | ListRunsResponse;

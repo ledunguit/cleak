@@ -11,6 +11,8 @@ import { LsanService } from './services/lsan.service';
 import { BinaryRunnerService } from './services/binary-runner.service';
 import { CompareService } from './services/compare.service';
 import { RunManagerService } from './services/run-manager.service';
+import { HarnessBuildService } from './services/harness-build.service';
+import { LibfuzzerRunService } from './services/libfuzzer-run.service';
 import * as dotenv from 'dotenv';
 import { existsSync } from 'fs';
 
@@ -29,6 +31,8 @@ async function serveMcp(ctx: INestApplicationContext) {
     binaryRunner: ctx.get(BinaryRunnerService),
     compare: ctx.get(CompareService),
     runManager: ctx.get(RunManagerService),
+    harnessBuild: ctx.get(HarnessBuildService),
+    libfuzzerRun: ctx.get(LibfuzzerRunService),
   };
   await startMcpHttp(() => createDynamicMcpServer(svc), Number(process.env.MCP_HTTP_PORT || 50062), 'dynamic-analyzer');
 }

@@ -8,6 +8,9 @@ import { ResultParserService } from './services/result-parser.service';
 import { LeakBundleNormalizerService } from './services/leak-bundle-normalizer.service';
 import { RunManagerService } from './services/run-manager.service';
 import { CompareService } from './services/compare.service';
+import { CompileCommandsService } from './services/compile-commands.service';
+import { HarnessBuildService } from './services/harness-build.service';
+import { LibfuzzerRunService } from './services/libfuzzer-run.service';
 
 @Module({
   providers: [
@@ -20,6 +23,9 @@ import { CompareService } from './services/compare.service';
     LeakBundleNormalizerService,
     RunManagerService,
     CompareService,
+    CompileCommandsService,
+    HarnessBuildService,
+    LibfuzzerRunService,
   ],
 })
 export class DynamicAnalyzerModule {}

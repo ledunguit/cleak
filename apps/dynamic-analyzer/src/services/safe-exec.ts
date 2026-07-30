@@ -46,7 +46,7 @@ export function sanitizeRunId(id: string, fallbackPrefix = 'run'): string {
   return clean.length ? clean : `${fallbackPrefix}_unknown`;
 }
 
-const intEnv = (name: string, fallback: number): number => {
+export const intEnv = (name: string, fallback: number): number => {
   const v = Number(process.env[name]);
   return Number.isFinite(v) && v > 0 ? Math.floor(v) : fallback;
 };

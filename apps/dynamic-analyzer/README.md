@@ -29,7 +29,24 @@ src/
     run-manager.service.ts        lưu/liệt kê artifact theo runId
     result-parser.service.ts      parse output LSan/ASan → finding (bytes/blocks/kind/frames)
     safe-exec.ts                  confinement ulimit (CPU/AS/fsize/proc), no-shell argv
+    compile-commands.service.ts   bắt compile_commands.json qua `bear` → flags -I/-D/-std thật của project
+    harness-build.service.ts      biên dịch+link harness TARGETED (Stage B2) bằng flags thật đó
+    libfuzzer-run.service.ts      chạy harness (entryStyle=fuzzer) trong ngân sách thời gian ngắn
 ```
+
+**Stage B2 — targeted harness (opt-in, `workflow.targetedHarness.enabled`):** thay vì build
++ chạy mù cả binary (recipe mặc định), orchestrator có thể yêu cầu build **một harness nhỏ**
+chỉ gọi đúng hàm/đoạn nghi vấn. `CompileCommandsService` chạy `bear -- sh -c '<buildCommand>'`
+(qua `runConfined`, KHÔNG dùng docker-in-docker — container này không có `docker.sock`) để lấy
+đúng flags compiler thật của project cho từng file, rồi `HarnessBuildService` biên dịch harness
++ (các) file cần thiết với đúng flags đó và link lại. `buildHarness` với `entryStyle=fuzzer`
+biên dịch CÙNG harness source với `-fsanitize=fuzzer,address -DHARNESS_FUZZ` để `libfuzzerRun` dò input
+trong một ngân sách thời gian ngắn khi lần chạy đơn (single-shot) đầu tiên "sạch" — harness PHẢI viết
+theo khuôn 2 entry-point (`run_case()` dùng chung, chọn `main()` hay `LLVMFuzzerTestOneInput` qua
+`#ifdef HARNESS_FUZZ`), nếu không sẽ đụng `main()` của chính libFuzzer khi link. Mỗi lần `buildHarness`
+để lại một thư mục run (`.o` + binary) dưới `RUNS_DIR` — giữ tối đa `DYNAMIC_HARNESS_MAX_RUN_DIRS`
+(mặc định 50) thư mục `harness_*` gần nhất, cũ hơn tự xoá. Xem
+[docs/SECURITY.md](../../docs/SECURITY.md) mục "Targeted harness synthesis" cho mô hình tin cậy.
 
 **Confinement khi chạy binary** (`safe-exec.ts`): bọc `ulimit` (CPU time, address-space,
 file size, process count), argv mảng (không shell). Các lần chạy **sanitizer được miễn trần
@@ -37,7 +54,7 @@ file size, process count), argv mảng (không shell). Các lần chạy **sanit
 sẽ giết chúng; RSS vật lý vẫn bị container giới hạn. Container có sẵn `llvm-symbolizer`
 (`ASAN_SYMBOLIZER_PATH`) để frame có `file:line`.
 
-## MCP tool (9) — I/O
+## MCP tool (11) — I/O
 
 | Tool | Input | Trả về |
 |---|---|---|
@@ -50,6 +67,8 @@ sẽ giết chúng; RSS vật lý vẫn bị container giới hạn. Container c
 | `lsanRun` | `binaryPath`, `args?`, `timeoutSec?` | chạy dưới LeakSanitizer → leak `definitely/indirectly_lost` |
 | `runBinary` | `binaryPath`, `args?`, `timeoutSec?` | chạy binary không instrument |
 | `listRuns` | `tool?`, `limit?` | liệt kê các run đã lưu |
+| `buildHarness` | `projectPath`, `buildCommand`, `harnessSource`, `targetFile`, `closureFiles?`, `entryStyle` (`single`\|`fuzzer`), `timeoutSec?` | biên dịch+link harness targeted → `binaryPath`, hoặc `reason="harness_unresolvable"` |
+| `libfuzzerRun` | `binaryPath`, `maxTotalTimeSec`, `timeoutSec?` | chạy harness (`entryStyle=fuzzer`) trong ngân sách thời gian ngắn |
 
 ## Cấu hình (ENV)
 
