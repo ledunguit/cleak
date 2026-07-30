@@ -62,6 +62,9 @@ export interface LeakEvidence {
    * break ties when a finding could attach to more than one nearby candidate.
    */
   correlationConfidence?: number;
+  /** True for evidence from a Stage B2 targeted harness (candidate-specific) rather
+   * than Stage B's blind whole-binary run. */
+  targeted?: boolean;
 }
 
 // ── Static evidence artifacts (research: MemHint / LAMeD) ──
@@ -83,6 +86,14 @@ export interface OwnershipSummary {
   /** Legacy coarse type: returns_ownership / consumes_ownership / local_ownership / none. */
   ownershipType: string;
   rationale: string;
+  /** Set once `ownershipVerification.ts` has dynamically harness-checked this
+   * claim (a "call once, never free" test under ASan). `refuted` means the
+   * static AST-lexical claim (name-match, not real dataflow) did NOT hold —
+   * callers should treat `ownershipCarrier` as downgraded to `'none'` once this
+   * is set to `refuted` (the verification stage clears it in-place, so a
+   * consumer reading `ownershipCarrier` directly already sees the correction;
+   * this field is for report/notice transparency, not itself load-bearing). */
+  verification?: 'confirmed' | 'refuted';
 }
 
 /** An allocation paired with its corresponding free (or null when unpaired). */

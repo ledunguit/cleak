@@ -44,6 +44,39 @@ export interface BaselinesConfig {
   inferBin: string;
 }
 
+export interface TargetedHarnessConfig {
+  enabled: boolean;
+  maxHarnessesPerScan: number;
+  concurrency: number;
+  timeoutMs: number;
+  fuzzBudgetMs: number;
+  maxClosureFiles: number;
+  /** Widen Stage B2 to ALSO target confident CONFIRMED_LEAK verdicts, not just
+   * borderline ones — a double-check, not a new mechanism (same harness worker,
+   * same cap). A clean result routes to the LLM/consensus judge automatically via
+   * `shouldEscalate`'s existing `dynamicRanClean` check — no other code involved. */
+  verifyConfirmedLeaks: boolean;
+}
+
+/** Dynamic verification of the LLM-discovered allocator/deallocator profile
+ * (harness-check each candidate instead of trusting textual grep-verify alone). */
+export interface AllocatorVerificationConfig {
+  enabled: boolean;
+  maxVerifications: number;
+  concurrency: number;
+  timeoutMs: number;
+}
+
+/** Dynamic verification of static ownership-transfer claims (harness-check
+ * whether a function really does hand out / consume heap ownership as claimed,
+ * instead of trusting the AST-lexical `ownershipCarrier` guess alone). */
+export interface OwnershipVerificationConfig {
+  enabled: boolean;
+  maxVerifications: number;
+  concurrency: number;
+  timeoutMs: number;
+}
+
 export interface RunConfig {
   staticUrl: string;
   dynamicUrl: string;
@@ -57,7 +90,21 @@ export interface RunConfig {
   /** Auto-compaction thresholds for the agent transcript. */
   compaction: { thresholdTokens: number; keepRecentTurns: number };
   /** Staged-workflow investigation knobs (bounded to protect the single LLM gateway). */
-  workflow: { staticConcurrency: number; staticGroupSize: number; judgeConcurrency: number; discoveryConcurrency: number };
+  workflow: {
+    staticConcurrency: number;
+    staticGroupSize: number;
+    judgeConcurrency: number;
+    discoveryConcurrency: number;
+    /** Stage B2 — targeted per-candidate harness synthesis (opt-in, off by default:
+     * compiles/runs LLM-authored C source, new attack surface + extra cost). */
+    targetedHarness: TargetedHarnessConfig;
+    /** Dynamic verification of profileAllocators' candidate names (opt-in, off by
+     * default — same harness infra, different verification target). */
+    allocatorVerification: AllocatorVerificationConfig;
+    /** Dynamic verification of static ownership-transfer claims (opt-in, off by
+     * default — same harness infra, different verification target). */
+    ownershipVerification: OwnershipVerificationConfig;
+  };
   /** Consensus judge (self-consistency) configuration for the borderline judge stage. */
   consensus: ConsensusJudgeConfig;
   /** Judge confidence thresholds. */

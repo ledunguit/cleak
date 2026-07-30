@@ -53,7 +53,39 @@ export const CleakConfigSchema = z
       .partial(),
     compaction: z.object({ thresholdTokens: zNum, keepRecentTurns: zNum }).partial(),
     workflow: z
-      .object({ staticConcurrency: zNum, staticGroupSize: zNum, judgeConcurrency: zNum, discoveryConcurrency: zNum })
+      .object({
+        staticConcurrency: zNum,
+        staticGroupSize: zNum,
+        judgeConcurrency: zNum,
+        discoveryConcurrency: zNum,
+        targetedHarness: z
+          .object({
+            enabled: zBool,
+            maxHarnessesPerScan: zNum,
+            concurrency: zNum,
+            timeoutMs: zNum,
+            fuzzBudgetMs: zNum,
+            maxClosureFiles: zNum,
+            verifyConfirmedLeaks: zBool,
+          })
+          .partial(),
+        allocatorVerification: z
+          .object({
+            enabled: zBool,
+            maxVerifications: zNum,
+            concurrency: zNum,
+            timeoutMs: zNum,
+          })
+          .partial(),
+        ownershipVerification: z
+          .object({
+            enabled: zBool,
+            maxVerifications: zNum,
+            concurrency: zNum,
+            timeoutMs: zNum,
+          })
+          .partial(),
+      })
       .partial(),
     consensus: z
       .object({

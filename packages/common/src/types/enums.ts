@@ -18,6 +18,8 @@ export enum ToolKind {
   VALGRIND = 'valgrind',
   ASAN = 'asan',
   LSAN = 'lsan',
+  /** Bounded libFuzzer run on a Stage B2 targeted harness (fuzz-tier escalation). */
+  LIBFUZZER = 'libfuzzer',
   SCAN_BUILD = 'scan_build',
   HEURISTIC = 'heuristic',
   LLM = 'llm',

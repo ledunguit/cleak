@@ -169,6 +169,34 @@ export function loadConfig(
       staticGroupSize: Math.max(1, pickNum(file.workflow?.staticGroupSize, 4)),
       judgeConcurrency: Math.max(1, pickNum(file.workflow?.judgeConcurrency, 3)),
       discoveryConcurrency: Math.max(1, pickNum(file.workflow?.discoveryConcurrency, 8)),
+      targetedHarness: {
+        // Opt-in: compiles/runs LLM-authored C source (new attack surface) and adds
+        // scan cost. Off by default — enable via `cleak config set workflow.targetedHarness.enabled true` or `--harness`.
+        enabled: file.workflow?.targetedHarness?.enabled ?? false,
+        maxHarnessesPerScan: Math.max(1, pickNum(file.workflow?.targetedHarness?.maxHarnessesPerScan, 5)),
+        concurrency: Math.max(1, pickNum(file.workflow?.targetedHarness?.concurrency, 2)),
+        timeoutMs: Math.max(1000, pickNum(file.workflow?.targetedHarness?.timeoutMs, 60_000)),
+        fuzzBudgetMs: Math.max(1000, pickNum(file.workflow?.targetedHarness?.fuzzBudgetMs, 15_000)),
+        maxClosureFiles: Math.max(1, pickNum(file.workflow?.targetedHarness?.maxClosureFiles, 8)),
+        verifyConfirmedLeaks: file.workflow?.targetedHarness?.verifyConfirmedLeaks ?? false,
+      },
+      allocatorVerification: {
+        // Opt-in: harness-checks each LLM-proposed allocator/deallocator name.
+        // Off by default — enable via `cleak config set workflow.allocatorVerification.enabled true` or `--verify-allocators`.
+        enabled: file.workflow?.allocatorVerification?.enabled ?? false,
+        maxVerifications: Math.max(1, pickNum(file.workflow?.allocatorVerification?.maxVerifications, 20)),
+        concurrency: Math.max(1, pickNum(file.workflow?.allocatorVerification?.concurrency, 2)),
+        timeoutMs: Math.max(1000, pickNum(file.workflow?.allocatorVerification?.timeoutMs, 30_000)),
+      },
+      ownershipVerification: {
+        // Opt-in: harness-checks static ownership-transfer claims that would
+        // otherwise suppress a leak signal. Off by default — enable via
+        // `cleak config set workflow.ownershipVerification.enabled true` or `--verify-ownership`.
+        enabled: file.workflow?.ownershipVerification?.enabled ?? false,
+        maxVerifications: Math.max(1, pickNum(file.workflow?.ownershipVerification?.maxVerifications, 15)),
+        concurrency: Math.max(1, pickNum(file.workflow?.ownershipVerification?.concurrency, 2)),
+        timeoutMs: Math.max(1000, pickNum(file.workflow?.ownershipVerification?.timeoutMs, 30_000)),
+      },
     },
     consensus: {
       n: Math.max(1, pickNum(file.consensus?.n, 1)),
@@ -239,6 +267,39 @@ export function clampConfig(cfg: RunConfig): RunConfig {
   cfg.workflow.staticConcurrency = Math.round(clamp("workflow.staticConcurrency", cfg.workflow.staticConcurrency, 1, 16, 3));
   cfg.workflow.staticGroupSize = Math.round(clamp("workflow.staticGroupSize", cfg.workflow.staticGroupSize, 1, 64, 4));
   cfg.workflow.judgeConcurrency = Math.round(clamp("workflow.judgeConcurrency", cfg.workflow.judgeConcurrency, 1, 16, 3));
+  cfg.workflow.targetedHarness.maxHarnessesPerScan = Math.round(
+    clamp("workflow.targetedHarness.maxHarnessesPerScan", cfg.workflow.targetedHarness.maxHarnessesPerScan, 1, 50, 5),
+  );
+  cfg.workflow.targetedHarness.concurrency = Math.round(
+    clamp("workflow.targetedHarness.concurrency", cfg.workflow.targetedHarness.concurrency, 1, 8, 2),
+  );
+  cfg.workflow.targetedHarness.timeoutMs = Math.round(
+    clamp("workflow.targetedHarness.timeoutMs", cfg.workflow.targetedHarness.timeoutMs, 1000, 600_000, 60_000),
+  );
+  cfg.workflow.targetedHarness.fuzzBudgetMs = Math.round(
+    clamp("workflow.targetedHarness.fuzzBudgetMs", cfg.workflow.targetedHarness.fuzzBudgetMs, 1000, 120_000, 15_000),
+  );
+  cfg.workflow.targetedHarness.maxClosureFiles = Math.round(
+    clamp("workflow.targetedHarness.maxClosureFiles", cfg.workflow.targetedHarness.maxClosureFiles, 1, 32, 8),
+  );
+  cfg.workflow.allocatorVerification.maxVerifications = Math.round(
+    clamp("workflow.allocatorVerification.maxVerifications", cfg.workflow.allocatorVerification.maxVerifications, 1, 100, 20),
+  );
+  cfg.workflow.allocatorVerification.concurrency = Math.round(
+    clamp("workflow.allocatorVerification.concurrency", cfg.workflow.allocatorVerification.concurrency, 1, 8, 2),
+  );
+  cfg.workflow.allocatorVerification.timeoutMs = Math.round(
+    clamp("workflow.allocatorVerification.timeoutMs", cfg.workflow.allocatorVerification.timeoutMs, 1000, 300_000, 30_000),
+  );
+  cfg.workflow.ownershipVerification.maxVerifications = Math.round(
+    clamp("workflow.ownershipVerification.maxVerifications", cfg.workflow.ownershipVerification.maxVerifications, 1, 100, 15),
+  );
+  cfg.workflow.ownershipVerification.concurrency = Math.round(
+    clamp("workflow.ownershipVerification.concurrency", cfg.workflow.ownershipVerification.concurrency, 1, 8, 2),
+  );
+  cfg.workflow.ownershipVerification.timeoutMs = Math.round(
+    clamp("workflow.ownershipVerification.timeoutMs", cfg.workflow.ownershipVerification.timeoutMs, 1000, 300_000, 30_000),
+  );
   cfg.consensus.n = Math.round(clamp("consensus.n", cfg.consensus.n, 1, 9, 1));
   cfg.consensus.temperature = clamp("consensus.temperature", cfg.consensus.temperature, 0, 2, 0.7);
   cfg.consensus.concurrency = Math.round(clamp("consensus.concurrency", cfg.consensus.concurrency, 1, 16, 3));
