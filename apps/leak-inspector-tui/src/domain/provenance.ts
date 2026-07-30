@@ -27,6 +27,17 @@ export interface EvalProvenance {
   corpusValidated?: boolean;
   /** Consensus-judge configuration for this run (records the ablation condition). */
   consensus?: { n: number; rule: string };
+  /** Which subset of the corpus was actually evaluated — 'all' cases, a plain
+   * top-N slice, a SEEDED random sample (reproducible from `randomSeed` alone),
+   * or a stratified round-robin sample keyed by `stratifyKey`. Recorded so a
+   * reported number's sample can be identified/reproduced from the artifacts
+   * alone, without re-deriving it from CLI args that may not be kept. */
+  sampling?: {
+    mode: 'all' | 'topN' | 'random' | 'stratified';
+    limit?: number;
+    randomSeed?: number;
+    stratifyKey?: string;
+  };
 }
 
 /** Run a version command without a shell; never throws (returns undefined). */
@@ -83,6 +94,7 @@ export function captureProvenance(opts: {
   manifestPath?: string;
   runs?: number;
   consensus?: { n: number; rule: string };
+  sampling?: EvalProvenance['sampling'];
 }): EvalProvenance {
   const hash = opts.corpusHash ?? (opts.manifestPath ? corpusHash(opts.manifestPath) : undefined);
   return {
@@ -95,6 +107,7 @@ export function captureProvenance(opts: {
     ...(hash ? { corpusHash: hash } : {}),
     ...(opts.corpusValidated !== undefined ? { corpusValidated: opts.corpusValidated } : {}),
     ...(opts.consensus ? { consensus: opts.consensus } : {}),
+    ...(opts.sampling ? { sampling: opts.sampling } : {}),
   };
 }
 

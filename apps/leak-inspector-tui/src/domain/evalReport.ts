@@ -79,6 +79,13 @@ function mdMetricTable(title: string, entries: Array<[string, Metrics]>): string
   return [head, ...rows].join('\n');
 }
 
+function samplingLabel(s?: EvalResult['provenance']['sampling']): string {
+  if (!s || s.mode === 'all') return 'all cases';
+  if (s.mode === 'random') return `random, n=${s.limit}, seed=${s.randomSeed}`;
+  if (s.mode === 'stratified') return `stratified by ${s.stratifyKey}, n=${s.limit}`;
+  return `first ${s.limit} (manifest order)`;
+}
+
 function provenanceLines(r: EvalResult): string[] {
   const p = r.provenance;
   const tools = Object.entries(p.toolVersions ?? {}).map(([k, v]) => `${k}: ${v}`).join('; ');
@@ -94,6 +101,7 @@ function provenanceLines(r: EvalResult): string[] {
     `| Git commit | ${p.gitCommit ?? '—'} |`,
     `| Tool versions | ${tools || '—'} |`,
     `| Corpus hash | ${p.corpusHash ?? '—'} |`,
+    `| Sample | ${samplingLabel(p.sampling)} |`,
     `| Judge | ${p.consensus ? (p.consensus.n > 1 ? `consensus×${p.consensus.n} (${p.consensus.rule})` : 'single-LLM') : 'heuristic'} |`,
     '',
   ];

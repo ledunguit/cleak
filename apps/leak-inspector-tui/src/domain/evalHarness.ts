@@ -64,6 +64,10 @@ export interface EvalOptions {
    * top-N is heavily skewed (first 200 are ~90% `char`, 0% of the 672-case `new`
    * family). Deterministic round-robin: representative coverage, reproducible. */
   stratify?: string;
+  /** Seeded random sampling (mutually exclusive with `stratify`) — same seed always
+   * yields the same subset, so a reported number stays reproducible from the seed
+   * alone. See `selectCases`. */
+  randomSeed?: number;
   concurrency?: number;
   resume?: boolean;
   staticUrl?: string;
@@ -119,6 +123,7 @@ const EvalOptionsSchema = z.object({
   outDir: z.string().min(1),
   limit: z.number().int().positive().optional(),
   stratify: z.string().optional(),
+  randomSeed: z.number().int().optional(),
   concurrency: z.number().int().positive().optional(),
   resume: z.boolean().optional(),
   runs: z.number().int().positive().optional(),
@@ -287,10 +292,28 @@ async function assertLlmAvailable(mode: string, allowFallback?: boolean, provide
  * `stratifyKey` set, sample EVENLY across that key via deterministic round-robin
  * (round 0 takes one case from every group in sorted-key order, then round 1, …)
  * so a small `limit` still covers every category — Juliet's manifest is grouped by
- * family, so plain top-N is heavily skewed. No `limit` ⇒ all cases (order unchanged).
+ * family, so plain top-N is heavily skewed. With `randomSeed` set (and no
+ * `stratifyKey` — the two sampling modes are mutually exclusive), shuffle
+ * deterministically via `makeRng(seed)` + Fisher-Yates before slicing: this is a
+ * THESIS eval tool, so "random" still has to be REPRODUCIBLE from the seed alone,
+ * not true nondeterministic randomness. No `limit` ⇒ all cases (order unchanged).
  */
-export function selectCases<T extends Record<string, any>>(all: T[], limit?: number, stratifyKey?: string): T[] {
+export function selectCases<T extends Record<string, any>>(
+  all: T[],
+  limit?: number,
+  stratifyKey?: string,
+  randomSeed?: number,
+): T[] {
   if (limit === undefined || limit >= all.length) return all;
+  if (randomSeed !== undefined && !stratifyKey) {
+    const rng = makeRng(randomSeed);
+    const shuffled = all.slice();
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(rng() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    return shuffled.slice(0, limit);
+  }
   if (!stratifyKey) return all.slice(0, limit);
   const groups = new Map<string, T[]>();
   for (const c of all) {
@@ -359,6 +382,16 @@ export function gateCorpus(corpusDir: string, allowUnvalidated: boolean): Corpus
  * Phase 4: Capture reproducibility provenance — the exact config that produced
  * these numbers (provider, model, temperature, corpus hash, consensus settings).
  */
+/** Which sampling mode `opts` actually resolves to — mirrors `selectCases`'s own
+ * precedence (no limit ⇒ all; random takes priority over stratify if somehow both
+ * are set, matching `selectCases`'s `randomSeed && !stratifyKey` guard). */
+function samplingProvenance(opts: EvalOptions): EvalProvenance['sampling'] {
+  if (opts.limit === undefined) return { mode: 'all' };
+  if (opts.randomSeed !== undefined && !opts.stratify) return { mode: 'random', limit: opts.limit, randomSeed: opts.randomSeed };
+  if (opts.stratify) return { mode: 'stratified', limit: opts.limit, stratifyKey: opts.stratify };
+  return { mode: 'topN', limit: opts.limit };
+}
+
 export function captureRunProvenance(opts: EvalOptions, _manifest: LabeledManifest, gate: CorpusGateResult): EvalProvenance {
   const llmCfg = opts.mode === 'llm_assisted' ? loadConfig({}).llm : undefined;
   return captureProvenance({
@@ -369,6 +402,7 @@ export function captureRunProvenance(opts: EvalOptions, _manifest: LabeledManife
     corpusHash: gate.contentHash,
     corpusValidated: gate.ok,
     runs: opts.runs ?? 1,
+    sampling: samplingProvenance(opts),
     ...(opts.mode === 'llm_assisted'
       ? { consensus: { n: Math.max(1, opts.consensusN ?? 1), rule: opts.consensusRule ?? 'weighted' } }
       : {}),
@@ -663,7 +697,7 @@ export async function runEval(opts: EvalOptions): Promise<EvalResult> {
   await assertLlmAvailable(opts.mode, opts.allowHeuristicFallback, opts.provider);
 
   const manifest = loadManifest(opts.corpusDir);
-  const cases = selectCases(manifest.cases ?? [], opts.limit, opts.stratify);
+  const cases = selectCases(manifest.cases ?? [], opts.limit, opts.stratify, opts.randomSeed);
   const gate = gateCorpus(opts.corpusDir, opts.allowUnvalidated ?? false);
   const provenance = captureRunProvenance(opts, manifest, gate);
   const { cacheDir, concurrency } = prepareCaseCache(opts.outDir, opts.concurrency, opts.mode);

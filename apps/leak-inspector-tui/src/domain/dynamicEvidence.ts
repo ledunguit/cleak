@@ -30,7 +30,7 @@ import type { PathResolver } from './pathResolver';
 import { coerceToObject } from './mcpResult';
 
 /** Which sanitizer produced a run (derived from the MCP tool NAME, not the LLM). */
-type DynamicTool = 'asan' | 'lsan' | 'valgrind';
+type DynamicTool = 'asan' | 'lsan' | 'valgrind' | 'libfuzzer';
 
 /** One sanitizer invocation's deterministic result — the ledger the reconcile reads. */
 export interface DynamicRunRecord {
@@ -38,6 +38,10 @@ export interface DynamicRunRecord {
   runId: string;
   success: boolean;
   findings: any[];
+  /** True for evidence from a Stage B2 targeted harness (single-shot or fuzz-tier),
+   * as opposed to Stage B's blind whole-binary run — lets the judge weight
+   * candidate-specific runtime evidence differently from a global one. */
+  targeted?: boolean;
 }
 
 export interface DynamicRunStore {
@@ -75,12 +79,14 @@ const RUN_TOOL_BY_NAME: Record<string, DynamicTool> = {
   asanRun: 'asan',
   lsanRun: 'lsan',
   valgrindMemcheck: 'valgrind',
+  libfuzzerRun: 'libfuzzer',
 };
 
 const TOOL_KIND: Record<DynamicTool, ToolKind> = {
   asan: ToolKind.ASAN,
   lsan: ToolKind.LSAN,
   valgrind: ToolKind.VALGRIND,
+  libfuzzer: ToolKind.LIBFUZZER,
 };
 
 
@@ -91,7 +97,7 @@ const TOOL_KIND: Record<DynamicTool, ToolKind> = {
  * `withDynamicEvidenceCapture(withHostPathMapping(tool, …), …)` so the capture sees
  * analyzer-resolved finding paths (mirrors the static wrapper layering).
  */
-export function withDynamicEvidenceCapture(tool: Tool, store: DynamicRunStore): Tool {
+export function withDynamicEvidenceCapture(tool: Tool, store: DynamicRunStore, opts?: { targeted?: boolean }): Tool {
   const dyn = RUN_TOOL_BY_NAME[tool.name];
   if (!dyn) return tool;
   return {
@@ -106,6 +112,7 @@ export function withDynamicEvidenceCapture(tool: Tool, store: DynamicRunStore): 
           runId: String(o.runId ?? o.run_id ?? o.structuredContent?.runId ?? ''),
           success: o.success !== false, // default true unless explicitly false
           findings,
+          targeted: opts?.targeted,
         });
       } catch {
         /* capture is best-effort — never break the tool call */
@@ -157,6 +164,7 @@ function findingToEvidence(finding: any, run: DynamicRunRecord, pathResolver: Pa
     stack_trace:
       finding.stackTrace || finding.stack_trace || (finding.stack || []).map((s: any) => `${s.function} at ${s.file}:${s.line}`).join('\n'),
     raw_output: finding.message || finding.rawOutput || finding.raw_output || '',
+    targeted: run.targeted,
   };
   const rawLeakKind = finding.allocationType || finding.allocation_type || finding.kind || finding.aux?.leak?.kind || '';
   return deriveDynamicFields(base, { rawLeakKind, rawStack: finding.stack });

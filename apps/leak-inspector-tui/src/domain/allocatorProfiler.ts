@@ -27,6 +27,12 @@ export const AllocatorProfileSchema = z.object({
   ownershipNotes: z.array(z.string()).default([]),
   confidence: z.number().optional(),
   explanation: z.string().optional(),
+  /** Set once `allocatorVerification.ts` has dynamically verified this profile
+   * (harness-confirmed/refuted names, deallocators re-checked) — a cached profile
+   * without this has only been textually grep-verified. Lets a re-scan of the same
+   * repo skip re-verification (mirrors the profile's own reproducible-caching
+   * philosophy, extended to dynamic verification). */
+  verifiedAt: z.string().optional(),
 });
 export type AllocatorProfile = z.infer<typeof AllocatorProfileSchema>;
 

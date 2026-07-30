@@ -62,6 +62,14 @@ describe('shouldEscalate', () => {
   test('a confident flag contradicted by a CLEAN dynamic run escalates', () => {
     expect(shouldEscalate(bundleWith(verdict(InvestigationVerdict.CONFIRMED_LEAK, 0.92), [cleanEv()]))).toBe(true);
   });
+  test('a CONFIRMED_LEAK double-checked by Stage B2 (verifyConfirmedLeaks) and found clean escalates via dynamicCoverage directly', () => {
+    // The exact shape stageTargetedHarness's widened gate produces: no correlated
+    // evidence yet, but dynamicCoverage stamped 'exercised_clean' by the targeted
+    // harness run itself (computeDynamicCoverage), not via the evidence-array fallback.
+    const b = bundleWith(verdict(InvestigationVerdict.CONFIRMED_LEAK, 0.92));
+    b.dynamicCoverage = 'exercised_clean';
+    expect(shouldEscalate(b)).toBe(true);
+  });
   test('a confident flag backed by a CORRELATED leak does NOT escalate (well-supported)', () => {
     expect(shouldEscalate(bundleWith(verdict(InvestigationVerdict.CONFIRMED_LEAK, 0.92), [leakEv(true)]))).toBe(false);
   });

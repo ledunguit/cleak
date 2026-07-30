@@ -36,6 +36,8 @@ const SERIAL_HEAVY = new Set<string>([
   'asanRun',
   'lsanRun',
   'runBinary',
+  'buildHarness',
+  'libfuzzerRun',
 ]);
 
 // Analyzer outputs (AST dumps, flow graphs) are verbose; cap them so the agent
@@ -77,6 +79,8 @@ export const MCP_TOOL_PHASE: Record<string, ScanPhase> = {
   lsanRun: ScanPhase.DYNAMIC,
   runBinary: ScanPhase.DYNAMIC,
   listRuns: ScanPhase.DYNAMIC,
+  buildHarness: ScanPhase.DYNAMIC,
+  libfuzzerRun: ScanPhase.DYNAMIC,
 };
 
 export function phaseForMcpTool(toolName: string): ScanPhase | undefined {
@@ -134,4 +138,6 @@ export const DYNAMIC_TOOL_NAMES = [
   'lsanRun',
   'runBinary',
   'listRuns',
+  'buildHarness',
+  'libfuzzerRun',
 ] as const;

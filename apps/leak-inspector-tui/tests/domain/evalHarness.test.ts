@@ -91,6 +91,41 @@ describe('selectCases', () => {
     expect(selectCases([], 5, 'functionalVariant')).toEqual([]);
   });
 
+  // ── randomSeed (new) ──────────────────────────────────────────────
+
+  test('same seed → same sample, every time (reproducibility is the whole point)', () => {
+    const a = selectCases(corpus, 6, undefined, 42);
+    const b = selectCases(corpus, 6, undefined, 42);
+    expect(a).toEqual(b);
+  });
+
+  test('different seeds → (very likely) different samples', () => {
+    const a = selectCases(corpus, 6, undefined, 1);
+    const b = selectCases(corpus, 6, undefined, 2);
+    expect(a).not.toEqual(b);
+  });
+
+  test('a random sample is NOT just the manifest-order skew (unlike plain top-N)', () => {
+    const sel = selectCases(corpus, 6, undefined, 7);
+    const fams = new Set(sel.map((c) => c.functionalVariant));
+    // Plain top-N(6) is 100% 'char' (see the test above) — a real shuffle should
+    // surface more than one family with high probability for this seed.
+    expect(fams.size).toBeGreaterThan(1);
+  });
+
+  test('randomSeed is ignored when stratify is also set (mutually exclusive — stratify wins)', () => {
+    const withSeed = selectCases(corpus, 8, 'functionalVariant', 42);
+    const withoutSeed = selectCases(corpus, 8, 'functionalVariant');
+    expect(withSeed).toEqual(withoutSeed);
+  });
+
+  test('randomSeed sample is a genuine subset (no duplicates, no foreign ids)', () => {
+    const sel = selectCases(corpus, 10, undefined, 99);
+    const ids = sel.map((c) => c.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    for (const id of ids) expect(corpus.some((c) => c.id === id)).toBe(true);
+  });
+
   test('stratify with all cases same variant picks top-N', () => {
     const same = [
       { id: 'a', functionalVariant: 'char' },

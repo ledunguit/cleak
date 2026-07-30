@@ -75,9 +75,10 @@ export function foldStaticResult(
       const allocations = Array.isArray(out.allocations) ? out.allocations : [];
       const frees = Array.isArray(out.frees) ? out.frees : [];
       let leaky = 0;
+      let parsedSummary: any = null;
       try {
-        const s = typeof out.summary === 'string' ? JSON.parse(out.summary) : out.summary;
-        leaky = Number(s?.leaky_exit_paths ?? 0);
+        parsedSummary = typeof out.summary === 'string' ? JSON.parse(out.summary) : out.summary;
+        leaky = Number((Array.isArray(parsedSummary) ? undefined : parsedSummary)?.leaky_exit_paths ?? 0);
       } catch {
         /* summary not parseable */
       }
@@ -91,6 +92,19 @@ export function foldStaticResult(
         if (pairs.length) {
           c.allocFreePairs = pairs;
           mergeStaticEvidence(b, { allocFreePairs: pairs, leakyExitPaths: leaky });
+        }
+        // Signature/linkage (returnType, parameters incl. isPointer, isStaticLinkage) —
+        // needed by the targeted-harness worker to decide extern-link vs #include-source
+        // and to write a type-correct call. Additive, only present since Phase 0.
+        const sig = Array.isArray(parsedSummary)
+          ? parsedSummary.find((s: any) => s?.function_name === b.candidate.function_name)
+          : parsedSummary?.function_name === b.candidate.function_name
+            ? parsedSummary
+            : null;
+        if (sig) {
+          c.returnType = sig.return_type;
+          c.isStaticLinkage = !!sig.is_static_linkage;
+          c.parameters = sig.parameters;
         }
       }
       break;
