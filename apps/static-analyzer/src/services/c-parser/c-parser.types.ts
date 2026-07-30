@@ -2,8 +2,13 @@
 
 export interface FunctionInfo {
   functionName: string;
-  parameters: { name: string; type: string }[];
+  parameters: { name: string; type: string; isPointer: boolean }[];
   localVariables: { name: string; type: string }[];
+  /** Return type (with trailing ` *` for pointer returns), e.g. `char *`, `int`. */
+  returnType: string;
+  /** `static` = internal linkage — a harness in a separate translation unit can't
+   * link this function; it must #include the defining source file instead. */
+  storageClass: 'static' | 'extern' | 'none';
   functionCalls: { name: string; line: number }[];
   allocationCalls: { name: string; line: number }[];
   deallocationCalls: { name: string; line: number }[];

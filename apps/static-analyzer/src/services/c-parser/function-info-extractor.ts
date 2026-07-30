@@ -4,6 +4,7 @@ import { findAllNodes, findChild, nodeText, getCallFunctionNameNode, extractDecl
 import {
   extractFunctionName, extractParameters, extractLocalVariables,
   extractFunctionCalls, isAllocationCall, extractReturnStatements, extractConditions,
+  extractStorageClass, extractReturnType,
 } from './extraction-helpers';
 
 function extractAllocationVariables(
@@ -189,6 +190,8 @@ export function buildFunctionInfo(
       functionName,
       parameters,
       localVariables,
+      returnType: extractReturnType(funcNode, lines),
+      storageClass: extractStorageClass(funcNode, lines),
       functionCalls,
       allocationCalls,
       deallocationCalls,

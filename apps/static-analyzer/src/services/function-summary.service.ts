@@ -32,6 +32,9 @@ export class FunctionSummaryService {
 
       return {
         function_name: fn.functionName,
+        return_type: fn.returnType,
+        is_static_linkage: fn.storageClass === 'static',
+        parameters: fn.parameters.map((p) => ({ name: p.name, type: p.type, is_pointer: p.isPointer })),
         parameter_count: fn.parameters.length,
         local_variable_count: fn.localVariables.length,
         call_count: fn.functionCalls.length,

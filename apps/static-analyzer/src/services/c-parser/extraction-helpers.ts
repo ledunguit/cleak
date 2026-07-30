@@ -32,7 +32,10 @@ export function extractFunctionName(node: TreeSitterNode, lines: string[]): stri
   return 'unknown';
 }
 
-export function extractParameters(node: TreeSitterNode, lines: string[]): { name: string; type: string }[] {
+export function extractParameters(
+  node: TreeSitterNode,
+  lines: string[],
+): { name: string; type: string; isPointer: boolean }[] {
   const topDecl = (node.children || []).find(
     (c: TreeSitterNode) => c.type === 'function_declarator' || c.type === 'pointer_declarator',
   );
@@ -67,8 +70,32 @@ export function extractParameters(node: TreeSitterNode, lines: string[]): { name
         }
       }
       const type = (typeNames.join(' ') || 'int') + (isPointer ? ' *' : '');
-      return { name, type };
+      return { name, type, isPointer };
     });
+}
+
+/** Storage-class specifier on a function DEFINITION — `static` means internal linkage:
+ * a harness in a separate translation unit cannot declare-and-link this function, it
+ * must #include the defining source file instead. */
+export function extractStorageClass(node: TreeSitterNode, lines: string[]): 'static' | 'extern' | 'none' {
+  const spec = findChild(node, 'storage_class_specifier');
+  if (!spec) return 'none';
+  const text = nodeText(spec, lines);
+  return text === 'static' ? 'static' : text === 'extern' ? 'extern' : 'none';
+}
+
+/** The function's return type, including a trailing ` *` when the declarator chain
+ * (before reaching the function_declarator) is a pointer_declarator. */
+export function extractReturnType(node: TreeSitterNode, lines: string[]): string {
+  const typeNode = (node.children || []).find((c: TreeSitterNode) =>
+    ['primitive_type', 'type_identifier', 'sized_type_specifier', 'struct_specifier'].includes(c.type),
+  );
+  const typeText = typeNode ? nodeText(typeNode, lines) : 'int';
+  const topDecl = (node.children || []).find(
+    (c: TreeSitterNode) => c.type === 'function_declarator' || c.type === 'pointer_declarator',
+  );
+  const isPointerReturn = topDecl?.type === 'pointer_declarator';
+  return typeText + (isPointerReturn ? ' *' : '');
 }
 
 export function extractLocalVariables(node: TreeSitterNode, lines: string[]): { name: string; type: string }[] {
