@@ -1,0 +1,8 @@
+{
+  "allocators": [],
+  "deallocators": [],
+  "reallocators": [],
+  "ownershipNotes": [],
+  "confidence": 1,
+  "explanation": "The project uses only standard malloc and free; no custom allocator or deallocator wrappers are defined or invoked."
+}

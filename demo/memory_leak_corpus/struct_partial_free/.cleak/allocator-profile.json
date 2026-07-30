@@ -1,0 +1,14 @@
+{
+  "allocators": [
+    "record_new"
+  ],
+  "deallocators": [
+    "record_free_buggy"
+  ],
+  "reallocators": [],
+  "ownershipNotes": [
+    "record_free_buggy only frees r->name and r->description, leaking r->tag and the Record struct itself. Callers must ensure complete cleanup."
+  ],
+  "confidence": 0.9,
+  "explanation": "Only two custom memory functions: record_new allocates and initializes a Record, record_free_buggy partially frees it. No other custom alloc/dealloc/realloc functions."
+}

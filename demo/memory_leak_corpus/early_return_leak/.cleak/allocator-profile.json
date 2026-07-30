@@ -1,0 +1,8 @@
+{
+  "allocators": [],
+  "deallocators": [],
+  "reallocators": [],
+  "ownershipNotes": [],
+  "confidence": 0.1,
+  "explanation": "The provided code uses only standard C library functions (malloc, free). No custom allocation or deallocation functions are defined; static helpers like duplicate_or_die are simple wrappers around malloc and do not introduce a custom API. No functions matching *_new, *_create, *_dup, *_free, etc., are present."
+}

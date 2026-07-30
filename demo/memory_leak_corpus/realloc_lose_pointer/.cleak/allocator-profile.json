@@ -1,0 +1,8 @@
+{
+  "allocators": [],
+  "deallocators": [],
+  "reallocators": [],
+  "ownershipNotes": [],
+  "confidence": 1,
+  "explanation": "This project does not define custom allocation or deallocation functions; it only uses standard malloc, realloc, and free. The grow_buffer helper is an internal function that calls realloc but does not introduce a named custom allocator API."
+}

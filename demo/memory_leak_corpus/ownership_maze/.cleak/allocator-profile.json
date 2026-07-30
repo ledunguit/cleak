@@ -1,0 +1,25 @@
+{
+  "allocators": [
+    "session_open",
+    "build_retry_batch",
+    "queue_fanout_clone"
+  ],
+  "deallocators": [
+    "consume_batch",
+    "queue_destroy_buggy",
+    "session_close_buggy"
+  ],
+  "reallocators": [],
+  "ownershipNotes": [
+    "session_open returns a Session that must be freed with session_close_buggy; internal allocations for name, cached_route, request_context are also owned by Session.",
+    "build_retry_batch returns a NULL-terminated array of strings; caller must free each string and the array. If fail_index is used, intermediate allocations are leaked.",
+    "queue_fanout_clone returns a heap copy of the payload; caller must free it. Bug: returns NULL after allocation if subscriber_enabled is 0, leaking the clone.",
+    "consume_batch frees each non-NULL string and the batch array itself.",
+    "queue_destroy_buggy only frees the head node and its payload, leaking remaining nodes.",
+    "session_close_buggy frees name and cached_route but misses request_context, causing a leak.",
+    "session_rename and session_replace_route allocate new strings and store them, leaking the previous values.",
+    "register_hook_context allocates a HookContext; if validator rejects, it returns without freeing the context, causing a leak."
+  ],
+  "confidence": 0.9,
+  "explanation": "Identify project-specific allocation/deallocation functions: session_open, build_retry_batch, queue_fanout_clone as allocators returning owned memory; consume_batch, queue_destroy_buggy, session_close_buggy as deallocators freeing owned memory. Internal static helpers (consume_batch) included. Several ownership bugs noted: missing frees, leaky early returns, incomplete destructors. Confidence high but not 100% due to possible oversight of internal allocation patterns."
+}

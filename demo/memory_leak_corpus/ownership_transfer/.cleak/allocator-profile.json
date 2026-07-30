@@ -1,0 +1,13 @@
+{
+  "allocators": [
+    "load_config_value",
+    "flatten_path"
+  ],
+  "deallocators": [],
+  "reallocators": [],
+  "ownershipNotes": [
+    "load_config_value and flatten_path allocate memory and transfer ownership to caller; caller must free the result."
+  ],
+  "confidence": 1,
+  "explanation": "The two static functions load_config_value and flatten_path are the only custom allocation functions; they use malloc and transfer ownership. No custom deallocators defined."
+}
