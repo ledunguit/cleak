@@ -203,7 +203,7 @@ All TUI/CLI configuration is persisted in a single JSON file at `~/.config/cleak
 > `astScan`, `functionSummary`, `pathConstraints`, `ownershipConventions`.
 > The other 6 require a shared filesystem and are driven by the orchestrator.
 
-### Dynamic Server Tools (9 tools — port 50062)
+### Dynamic Server Tools (11 tools — port 50062)
 - `buildTarget`: *Build the project with sanitizer-instrumented compiler flags*
 - `valgrindMemcheck`: *Run Valgrind Memcheck for detailed leak analysis*
 - `valgrindGetReport`: *Retrieve a normalized Valgrind report*
@@ -212,9 +212,15 @@ All TUI/CLI configuration is persisted in a single JSON file at `~/.config/cleak
 - `asanRun`: *Run the binary under AddressSanitizer for leak detection*
 - `lsanRun`: *Run the binary under LeakSanitizer*
 - `runBinary`: *Run a binary without instrumentation*
+- `buildHarness`: *Compile+link a targeted per-candidate harness (Stage B2) against the real project's own compiler flags (recovered via compile_commands.json), instead of building the whole project*
+- `libfuzzerRun`: *Run a buildHarness(entryStyle="fuzzer") binary for a short bounded time budget — the fuzz-tier escalation when a targeted single-shot run came back clean*
 - `listRuns`: *List stored dynamic analysis runs*
 
-> All dynamic tools are driven by the deterministic Stage B recipe, not by the LLM.
+> Most dynamic tools are driven by the deterministic Stage B recipe, not by the LLM.
+> Stage B2 (opt-in, `workflow.targetedHarness.enabled`, off by default) is the
+> exception: an LLM harness worker calls `buildHarness`/`lsanRun`/`asanRun` directly
+> for candidates static evidence alone left borderline; the fuzz-tier escalation that
+> may follow is deterministic orchestrator code, not a further LLM turn.
 
 ## Important Notes
 

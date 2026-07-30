@@ -35,6 +35,41 @@ trust boundary it is built for and the controls that enforce it.
 | `scan-build` shell injection | `spawnSync` with argv; the build command keeps one intended `/bin/sh -c` layer (a single argv element, nothing to escape) | `apps/static-analyzer/src/services/scan-build-adapter.service.ts` |
 | Run id → filesystem path | `sanitizeRunId` strips to `[A-Za-z0-9_]` before building `/tmp/<id>.xml` | `safe-exec.ts`, `valgrind.service.ts` |
 | Analyzer ports on the LAN | MCP ports published to `127.0.0.1` only in docker-compose | `docker-compose.yml` |
+| Compiling/running an ORCHESTRATOR-GENERATED harness | Same argv-only, no-shell, `ulimit`-confined `runConfined` used for sanitizer runs — see "Targeted harness synthesis" below | `apps/dynamic-analyzer/src/services/harness-build.service.ts`, `compile-commands.service.ts` |
+
+## Targeted harness synthesis (Stage B2, opt-in)
+
+`workflow.targetedHarness.enabled` (off by default — `--harness` / `cleak config set
+workflow.targetedHarness.enabled true`) adds a new code-execution surface beyond the
+scanned repo's own build: for a candidate static analysis is unsure about, an LLM
+sub-agent writes a SMALL C/C++ driver (`buildHarness`'s `harnessSource`) that gets
+compiled and run. This is the first place the pipeline executes code it did not
+receive verbatim from the scanned repository — it warrants its own entry.
+
+- **Compilation is NOT a nested Docker container.** `buildTarget`'s Docker-in-Docker
+  path (`buildWithDocker`, spawning `docker run gcc:latest`) exists only for
+  macOS-native dev outside docker-compose — the deployed `dynamic-analyzer` image has
+  no `docker` CLI and no `/var/run/docker.sock` mount, so nested Docker is not
+  reachable from inside it. `HarnessBuildService` and `CompileCommandsService`
+  therefore compile via the SAME confined `runConfined` (`safe-exec.ts`) used for
+  running sanitizer binaries: argv-array `execFile` (no shell for the outer call),
+  `ulimit`-wrapped on Linux (CPU time, address space, file size, process count).
+  `bear -- sh -c '<buildCommand>'` is the one place a shell reappears — `sh -c`
+  interprets `buildCommand`'s OWN syntax, exactly as `BuildTargetService`'s existing
+  `execSync(buildCommand, …)` already does; this doesn't add injection surface
+  beyond what `buildTarget` already carries (the build command is operator-supplied,
+  not attacker-supplied).
+- **Path containment.** `HarnessBuildService` resolves `targetFile`/`closureFiles`
+  against `realpathSync(projectPath)` and rejects anything that resolves outside it,
+  so a harness-authoring LLM cannot point compilation at an arbitrary host path.
+- **Compiled harnesses run through the identical sanitizer-execution path** as
+  `lsanRun`/`asanRun` (same `runConfined`, same `unlimitedAddressSpace` handling) —
+  no separate, less-audited execution path was added for harness binaries.
+- **Not yet covered** (same limitation as the rest of the dynamic stage): no network
+  isolation on the host-run path — see "No network isolation" below, which now also
+  applies to compiled harness binaries, not just the scanned project's own binary.
+  A network-isolated container path for harness compile+run is future work if this
+  moves beyond single-operator/local use.
 
 ## Known limitations (acceptable under the trust model; fix before exposure)
 

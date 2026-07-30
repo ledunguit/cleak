@@ -43,7 +43,7 @@ Juliet giữ nguyên. Thêm project mới = **0 dòng code**.
 |---|---|---|---|---|
 | **leak-inspector-tui** | TS + Ink (Bun) | — (headless) | MCP client + file I/O | Scanner standalone (luận văn) — **orchestrator**, client MCP trực tiếp tới analyzer |
 | **static-analyzer** | NestJS + Tree-sitter | 50061 (MCP HTTP) | MCP Streamable-HTTP | 11 tool: index, candidate scan, AST, call graph, function summary, path constraints, ownership, Clang scan-build |
-| **dynamic-analyzer** | NestJS + valgrind/asan/lsan | 50062 (MCP HTTP) | MCP Streamable-HTTP | 9 tool: build target + Valgrind/ASan/LSan + run binary |
+| **dynamic-analyzer** | NestJS + valgrind/asan/lsan | 50062 (MCP HTTP) | MCP Streamable-HTTP | 11 tool: build target + Valgrind/ASan/LSan + run binary + targeted harness (Stage B2, opt-in) |
 | **packages/agent-core** | TS library | — | (nhúng) | Vòng lặp agentic, tool abstraction, MCP client, provider LLM (streaming) |
 | **@cleak/common** | TS library | — | (chia sẻ) | Type/Zod, heuristic judge + consensus judge + leak analysis, report renderer |
 | *(ngoài)* **LLM gateway** | OpenAI-compatible | 20128 | HTTP SSE | `mimo/mimo-v2.5-pro` cục bộ (hoặc OpenAI/Anthropic) |
@@ -101,8 +101,9 @@ Tập tool được khai báo bằng **Zod `inputSchema`** ngay trong các MCP s
   ScanBuildGetReport`. Bốn tool (`CandidateScan, FunctionSummary, PathConstraints, CallGraph`)
   nhận thêm `extraAllocators?`/`extraDeallocators?` (tên cấp phát/giải phóng theo project, ≈ LAMeD
   AllocSource/FreeSink) để engine theo dõi factory allocator, không chỉ libc.
-- **dynamic** — 9 tool: `BuildTarget, ValgrindMemcheck, ValgrindGetReport, ValgrindListFindings,
-  ValgrindCompareRuns, AsanRun, LsanRun, RunBinary, ListRuns`.
+- **dynamic** — 11 tool: `BuildTarget, ValgrindMemcheck, ValgrindGetReport, ValgrindListFindings,
+  ValgrindCompareRuns, AsanRun, LsanRun, RunBinary, BuildHarness, LibfuzzerRun, ListRuns`. Hai
+  tool cuối phục vụ Stage B2 (targeted harness synthesis, opt-in) — xem §5.
 
 ### 4.2 LLM — HTTP SSE streaming
 
@@ -154,6 +155,17 @@ flowchart TB
   judge **path-aware ngay cả ở no_llm** (trước đây judge mù).
 - **Investigation (agentic, chỉ llm_assisted):** sub-agent tĩnh gom evidence qua MCP; dynamic worker
   build + chạy LSan theo recipe tất định; LLM có ownership notes của project.
+- **Stage B2 — targeted harness (opt-in, `workflow.targetedHarness.enabled`, mặc định TẮT):** sau khi
+  Stage A/B xong và heuristic verdict được tính, các bundle vẫn BORDERLINE mà lần chạy whole-binary
+  không xác nhận được (`dynamicCoverage ≠ exercised_leak`) sẽ được xét bởi `needsTargetedDynamic`
+  (`domain/harnessEscalation.ts`). Mỗi bundle đủ điều kiện có MỘT sub-agent (`kind: 'harness'`) viết
+  driver nhỏ chỉ gọi đúng hàm nghi vấn, `buildHarness` biên dịch+link bằng flags compiler THẬT của
+  project (qua `compile_commands.json`, bắt bằng `bear`), rồi chạy LSan/ASan trên harness đó. Nếu lần
+  chạy đơn (single-shot) "sạch" mà bundle vẫn borderline, orchestrator (KHÔNG LLM) tự động chạy tiếp
+  `libfuzzerRun` trong ngân sách thời gian ngắn trên CÙNG harness source (`entryStyle=fuzzer`). Lý do:
+  một lần chạy whole-binary mù gần như không chạm được nhánh leak trong project thực tế có nhiều
+  logic/nhánh phức tạp — xem [SECURITY.md](SECURITY.md) mục "Targeted harness synthesis" cho mô hình
+  tin cậy của bước biên dịch/thực thi mã do LLM sinh ra.
 - **Judging (hybrid):** heuristic cho mọi bundle (path-sensitive, §6) + LLM/consensus cho BORDERLINE.
 
 > `no_llm` mode bỏ qua Profiling/Strategy/Investigation (discovery → [enrichment] → heuristic judge →

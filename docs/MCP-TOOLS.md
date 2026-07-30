@@ -774,7 +774,7 @@ extracted function name, confidence (heuristic from line content), and context t
 
 ## 3. Dynamic Analyzer Tools
 
-The dynamic-analyzer (`apps/dynamic-analyzer`, port **50062**) exposes **9 tools**
+The dynamic-analyzer (`apps/dynamic-analyzer`, port **50062**) exposes **11 tools**
 for binary-level memory analysis. All execution goes through `runConfined()` for
 sandboxed, resource-controlled subprocess management.
 
@@ -790,13 +790,20 @@ sandboxed, resource-controlled subprocess management.
 | `asanRun` | DYNAMIC | SERIAL_HEAVY |
 | `lsanRun` | DYNAMIC | SERIAL_HEAVY |
 | `runBinary` | DYNAMIC | SERIAL_HEAVY |
+| `buildHarness` | DYNAMIC | SERIAL_HEAVY |
+| `libfuzzerRun` | DYNAMIC | SERIAL_HEAVY |
 | `listRuns` | DYNAMIC | CONCURRENCY_SAFE |
 
 > All dynamic tools are in ScanPhase `DYNAMIC`. Query tools (getReport,
 > listFindings, compareRuns, listRuns) are `CONCURRENCY_SAFE`; build/run tools
 > are `SERIAL_HEAVY` because they spawn processes that compete for CPU/memory.
-> None of the dynamic tools are exposed to the LLM agent — they are driven by
-> the deterministic Stage B recipe (`buildTarget` → sanitizer runs/`lsanRun`).
+> Most dynamic tools are driven by the deterministic Stage B recipe (`buildTarget`
+> → sanitizer runs/`lsanRun`), not the LLM. The exception is Stage B2 (opt-in,
+> `workflow.targetedHarness.enabled`): its harness worker sub-agent IS an LLM loop
+> that calls `buildHarness`/`lsanRun`/`asanRun` directly to write and run a
+> targeted driver — the fuzz-tier escalation (`buildHarness(entryStyle="fuzzer")`
+> → `libfuzzerRun`) that may follow is deterministic orchestrator code, not a
+> further LLM turn.
 
 ---
 
@@ -1238,6 +1245,97 @@ Where `RawFinding`:
 ```
 
 **Dependencies:** `runConfined()`.
+
+---
+
+### `buildHarness`
+
+**Purpose:** Compile+link a TARGETED harness (Stage B2 — a driver calling just one
+suspicious function/call-chain) against the REAL project's own compiler flags,
+instead of building the whole project. Opt-in (`workflow.targetedHarness.enabled`).
+
+**Input Schema:**
+```typescript
+{
+  projectPath: z.string(),
+  buildCommand: z.string(),
+  harnessSource: z.string(),           // C/C++ source the caller wrote
+  targetFile: z.string(),              // file defining the target function
+  closureFiles: z.array(z.string()).optional(),  // files to compile+link alongside the harness
+  entryStyle: z.enum(['single', 'fuzzer']),
+  timeoutSec: z.number().optional(),
+}
+```
+
+**Handler:** `HarnessBuildService.build()` at
+`apps/dynamic-analyzer/src/services/harness-build.service.ts`
+
+1. Validates `targetFile`/`closureFiles` resolve inside `realpathSync(projectPath)`.
+2. `CompileCommandsService.capture()` ensures `compile_commands.json` exists at
+   `projectPath` — running `bear -- sh -c '<buildCommand>'` via `runConfined()` if
+   not already captured (NOT a nested Docker container — see docs/SECURITY.md
+   "Targeted harness synthesis"). Returns `harness_unresolvable` if bear produces
+   nothing (unsupported build system).
+3. Looks up the captured compiler flags for `targetFile` (and each `closureFiles`
+   entry, falling back to `targetFile`'s flags); keeps only reusable ones
+   (`-I`/`-D`/`-U`/`-std=`/`-isystem`/`-include`/`-m*`) via `extractReusableFlags()`.
+4. Writes `harnessSource` to `{RUNS_DIR}/{runId}/harness.{c,cpp}`.
+5. Compiles each closure file `-c` with its own flags → `.o` (clang, `-fsanitize=address`).
+6. Compiles+links the harness with the target file's flags, `-g -O0`, and
+   `-fsanitize=address` (`entryStyle=single`) or `-fsanitize=fuzzer,address`
+   (`entryStyle=fuzzer`) — always `clang` so both entry styles share one compiler.
+7. Persists `{runId}.harnessbuild.json` metadata alongside the artifacts.
+
+**Two linkage strategies** (chosen by the CALLER, via `harnessSource`/`closureFiles`
+contents — not derived by this handler):
+- **External linkage:** `harnessSource` `extern`-declares the target function;
+  `closureFiles` lists the file(s) needed to link it.
+- **`static` (internal) linkage:** `harnessSource` must `#include` the defining
+  file directly (a separate TU can't link a `static` function); that file must
+  NOT also appear in `closureFiles` (would define it twice).
+
+**Return Type:**
+```typescript
+{
+  success: boolean;
+  binaryPath: string;      // analyzer-side path to the compiled harness
+  runId: string;
+  errors: string[];
+  reason?: 'harness_unresolvable';   // structural failure — caller should fall back, not retry
+}
+```
+
+**Dependencies:** `CompileCommandsService`, `runConfined()`.
+
+---
+
+### `libfuzzerRun`
+
+**Purpose:** Run a harness binary built with `buildHarness(entryStyle="fuzzer")` for
+a short BOUNDED time budget — the fuzz-tier escalation when a Stage B2 single-shot
+run came back clean but the bundle is still borderline.
+
+**Input Schema:**
+```typescript
+{
+  binaryPath: z.string(),
+  maxTotalTimeSec: z.number(),
+  timeoutSec: z.number().optional(),   // default maxTotalTimeSec + 30
+}
+```
+
+**Handler:** `LibfuzzerRunService.run()` at
+`apps/dynamic-analyzer/src/services/libfuzzer-run.service.ts`
+
+1. Runs via `runConfined()` with `-max_total_time=<budget> -runs=-1 -close_fd_mask=3`,
+   `unlimitedAddressSpace: true` (same reasoning as `lsanRun`/`asanRun`).
+2. Parses stderr/stdout with `ResultParserService.parseLsanOutput()` — a combined
+   ASan+LSan(fuzzer) build reports leaks in the same format at exit.
+3. Saves via `RunManagerService.saveRun()` (`tool: 'libfuzzer'`).
+
+**Return Type:** same shape as `lsanRun`/`asanRun` — `{ success, runId, findings, rawOutput }`.
+
+**Dependencies:** `runConfined()`, `RunManagerService`, `ResultParserService`.
 
 ---
 
