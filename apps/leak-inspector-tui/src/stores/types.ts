@@ -105,6 +105,17 @@ export interface EvalUiState {
   selectedId?: string;
   result?: EvalResult;
   outDir?: string;
+  /** What subset of the corpus this run covers — self-documenting run-summary
+   * line in the header, without opening metrics.json. */
+  sampling?: { mode: 'all' | 'topN' | 'random' | 'stratified'; limit?: number; randomSeed?: number; stratifyKey?: string };
+  /** True when this run bypassed the corpus integrity gate — surfaced as a
+   * persistent warning banner so a number is never silently ambiguous about
+   * its trust level. */
+  allowUnvalidated?: boolean;
+  /** True when this state was loaded read-only via `/eval history`/`/eval
+   * <name>` rather than a live run — changes what Esc does (back to the
+   * history list instead of the main screen). */
+  historical?: boolean;
 }
 
 export type FindingsTab = 'table' | 'detail';
@@ -141,7 +152,7 @@ export interface UiState {
   pendingPermission?: PendingPermission;
   permissionMode: 'ask' | 'auto';
   startedAt?: number;
-  view: 'main' | 'config' | 'eval' | 'findings';
+  view: 'main' | 'config' | 'eval' | 'evalSetup' | 'findings';
   eval?: EvalUiState;
   findings?: FindingsUiState;
   autoShowReport: boolean;

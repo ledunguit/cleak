@@ -32,6 +32,7 @@ import { toProviderSettings, type RunConfig } from '@cleak/config';
 import type { AgentMeta, InvestigationContext, InvestigationOutcome, InvestigationPhase } from './investigation';
 import { mcpToolFlags, CONTENT_CAPABLE_TOOLS } from '../domain/mcpToolPlan';
 import { buildReadFileTool } from '../domain/readFileTool';
+import { walkCFiles } from '../domain/fileWalk';
 import { heuristicVerdict } from '../domain/judge';
 import { StepLog } from '../domain/stepLog';
 import { ScanEventName } from './events';
@@ -49,14 +50,22 @@ import {
 import {
   DONE_STATIC,
   DONE_DYNAMIC,
+  DONE_HARNESS,
   buildDoneTool,
   staticSubAgentSystemPrompt,
   staticSubAgentUserMessage,
   dynamicWorkerSystemPrompt,
   dynamicWorkerUserMessage,
+  harnessWorkerSystemPrompt,
+  harnessWorkerUserMessage,
 } from '../domain/subAgentPrompts';
-import { judgeBundleWithLlm, shouldEscalate } from '../domain/llmJudge';
+import { judgeBundleWithLlm, shouldEscalate, isBorderline } from '../domain/llmJudge';
 import { judgeByConsensus, type ConsensusVerdict } from '@cleak/common/analysis/consensus-judge';
+import { evidenceIndicatesLeak } from '@cleak/common/analysis/judge-shared';
+import { needsTargetedDynamic } from '../domain/harnessEscalation';
+import { verifyOwnershipClaims } from '../domain/ownershipVerification';
+import { withHarnessInputCapture, type HarnessBuildInputCapture } from '../domain/harnessCapture';
+import { coerceToObject } from '../domain/mcpResult';
 
 /**
  * Group candidates by FILE affinity (a file is never split across sub-agents), then
@@ -281,6 +290,175 @@ async function stageDynamicEvidence(
   }, state, callModel, bridge, toolCtx, cfg, ctx);
 }
 
+/**
+ * Stage B2 — for bundles the heuristic is still unsure about after the cheap
+ * whole-binary Stage B run, synthesize a harness that calls JUST the suspicious
+ * function/call-chain, compile it against the REAL project's own compiler flags,
+ * and run it under a sanitizer. Each target gets its OWN local `DynamicRunStore` so
+ * concurrent workers can't cross-attribute findings, and — since it targets exactly
+ * one bundle — `reconcileDynamicEvidence` is scoped to `[bundle]` only. If the
+ * single-shot (LLM-chosen) run comes back clean and the bundle is STILL borderline,
+ * escalate deterministically (no extra LLM turn) to a short bounded libFuzzer run on
+ * the SAME harness source the worker already built.
+ */
+async function stageTargetedHarness(
+  allBundles: LeakBundle[],
+  dynamicRaw: Tool[],
+  readFileTool: Tool,
+  cfg: RunConfig,
+  ctx: InvestigationContext,
+  state: WorkflowMutableState,
+  callModel: CallModel,
+  bridge: AgentEventBridge,
+  toolCtx: ToolCtx,
+  onNotice: (text: string) => void,
+): Promise<void> {
+  const harnessCfg = cfg.workflow.targetedHarness;
+  if (!harnessCfg?.enabled || !ctx.buildCommand) return;
+  const buildHarnessTool = dynamicRaw.find((t) => t.name === 'buildHarness');
+  const fuzzTool = dynamicRaw.find((t) => t.name === 'libfuzzerRun');
+  if (!buildHarnessTool) return; // analyzer doesn't expose the tool (older server) — nothing to do
+
+  const targets = allBundles
+    .filter((b) => needsTargetedDynamic(b, state.staticStore, !!ctx.buildCommand, harnessCfg.verifyConfirmedLeaks))
+    // Borderline bundles first when both compete for maxHarnessesPerScan —
+    // resolving ambiguity is worth more per harness than double-checking an
+    // already-confident CONFIRMED_LEAK verdict (the `verifyConfirmedLeaks` case).
+    .sort((a, b) => Number(isBorderline(b.verdict!)) - Number(isBorderline(a.verdict!)))
+    .slice(0, harnessCfg.maxHarnessesPerScan);
+  if (targets.length === 0) return;
+  onNotice(`Stage B2 · targeted harness: ${targets.length} candidate(s) need deeper dynamic verification`);
+
+  // `interproceduralFlow` needs the whole repo's file set to trace callees ACROSS
+  // files (same requirement as scanController's enrich-stage use of it) — computed
+  // ONCE for all targets, not per-bundle.
+  const analyzerRepoPath = ctx.pathResolver.toAnalyzerPath(ctx.repoPath);
+  const ipFiles = walkCFiles(ctx.repoPath).map((f) => ctx.pathResolver.toAnalyzerPath(f));
+
+  await mapWithLimit(targets, harnessCfg.concurrency, async (bundle, i) => {
+    if (ctx.abortSignal?.aborted) return;
+    const staticCtx = state.staticStore.get(bundle.bundleId) ?? {};
+    const localStore = createDynamicRunStore();
+
+    // Best-effort call-chain hint: `interproceduralFlow` already computes which
+    // OTHER files a leaking call chain touches — surface them as candidate
+    // `closureFiles` so the worker isn't guessing blind on multi-file leaks. The
+    // worker still decides what to actually pass (this narrows, doesn't replace,
+    // its judgment).
+    let suggestedClosureFiles: string[] = [];
+    const fn = bundle.candidate.function_name;
+    if (fn) {
+      try {
+        const ip = coerceToObject<{ paths?: Array<{ filePath?: string }> }>(
+          await ctx.staticClient.callTool('interproceduralFlow', { rootPath: analyzerRepoPath, functionName: fn, files: ipFiles }),
+        );
+        const seen = new Set<string>();
+        for (const p of ip.paths ?? []) {
+          if (!p.filePath) continue;
+          const hostPath = ctx.pathResolver.toHostPath(p.filePath);
+          if (hostPath === bundle.candidate.file_path || seen.has(hostPath)) continue;
+          seen.add(hostPath);
+          suggestedClosureFiles.push(hostPath);
+        }
+      } catch {
+        /* best-effort — the worker falls back to just the target's own file */
+      }
+    }
+    const capture: HarnessBuildInputCapture = {};
+    const tools: Tool[] = [
+      ...dynamicRaw
+        .filter((t) => t.name === 'buildHarness' || t.name === 'lsanRun' || t.name === 'asanRun')
+        .map((t) =>
+          withDynamicEvidenceCapture(
+            withHostPathMapping(withHarnessInputCapture(t, capture), ctx.pathResolver),
+            localStore,
+            { targeted: true },
+          ),
+        ),
+      readFileTool,
+      buildDoneTool(DONE_HARNESS, 'Finish targeted harness synthesis for this candidate.'),
+    ];
+    const agent: AgentMeta = { id: `harness-${i}`, label: `harness ${i + 1}/${targets.length}`, kind: 'harness' };
+    await runSubAgent(agent, {
+      systemPrompt: harnessWorkerSystemPrompt(ctx.repoPath, ctx.buildCommand!, ctx.pathResolver.toAnalyzerPath(ctx.repoPath)),
+      messages: [{ role: 'user', content: harnessWorkerUserMessage(bundle, staticCtx, suggestedClosureFiles) }],
+      tools,
+      maxTurns: Math.min(cfg.maxTurns, 12),
+      terminalTools: new Set([DONE_HARNESS]),
+      checkCompletion: () => {
+        if (localStore.runs.some((r) => r.success) || capture.success === false) return null;
+        return `No sanitizer run yet for this harness. Call buildHarness, then lsanRun/asanRun on the returned binaryPath, then call ${DONE_HARNESS}. Only tool calls advance the work.`;
+      },
+    }, state, callModel, bridge, toolCtx, cfg, ctx);
+
+    reconcileDynamicEvidence(localStore, [bundle], ctx.pathResolver);
+    if (localStore.runs.some((r) => r.success)) {
+      bundle.dynamicCoverage = computeDynamicCoverage(localStore, bundle, true);
+    }
+
+    // Deterministic fuzz escalation — no extra LLM turn: only when the single-shot
+    // run came back clean, the bundle is STILL borderline, and we actually have a
+    // fuzzer tool + the exact harness inputs the worker used.
+    const singleShotLeak = bundle.evidence.some(
+      (e) => e.targeted && localStore.runs.some((r) => r.runId === e.runId) && evidenceIndicatesLeak(e),
+    );
+    const ranClean = localStore.runs.some((r) => r.success) && !singleShotLeak;
+    if (ranClean && fuzzTool && capture.success && capture.input && bundle.verdict && isBorderline(bundle.verdict)) {
+      onNotice(`Stage B2 · ${bundle.bundleId} clean on single-shot, escalating to ${(harnessCfg.fuzzBudgetMs / 1000).toFixed(0)}s fuzz`);
+      try {
+        const fuzzBuild = coerceToObject<{ success?: boolean; binaryPath?: string }>(
+          await buildHarnessTool.call(
+            { ...capture.input, entryStyle: 'fuzzer', timeoutSec: Math.ceil(harnessCfg.timeoutMs / 1000) },
+            toolCtx,
+          ),
+        );
+        if (fuzzBuild.success && fuzzBuild.binaryPath) {
+          const fuzzCaptured = withDynamicEvidenceCapture(fuzzTool, localStore, { targeted: true });
+          await fuzzCaptured.call(
+            { binaryPath: fuzzBuild.binaryPath, maxTotalTimeSec: Math.floor(harnessCfg.fuzzBudgetMs / 1000) },
+            toolCtx,
+          );
+          reconcileDynamicEvidence(localStore, [bundle], ctx.pathResolver);
+          if (localStore.runs.some((r) => r.success)) {
+            bundle.dynamicCoverage = computeDynamicCoverage(localStore, bundle, true);
+          }
+        }
+      } catch (err: unknown) {
+        onNotice(`Stage B2 · fuzz escalation for ${bundle.bundleId} failed: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+  });
+}
+
+/**
+ * Dynamic verification of static OWNERSHIP-TRANSFER claims — runs BEFORE the
+ * heuristic-verdict loop (unlike Stage B2, which runs after) so a refuted claim
+ * actually changes the outcome instead of arriving too late. See
+ * `ownershipVerification.ts` module doc for the full rationale.
+ */
+async function stageOwnershipVerification(
+  allBundles: LeakBundle[],
+  cfg: RunConfig,
+  ctx: InvestigationContext,
+  state: WorkflowMutableState,
+  onNotice: (text: string) => void,
+): Promise<void> {
+  const ownershipCfg = cfg.workflow.ownershipVerification;
+  if (!ownershipCfg?.enabled || !ctx.buildCommand || !ctx.dynamicClient) return;
+  const summary = await verifyOwnershipClaims(allBundles, state.staticStore, {
+    repoPath: ctx.repoPath,
+    buildCommand: ctx.buildCommand,
+    staticClient: ctx.staticClient,
+    dynamicClient: ctx.dynamicClient,
+    pathResolver: ctx.pathResolver,
+    cfg: ownershipCfg,
+    onNotice,
+  });
+  if (summary.confirmed > 0 || summary.refuted > 0) {
+    onNotice(`Stage · ownership verify: ${summary.confirmed} confirmed, ${summary.refuted} refuted (exoneration cleared)`);
+  }
+}
+
 async function stageHybridJudge(
   allBundles: LeakBundle[],
   staticStore: StaticContextStore,
@@ -291,10 +469,6 @@ async function stageHybridJudge(
   state: WorkflowMutableState,
 ): Promise<void> {
   onNotice('Stage D · judge: heuristic for all, LLM for borderline');
-  for (const b of allBundles) {
-    if (b.verdict) continue;
-    b.verdict = heuristicVerdict(b, staticStore.get(b.bundleId) ?? {});
-  }
   const borderline = allBundles.filter((b) => b.verdict && shouldEscalate(b));
   // n>1 ⇒ multi-agent consensus (self-consistency); n=1 ⇒ the single-LLM judge
   // (unchanged regression baseline). Both feed the same downstream pipeline.
@@ -407,6 +581,19 @@ export function buildWorkflowInvestigationPhase(
       }
 
       onNotice(`Stage C · synthesize: ${state.staticStore.size}/${allBundles.length} candidates have static context`);
+
+      // MUST run before the heuristic-verdict loop below — it corrects
+      // `staticStore`/`bundle.staticEvidence` in place, so a refuted ownership
+      // claim is reflected in the FIRST verdict computation, not a later patch.
+      await stageOwnershipVerification(allBundles, cfg, ctx, state, onNotice);
+
+      // Hoisted from Stage D so Stage B2's escalation gate (which needs a verdict to
+      // judge "still borderline") can run before the LLM judge, not after it.
+      for (const b of allBundles) {
+        if (!b.verdict) b.verdict = heuristicVerdict(b, state.staticStore.get(b.bundleId) ?? {});
+      }
+
+      await stageTargetedHarness(allBundles, dynamicRaw, readFileTool, cfg, ctx, state, callModel, bridge, toolCtx, onNotice);
 
       await stageHybridJudge(allBundles, state.staticStore, cfg, ctx, callModel, onNotice, state);
 

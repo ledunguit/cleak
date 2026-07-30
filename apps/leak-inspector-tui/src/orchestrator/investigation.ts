@@ -15,7 +15,7 @@ import type { CandidateManager } from '../domain/candidateState';
 export interface AgentMeta {
   id: string;
   label: string;
-  kind: 'main' | 'static' | 'dynamic';
+  kind: 'main' | 'static' | 'dynamic' | 'harness';
 }
 
 /**

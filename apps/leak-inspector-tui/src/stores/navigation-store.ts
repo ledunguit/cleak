@@ -15,7 +15,7 @@ import type { UiMessage, NavMode } from './types';
 // ─── State & Actions interfaces ───────────────────────────────────────────
 
 export interface NavState {
-  view: 'main' | 'config' | 'eval' | 'findings';
+  view: 'main' | 'config' | 'eval' | 'evalSetup' | 'findings';
   navMode: NavMode;
   navIndex: number;
   viewAgentId: string;

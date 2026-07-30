@@ -21,6 +21,8 @@ export interface EvalActions {
   beginEval: (meta: {
     corpus: string; mode: string; dynamic: string; total: number; concurrency: number;
     cases: Array<Pick<EvalCaseUi, 'id' | 'cwe' | 'flowVariant' | 'functionalVariant'>>;
+    sampling?: EvalUiState['sampling'];
+    allowUnvalidated?: boolean;
   }) => void;
   evalCaseStart: (id: string) => void;
   evalCasePhase: (id: string, phase: string) => void;
@@ -32,6 +34,11 @@ export interface EvalActions {
     findings?: SnapshotFinding[]; flaws?: LabeledFlaw[]; clean?: CleanSite[];
   }) => void;
   endEval: (result: EvalResult, outDir: string) => void;
+  /** Load a PAST run (read-only — `running: false`, no abort controller) for
+   * review via `/eval history`/`/eval <name>` — replaces the whole eval slice
+   * in one shot, unlike the live incremental beginEval→evalCaseResult→endEval
+   * flow (this bypasses it entirely, nothing to stream). */
+  loadHistoricalEval: (state: EvalUiState) => void;
   setEvalAbort: (ac: AbortController | undefined) => void;
   evalAbort: () => void;
   evalCycleTab: (dir: 1 | -1) => void;
@@ -72,6 +79,12 @@ export const evalStore = createStore<EvalState & EvalActions>()((set, get) => {
         concurrency: meta.concurrency,
         startedAt: Date.now(),
         running: true,
+        sampling: meta.sampling,
+        allowUnvalidated: meta.allowUnvalidated,
+        // A fresh live run is never historical — clear any flag left over
+        // from a previously-viewed past run (set() only merges keys it's
+        // given, so this must be explicit or it would stick around).
+        historical: false,
         cases: meta.cases.map((c) => ({
           ...c,
           status: 'pending' as const,
@@ -116,6 +129,11 @@ export const evalStore = createStore<EvalState & EvalActions>()((set, get) => {
     endEval: (result, outDir) => {
       evalAbortController = undefined;
       set({ running: false, cancelling: false, finishedAt: Date.now(), result, outDir });
+    },
+
+    loadHistoricalEval: (state) => {
+      evalAbortController = undefined;
+      set({ ...state, cancelling: false, cursor: 0 });
     },
 
     setEvalAbort: (ac) => {

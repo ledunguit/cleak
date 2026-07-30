@@ -41,13 +41,19 @@ export function withHostPathMapping(
   resolver: { hasMapping(): boolean; toAnalyzerPath(p: string): string },
 ): Tool {
   if (!resolver.hasMapping()) return tool;
-  const PATH_KEYS = ['projectPath', 'binaryPath', 'cwd', 'workdir'];
+  const PATH_KEYS = ['projectPath', 'binaryPath', 'cwd', 'workdir', 'targetFile'];
+  // `buildHarness`'s closureFiles is a list of host paths the LLM worker supplies
+  // alongside targetFile — every element needs the same host→analyzer translation.
+  const PATH_ARRAY_KEYS = ['closureFiles'];
   return {
     ...tool,
     call: (input: any, ctx) => {
       const next = input && typeof input === 'object' ? { ...input } : input;
       if (next && typeof next === 'object') {
         for (const k of PATH_KEYS) if (typeof next[k] === 'string') next[k] = resolver.toAnalyzerPath(next[k]);
+        for (const k of PATH_ARRAY_KEYS) {
+          if (Array.isArray(next[k])) next[k] = next[k].map((p: unknown) => (typeof p === 'string' ? resolver.toAnalyzerPath(p) : p));
+        }
       }
       return tool.call(next, ctx);
     },
