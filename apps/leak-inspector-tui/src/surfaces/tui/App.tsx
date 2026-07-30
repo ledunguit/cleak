@@ -8,6 +8,7 @@ import { useCommands, type Overlay } from './hooks/useCommands';
 import { MainScreen } from './screens/MainScreen';
 import { ConfigScreen } from './components/ConfigScreen';
 import { EvalScreen } from './components/EvalScreen';
+import { EvalSetupScreen } from './components/EvalSetupScreen';
 import { FindingsScreen } from './components/FindingsScreen';
 import { saveConfigFile, loadConfigFile, configTemplate, type CleakConfig } from '@cleak/config';
 import { visibleMessages, type TuiStore } from '../../stores';
@@ -49,7 +50,7 @@ export function App({ store, staticUrl, dynamicUrl, cwd, resultsDir, recentScans
   const {
     history, recallHistory, completeCommand, matches, showSuggest, resetHistoryCursor,
   } = useHistoryNavigation(input, setInput, store, overlay, setInputRev);
-  const { dispatch, openReport, showMetrics, openSelect } = useCommands(
+  const { dispatch, openReport, showMetrics, openSelect, launchEval, openEvalHistory } = useCommands(
     store, exit, resultsDir, setOverlay, staticUrl, dynamicUrl,
   );
 
@@ -162,7 +163,8 @@ export function App({ store, staticUrl, dynamicUrl, cwd, resultsDir, recentScans
   };
 
   if (view === 'config') return <Box flexDirection="column"><ConfigScreen initial={{ ...configTemplate(), ...loadConfigFile(), defaultMode: fullState.mode, defaultDynamic: fullState.dynamic, autoShowReport: fullState.autoShowReport, fullscreen: fullState.fullscreen, sidebarPosition: fullState.sidebarPosition, provider: fullState.provider as CleakConfig['provider'] }} onSave={saveConfig} onCancel={() => store.setView('main')} /></Box>;
-  if (view === 'eval' && fullState.eval) return <Box flexDirection="column"><EvalScreen store={store} evalState={fullState.eval} resultsDir={resultsDir} /></Box>;
+  if (view === 'evalSetup') return <Box flexDirection="column"><EvalSetupScreen store={store} launchEval={launchEval} onCancel={() => store.setView('main')} /></Box>;
+  if (view === 'eval' && fullState.eval) return <Box flexDirection="column"><EvalScreen store={store} evalState={fullState.eval} resultsDir={resultsDir} onBackToHistory={openEvalHistory} /></Box>;
   if (view === 'findings' && fullState.findings) return <Box flexDirection="column"><FindingsScreen store={store} state={fullState} resultsDir={resultsDir} /></Box>;
 
   return (

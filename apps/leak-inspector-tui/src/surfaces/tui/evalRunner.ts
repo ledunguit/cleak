@@ -9,10 +9,11 @@
 import { resolve, basename, join } from 'node:path';
 import { existsSync, readFileSync } from 'node:fs';
 import { loadConfig } from '@cleak/config';
-import { runEval } from '../../domain/evalHarness';
+import { runEval, selectCases } from '../../domain/evalHarness';
 import { writeEval } from '../../domain/evalReport';
 import { color, glyph } from './theme';
 import type { TuiStore } from '../../stores';
+import type { EvalUiState } from '../../stores/types';
 
 export interface TuiEvalRequest {
   corpus: string;
@@ -23,6 +24,14 @@ export interface TuiEvalRequest {
   resume?: boolean;
   staticUrl?: string;
   dynamicUrl?: string;
+  /** Stratified sampling key (mutually exclusive with randomSeed) — see `selectCases`. */
+  stratify?: string;
+  /** Seeded random sampling (mutually exclusive with stratify) — see `selectCases`. */
+  randomSeed?: number;
+  /** Bypass the corpus integrity gate (no lockfile / failed validation / drift). The
+   * eval-setup wizard sets this only after an explicit "proceed unvalidated" choice —
+   * never silently. */
+  allowUnvalidated?: boolean;
 }
 
 const pct = (n: number) => `${(n * 100).toFixed(1)}%`;
@@ -49,15 +58,27 @@ export async function runTuiEval(store: TuiStore, req: TuiEvalRequest): Promise<
   const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
   const outDir = join(cfg.resultsDir, req.resume ? base : `${base}-${stamp}`);
 
-  // Read the case list up front so the dashboard can show every case as pending.
+  // Read the case list up front so the dashboard can show every case as pending —
+  // MUST apply the same selection (`selectCases`, same limit/stratify/randomSeed)
+  // `runEval` uses internally, or a random/stratified run would pre-populate the
+  // WRONG case ids: evalCaseStart/evalCasePhase/evalCaseResult update EXISTING
+  // entries by id and silently no-op for an id that was never in this list.
   let allCases: Array<{ id: string; cwe?: string; flowVariant?: string; functionalVariant?: string }> = [];
   try {
     const manifest = JSON.parse(readFileSync(join(corpusDir, 'corpus_manifest.json'), 'utf-8'));
-    allCases = (manifest.cases ?? []).slice(0, req.limit ?? Infinity);
+    allCases = selectCases(manifest.cases ?? [], req.limit, req.stratify, req.randomSeed);
   } catch {
     /* runEval will surface a parse error */
   }
   const concurrency = req.concurrency ?? (req.mode === 'no_llm' ? 6 : 3);
+  const sampling: EvalUiState['sampling'] =
+    req.limit === undefined
+      ? { mode: 'all' }
+      : req.randomSeed !== undefined && !req.stratify
+        ? { mode: 'random', limit: req.limit, randomSeed: req.randomSeed }
+        : req.stratify
+          ? { mode: 'stratified', limit: req.limit, stratifyKey: req.stratify }
+          : { mode: 'topN', limit: req.limit };
 
   store.beginEval({
     corpus: basename(corpusDir),
@@ -65,6 +86,8 @@ export async function runTuiEval(store: TuiStore, req: TuiEvalRequest): Promise<
     dynamic: req.dynamic,
     total: allCases.length,
     concurrency,
+    sampling,
+    allowUnvalidated: req.allowUnvalidated,
     cases: allCases.map((c) => ({
       id: c.id,
       cwe: c.cwe,
@@ -85,6 +108,9 @@ export async function runTuiEval(store: TuiStore, req: TuiEvalRequest): Promise<
       dynamic: req.dynamic,
       outDir,
       limit: req.limit,
+      stratify: req.stratify,
+      randomSeed: req.randomSeed,
+      allowUnvalidated: req.allowUnvalidated,
       resume: req.resume,
       concurrency,
       signal: abort.signal,

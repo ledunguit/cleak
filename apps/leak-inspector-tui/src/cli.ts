@@ -88,6 +88,10 @@ program
   .option('--api-key <key>', 'LLM API key override')
   .option('--format <list>', 'comma list: json,markdown,html,snapshot,csv', 'json,markdown,snapshot')
   .option('--build <cmd>', 'build command for dynamic analysis')
+  .option('--harness', 'enable Stage B2 targeted per-candidate harness synthesis (opt-in, experimental)', false)
+  .option('--verify-allocators', 'dynamically verify the LLM-discovered allocator/deallocator profile via harness (opt-in, experimental)', false)
+  .option('--verify-confirmed', 'widen Stage B2 targeted harness to also double-check CONFIRMED_LEAK verdicts, not just borderline ones (opt-in, experimental)', false)
+  .option('--verify-ownership', 'dynamically verify static ownership-transfer claims via harness before scoring (opt-in, experimental)', false)
   .option('--allocators-from <mode>', 'allocator API discovery: auto | llm | none', 'auto')
   .option('--strategy <mode>', 'adaptive strategist (LLM picks the plan per project): auto | off', 'off')
   .option('--allocators <csv>', 'custom allocator names (comma-separated; overrides discovery)')
@@ -110,6 +114,10 @@ program
         apiKey: opts.apiKey,
         format: opts.format,
         build: opts.build,
+        harness: opts.harness,
+        verifyAllocators: opts.verifyAllocators,
+        verifyConfirmed: opts.verifyConfirmed,
+        verifyOwnership: opts.verifyOwnership,
         allocatorsFrom: opts.allocatorsFrom,
         strategy: opts.strategy,
         extraAllocators: csv(opts.allocators),

@@ -6,13 +6,14 @@
  */
 
 import { resolve, basename, join } from 'node:path';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { McpClient, buildCallModel } from '@cleak/agent-core';
 import { AnalysisMode, DynamicMode } from '@cleak/common/types';
 import { loadConfig, type Provider, type ConsensusJudgeConfig, type RunConfig, toProviderSettings } from '@cleak/config';
-import { loadOrProfileAllocators } from '../domain/allocatorProfiler';
+import { loadOrProfileAllocators, profileCachePath } from '../domain/allocatorProfiler';
+import { verifyAllocatorProfile } from '../domain/allocatorVerification';
 import { decideStrategy } from '../domain/strategist';
-import { buildPathResolver } from '../domain/pathResolver';
+import { buildPathResolver, type PathResolver } from '../domain/pathResolver';
 import { ScanEmitter, JsonlFileSink, MultiSink, CallbackSink, type EventSink, type ScanEvent } from '../orchestrator/events';
 import { runScan, type ScanResult } from '../orchestrator/scanController';
 import { buildWorkflowInvestigationPhase } from '../orchestrator/workflowInvestigation';
@@ -31,6 +32,18 @@ export interface HeadlessOptions {
   apiKey?: string;
   format: string;
   build?: string;
+  /** Stage B2 — targeted per-candidate harness synthesis (opt-in, experimental).
+   * Overrides the saved config's `workflow.targetedHarness.enabled` to true. */
+  harness?: boolean;
+  /** Dynamic verification of the LLM-discovered allocator/deallocator profile
+   * (opt-in, experimental). Overrides `workflow.allocatorVerification.enabled`. */
+  verifyAllocators?: boolean;
+  /** Widen Stage B2 to also double-check CONFIRMED_LEAK verdicts (opt-in,
+   * experimental). Overrides `workflow.targetedHarness.verifyConfirmedLeaks`. */
+  verifyConfirmed?: boolean;
+  /** Dynamic verification of static ownership-transfer claims (opt-in,
+   * experimental). Overrides `workflow.ownershipVerification.enabled`. */
+  verifyOwnership?: boolean;
   /** Per-project factory allocators / custom deallocators (≈ LAMeD AllocSource /
    * FreeSink) — threaded to candidateScan so wrapper-named allocators are found. */
   extraAllocators?: string[];
@@ -93,6 +106,13 @@ export async function runHeadless(opts: HeadlessOptions): Promise<HeadlessResult
     ...(opts.analyzerRoot ? { analyzerRoot: opts.analyzerRoot } : {}),
     ...(opts.consensus ? { consensus: opts.consensus as ConsensusJudgeConfig } : {}),
   });
+  // `workflow` isn't deep-merged by loadConfig's overrides (only `consensus`/`llm`
+  // are) — flip just this one nested flag after defaults are resolved instead of
+  // risking a shallow-merge that would drop staticConcurrency/staticGroupSize/etc.
+  if (opts.harness) cfg.workflow.targetedHarness.enabled = true;
+  if (opts.verifyAllocators) cfg.workflow.allocatorVerification.enabled = true;
+  if (opts.verifyConfirmed) cfg.workflow.targetedHarness.verifyConfirmedLeaks = true;
+  if (opts.verifyOwnership) cfg.workflow.ownershipVerification.enabled = true;
 
   const repoPath = resolve(opts.repo);
   if (!existsSync(repoPath)) throw new Error(`Repository path not found: ${repoPath}`);
@@ -133,7 +153,15 @@ export async function runHeadless(opts: HeadlessOptions): Promise<HeadlessResult
       ? buildWorkflowInvestigationPhase(cfg, dynamicMode, { toolSelect: opts.toolSelect ?? true })
       : undefined;
 
-  const { extraAllocators, extraDeallocators, ownershipNotes } = await runAllocatorProfile(repoPath, cfg, opts, analysisMode);
+  const { extraAllocators, extraDeallocators, ownershipNotes } = await runAllocatorProfile(
+    repoPath,
+    cfg,
+    opts,
+    analysisMode,
+    staticClient,
+    dynamicClient,
+    pathResolver,
+  );
 
   const adaptiveResult = await runAdaptiveStrategy(repoPath, cfg, dynamicMode, dynamicClient, opts, analysisMode, extraAllocators, extraDeallocators);
   dynamicMode = adaptiveResult.dynamicMode;
@@ -162,6 +190,9 @@ async function runAllocatorProfile(
   cfg: RunConfig,
   opts: HeadlessOptions,
   analysisMode: AnalysisMode,
+  staticClient: McpClient,
+  dynamicClient: McpClient | undefined,
+  pathResolver: PathResolver,
 ): Promise<{ extraAllocators?: string[]; extraDeallocators?: string[]; ownershipNotes?: string[] }> {
   let extraAllocators = opts.extraAllocators;
   let extraDeallocators = opts.extraDeallocators;
@@ -173,11 +204,43 @@ async function runAllocatorProfile(
     (allocatorsFrom === 'llm' || analysisMode === AnalysisMode.LLM_ASSISTED);
   if (wantProfile) {
     const callModel = buildCallModel(toProviderSettings(cfg), () => globalThis.crypto.randomUUID());
-    const profile = await loadOrProfileAllocators(repoPath, callModel, {
+    const notice = opts.quiet ? undefined : (r: string) => process.stderr.write(`  ${r}\n`);
+    let profile = await loadOrProfileAllocators(repoPath, callModel, {
       signal: opts.signal,
       temperature: cfg.llm.temperature,
-      onNotice: opts.quiet ? undefined : (r) => process.stderr.write(`  ${r}\n`),
+      onNotice: notice,
     });
+    // Dynamic verification (opt-in): harness-check each candidate name instead of
+    // trusting the LLM's textual grep-verify alone. Needs a build command AND a
+    // live dynamic-analyzer connection — same preconditions as Stage B2's
+    // deterministic recipe. `verifiedAt` on a cache hit means a prior run already
+    // did this — skip so a re-scan doesn't re-pay the harness-build cost.
+    const verifyCfg = cfg.workflow.allocatorVerification;
+    if (profile && !profile.verifiedAt && verifyCfg?.enabled && opts.build && dynamicClient) {
+      const { profile: verified, summary } = await verifyAllocatorProfile(profile, {
+        repoPath,
+        buildCommand: opts.build,
+        staticClient,
+        dynamicClient,
+        pathResolver,
+        cfg: verifyCfg,
+        onNotice: notice,
+      });
+      profile = verified;
+      try {
+        mkdirSync(join(repoPath, '.cleak'), { recursive: true });
+        writeFileSync(profileCachePath(repoPath), JSON.stringify(profile, null, 2));
+      } catch {
+        /* re-caching the verified profile is best-effort */
+      }
+      if (!opts.quiet) {
+        const refuted = Object.values(summary.allocators).filter((s) => s === 'refuted').length;
+        const confirmed =
+          Object.values(summary.allocators).filter((s) => s === 'confirmed').length +
+          Object.values(summary.deallocators).filter((s) => s === 'confirmed').length;
+        process.stdout.write(`  allocator verify: ${confirmed} confirmed, ${refuted} refuted (dropped)\n`);
+      }
+    }
     if (profile) {
       extraAllocators = profile.allocators;
       extraDeallocators = profile.deallocators;

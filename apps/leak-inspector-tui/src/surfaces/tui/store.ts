@@ -294,6 +294,10 @@ export class TuiStore {
   evalCasePhase(id: string, phase: string): void { evalStore.getState().evalCasePhase(id, phase); }
   evalCaseResult(detail: Parameters<EvalActions['evalCaseResult']>[0]): void { evalStore.getState().evalCaseResult(detail); }
   endEval(result: EvalResult, outDir: string): void { evalStore.getState().endEval(result, outDir); }
+  loadHistoricalEval(state: Parameters<EvalActions['loadHistoricalEval']>[0]): void {
+    evalStore.getState().loadHistoricalEval(state);
+    navigationStore.getState().setView('eval');
+  }
   setEvalAbort(ac: AbortController | undefined): void { evalStore.getState().setEvalAbort(ac); }
   evalAbort(): void { evalStore.getState().evalAbort(); }
   evalCycleTab(dir: 1 | -1): void { evalStore.getState().evalCycleTab(dir); }

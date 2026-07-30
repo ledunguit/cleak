@@ -10,9 +10,10 @@ import { join } from 'node:path';
 import { findCommand } from '../commands';
 import { glyph, color, formatDuration } from '../theme';
 import { runTuiScan } from '../runner';
-import { runTuiEval } from '../evalRunner';
+import { runTuiEval, type TuiEvalRequest } from '../evalRunner';
 import { snapshotFindingToView } from '../findings/findingView';
 import { generateScanPlan } from '../../../domain/scanPlan';
+import { listEvalRuns, loadEvalRun, resolveHistoricalRun } from '../../../domain/evalHistory';
 import type { TuiStore } from '../../../stores';
 import type { RunConfig } from '@cleak/config';
 import type { SelectOption } from '../components/Select';
@@ -37,6 +38,35 @@ export function useCommands(
   dynamicUrl?: string,
 ) {
   const evalBusy = useRef(false);
+
+  /** Shared by the `/eval <args>` dispatch case AND the eval-setup wizard
+   * (`EvalSetupScreen`) — same busy/scan-running guards, same launch path.
+   * `staticUrl`/`dynamicUrl` default from THIS hook's own closure params (the
+   * `--static-url`/`--dynamic-url` CLI overrides) when the caller doesn't set
+   * them itself — the wizard has no per-run URL override UI, so without this
+   * default it would silently never see those flags at all, unlike the
+   * `/eval <args>` dispatch case which already threads them through. Returns
+   * whether the launch actually started. */
+  const launchEval = (req: TuiEvalRequest): boolean => {
+    if (evalBusy.current) {
+      store.addSystemMessage('an eval is already running — type /eval (no args) to watch it');
+      return false;
+    }
+    if (store.getSnapshot().status === 'running') {
+      store.addSystemMessage('a scan is running — wait for it to finish before evaluating');
+      return false;
+    }
+    const fullReq: TuiEvalRequest = {
+      staticUrl,
+      dynamicUrl,
+      ...req,
+    };
+    evalBusy.current = true;
+    void runTuiEval(store, fullReq).finally(() => {
+      evalBusy.current = false;
+    });
+    return true;
+  };
 
   // ── Option appliers (shared by typed-arg and the select overlay) ──
 
@@ -72,6 +102,37 @@ export function useCommands(
         color: o.value === initial ? color.accent : undefined,
       })),
       onSubmit: (vals) => apply(vals[0]),
+    });
+  };
+
+  // ── Eval history (browse/reopen a PAST run, read-only) ──
+
+  /** `/eval history` — overlay listing recent past runs (newest first); picking
+   * one loads it read-only via loadEvalRun/loadHistoricalEval, same as
+   * resolving a token directly. */
+  const openEvalHistory = () => {
+    const runs = listEvalRuns(resultsDir);
+    if (runs.length === 0) {
+      store.addSystemMessage('no past eval runs found under results/');
+      return;
+    }
+    setOverlay({
+      title: `Past eval runs (${runs.length}) — pick one to review`,
+      options: runs.map((r) => ({
+        label: `${r.name}`,
+        value: r.dir,
+        description: `${r.corpus.split('/').pop()} · ${r.mode}${r.dynamic !== 'off' ? `+${r.dynamic}` : ''} · P${(r.precision * 100).toFixed(0)} R${(r.recall * 100).toFixed(0)} F1${r.f1.toFixed(2)} · ${r.caseCount} cases`,
+      })),
+      onSubmit: (vals) => {
+        const dir = vals[0];
+        if (!dir) return;
+        const loaded = loadEvalRun(dir);
+        if (!loaded) {
+          store.addSystemMessage(`failed to load eval run at ${dir}`);
+          return;
+        }
+        store.loadHistoricalEval(loaded);
+      },
     });
   };
 
@@ -208,22 +269,54 @@ export function useCommands(
       }
 
       case '/eval': {
-        // /eval <corpus-path> [limit] [c=N] [--resume] — uses the current /mode + /dynamic.
-        // /eval with no path re-opens the live/last dashboard (e.g. after Esc'ing out).
+        // /eval <corpus-path> [limit] [c=N] [--resume] — uses the current /mode + /dynamic
+        // (legacy direct-args form, unchanged — scripting/muscle-memory path).
+        // /eval with no path re-opens the dashboard ONLY while an eval is still
+        // RUNNING (e.g. after Esc'ing out to check something else) — `snap.eval`
+        // stays populated forever after the run finishes (it's the last result,
+        // not "is one active"), so gating on it alone meant /eval could never
+        // reach the wizard again once a single eval had ever run this session.
+        // Once finished, bare /eval opens the wizard for a NEW run; the finished
+        // run's artifacts are still on disk and reachable again via
+        // `/eval history` (pick from a list) or `/eval <name>` (direct by dir name).
         const snap = store.getSnapshot();
         const tokens = rest.filter((t) => t.length > 0);
+
+        if (tokens[0] === 'history') {
+          openEvalHistory();
+          return;
+        }
+
         // corpus = first token that's not a flag, not a bare number, not c=N
         const corpus = tokens.find(
           (t) => !t.startsWith('--') && !/^\d+$/.test(t) && !/^c=\d+$/i.test(t),
         );
         if (!corpus) {
-          if (snap.eval) {
+          if (snap.eval?.running) {
             store.setView('eval');
+          } else if (evalBusy.current) {
+            store.addSystemMessage('an eval is already running — type /eval (no args) to watch it');
           } else {
-            store.addSystemMessage('usage: /eval <corpus-path> [limit] [c=N parallel] [--resume]');
+            store.setView('evalSetup');
           }
           return;
         }
+
+        // A bare token may name a PAST run's output dir (`/eval <name>`) rather
+        // than a corpus to launch fresh — check before treating it as a corpus
+        // path. Unambiguous: past runs live under resultsDir with a metrics.json,
+        // corpora don't.
+        const historical = resolveHistoricalRun(corpus, resultsDir);
+        if (historical) {
+          const loaded = loadEvalRun(historical);
+          if (!loaded) {
+            store.addSystemMessage(`failed to load eval run at ${historical}`);
+            return;
+          }
+          store.loadHistoricalEval(loaded);
+          return;
+        }
+
         if (evalBusy.current) {
           store.addSystemMessage('an eval is already running — type /eval (no args) to watch it');
           return;
@@ -241,13 +334,7 @@ export function useCommands(
           `/eval ${corpus} (mode ${snap.mode}, dynamic ${snap.dynamic}${limit ? `, limit ${limit}` : ''}` +
             `${concurrency ? `, c=${concurrency}` : ''}${resume ? ', resume' : ''})`,
         );
-        evalBusy.current = true;
-        void runTuiEval(
-          store,
-          { corpus, mode: snap.mode, dynamic: snap.dynamic, limit, concurrency, resume, staticUrl, dynamicUrl },
-        ).finally(() => {
-          evalBusy.current = false;
-        });
+        launchEval({ corpus, mode: snap.mode, dynamic: snap.dynamic, limit, concurrency, resume, staticUrl, dynamicUrl });
         return;
       }
 
@@ -256,7 +343,7 @@ export function useCommands(
     }
   };
 
-  return { dispatch, openReport, showMetrics, openSelect };
+  return { dispatch, openReport, showMetrics, openSelect, launchEval, openEvalHistory };
 }
 
 // ── Module-level helpers (no component state needed) ──

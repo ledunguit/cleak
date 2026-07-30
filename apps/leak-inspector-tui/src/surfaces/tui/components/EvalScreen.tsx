@@ -65,10 +65,15 @@ export function EvalScreen({
   store,
   evalState,
   resultsDir,
+  onBackToHistory,
 }: {
   store: TuiStore;
   evalState: EvalUiState;
   resultsDir: string;
+  /** Called instead of a plain exit-to-main when Esc is pressed on a run
+   * loaded via `/eval history`/`/eval <name>` — reopens the run-picker so
+   * browsing past runs doesn't dead-end at the main screen. */
+  onBackToHistory?: () => void;
 }) {
   const { rows: termRows } = useTerminalSize();
   // Tick so elapsed timers + running phases stay live between store updates.
@@ -106,6 +111,14 @@ export function EvalScreen({
       // First Esc while running = cancel (skip pending, abort in-flight, still
       // report what finished). Esc again (or when done) leaves the screen.
       if (evalState.running && !evalState.cancelling) return store.evalAbort();
+      // A run reached via /eval history or /eval <name> is a read-only replay —
+      // Esc goes back to the run picker, not all the way to main, so browsing
+      // past runs doesn't dead-end.
+      if (evalState.historical && onBackToHistory) {
+        store.evalExit();
+        onBackToHistory();
+        return;
+      }
       return store.evalExit();
     }
     if (key.tab) return store.evalCycleTab(key.shift ? -1 : 1);
@@ -149,6 +162,26 @@ export function EvalScreen({
   );
 }
 
+/** What was actually launched — self-documenting without opening metrics.json. */
+function samplingSummary(s: EvalUiState): string {
+  const sm = s.sampling;
+  if (!sm || sm.mode === 'all') return `all ${s.total} cases`;
+  if (sm.mode === 'random') return `${s.total} cases (random, seed=${sm.randomSeed})`;
+  if (sm.mode === 'stratified') return `${s.total} cases (stratified by ${sm.stratifyKey})`;
+  return `${s.total} cases (first ${sm.limit}, manifest order)`;
+}
+
+/** avg wall-time of completed cases × remaining ÷ concurrency — a rough ETA,
+ * not a report figure (unlike everything in evalReport.ts, which stays exact). */
+function etaSeconds(s: EvalUiState): number | null {
+  const done = s.cases.filter((c) => c.durationMs !== undefined);
+  if (!s.running || done.length === 0) return null;
+  const remaining = s.total - s.done;
+  if (remaining <= 0) return 0;
+  const avgMs = done.reduce((a, c) => a + (c.durationMs ?? 0), 0) / done.length;
+  return Math.round((avgMs * remaining) / Math.max(1, s.concurrency) / 1000);
+}
+
 function Header({ s }: { s: EvalUiState }) {
   const secs = elapsed(s.startedAt, s.finishedAt);
   const errors = s.cases.filter((c) => c.status === 'error').length;
@@ -156,16 +189,24 @@ function Header({ s }: { s: EvalUiState }) {
   const skipped = s.cases.filter((c) => c.status === 'skipped').length;
   const stateLabel = s.cancelling ? 'cancelling…' : s.running ? 'running' : 'done';
   const stateColor = s.cancelling ? color.warning : s.running ? color.accent : color.success;
+  const eta = etaSeconds(s);
   return (
     <Box flexDirection="column">
       <Text color={color.accent} bold>
         {glyph.star} EVAL {s.corpus}
       </Text>
       <Text dimColor>
-        {s.mode} {glyph.bullet} dynamic {s.dynamic} {glyph.bullet} {s.done}/{s.total} {glyph.bullet} {s.concurrency} parallel{' '}
-        {glyph.bullet} {running} running {glyph.bullet} {errors} err {glyph.bullet} {skipped} skipped {glyph.bullet} {secs}s{' '}
+        {samplingSummary(s)} {glyph.bullet} {s.mode} {glyph.bullet} dynamic {s.dynamic}
+      </Text>
+      <Text dimColor>
+        {s.done}/{s.total} {glyph.bullet} {s.concurrency} parallel{' '}
+        {glyph.bullet} {running} running {glyph.bullet} {errors} err {glyph.bullet} {skipped} skipped {glyph.bullet} {secs}s
+        {eta !== null && eta > 0 ? <Text> {glyph.bullet} ~{eta}s left</Text> : null}{' '}
         {glyph.bullet} <Text color={stateColor}>{stateLabel}</Text>
       </Text>
+      {s.allowUnvalidated ? (
+        <Text color={color.warning}>{glyph.cross} unvalidated corpus — numbers are NOT verified against the integrity gate</Text>
+      ) : null}
     </Box>
   );
 }
@@ -196,6 +237,28 @@ function TabBar({ tab }: { tab: EvalUiState['tab'] }) {
   );
 }
 
+/** At concurrency > 1 there's otherwise no single place to see "what's
+ * happening right now" without tabbing through the Cases list one by one. */
+function RunningNow({ s }: { s: EvalUiState }) {
+  const running = s.cases
+    .filter((c) => c.status === 'running')
+    .sort((a, b) => (b.startedAt ?? 0) - (a.startedAt ?? 0))
+    .slice(0, 6);
+  if (running.length === 0) return null;
+  return (
+    <Box flexDirection="column" marginTop={1}>
+      <Text color={color.subtle}>Running now:</Text>
+      {running.map((c) => (
+        <Text key={c.id}>
+          {'  '}
+          <Text color={color.accent}>{glyph.running}</Text> {shortId(c.id).slice(0, 40).padEnd(40)}{' '}
+          <Text color={color.subtle}>{c.phase ?? 'starting'} {glyph.bullet} {elapsed(c.startedAt)}s</Text>
+        </Text>
+      ))}
+    </Box>
+  );
+}
+
 function Overview({ s }: { s: EvalUiState }) {
   const cm = aggregate(s.cases);
   const m = prf(cm);
@@ -216,6 +279,7 @@ function Overview({ s }: { s: EvalUiState }) {
         Confusion: TP {cm.tp} {glyph.bullet} FP {cm.fp} {glyph.bullet} FN {cm.fn} {glyph.bullet} TN {cm.tn}
         {s.result ? <Text> {glyph.bullet} ECE {s.result.ece.toFixed(3)}</Text> : null}
       </Text>
+      {s.running ? <RunningNow s={s} /> : null}
       {s.result ? (
         <Box flexDirection="column" marginTop={1}>
           <Text color={color.subtle}>By functional variant (final):</Text>
@@ -238,8 +302,13 @@ function Overview({ s }: { s: EvalUiState }) {
   );
 }
 
-function caseLine(c: EvalCaseUi, selected: boolean) {
+function caseLine(c: EvalCaseUi, selected: boolean, columns: number) {
   const g = STATUS_GLYPH[c.status];
+  // Fixed-width prefix: cursor(2) + status glyph(2) + id column(31) — the error
+  // message gets whatever's left, not a hardcoded 28 chars regardless of an
+  // actually-wide terminal (was truncating "Static analyzer MCP server is
+  // unreachable." down to "error: Static analyzer MCP s").
+  const errWidth = Math.max(20, columns - 2 - 2 - 31 - 2);
   const right =
     c.status === 'running'
       ? `${glyph.pointer} ${c.phase ?? 'starting'}  ${elapsed(c.startedAt)}s`
@@ -248,7 +317,7 @@ function caseLine(c: EvalCaseUi, selected: boolean) {
         : c.status === 'skipped'
           ? 'skipped (cancelled)'
           : c.status === 'error'
-            ? `error: ${(c.error ?? '').slice(0, 28)}`
+            ? `error: ${(c.error ?? '(unknown error — see Detail)').slice(0, errWidth)}`
             : `TP${c.tp} FP${c.fp} FN${c.fn}  ${Math.round((c.durationMs ?? 0) / 1000)}s`;
   return (
     <Text key={c.id}>
@@ -261,14 +330,14 @@ function caseLine(c: EvalCaseUi, selected: boolean) {
 }
 
 function Cases({ s }: { s: EvalUiState }) {
-  const { rows: termRows } = useTerminalSize();
+  const { rows: termRows, columns } = useTerminalSize();
   const rows = Math.max(5, termRows - 12);
   const n = s.cases.length;
   const start = Math.max(0, Math.min(Math.max(0, n - rows), s.cursor - Math.floor(rows / 2)));
   const window = s.cases.slice(start, start + rows);
   return (
     <Box flexDirection="column">
-      {window.map((c) => caseLine(c, s.cases[s.cursor]?.id === c.id))}
+      {window.map((c) => caseLine(c, s.cases[s.cursor]?.id === c.id, columns))}
       {n > rows ? (
         <Text dimColor>
           {'  '}showing {start + 1}–{Math.min(n, start + rows)} of {n}
@@ -327,12 +396,23 @@ function Detail({
         <Text bold>{shortId(c.id)}</Text>
         <Text color={color.subtle}> {glyph.bullet} {c.status}{c.scanId ? ` ${glyph.bullet} ${c.scanId}` : ''}</Text>
       </Text>
-      <Text color={color.subtle}>
-        P {pct(m.precision)} {glyph.bullet} R {pct(m.recall)} {glyph.bullet} F1 {pct(m.f1)} {glyph.bullet} TP{c.tp} FP{c.fp}{' '}
-        FN{c.fn} TN{c.tn} {glyph.bullet} flaw{' '}
-        <Text color={caught ? color.success : color.error}>{caught ? 'caught' : 'missed'}</Text> {glyph.bullet} findings:{' '}
-        {findings.map((f) => `${classify(f).mark} ${f.function ?? '?'}@${f.line ?? '?'}`).slice(0, 4).join('  ') || '(none)'}
-      </Text>
+      {c.status === 'error' ? (
+        // The case failed before producing findings — the P/R/F1/findings line
+        // below would just be all-zeros noise; show the actual error instead,
+        // word-wrapped to the terminal width (not truncated, unlike the Cases
+        // list line which has to fit alongside the id column).
+        <Box flexDirection="column" marginTop={1}>
+          <Text color={color.error} bold>{glyph.cross} Error</Text>
+          <Text color={color.error}>{'  '}{c.error || '(no error message was captured for this case)'}</Text>
+        </Box>
+      ) : (
+        <Text color={color.subtle}>
+          P {pct(m.precision)} {glyph.bullet} R {pct(m.recall)} {glyph.bullet} F1 {pct(m.f1)} {glyph.bullet} TP{c.tp} FP{c.fp}{' '}
+          FN{c.fn} TN{c.tn} {glyph.bullet} flaw{' '}
+          <Text color={caught ? color.success : color.error}>{caught ? 'caught' : 'missed'}</Text> {glyph.bullet} findings:{' '}
+          {findings.map((f) => `${classify(f).mark} ${f.function ?? '?'}@${f.line ?? '?'}`).slice(0, 4).join('  ') || '(none)'}
+        </Text>
+      )}
 
       {/* structured verdict detail (reuses the findings-browser card) */}
       {cardFindings.length ? (
@@ -356,9 +436,11 @@ function Detail({
             {'  '}
             {c.status === 'running'
               ? '(log is written when the case finishes — watch the phase in Cases)'
-              : c.scanId
-                ? '(no steps.md — no_llm mode keeps no agent log; see /report)'
-                : '(case has not run yet)'}
+              : c.status === 'error'
+                ? '(no investigation log — the case failed before a scan could run; see Error above)'
+                : c.scanId
+                  ? '(no steps.md — no_llm mode keeps no agent log; see /report)'
+                  : '(case has not run yet)'}
           </Text>
         ) : (
           win.map((line, i) => (
