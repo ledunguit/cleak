@@ -1,5 +1,13 @@
 # @cleak/common
 
+## 0.5.0
+
+### Minor Changes
+
+- [`adcbeff`](https://github.com/ledunguit/cleak/commit/adcbeff7e769aea0182f253def9e8a1f28f9a148) Thanks [@ledunguit](https://github.com/ledunguit)! - New config schema fields for harness/escalation and new fuzzer-evidence types/enum values,
+  consumed by the dynamic analyzer's harness-build/libfuzzer-run services and the TUI's harness and
+  fuzz-escalation domain modules.
+
 ## 0.4.0
 
 ### Minor Changes
