@@ -1,7 +1,6 @@
 {
   "name": "@cleak/config",
   "version": "0.1.0",
-  "private": true,
   "description": "Centralized config management — schema, loader, persist, CLI helpers",
   "type": "module",
   "license": "Apache-2.0",
@@ -10,6 +9,9 @@
     "type": "git",
     "url": "git+https://github.com/ledunguit/leak-investigator.git",
     "directory": "packages/config"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "engines": {
     "node": ">=18"
