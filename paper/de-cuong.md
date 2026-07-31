@@ -93,7 +93,7 @@ Mục tiêu **nghiên cứu (đóng góp luận văn)**:
 ## Phương pháp phân tích cấu trúc, phân rã hệ thống
 
 Hệ thống được phân rã thành **microservices** trong một monorepo Turborepo (ngôn ngữ
-TypeScript, runtime bun): một **control-plane** điều phối, hai **analyzer** (tĩnh/động) phục
+TypeScript, runtime Node.js, package manager pnpm): một **control-plane** điều phối, hai **analyzer** (tĩnh/động) phục
 vụ cả gRPC lẫn MCP, một thư viện **agent-core** (vòng lặp tool-calling), một thư viện
 **common** (type/scoring/judge dùng chung), và hai giao diện (web React + CLI/TUI). Việc phân
 rã theo *ranh giới phân tích* (tĩnh vs động) + *ranh giới điều phối* (web vs CLI) cho phép
@@ -194,7 +194,7 @@ agentic static+dynamic từ lỗi-gây-crash sang lớp **rò rỉ không-crash*
   AddressSanitizer (instrumentation thời biên dịch) [9]; LeakSanitizer (`-fsanitize=leak`) [12].
 - **Phân tích tĩnh:** Clang Static Analyzer (`scan-build`); AST qua tree-sitter; call graph;
   interprocedural data-flow.
-- **Nền kỹ thuật:** monorepo Turborepo + bun; **NestJS** (control-plane + analyzer); **gRPC**
+- **Nền kỹ thuật:** monorepo Turborepo + pnpm (runtime Node.js); **NestJS** (control-plane + analyzer); **gRPC**
   (proto3) cho control-plane↔analyzer; **React 19** + Vite + Ant Design + Zustand cho UI;
   **Ink/React** cho TUI; **PostgreSQL** + **Redis/BullMQ** cho trạng thái/queue; GitHub OAuth.
 
@@ -233,7 +233,7 @@ flowchart TB
 | Thành phần | Công nghệ | Vai trò |
 |---|---|---|
 | `apps/control-plane` | NestJS, gRPC, BullMQ | Điều phối web (JSON-action), API REST + SSE, OAuth, lưu lịch sử quét |
-| `apps/leak-inspector-tui` | Ink/React, bun | Điều phối CLI/TUI (native tool-calling); dùng cho eval/benchmark |
+| `apps/leak-inspector-tui` | Ink/React, Node.js | Điều phối CLI/TUI (native tool-calling); dùng cho eval/benchmark |
 | `packages/agent-core` | TypeScript | Vòng lặp tool-calling, MCP client, `callModel` đa-provider (streaming), nén ngữ cảnh |
 | `packages/common` | TS + Zod | Type/schema, `scoreCase`, heuristic + **consensus judge**, reporting |
 | `apps/static-analyzer` | NestJS, tree-sitter, Clang | index, candidate/AST scan, call graph, interprocedural flow, `scan-build` |

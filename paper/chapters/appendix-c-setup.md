@@ -6,8 +6,8 @@
 |---|---|
 | OS | Linux (dynamic analysis); macOS/Linux (static only) |
 | Docker | ≥ 20.10 (chạy analyzer) |
-| Bun | ≥ 1.0 (runtime chính) |
-| Node.js | ≥ 18 (fallback, không khuyến nghị) |
+| Node.js | ≥ 22 (runtime chính) |
+| pnpm | ≥ 11 (package manager, qua corepack) |
 | Clang | ≥ 14 (compile test case Juliet, scan-build) |
 | Valgrind | ≥ 3.18 (chỉ Linux, optional) |
 | LLM Gateway | OpenAI-compatible endpoint (mặc định: localhost:20128) |
@@ -19,10 +19,10 @@
 git clone <repo-url> && cd leak-investigator
 
 # Install dependencies
-bun install
+pnpm install
 
 # Build all packages + apps
-bun run build
+pnpm run build
 
 # Start analyzers (Docker)
 docker compose up --build -d
@@ -56,16 +56,16 @@ LLM_MODEL=mimo/mimo-v2.5-pro
 
 ```bash
 # Single run — deterministic (no_llm)
-bun scripts/evaluate-corpus.ts no_llm --corpus demo/juliet_cwe401 --dynamic selective
+pnpm exec tsx scripts/evaluate-corpus.ts no_llm --corpus demo/juliet_cwe401 --dynamic selective
 
 # LLM-assisted, 5 runs → mean ± std
-bun scripts/evaluate-corpus.ts llm_assisted --corpus demo/juliet_cwe401 --runs 5
+pnpm exec tsx scripts/evaluate-corpus.ts llm_assisted --corpus demo/juliet_cwe401 --runs 5
 
 # 9-baseline sweep (stratified n=50)
-bun scripts/run-baselines.ts --corpus demo/juliet_cwe401 --limit 50 --stratify
+pnpm exec tsx scripts/run-baselines.ts --corpus demo/juliet_cwe401 --limit 50 --stratify
 
 # So sánh với Clang SA
-bun scripts/compare-baselines.ts --corpus demo/juliet_cwe401 --limit 30
+pnpm exec tsx scripts/compare-baselines.ts --corpus demo/juliet_cwe401 --limit 30
 
 # Determinism gate
 bash scripts/determinism-gate.sh

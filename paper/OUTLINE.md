@@ -73,7 +73,7 @@ Mỗi thành phần được thiết kế độc lập, giao tiếp qua MCP Stre
 
 ## Triển khai hệ thống
 
-- TypeScript + Bun runtime; NestJS cho analyzer services; Ink cho TUI.
+- TypeScript + Node.js runtime (pnpm); NestJS cho analyzer services; Ink cho TUI.
 - Docker Compose cho static-analyzer (port 50061) và dynamic-analyzer (port 50062).
 - MCP SDK (`@modelcontextprotocol/sdk`) cho tool registration và client.
 - Monorepo Turborepo: `apps/` (3 ứng dụng) + `packages/` (2 thư viện chia sẻ).
@@ -193,7 +193,7 @@ Mỗi thành phần được thiết kế độc lập, giao tiếp qua MCP Stre
 ## Chương 3: Hiện thực, triển khai hệ thống (~20 trang)
 
 ### 3.1. Công nghệ sử dụng và cấu trúc dự án
-- TypeScript, Bun, NestJS, Tree-sitter, Ink TUI
+- TypeScript, Node.js, pnpm, NestJS, Tree-sitter, Ink TUI
 - MCP SDK, agent-core, Docker Compose
 - Monorepo Turborepo: apps/ + packages/
 
