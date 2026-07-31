@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, test } from 'vitest';
 import { isTransientError, retryTransient } from '../../src/mcp/mcpClient';
 
 const noBackoff = () => 0;

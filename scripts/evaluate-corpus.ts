@@ -1,4 +1,4 @@
-#!/usr/bin/env bun
+#!/usr/bin/env -S tsx
 /**
  * Batch corpus evaluation (v2 harness). Runs the leak-inspector-tui headless
  * scanner over every labeled case in a v2 corpus, scores findings against the
@@ -8,11 +8,11 @@
  * git commit/corpus hash) and, with --runs>1, mean ± std across independent runs
  * so LLM-sampling variance is reported rather than hidden behind a single pass.
  *
- *   bun scripts/evaluate-corpus.ts                          # llm_assisted, all cases
- *   bun scripts/evaluate-corpus.ts no_llm                   # deterministic baseline
- *   bun scripts/evaluate-corpus.ts llm_assisted --limit 3   # first 3 cases
- *   bun scripts/evaluate-corpus.ts llm_assisted --runs 5    # 5 runs, report variance
- *   bun scripts/evaluate-corpus.ts no_llm --dynamic selective --corpus demo/juliet_cwe401
+ *   tsx scripts/evaluate-corpus.ts                          # llm_assisted, all cases
+ *   tsx scripts/evaluate-corpus.ts no_llm                   # deterministic baseline
+ *   tsx scripts/evaluate-corpus.ts llm_assisted --limit 3   # first 3 cases
+ *   tsx scripts/evaluate-corpus.ts llm_assisted --runs 5    # 5 runs, report variance
+ *   tsx scripts/evaluate-corpus.ts no_llm --dynamic selective --corpus demo/juliet_cwe401
  *
  * In this dev environment the docker stack holds 50061/50062 in gRPC mode, so the
  * MCP analyzers run on 50071/50072; override with EVAL_STATIC_URL / EVAL_DYNAMIC_URL.
@@ -30,7 +30,7 @@ import { loadConfig } from '@cleak/config';
 const cfg = loadConfig();
 
 if (process.argv.includes('--help') || process.argv.includes('-h')) {
-  console.log(`Usage: bun scripts/evaluate-corpus.ts [mode] [options]
+  console.log(`Usage: tsx scripts/evaluate-corpus.ts [mode] [options]
 
 Evaluate the leak-inspector-tui over a labeled corpus.
 

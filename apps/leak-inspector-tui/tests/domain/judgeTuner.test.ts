@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, test } from 'vitest';
 import type { CallModel } from '@cleak/agent-core';
 import { clampThresholds, parseTuning, tuneThresholds } from '../../src/domain/judgeTuner';
 

@@ -6,24 +6,28 @@
  * The two runEval* tests mock runHeadless to avoid real MCP analyzer calls.
  */
 
-import { describe, expect, test, mock, beforeAll, afterAll } from 'bun:test';
+import { describe, expect, test, vi, beforeAll, afterAll } from 'vitest';
 import { existsSync, mkdtempSync, writeFileSync, rmSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
-// ── Module-level mocks (must resolve BEFORE static imports) ──────────
+// ── Module-level mocks (hoisted by vitest BEFORE static imports) ─────
 //
 // These replace imported dependencies so runEval/runEvalRepeated never
 // call a real MCP analyzer or check a real corpus lockfile.
-
-const mockRunHeadless = mock(() => ({
-  dir: '',
-  scanId: 'mock-scan',
-  investigation: { usage: { inputTokens: 0, outputTokens: 0 } },
-  mcpCalls: 0,
+// vi.mock() factories are hoisted above imports AND above any preceding
+// top-level code, so the vi.fn() they reference must itself be created via
+// vi.hoisted() — otherwise it's still in its TDZ when the factory runs.
+const { mockRunHeadless } = vi.hoisted(() => ({
+  mockRunHeadless: vi.fn(() => ({
+    dir: '',
+    scanId: 'mock-scan',
+    investigation: { usage: { inputTokens: 0, outputTokens: 0 } },
+    mcpCalls: 0,
+  })),
 }));
 
-mock.module('../../src/surfaces/headless', () => ({
+vi.mock('../../src/surfaces/headless', () => ({
   runHeadless: mockRunHeadless,
 }));
 

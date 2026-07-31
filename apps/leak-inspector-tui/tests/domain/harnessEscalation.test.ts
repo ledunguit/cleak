@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, test } from 'vitest';
 import { needsTargetedDynamic } from '../../src/domain/harnessEscalation';
 import { InvestigationVerdict, ToolKind, type LeakBundle, type VerdictResult } from '@cleak/common/types';
 import type { StaticContextStore } from '../../src/domain/staticContext';

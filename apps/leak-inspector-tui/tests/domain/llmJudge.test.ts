@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, test } from 'vitest';
 import { isBorderline, shouldEscalate, judgeBundleWithLlm, parseVerdict } from '../../src/domain/llmJudge';
 import { InvestigationVerdict, ToolKind, type LeakBundle, type VerdictResult } from '@cleak/common/types';
 import type { CallModel } from '@cleak/agent-core';

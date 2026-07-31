@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, test } from 'vitest';
 import { CandidateScanService, enclosingFunctionName } from '../../src/services/candidate-scan.service';
 import { CParserService } from '../../src/services/c-parser.service';
 

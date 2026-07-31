@@ -1,6 +1,6 @@
 # System Sequence Diagrams
 
-Memory-leak investigation system. The orchestrator is the **TUI** (`leak-inspector-tui`), a standalone Bun/Ink CLI driving a native agent loop via `@cleak/agent-core`. It produces the data contract `LeakCandidate` → `LeakBundle` → `VerdictResult` → `ScanReport`.
+Memory-leak investigation system. The orchestrator is the **TUI** (`leak-inspector-tui`), a standalone Node/Ink CLI driving a native agent loop via `@cleak/agent-core`. It produces the data contract `LeakCandidate` → `LeakBundle` → `VerdictResult` → `ScanReport`.
 
 The TUI invokes the `static-analyzer` / `dynamic-analyzer` services over **MCP-over-HTTP** and writes report artifacts to disk.
 
@@ -55,7 +55,7 @@ sequenceDiagram
     participant Dynamic as dynamic-analyzer (MCP)
     participant Rep as LeakReporting
 
-    User->>CLI: bun leak-tui scan --repo --mode llm_assisted [--allocators-from llm --strategy auto]
+    User->>CLI: cleak scan --repo --mode llm_assisted [--allocators-from llm --strategy auto]
 
     rect rgb(240,240,255)
     Note right of CLI: POLICY (LLM, host-side — skipped in eval/frozen)

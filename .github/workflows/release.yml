@@ -18,9 +18,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: 1.3.14
+      - uses: pnpm/action-setup@v4
 
       # setup-node writes ~/.npmrc with NODE_AUTH_TOKEN so `changeset publish`
       # (npm under the hood) can authenticate to the registry.
@@ -32,16 +30,18 @@ jobs:
           registry-url: https://registry.npmjs.org
 
       - name: Install
-        run: bun install --frozen-lockfile
+        run: pnpm install --frozen-lockfile
 
       # If there are pending changesets -> open/update the "Version Packages" PR
       # (bumps versions + writes CHANGELOGs). When that PR merges (no pending
       # changesets) -> build + publish the changed packages to npm.
+      # NOTE: must be `pnpm run version`, not bare `pnpm version` — pnpm has a
+      # built-in `version` command that would shadow the custom changeset script.
       - name: Create Release PR or publish
         uses: changesets/action@v1
         with:
-          version: bun run version
-          publish: bun run release
+          version: pnpm run version
+          publish: pnpm run release
           commit: "chore: version packages"
           title: "chore: version packages"
         env:

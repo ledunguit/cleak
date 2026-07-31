@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, test } from 'vitest';
 import { bestCorrelation, samplesSparkline, confidenceMeter, coverageBadge, judgeChip, correlationLabel } from '../../../../src/surfaces/tui/findings/verdictStyle';
 
 describe('bestCorrelation', () => {

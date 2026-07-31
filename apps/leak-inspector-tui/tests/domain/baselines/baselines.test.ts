@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, test } from 'vitest';
 import { parseClangLeaks } from '../../../src/domain/baselines/clangAnalyzer';
 import { parseInferLeaks } from '../../../src/domain/baselines/infer';
 

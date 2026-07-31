@@ -1,4 +1,4 @@
-#!/usr/bin/env bun
+#!/usr/bin/env -S tsx
 /**
  * Ingest the NIST Juliet C/C++ CWE-401 (memory-leak) testcases into a v2 labeled
  * corpus the eval harness understands — AND materialize each testcase as a
@@ -18,7 +18,7 @@
  *   https://samate.nist.gov/SARD/downloads/test-suites/2017-10-01-juliet-test-suite-for-c-cplusplus-v1-3.zip
  *
  * Usage:
- *   bun scripts/juliet/ingest.ts --juliet <extracted-root> --out demo/juliet_cwe401 \
+ *   tsx scripts/juliet/ingest.ts --juliet <extracted-root> --out demo/juliet_cwe401 \
  *       [--limit N] [--variant malloc] [--support <testcasesupport dir>] [--no-build]
  *
  *   --no-build   only copy sources (static-only corpus; no support files / Makefile)
@@ -45,7 +45,7 @@ const noBuild = hasFlag('no-build');
 const supportOverride = arg('support');
 
 if (!julietRoot) {
-  console.error('usage: bun scripts/juliet/ingest.ts --juliet <extracted-root> --out <dir> [--limit N] [--variant <substr>] [--support <dir>] [--no-build]');
+  console.error('usage: tsx scripts/juliet/ingest.ts --juliet <extracted-root> --out <dir> [--limit N] [--variant <substr>] [--support <dir>] [--no-build]');
   process.exit(2);
 }
 

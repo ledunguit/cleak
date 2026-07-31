@@ -1,11 +1,11 @@
-#!/usr/bin/env bun
+#!/usr/bin/env -S tsx
 /**
  * Compare the deterministic heuristic mode (no_llm) against the agentic mode
  * (llm_assisted) on the labeled corpus. Surfaces where the agent adds detections
  * or — just as important for the thesis — correctly dismisses false positives.
  *
- *   bun scripts/compare-modes.ts          # all cases
- *   bun scripts/compare-modes.ts 3        # first 3 cases
+ *   tsx scripts/compare-modes.ts          # all cases
+ *   tsx scripts/compare-modes.ts 3        # first 3 cases
  */
 
 import { readFileSync, mkdirSync, writeFileSync } from 'node:fs';

@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, test } from 'vitest';
 import { ResultParserService } from '../../src/services/result-parser.service';
 
 const svc = new ResultParserService();

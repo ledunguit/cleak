@@ -1,4 +1,4 @@
-#!/usr/bin/env bun
+#!/usr/bin/env -S tsx
 /** Verifies the classification-metrics math against a hand-computed matrix. */
 
 import { computeMetrics, metricsOf, calibrationBins, type Sample } from '@cleak/common/analysis/metrics';

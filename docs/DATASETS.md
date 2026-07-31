@@ -13,7 +13,7 @@ is how to obtain/rebuild them. See `.gitignore` for the exact ignored paths and
 2. Unzip it somewhere, then ingest the CWE-401 cases into a v2 labeled corpus:
    ```bash
    unzip juliet.zip -d /tmp/juliet
-   bun scripts/juliet/ingest.ts --juliet /tmp/juliet --out demo/juliet_cwe401
+   pnpm exec tsx scripts/juliet/ingest.ts --juliet /tmp/juliet --out demo/juliet_cwe401
    ```
    This materializes `demo/juliet_cwe401/` (git-ignored) with a `corpus_manifest.json`
    and a self-contained, buildable project per testcase. See `scripts/juliet/README.md`.
@@ -36,7 +36,7 @@ revision is the flaw (`actual:true`), the post-fix revision is clean (`actual:fa
 2 cJSON leak-fix pairs (`cjson-printbuffered`, `cjson-mergepatch`, each `-bad` + `-fixed`).
 
 ```bash
-bun scripts/real-projects/ingest.ts \
+pnpm exec tsx scripts/real-projects/ingest.ts \
   --ground-truth demo/real_projects/ground-truth.json --out demo/real_projects
 ```
 `ground-truth.json` (the oracle: project repo + fixCommit + file/function/flawLine/fixedLine)
@@ -55,14 +55,14 @@ are git-ignored (regenerable).
 
 ```bash
 # 1. Manifest only (fast, no network) — inspect the 41-case → 43-flaw mapping
-bun scripts/lamed/ingest.ts --manifest-only
+pnpm exec tsx scripts/lamed/ingest.ts --manifest-only
 
 # 2. Full materialize — clone each project at its bug commit into demo/lamed/cases/
-bun scripts/lamed/ingest.ts            # needs network + git; ~7 repos
+pnpm exec tsx scripts/lamed/ingest.ts            # needs network + git; ~7 repos
 
 # 3. Evaluate (positive-only → report RECALL + FP count, NOT specificity/MCC)
-bun scripts/evaluate-corpus.ts no_llm  --corpus demo/lamed
-bun scripts/evaluate-corpus.ts llm_assisted --corpus demo/lamed --consensus-n 3
+pnpm exec tsx scripts/evaluate-corpus.ts no_llm  --corpus demo/lamed
+pnpm exec tsx scripts/evaluate-corpus.ts llm_assisted --corpus demo/lamed --consensus-n 3
 ```
 
 > **Real-project allocators — per-project profile (frozen for eval).** Real leaks flow

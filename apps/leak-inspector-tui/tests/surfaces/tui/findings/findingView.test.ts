@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, test } from 'vitest';
 import { snapshotFindingToView, bundleToFindingView, verdictSeverityRank } from '../../../../src/surfaces/tui/findings/findingView';
 
 const richSnapshotFinding = {

@@ -1,4 +1,4 @@
-#!/usr/bin/env bun
+#!/usr/bin/env -S tsx
 /**
  * Exercises the TUI's data layer (store + runner) without rendering Ink: runs a
  * real scan and asserts the store ends in 'done' with a summary, phase banners,

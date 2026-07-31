@@ -1,10 +1,14 @@
-#!/usr/bin/env bun
+#!/usr/bin/env -S tsx
 /** Verifies fetchWithRetry: clear timeout message, onRetry fires, caller-abort → 'interrupted'. */
 
+import { createServer } from 'node:http';
 import { fetchWithRetry } from '@cleak/agent-core';
 
-const hang = Bun.serve({ port: 0, fetch: () => new Promise<Response>(() => {}) });
-const url = `http://localhost:${hang.port}/`;
+const hang = createServer(() => {});
+hang.listen(0);
+const hangAddress = hang.address();
+const hangPort = typeof hangAddress === 'object' && hangAddress ? hangAddress.port : 0;
+const url = `http://localhost:${hangPort}/`;
 
 // ── timeout + retry ──
 const notices: string[] = [];
@@ -45,6 +49,6 @@ try {
   console.log(`✓ caller abort → "interrupted" (not retried)`);
 }
 
-hang.stop();
+hang.close();
 console.log('✓ transport resilience verified');
 process.exit(0);

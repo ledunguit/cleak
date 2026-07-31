@@ -1,4 +1,4 @@
-#!/usr/bin/env bun
+#!/usr/bin/env -S tsx
 /**
  * Ingest real-project memory-leak cases from upstream leak-fix commits into a v2
  * labeled corpus the eval harness understands — using the LEAK-FIX-COMMIT ORACLE:
@@ -12,7 +12,7 @@
  * materialized `cases/` are git-ignored (regenerable, like the Juliet corpus).
  *
  * Usage:
- *   bun scripts/real-projects/ingest.ts \
+ *   tsx scripts/real-projects/ingest.ts \
  *     --ground-truth demo/real_projects/ground-truth.json \
  *     --out demo/real_projects [--clones /tmp/real-projects-clones]
  */

@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, test } from 'vitest';
 import { createOpenAiStreamAssembler, createAnthropicStreamAssembler } from '../../src/providers/normalize';
 
 const uuid = () => 'generated-id';

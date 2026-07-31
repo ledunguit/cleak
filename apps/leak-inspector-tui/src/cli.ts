@@ -1,6 +1,6 @@
 /**
  * cleak — an agentic terminal investigator for C/C++ memory leaks.
- * (The executable shebang is injected by tsup at build time; `bun src/cli.ts`
+ * (The executable shebang is injected by tsup at build time; `tsx src/cli.ts`
  * is used for local dev.)
  *
  * Commands:

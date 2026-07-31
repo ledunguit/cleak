@@ -65,7 +65,7 @@
     "build": "tsup",
     "typecheck": "tsc --noEmit -p tsconfig.lib.json",
     "lint": "echo 'lint ok'",
-    "test": "bun test"
+    "test": "vitest run"
   },
   "dependencies": {
     "zod": "^4.4.3"

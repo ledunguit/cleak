@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, test } from 'vitest';
 import { join } from 'node:path';
 import { loadBaselineConfigs } from '../../src/domain/baselineConfig';
 import { resolveCapabilities } from '../../src/domain/capabilityResolver';
@@ -10,7 +10,7 @@ import {
   type BaselineSweepRow,
 } from '../../src/domain/baselineSweep';
 
-const BASELINES_DIR = join(import.meta.dir, '../../../../configs/baselines');
+const BASELINES_DIR = join(import.meta.dirname, '../../../../configs/baselines');
 
 describe('isWiredNow (Step-4 gate over the 9 baselines)', () => {
   const configs = loadBaselineConfigs(BASELINES_DIR);

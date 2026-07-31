@@ -9,7 +9,7 @@
  * hardcoded lists with dynamic LLM discovery WITHOUT making the leak eval
  * non-deterministic (the eval still uses the frozen lists).
  *
- *   bun scripts/validate-allocator-profile.ts --corpus <dir-with-corpus_manifest.json>
+ *   tsx scripts/validate-allocator-profile.ts --corpus <dir-with-corpus_manifest.json>
  */
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -59,7 +59,7 @@ function score(discovered: string[], truth: string[]): Score {
 async function main() {
   const corpusDir = flag('corpus');
   if (!corpusDir) {
-    console.error('usage: bun scripts/validate-allocator-profile.ts --corpus <dir>');
+    console.error('usage: tsx scripts/validate-allocator-profile.ts --corpus <dir>');
     process.exit(1);
   }
   const manifest = JSON.parse(readFileSync(join(corpusDir, 'corpus_manifest.json'), 'utf-8'));

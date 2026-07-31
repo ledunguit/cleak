@@ -42,14 +42,14 @@
   },
   "main": "dist/cli.js",
   "scripts": {
-    "tui": "bun src/cli.ts tui",
-    "scan": "bun src/cli.ts scan",
-    "tools": "bun src/cli.ts tools",
-    "eval": "bun src/cli.ts eval",
+    "tui": "tsx src/cli.ts tui",
+    "scan": "tsx src/cli.ts scan",
+    "tools": "tsx src/cli.ts tools",
+    "eval": "tsx src/cli.ts eval",
     "build": "tsup",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "lint": "echo 'lint ok'",
-    "test": "bun test"
+    "test": "vitest run"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.0",

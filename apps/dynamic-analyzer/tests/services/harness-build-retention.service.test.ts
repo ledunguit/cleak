@@ -1,4 +1,4 @@
-import { describe, expect, test, mock } from 'bun:test';
+import { describe, expect, test, vi } from 'vitest';
 import { mkdirSync, mkdtempSync, readdirSync, realpathSync, rmSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
@@ -6,7 +6,7 @@ import { join } from 'path';
 // Mock the compiler/linker calls so this test doesn't need real bear/clang — every
 // `runConfined` call succeeds and, when the args contain `-o <path>`, creates an
 // empty file there (HarnessBuildService only checks `existsSync` on it).
-mock.module('../../src/services/safe-exec', () => ({
+vi.mock('../../src/services/safe-exec', () => ({
   sanitizeRunId: (id: string, fallbackPrefix = 'run') => {
     const clean = (id || '').replace(/[^A-Za-z0-9_]/g, '');
     return clean.length ? clean : `${fallbackPrefix}_unknown`;

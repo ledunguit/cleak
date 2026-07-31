@@ -1,9 +1,9 @@
-#!/usr/bin/env bun
+#!/usr/bin/env -S tsx
 /**
  * End-to-end smoke: run one headless scan and assert it completes with a leak
  * detected and an applicable repair diff. Fast sanity check for CI / local dev.
  *
- *   bun scripts/run-local-scan-smoke.ts [no_llm|llm_assisted] [repo]
+ *   tsx scripts/run-local-scan-smoke.ts [no_llm|llm_assisted] [repo]
  */
 
 import { runHeadless } from '../apps/leak-inspector-tui/src/surfaces/headless';

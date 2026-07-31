@@ -53,5 +53,5 @@ cộng điểm. Chi tiết: [docs/EVALUATION.md](../../docs/EVALUATION.md) ·
 
 ```bash
 turbo run build --filter=@cleak/common    # tsup (nhiều entry: index/types/flow/analysis)
-turbo run test  --filter=@cleak/common    # bun test
+turbo run test  --filter=@cleak/common    # vitest run
 ```

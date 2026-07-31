@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, test } from 'vitest';
 import { splitCommandLine, extractReusableFlags } from '../../src/services/compile-commands.service';
 
 describe('splitCommandLine', () => {

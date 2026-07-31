@@ -53,7 +53,7 @@ Every scan must deliver all five of the following:
 |:---:|---|
 | ✅ | Full `setup → scan → report` flow runs end-to-end (verified on the Docker stack). |
 | ✅ | Realtime workflow nodes reflect the **actual** running flow, via a shared scan-flow contract (single source of truth in `packages/common`). |
-| ✅ | Eval harness emits precision/recall comparing `no_llm` vs `llm_assisted` on the corpus (`bun run eval:compare` → `results/eval/comparison.{json,md}`). |
+| ✅ | Eval harness emits precision/recall comparing `no_llm` vs `llm_assisted` on the corpus (`pnpm run eval:compare` → `results/eval/comparison.{json,md}`). |
 | ✅ | Every "leak" verdict ships a root-cause explanation **and** an applicable, source-anchored fix diff (heuristic *and* LLM paths). |
 
 ## Evaluation & metric notes

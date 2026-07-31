@@ -1,12 +1,12 @@
-#!/usr/bin/env bun
+#!/usr/bin/env -S tsx
 /**
  * McNemar paired-significance comparison of two eval runs (Tier-2). This is the
  * defensible test behind a claim like "consensus beats single-LLM": both arms are
  * scored over the SAME ground-truth sites, so we compare them site-by-site rather
  * than comparing two independent aggregate numbers.
  *
- *   bun scripts/mcnemar-compare.ts <runA>[/metrics.json] <runB>[/metrics.json]
- *   bun scripts/mcnemar-compare.ts single=/tmp/s1/metrics.json consensus=/tmp/c3/metrics.json
+ *   tsx scripts/mcnemar-compare.ts <runA>[/metrics.json] <runB>[/metrics.json]
+ *   tsx scripts/mcnemar-compare.ts single=/tmp/s1/metrics.json consensus=/tmp/c3/metrics.json
  *
  * Each run's `metrics.json` must carry the per-site `samples` array (with `siteId`)
  * that the eval harness now persists — older runs predate it and must be re-run.
@@ -21,7 +21,7 @@ import { mcnemar, accumulate, computeMetrics, type Sample } from '@cleak/common/
 
 const args = process.argv.slice(2);
 if (args.length !== 2) {
-  console.error('usage: bun scripts/mcnemar-compare.ts <runA> <runB>   (dir or metrics.json; optional label=path)');
+  console.error('usage: tsx scripts/mcnemar-compare.ts <runA> <runB>   (dir or metrics.json; optional label=path)');
   process.exit(2);
 }
 

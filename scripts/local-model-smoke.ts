@@ -1,11 +1,11 @@
-#!/usr/bin/env bun
+#!/usr/bin/env -S tsx
 /**
  * Real-model smoke: drives the agentic loop against the configured local
  * gateway with two tools (a calculator + a terminal "report" tool) to confirm
  * native tool-calling works end-to-end. Host runs rewrite the container URL
  * (host.docker.internal) to localhost.
  *
- *   bun scripts/local-model-smoke.ts
+ *   tsx scripts/local-model-smoke.ts
  */
 
 import { z } from 'zod';

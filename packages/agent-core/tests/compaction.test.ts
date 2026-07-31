@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, test } from 'vitest';
 import { estimateTokens, pruneStaleToolResults } from '../src/compaction';
 import type { Message } from '../src/types';
 

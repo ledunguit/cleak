@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, test } from 'vitest';
 import { createTestState } from './test-helpers';
 
 describe('permission mode (Shift+Tab auto-accept)', () => {

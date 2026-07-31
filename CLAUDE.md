@@ -130,19 +130,19 @@ docker compose up --build
 
 ### Build All (Turbo)
 ```bash
-bun run build        # Builds all NestJS apps + the TUI via turbo pipeline
-bun run typecheck    # Type-check all packages (separate turbo task)
+pnpm run build        # Builds all NestJS apps + the TUI via turbo pipeline
+pnpm run typecheck    # Type-check all packages (separate turbo task)
 
-# Package manager: bun@1.3.14 (per root package.json)
-# Global install:  bun run cleak:install (builds @cleak/cli then npm i -g)
+# Package manager: pnpm@11.18.0 (per root package.json), runtime: Node 22 (no Bun)
+# Global install:  pnpm run cleak:install (builds @cleak/cli then npm i -g)
 ```
 
 ### Development / Test Scripts
 ```bash
-bun run scan:smoke        # bun scripts/run-local-scan-smoke.ts
-bun run eval:corpus       # bun scripts/evaluate-corpus.ts
-bun run eval:compare      # bun scripts/compare-modes.ts
-bun run mcp:contract      # bun scripts/mcp-contract-test.ts
+pnpm run scan:smoke        # tsx scripts/run-local-scan-smoke.ts
+pnpm run eval:corpus       # tsx scripts/evaluate-corpus.ts
+pnpm run eval:compare      # tsx scripts/compare-modes.ts
+pnpm run mcp:contract      # tsx scripts/mcp-contract-test.ts
 ```
 
 Development scripts live in `scripts/` — 21 TypeScript evaluation/test files,
@@ -156,10 +156,10 @@ turbo run dev --filter=static-analyzer        # static analyzer (MCP, port 50061
 turbo run dev --filter=dynamic-analyzer        # dynamic analyzer (MCP, port 50062)
 
 # Or run the TUI directly:
-bun src/cli.ts tui                    # default: interactive TUI
-bun src/cli.ts scan --repo <path>     # headless scan
-bun src/cli.ts eval --corpus <path>   # corpus evaluation
-bun src/cli.ts tools                  # MCP connectivity check
+pnpm exec tsx src/cli.ts tui                    # default: interactive TUI
+pnpm exec tsx src/cli.ts scan --repo <path>     # headless scan
+pnpm exec tsx src/cli.ts eval --corpus <path>   # corpus evaluation
+pnpm exec tsx src/cli.ts tools                  # MCP connectivity check
 ```
 
 ## Configuration

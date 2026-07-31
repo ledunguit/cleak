@@ -1,9 +1,9 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, test } from 'vitest';
 import { join } from 'node:path';
 import { loadBaselineConfigs, type Capabilities } from '../../src/domain/baselineConfig';
 import { resolveCapabilities, type ResolvedRunPlan } from '../../src/domain/capabilityResolver';
 
-const BASELINES_DIR = join(import.meta.dir, '../../../../configs/baselines');
+const BASELINES_DIR = join(import.meta.dirname, '../../../../configs/baselines');
 
 /** Expected resolution per baseline id (the contract the sweep runner relies on). */
 const EXPECTED: Record<string, Partial<ResolvedRunPlan>> = {
@@ -77,7 +77,7 @@ describe('resolveCapabilities (edge cases)', () => {
 describe('resolveCapabilities (baseline round-trip)', () => {
   test('every baseline config round-trips through loadBaselineConfig + resolveCapabilities', () => {
     const configs = loadBaselineConfigs(
-      join(import.meta.dir, '../../../../configs/baselines'),
+      join(import.meta.dirname, '../../../../configs/baselines'),
     );
     expect(configs.length).toBeGreaterThanOrEqual(9); // B1-B7 + variants
     for (const cfg of configs) {

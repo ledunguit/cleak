@@ -18,8 +18,9 @@
  * These tests verify the STRUCTURAL invariants without requiring a real
  * terminal or ink-testing-library.
  */
-import { afterEach, describe, expect, test } from 'bun:test';
+import { afterEach, describe, expect, test } from 'vitest';
 import { join } from 'node:path';
+import { readFile } from 'node:fs/promises';
 import { createTestState } from './test-helpers';
 import { isFullscreenEnvEnabled } from '../../../src/surfaces/tui/layout/layoutFlags';
 
@@ -84,12 +85,13 @@ describe('flicker elimination (store level)', () => {
 
 describe('flicker elimination (layout level)', () => {
   test('FullscreenLayout does not use height={terminalRows}', async () => {
-    // import.meta.dir = apps/leak-inspector-tui/tests/surfaces/tui
+    // import.meta.dirname = apps/leak-inspector-tui/tests/surfaces/tui
     // ../../../ = apps/leak-inspector-tui
-    const srcDir = join(import.meta.dir!, '..', '..', '..', 'src');
-    const source = await Bun.file(
+    const srcDir = join(import.meta.dirname, '..', '..', '..', 'src');
+    const source = await readFile(
       join(srcDir, 'surfaces/tui/layout/FullscreenLayout.tsx'),
-    ).text();
+      'utf8',
+    );
 
     // These patterns would trigger the Ink v5 full-clear when content
     // height matches viewport height
@@ -102,10 +104,11 @@ describe('flicker elimination (layout level)', () => {
   });
 
   test('StackLayout uses flexGrow not height={terminalRows}', async () => {
-    const srcDir = join(import.meta.dir!, '..', '..', '..', 'src');
-    const source = await Bun.file(
+    const srcDir = join(import.meta.dirname, '..', '..', '..', 'src');
+    const source = await readFile(
       join(srcDir, 'surfaces/tui/layout/StackLayout.tsx'),
-    ).text();
+      'utf8',
+    );
 
     // StackLayout is the default layout — it must NOT use the problematic
     // pattern either. Its outer Box uses height="100%" (flex-parent-relative)
@@ -116,10 +119,11 @@ describe('flicker elimination (layout level)', () => {
   });
 
   test('layoutFlags module has no terminal dependency', async () => {
-    const srcDir = join(import.meta.dir!, '..', '..', '..', 'src');
-    const source = await Bun.file(
+    const srcDir = join(import.meta.dirname, '..', '..', '..', 'src');
+    const source = await readFile(
       join(srcDir, 'surfaces/tui/layout/layoutFlags.ts'),
-    ).text();
+      'utf8',
+    );
 
     // The flag function must be a pure env-var check with no I/O
     expect(source).toContain('process.env.CLEAK_FULLSCREEN');

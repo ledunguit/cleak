@@ -1,4 +1,4 @@
-#!/usr/bin/env bun
+#!/usr/bin/env -S tsx
 /**
  * Determinism gate — the whole point of the dynamic-evidence rework. Asserts that
  * two eval runs of the SAME config produced byte-identical SCORING results (the
@@ -7,7 +7,7 @@
  * worker non-deterministically recorded evidence, flipping verdicts run-to-run);
  * after it, this PASSES.
  *
- *   bun scripts/assert-determinism.ts <runA>/metrics.json <runB>/metrics.json
+ *   tsx scripts/assert-determinism.ts <runA>/metrics.json <runB>/metrics.json
  *
  * Exit codes: 0 = deterministic · 1 = non-deterministic (diff shown) · 2 = INVALID
  * gate (refused to certify — see below).
@@ -45,7 +45,7 @@ function stableSubset(r: any) {
 
 const [pathA, pathB] = process.argv.slice(2);
 if (!pathA || !pathB) {
-  console.error('usage: bun scripts/assert-determinism.ts <runA>/metrics.json <runB>/metrics.json');
+  console.error('usage: tsx scripts/assert-determinism.ts <runA>/metrics.json <runB>/metrics.json');
   process.exit(2);
 }
 

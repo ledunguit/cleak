@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, test } from 'vitest';
 import { analyzeLeakHeuristically } from '../../src/analysis/heuristic-leak-analysis';
 import type { LeakBundle } from '../../src/types';
 

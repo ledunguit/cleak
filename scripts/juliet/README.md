@@ -20,14 +20,14 @@ The CWE-401 testcases live under
 
 ```bash
 # Full CWE-401:
-bun scripts/juliet/ingest.ts --juliet /tmp/juliet/C/testcases/CWE401_Memory_Leak --out demo/juliet_cwe401
+pnpm exec tsx scripts/juliet/ingest.ts --juliet /tmp/juliet/C/testcases/CWE401_Memory_Leak --out demo/juliet_cwe401
 
 # A slice for a dev run:
-bun scripts/juliet/ingest.ts --juliet /tmp/juliet/C/testcases/CWE401_Memory_Leak --out demo/juliet_cwe401 --limit 30
-bun scripts/juliet/ingest.ts --juliet /tmp/juliet/C/testcases/CWE401_Memory_Leak --out demo/juliet_cwe401 --variant malloc
+pnpm exec tsx scripts/juliet/ingest.ts --juliet /tmp/juliet/C/testcases/CWE401_Memory_Leak --out demo/juliet_cwe401 --limit 30
+pnpm exec tsx scripts/juliet/ingest.ts --juliet /tmp/juliet/C/testcases/CWE401_Memory_Leak --out demo/juliet_cwe401 --variant malloc
 
 # Static-only (no support files / Makefile):
-bun scripts/juliet/ingest.ts --juliet .../CWE401_Memory_Leak --out demo/juliet_cwe401 --no-build
+pnpm exec tsx scripts/juliet/ingest.ts --juliet .../CWE401_Memory_Leak --out demo/juliet_cwe401 --no-build
 ```
 
 This materializes each testcase into `demo/juliet_cwe401/cases/<id>/` as a
@@ -64,14 +64,14 @@ leak-tui scan . --dynamic selective   # your /scan workflow: static + dynamic
 
 ```bash
 # Deterministic baseline (fast, free) — static only:
-bun apps/leak-inspector-tui/src/cli.ts eval --corpus demo/juliet_cwe401 --mode no_llm --concurrency 6
+pnpm exec tsx apps/leak-inspector-tui/src/cli.ts eval --corpus demo/juliet_cwe401 --mode no_llm --concurrency 6
 
 # Static + dynamic (LeakSanitizer confirms the leak; needs Linux/Docker build):
-bun apps/leak-inspector-tui/src/cli.ts eval --corpus demo/juliet_cwe401 --mode no_llm --dynamic selective --concurrency 4
+pnpm exec tsx apps/leak-inspector-tui/src/cli.ts eval --corpus demo/juliet_cwe401 --mode no_llm --dynamic selective --concurrency 4
 
 # Agentic — validate on a slice, then the full set (resumable):
-bun apps/leak-inspector-tui/src/cli.ts eval --corpus demo/juliet_cwe401 --mode llm_assisted --dynamic selective --limit 30
-bun apps/leak-inspector-tui/src/cli.ts eval --corpus demo/juliet_cwe401 --mode llm_assisted --dynamic selective --resume
+pnpm exec tsx apps/leak-inspector-tui/src/cli.ts eval --corpus demo/juliet_cwe401 --mode llm_assisted --dynamic selective --limit 30
+pnpm exec tsx apps/leak-inspector-tui/src/cli.ts eval --corpus demo/juliet_cwe401 --mode llm_assisted --dynamic selective --resume
 ```
 
 Or run it **inside the interactive TUI** — opens a live EVAL dashboard (set

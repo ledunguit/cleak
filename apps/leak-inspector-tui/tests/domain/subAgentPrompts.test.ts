@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, test } from 'vitest';
 import { harnessWorkerUserMessage } from '../../src/domain/subAgentPrompts';
 import type { LeakBundle } from '@cleak/common/types';
 

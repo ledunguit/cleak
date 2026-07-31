@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, test } from 'vitest';
 import { safeParseManifest, parseManifest } from '../../src/validation/corpus-manifest.schema';
 
 const validCase = { id: 'c1', repo_path: 'cases/c1', flaws: [{ function: 'bad', cwe: 'CWE-401' }], clean: [{ function: 'goodB2G' }] };

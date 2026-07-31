@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, test } from 'vitest';
 import { toOpenAiMessages } from '../../src/providers/normalize';
 import type { Message } from '../../src/types';
 

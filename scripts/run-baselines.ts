@@ -1,13 +1,13 @@
-#!/usr/bin/env bun
+#!/usr/bin/env -S tsx
 /**
  * Baseline ablation sweep. Runs the 9 declarative baseline configs
  * (configs/baselines/*.yaml) on one corpus through the SAME eval harness + scorer,
  * and emits a single comparison table (Markdown / CSV / LaTeX) over the thesis
  * metrics: Precision · Recall · F1 · FP/KLOC · runtime · #MCP calls · token cost.
  *
- *   bun scripts/run-baselines.ts --corpus demo/juliet_cwe401 --limit 300
- *   bun scripts/run-baselines.ts --only B1,B3 --corpus demo/juliet_cwe401
- *   bun scripts/run-baselines.ts --dry-run            # print resolved plans, run nothing
+ *   tsx scripts/run-baselines.ts --corpus demo/juliet_cwe401 --limit 300
+ *   tsx scripts/run-baselines.ts --only B1,B3 --corpus demo/juliet_cwe401
+ *   tsx scripts/run-baselines.ts --dry-run            # print resolved plans, run nothing
  *
  * Each config maps to engine knobs via capabilityResolver. Deterministic configs
  * (fusion off) run once; fusion configs run `runs` times and F1 is reported mean±std.

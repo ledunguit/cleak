@@ -34,11 +34,11 @@ cd "$ROOT"
 
 echo "── determinism gate: mode=$MODE limit=$LIMIT static=$EVAL_STATIC_URL ──"
 echo "── run A ──"
-RESULTS_DIR="$OUT/A" bun scripts/evaluate-corpus.ts "$MODE" --limit "$LIMIT" "$@" | tail -2
+RESULTS_DIR="$OUT/A" pnpm exec tsx scripts/evaluate-corpus.ts "$MODE" --limit "$LIMIT" "$@" | tail -2
 echo "── run B ──"
-RESULTS_DIR="$OUT/B" bun scripts/evaluate-corpus.ts "$MODE" --limit "$LIMIT" "$@" | tail -2
+RESULTS_DIR="$OUT/B" pnpm exec tsx scripts/evaluate-corpus.ts "$MODE" --limit "$LIMIT" "$@" | tail -2
 
 A="$(ls -d "$OUT"/A/eval-* | head -1)"
 B="$(ls -d "$OUT"/B/eval-* | head -1)"
 echo "── assert (A=$A B=$B) ──"
-bun scripts/assert-determinism.ts "$A/metrics.json" "$B/metrics.json"
+pnpm exec tsx scripts/assert-determinism.ts "$A/metrics.json" "$B/metrics.json"

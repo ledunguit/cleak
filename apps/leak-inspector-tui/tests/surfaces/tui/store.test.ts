@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, test } from 'vitest';
 import { visibleMessages, visibleFindings } from '../../../src/stores';
 import type { FindingView } from '../../../src/surfaces/tui/findings/findingView';
 

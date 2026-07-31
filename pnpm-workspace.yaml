@@ -1,0 +1,9 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+allowBuilds:
+  '@swc/core': true
+  esbuild: true
+  tree-sitter: true
+  tree-sitter-c: true
+  tree-sitter-cpp: true

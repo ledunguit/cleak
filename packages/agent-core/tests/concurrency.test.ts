@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, test } from 'vitest';
 import { mapWithLimit } from '../src/concurrency';
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));

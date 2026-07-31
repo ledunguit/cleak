@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, test } from 'vitest';
 import { groupByFileAffinity } from '../../src/orchestrator/workflowInvestigation';
 import type { LeakBundle } from '@cleak/common/types';
 

@@ -1,4 +1,4 @@
-#!/usr/bin/env bun
+#!/usr/bin/env -S tsx
 /**
  * Ingest the LAMeD memory-leak benchmark into a v2 labeled corpus the eval harness
  * understands, so leak-investigator can be run head-to-head on the only
@@ -22,12 +22,12 @@
  * positive-only static baselines (see docs/BASELINE-COMPARISON.md).
  *
  * Usage:
- *   bun scripts/lamed/ingest.ts                          # materialize (clones repos)
- *   bun scripts/lamed/ingest.ts --manifest-only          # write the manifest only (no clone)
- *   bun scripts/lamed/ingest.ts --benchmark <path> --out demo/lamed --clones /tmp/lamed-clones
+ *   tsx scripts/lamed/ingest.ts                          # materialize (clones repos)
+ *   tsx scripts/lamed/ingest.ts --manifest-only          # write the manifest only (no clone)
+ *   tsx scripts/lamed/ingest.ts --benchmark <path> --out demo/lamed --clones /tmp/lamed-clones
  *
  * The pure mapping helpers are exported (and unit-tested in ingest.test.ts);
- * execution is guarded by `import.meta.main` so importing them runs nothing.
+ * execution is guarded by an entrypoint check so importing them runs nothing.
  */
 
 import { execFileSync } from 'node:child_process';
@@ -250,4 +250,4 @@ function main(): void {
   console.log('\nLAMeD is POSITIVE-ONLY → score RECALL + FP count (not specificity/MCC). See docs/BASELINE-COMPARISON.md.');
 }
 
-if (import.meta.main) main();
+if (import.meta.url === `file://${process.argv[1]}`) main();

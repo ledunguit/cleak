@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, test } from 'vitest';
 import { synthesizeCandidatesFromStore } from '../../src/domain/dynamicDiscovery';
 import type { DynamicRunStore } from '../../src/domain/dynamicEvidence';
 

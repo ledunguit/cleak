@@ -1,4 +1,4 @@
-#!/usr/bin/env bun
+#!/usr/bin/env -S tsx
 /**
  * Loop smoke test with a scripted (fake) callModel — no network. Verifies the
  * turn loop dispatches tools, threads tool_result blocks back, runs the

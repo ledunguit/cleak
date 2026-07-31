@@ -367,7 +367,7 @@ export function gateCorpus(corpusDir: string, allowUnvalidated: boolean): Corpus
     if (!allowUnvalidated) {
       throw new Error(
         `✗ corpus integrity gate FAILED for ${corpusDir}: ${gate.reason}.\n` +
-          `  Run \`bun scripts/corpus/validate-corpus.ts --corpus ${corpusDir} --write-lock ${corpusDir}.lock.json\` ` +
+          `  Run \`tsx scripts/corpus/validate-corpus.ts --corpus ${corpusDir} --write-lock ${corpusDir}.lock.json\` ` +
           `and commit the lockfile, or pass --allow-unvalidated to run on UNVERIFIED data.`,
       );
     }

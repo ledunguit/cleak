@@ -65,13 +65,13 @@ Copy `.env.example` → `.env`. **Mọi biến TUỲ CHỌN** (code có default)
 
 ```bash
 # Host (đọc apps/static-analyzer/.env qua dotenv của main.ts; cwd = repo root)
-turbo run dev --filter=static-analyzer        # hoặc: (cd apps/static-analyzer && bun run dev)
+turbo run dev --filter=static-analyzer        # hoặc: (cd apps/static-analyzer && pnpm run dev)
 
 # Docker (đọc apps/static-analyzer/.env qua env_file của compose)
 docker compose up --build static-analyzer
 ```
 
-Kiểm tra nhanh tool catalog: `bun scripts/mcp-contract-test.ts`.
+Kiểm tra nhanh tool catalog: `pnpm exec tsx scripts/mcp-contract-test.ts`.
 
 ## Ghi chú
 

@@ -41,10 +41,10 @@ chấm bằng **đúng một** `scoreCase` (`apps/leak-inspector-tui/src/domain/
 ```bash
 # (tuỳ chọn) chạy một eval hệ thống trước để fold-in
 export EVAL_STATIC_URL=http://127.0.0.1:50061/mcp EVAL_DYNAMIC_URL=http://127.0.0.1:50062/mcp
-bun scripts/evaluate-corpus.ts no_llm --limit 30          # → results/eval-no_llm-<ts>/metrics.json
+pnpm exec tsx scripts/evaluate-corpus.ts no_llm --limit 30          # → results/eval-no_llm-<ts>/metrics.json
 
 # so baseline (clang/infer) + fold-in run hệ thống:
-bun scripts/compare-baselines.ts --corpus demo/juliet_cwe401 --limit 30 \
+pnpm exec tsx scripts/compare-baselines.ts --corpus demo/juliet_cwe401 --limit 30 \
   --system "no_llm=results/eval-no_llm-<ts>/metrics.json" \
   --out results/baseline-compare
 cat results/baseline-compare/baseline-compare.md
@@ -78,9 +78,9 @@ LAMeD (EASE'25) là baseline leak C/C++ peer-review duy nhất, và là **dự �
 (ngược với Juliet *dễ*). Lấy + ingest theo [DATASETS.md](DATASETS.md):
 
 ```bash
-bun scripts/lamed/ingest.ts                 # clone 7 repo tại bug commit → demo/lamed/cases/
-bun scripts/evaluate-corpus.ts no_llm        --corpus demo/lamed   # → metrics.json
-bun scripts/evaluate-corpus.ts llm_assisted  --corpus demo/lamed --consensus-n 3
+pnpm exec tsx scripts/lamed/ingest.ts                 # clone 7 repo tại bug commit → demo/lamed/cases/
+pnpm exec tsx scripts/evaluate-corpus.ts no_llm        --corpus demo/lamed   # → metrics.json
+pnpm exec tsx scripts/evaluate-corpus.ts llm_assisted  --corpus demo/lamed --consensus-n 3
 ```
 
 **Luật công bằng cho LAMeD = giống §3 (positive-only):** benchmark **không có nhãn sạch**
@@ -151,13 +151,13 @@ judging path-sensitive/interprocedural — đúng hướng LAMeD, và lớp đ�
 
 | Script | Mục đích | Lệnh |
 |---|---|---|
-| `evaluate-corpus.ts` | Eval corpus (1 hoặc N run), ghi metrics/report/tables | `bun scripts/evaluate-corpus.ts [no_llm\|llm_assisted] [--limit N] [--runs M] [--dynamic ..] [--consensus-n K]` |
-| `compare-baselines.ts` | Baseline ↔ hệ thống (bảng) | `bun scripts/compare-baselines.ts --corpus <dir> [--limit N] [--system L=path] [--out dir]` |
-| `compare-results.ts` | So ≥2 run (md+LaTeX) | `bun scripts/compare-results.ts <runA> <runB> [--label L] [--out f]` |
-| `compare-modes.ts` | no_llm vs llm_assisted | `bun scripts/compare-modes.ts [N]` |
-| `assert-determinism.ts` | Gate Tier-1 (so chấm điểm 2 run) | `bun scripts/assert-determinism.ts <A>/metrics.json <B>/metrics.json` |
+| `evaluate-corpus.ts` | Eval corpus (1 hoặc N run), ghi metrics/report/tables | `pnpm exec tsx scripts/evaluate-corpus.ts [no_llm\|llm_assisted] [--limit N] [--runs M] [--dynamic ..] [--consensus-n K]` |
+| `compare-baselines.ts` | Baseline ↔ hệ thống (bảng) | `pnpm exec tsx scripts/compare-baselines.ts --corpus <dir> [--limit N] [--system L=path] [--out dir]` |
+| `compare-results.ts` | So ≥2 run (md+LaTeX) | `pnpm exec tsx scripts/compare-results.ts <runA> <runB> [--label L] [--out f]` |
+| `compare-modes.ts` | no_llm vs llm_assisted | `pnpm exec tsx scripts/compare-modes.ts [N]` |
+| `assert-determinism.ts` | Gate Tier-1 (so chấm điểm 2 run) | `pnpm exec tsx scripts/assert-determinism.ts <A>/metrics.json <B>/metrics.json` |
 | `determinism-gate.sh` | Wrapper 2 run no_llm → assert | `bash scripts/determinism-gate.sh` |
-| `verdict-stability.ts` | Tier-2 (flip rate) | `bun scripts/verdict-stability.ts <A> <B> [..]` |
+| `verdict-stability.ts` | Tier-2 (flip rate) | `pnpm exec tsx scripts/verdict-stability.ts <A> <B> [..]` |
 | `consensus-ablation.sh` | single vs consensus (flip rate) | `K=3 LIMIT=30 bash scripts/consensus-ablation.sh` |
 
 Corpus: xem [DATASETS.md](DATASETS.md) (Juliet CWE-401 + real_projects) và lệnh ingest.

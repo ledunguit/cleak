@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, test } from 'vitest';
 import { LeakBundleSchema, DynamicCoverageSchema } from '../../src/validation/leak-bundle.schema';
 
 const baseBundle = {

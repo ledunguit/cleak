@@ -1,4 +1,4 @@
-#!/usr/bin/env bun
+#!/usr/bin/env -S tsx
 /** Verifies the loop pauses on model failure and resumes (retries) on user input. */
 
 import { queryLoop, type AgentEvent, type CallModel } from '@cleak/agent-core';

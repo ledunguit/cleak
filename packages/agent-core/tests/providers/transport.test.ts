@@ -1,8 +1,8 @@
-import { afterAll, describe, expect, test } from 'bun:test';
+import { afterAll, describe, expect, test } from 'vitest';
+import { createServer } from 'node:http';
 import { streamWithRetry } from '../../src/providers/transport';
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-const enc = new TextEncoder();
 
 interface StubBehavior {
   /** Emit these SSE payloads with `gapMs` between each; -1 gap = stall forever. */
@@ -16,43 +16,43 @@ interface StubBehavior {
 let calls = 0;
 let behavior: StubBehavior = {};
 
-const server = Bun.serve({
-  port: 0,
-  async fetch() {
-    const attempt = calls++;
-    if (behavior.failStatuses && attempt < behavior.failStatuses.length) {
-      return new Response('busy', { status: behavior.failStatuses[attempt] });
+const server = createServer(async (_req, res) => {
+  const attempt = calls++;
+  if (behavior.failStatuses && attempt < behavior.failStatuses.length) {
+    res.writeHead(behavior.failStatuses[attempt]);
+    res.end('busy');
+    return;
+  }
+  if (behavior.json !== undefined) {
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end(JSON.stringify(behavior.json));
+    return;
+  }
+  const chunks = behavior.chunks ?? [];
+  res.writeHead(200, { 'content-type': 'text/event-stream' });
+  for (const c of chunks) {
+    if (c.gapMs < 0) {
+      await sleep(10_000); // stall — client idle timeout should fire first
+    } else if (c.gapMs > 0) {
+      await sleep(c.gapMs);
     }
-    if (behavior.json !== undefined) {
-      return new Response(JSON.stringify(behavior.json), { headers: { 'content-type': 'application/json' } });
-    }
-    const chunks = behavior.chunks ?? [];
-    const stream = new ReadableStream({
-      async pull(ctrl) {
-        for (const c of chunks) {
-          if (c.gapMs < 0) {
-            await sleep(10_000); // stall — client idle timeout should fire first
-          } else if (c.gapMs > 0) {
-            await sleep(c.gapMs);
-          }
-          ctrl.enqueue(enc.encode(`data: ${c.data}\n\n`));
-        }
-        ctrl.enqueue(enc.encode('data: [DONE]\n\n'));
-        ctrl.close();
-      },
-    });
-    return new Response(stream, { headers: { 'content-type': 'text/event-stream' } });
-  },
+    res.write(`data: ${c.data}\n\n`);
+  }
+  res.write('data: [DONE]\n\n');
+  res.end();
 });
+server.listen(0);
+const serverAddress = server.address();
+const serverPort = typeof serverAddress === 'object' && serverAddress ? serverAddress.port : 0;
 
-const url = `http://localhost:${server.port}/`;
+const url = `http://localhost:${serverPort}/`;
 
 function reset(b: StubBehavior) {
   calls = 0;
   behavior = b;
 }
 
-afterAll(() => server.stop(true));
+afterAll(() => new Promise<void>((resolve) => server.close(() => resolve())));
 
 const base = { connectTimeoutMs: 1000, idleTimeoutMs: 150, retries: 2, onJsonFallback: () => {} };
 

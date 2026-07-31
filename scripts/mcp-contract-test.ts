@@ -1,4 +1,4 @@
-#!/usr/bin/env bun
+#!/usr/bin/env -S tsx
 /**
  * MCP contract test — asserts both analyzer servers expose their expected tool
  * catalogs over Streamable HTTP. Run after starting the analyzers in MCP mode:
@@ -6,7 +6,7 @@
  *   (cd apps/static-analyzer  && TRANSPORT_MODE=mcp MCP_HTTP_PORT=50071 bun run dev)
  *   (cd apps/dynamic-analyzer && TRANSPORT_MODE=mcp MCP_HTTP_PORT=50072 bun run dev)
  *   STATIC_ANALYZER_MCP_URL=http://127.0.0.1:50071/mcp \
- *   DYNAMIC_ANALYZER_MCP_URL=http://127.0.0.1:50072/mcp bun scripts/mcp-contract-test.ts
+ *   DYNAMIC_ANALYZER_MCP_URL=http://127.0.0.1:50072/mcp tsx scripts/mcp-contract-test.ts
  */
 
 import { McpClient } from '@cleak/agent-core';

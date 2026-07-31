@@ -14,7 +14,7 @@ analyzer trực tiếp qua MCP.
 
 | | **leak-inspector-tui** (CLI/TUI) |
 |---|---|
-| Vào | `bun src/cli.ts scan\|tui` |
+| Vào | `pnpm exec tsx src/cli.ts scan\|tui` |
 | Điều phối | `agent-core` `queryLoop` — **native tool-calling** |
 | Model làm gì | gọi tool trực tiếp (`tool_use`/`tool_result`) |
 | Verdict | tool `record_verdict` (LLM) + heuristic finalize |
@@ -41,7 +41,7 @@ Juliet giữ nguyên. Thêm project mới = **0 dòng code**.
 
 | Thành phần | Công nghệ | Port | Giao thức | Trách nhiệm |
 |---|---|---|---|---|
-| **leak-inspector-tui** | TS + Ink (Bun) | — (headless) | MCP client + file I/O | Scanner standalone (luận văn) — **orchestrator**, client MCP trực tiếp tới analyzer |
+| **leak-inspector-tui** | TS + Ink (Node) | — (headless) | MCP client + file I/O | Scanner standalone (luận văn) — **orchestrator**, client MCP trực tiếp tới analyzer |
 | **static-analyzer** | NestJS + Tree-sitter | 50061 (MCP HTTP) | MCP Streamable-HTTP | 11 tool: index, candidate scan, AST, call graph, function summary, path constraints, ownership, Clang scan-build |
 | **dynamic-analyzer** | NestJS + valgrind/asan/lsan | 50062 (MCP HTTP) | MCP Streamable-HTTP | 11 tool: build target + Valgrind/ASan/LSan + run binary + targeted harness (Stage B2, opt-in) |
 | **packages/agent-core** | TS library | — | (nhúng) | Vòng lặp agentic, tool abstraction, MCP client, provider LLM (streaming) |

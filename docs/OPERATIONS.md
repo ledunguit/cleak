@@ -40,7 +40,7 @@ curl -s -m 3 -X POST http://127.0.0.1:50061/mcp -H 'content-type: application/js
 ### 2a. TUI tương tác
 ```bash
 cd apps/leak-inspector-tui
-bun src/cli.ts                       # mở TUI (lệnh mặc định)
+pnpm exec tsx src/cli.ts                       # mở TUI (lệnh mặc định)
 # trong TUI:  /scan <path-repo>  ·  /report [scanId]  ·  /config  ·  /eval <corpus> [N]
 ```
 - `/config` sửa **toàn bộ** knob của `RunConfig` ngay trong UI — provider
@@ -56,10 +56,10 @@ bun src/cli.ts                       # mở TUI (lệnh mặc định)
 ```bash
 cd apps/leak-inspector-tui
 # Heuristic (không LLM) — nhanh, tất định
-bun src/cli.ts scan --repo <path> --mode no_llm
+pnpm exec tsx src/cli.ts scan --repo <path> --mode no_llm
 
 # LLM-assisted với endpoint OpenAI-compatible tuỳ chỉnh
-bun src/cli.ts scan --repo <path> --mode llm_assisted \
+pnpm exec tsx src/cli.ts scan --repo <path> --mode llm_assisted \
   --provider openai-compat --base-url http://localhost:1234/v1 --model qwen2.5-coder-32b
 
 # Tổng quát hoá theo project (tầng POLICY, xem PROMPTS.md §0.5):
@@ -67,7 +67,7 @@ bun src/cli.ts scan --repo <path> --mode llm_assisted \
 #   --allocators a,b,c                 cấp tên allocator tường minh (bỏ qua LLM-discovery)
 #   --deallocators x,y                 cấp tên deallocator tường minh
 #   --strategy auto|off                strategist chọn plan per-project (off mặc định; bỏ stage dynamic khi không build được)
-bun src/cli.ts scan --repo <path> --mode llm_assisted --allocators-from llm --strategy auto
+pnpm exec tsx src/cli.ts scan --repo <path> --mode llm_assisted --allocators-from llm --strategy auto
 ```
 Báo cáo ghi vào `results/<scanId>/`. Profile allocator/ownership được cache ở `<repo>/.cleak/allocator-profile.json`
 (rerun cùng repo = tất định, 0 LLM call). **Eval bỏ qua tầng POLICY** (manifest cấp allocators) ⇒ tất định.
@@ -79,13 +79,13 @@ Báo cáo ghi vào `results/<scanId>/`. Profile allocator/ownership được cac
 export EVAL_STATIC_URL=http://127.0.0.1:50061/mcp EVAL_DYNAMIC_URL=http://127.0.0.1:50062/mcp
 
 # Baseline tất định (heuristic), 30 ca Juliet
-bun scripts/evaluate-corpus.ts no_llm --limit 30
+pnpm exec tsx scripts/evaluate-corpus.ts no_llm --limit 30
 
 # LLM-assisted, 5 lần chạy → mean ± std (variance.json / variance.md)
-bun scripts/evaluate-corpus.ts llm_assisted --limit 30 --runs 5
+pnpm exec tsx scripts/evaluate-corpus.ts llm_assisted --limit 30 --runs 5
 
 # Bật consensus (k=3) + chọn rule
-bun scripts/evaluate-corpus.ts llm_assisted --limit 30 --consensus-n 3 --consensus-rule weighted
+pnpm exec tsx scripts/evaluate-corpus.ts llm_assisted --limit 30 --consensus-n 3 --consensus-rule weighted
 ```
 Artifacts mỗi lần chạy: `results/eval-<mode>-<ts>/` → `metrics.json` (đầy đủ `EvalResult` +
 provenance), `metrics.csv`, `rows.csv`, `report.md`, `tables.tex`.
@@ -108,8 +108,8 @@ bash scripts/determinism-gate.sh         # 2 lần chạy no_llm vào 2 thư m�
 
 **Tier-2 — verdict-stability (dao động LLM):**
 ```bash
-bun scripts/evaluate-corpus.ts llm_assisted --limit 30 --runs 2     # hoặc 2 lần chạy riêng
-bun scripts/verdict-stability.ts <runA> <runB>                      # dir hoặc metrics.json
+pnpm exec tsx scripts/evaluate-corpus.ts llm_assisted --limit 30 --runs 2     # hoặc 2 lần chạy riêng
+pnpm exec tsx scripts/verdict-stability.ts <runA> <runB>                      # dir hoặc metrics.json
 # Báo: case-level stability, verdict flip rate, modal agreement, cờ "stable-by-luck"
 ```
 
@@ -128,7 +128,7 @@ docker compose up --build -d
 export EVAL_STATIC_URL=http://127.0.0.1:50061/mcp EVAL_DYNAMIC_URL=http://127.0.0.1:50062/mcp
 bash scripts/determinism-gate.sh                       # (1) Tier-1 tất định
 K=3 LIMIT=30 bash scripts/consensus-ablation.sh        # (2) headline consensus 4×
-bun scripts/compare-baselines.ts --corpus demo/juliet_cwe401 --limit 30 --out results/baseline  # (3) vs clang
+pnpm exec tsx scripts/compare-baselines.ts --corpus demo/juliet_cwe401 --limit 30 --out results/baseline  # (3) vs clang
 ```
 
 ## 6. Biến môi trường chính

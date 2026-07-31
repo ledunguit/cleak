@@ -1,4 +1,4 @@
-#!/usr/bin/env bun
+#!/usr/bin/env -S tsx
 /**
  * Verdict-stability report (Tier-2 reproducibility) — quantifies the run-to-run
  * nondeterminism of an LLM-judged eval HONESTLY instead of hiding it.
@@ -8,7 +8,7 @@
  * NOT clear it — the LLM judge flips borderline verdicts even at temp=0. This tool
  * measures HOW MUCH it flips across ≥2 independent runs of the same config:
  *
- *   bun scripts/verdict-stability.ts <runA>[/metrics.json] <runB> [<runC> ...]
+ *   tsx scripts/verdict-stability.ts <runA>[/metrics.json] <runB> [<runC> ...]
  *
  * Per case we form the confusion signature (tp,fp,fn,tn). A case is STABLE iff that
  * signature is identical in every run; otherwise it FLIPPED. We report the
@@ -26,7 +26,7 @@ import { join } from 'node:path';
 
 const args = process.argv.slice(2);
 if (args.length < 2) {
-  console.error('usage: bun scripts/verdict-stability.ts <runA> <runB> [<runC> ...]   (dir or metrics.json)');
+  console.error('usage: tsx scripts/verdict-stability.ts <runA> <runB> [<runC> ...]   (dir or metrics.json)');
   process.exit(2);
 }
 

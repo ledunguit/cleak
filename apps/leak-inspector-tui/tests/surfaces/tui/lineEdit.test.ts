@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, test } from 'vitest';
 import { reduce, keyToIntent, type EditState, type InputKey } from '../../../src/surfaces/tui/lineEdit';
 
 const st = (value: string, cursor: number): EditState => ({ value, cursor });

@@ -1,4 +1,4 @@
-#!/usr/bin/env bun
+#!/usr/bin/env -S tsx
 /** Verifies the loop injects user steering messages between turns (getSteering). */
 
 import { queryLoop, buildTool, type CallModel, type Tool } from '@cleak/agent-core';

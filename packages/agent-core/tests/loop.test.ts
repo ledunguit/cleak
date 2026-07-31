@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, test } from 'vitest';
 import { queryLoop } from '../src/loop';
 import { buildTool } from '../src/tool';
 import type { AgentDeps } from '../src/deps';

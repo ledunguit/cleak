@@ -1,4 +1,4 @@
-#!/usr/bin/env bun
+#!/usr/bin/env -S tsx
 /**
  * Verifies M6 wiring without a Linux/Docker dynamic environment:
  *  (1) the agent-event → scan-event bridge emits the right scan-build/dynamic

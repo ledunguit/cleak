@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, test } from 'vitest';
 import { _internal } from '../../src/domain/allocatorVerification';
 
 const { synthesizeArg, buildAllocatorHarnessSource, buildDeallocatorHarnessSource, classifyAllocatorRun, classifyDeallocatorRun, isPointerReturn } =

@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, test } from 'vitest';
 import { visibleMessages } from '../../../src/stores';
 import type { AgentMeta } from '../../../src/orchestrator/investigation';
 import type { AgentEvent } from '@cleak/agent-core';

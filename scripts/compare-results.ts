@@ -1,4 +1,4 @@
-#!/usr/bin/env bun
+#!/usr/bin/env -S tsx
 /**
  * Side-by-side comparison of two or more eval runs — the table the thesis uses
  * to contrast modes (no_llm vs llm_assisted = the LLM-agent ablation) and, once
@@ -7,9 +7,9 @@
  * given path (a metrics.json file OR a directory containing one) and emits a
  * Markdown + LaTeX comparison to stdout (or --out <file>).
  *
- *   bun scripts/compare-results.ts results/eval-no_llm-* results/eval-llm_assisted-*
- *   bun scripts/compare-results.ts a/metrics.json b/metrics.json --out results/compare.md
- *   bun scripts/compare-results.ts --label "Heuristic" a/ --label "LLM" b/
+ *   tsx scripts/compare-results.ts results/eval-no_llm-* results/eval-llm_assisted-*
+ *   tsx scripts/compare-results.ts a/metrics.json b/metrics.json --out results/compare.md
+ *   tsx scripts/compare-results.ts --label "Heuristic" a/ --label "LLM" b/
  */
 
 import { readFileSync, writeFileSync, existsSync, statSync } from 'node:fs';
@@ -80,7 +80,7 @@ function autoLabel(path: string, r: EvalResultish): string {
 
 const { items, out } = parseArgs();
 if (items.length < 2) {
-  console.error('usage: bun scripts/compare-results.ts <metrics.json|dir> <metrics.json|dir> [...] [--label L]* [--out file]');
+  console.error('usage: tsx scripts/compare-results.ts <metrics.json|dir> <metrics.json|dir> [...] [--label L]* [--out file]');
   process.exit(2);
 }
 

@@ -8,7 +8,7 @@
     "start": "cd ../.. && nest start dynamic-analyzer",
     "start:prod": "node dist/main",
     "lint": "echo 'lint ok'",
-    "test": "bun test"
+    "test": "vitest run"
   },
   "dependencies": {
     "@cleak/common": "workspace:*",

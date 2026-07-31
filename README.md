@@ -120,7 +120,7 @@ Bộ điều phối (`leak-inspector-tui`) đọc config từ `~/.config/cleak/c
 
 ```bash
 cd apps/leak-inspector-tui
-bun install
+pnpm install
 cleak config init            # tạo template đầy đủ
 cleak config set LLM_API_KEY sk-...   # thêm key LLM (nếu cần)
 ```
@@ -147,13 +147,13 @@ docker compose up --build
 
 ```bash
 cd apps/leak-inspector-tui
-bun run dev
+pnpm run dev
 ```
 
 ### Build toàn bộ (Turbo)
 
 ```bash
-bun run build
+pnpm run build
 ```
 
 ## Tài liệu

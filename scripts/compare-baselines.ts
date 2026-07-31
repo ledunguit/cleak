@@ -1,4 +1,4 @@
-#!/usr/bin/env bun
+#!/usr/bin/env -S tsx
 /**
  * Head-to-head baseline comparison (thesis Table 3). Runs every AVAILABLE external
  * baseline (clang-analyzer, infer) over the same corpus, scored by the same
@@ -7,8 +7,8 @@
  * consensus sit in the same table as the baselines — every number from one
  * scoring definition on one corpus, which is what makes the comparison defensible.
  *
- *   bun scripts/compare-baselines.ts --corpus demo/juliet_cwe401
- *   bun scripts/compare-baselines.ts --corpus demo/juliet_cwe401 --limit 8 \
+ *   tsx scripts/compare-baselines.ts --corpus demo/juliet_cwe401
+ *   tsx scripts/compare-baselines.ts --corpus demo/juliet_cwe401 --limit 8 \
  *       --system heuristic=/tmp/p0-all30/metrics.json \
  *       --system consensus=/tmp/p0-consensus/metrics.json \
  *       --out results/baseline-compare
@@ -130,7 +130,7 @@ function renderCsv(rows: Row[]): string {
 
 async function main(): Promise<void> {
   if (process.argv.includes('--help') || process.argv.includes('-h')) {
-    console.log(`Usage: bun scripts/compare-baselines.ts [options]
+    console.log(`Usage: tsx scripts/compare-baselines.ts [options]
 
 Run external baseline tools (clang-analyzer, infer) over a labeled corpus
 and compare results in a single table.

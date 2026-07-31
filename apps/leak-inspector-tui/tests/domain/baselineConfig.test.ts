@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, test } from 'vitest';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -9,7 +9,7 @@ import {
   type Capabilities,
 } from '../../src/domain/baselineConfig';
 
-const BASELINES_DIR = join(import.meta.dir, '../../../../configs/baselines');
+const BASELINES_DIR = join(import.meta.dirname, '../../../../configs/baselines');
 
 const caps = (over: Partial<Capabilities>): Capabilities => ({
   static: false,

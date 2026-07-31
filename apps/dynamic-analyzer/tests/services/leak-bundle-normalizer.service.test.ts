@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, test } from 'vitest';
 import { LeakBundleNormalizerService } from '../../src/services/leak-bundle-normalizer.service';
 
 const svc = new LeakBundleNormalizerService();

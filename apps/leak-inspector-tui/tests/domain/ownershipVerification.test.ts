@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, test } from 'vitest';
 import { buildParameterConsumptionHarnessSource, classifyOwnershipParameterRun, _internal } from '../../src/domain/ownershipVerification';
 import type { Signature } from '../../src/domain/allocatorVerification';
 import type { LeakBundle } from '@cleak/common/types';

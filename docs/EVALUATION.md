@@ -133,8 +133,8 @@ isolate each contribution (the original design only flipped them together at B7)
 
 ```bash
 # Representative sweep: stratify the sample evenly across families (§3c), real LLM gateway.
-bun scripts/run-baselines.ts --corpus demo/juliet_cwe401 --limit 200 --stratify --provider local
-bun scripts/run-baselines.ts --only B1,B3 --dry-run                     # inspect resolved plans
+pnpm exec tsx scripts/run-baselines.ts --corpus demo/juliet_cwe401 --limit 200 --stratify --provider local
+pnpm exec tsx scripts/run-baselines.ts --only B1,B3 --dry-run                     # inspect resolved plans
 # → results/baseline-sweep-<ts>/baseline-sweep.{md,csv,tex,json}  (+ a Token-cost footer)
 ```
 
@@ -226,7 +226,7 @@ for st in none functionSummary pathConstraints functionSummary,pathConstraints \
           functionSummary,pathConstraints,interproceduralFlow \
           functionSummary,pathConstraints,scanBuild; do
   EVAL_STATIC_PATH_MAP="$PWD/demo=/workspace/demo" \
-  bun scripts/run-baselines.ts --only B1 --enrich --static-tools "$st" --stratify --limit 50; done
+  pnpm exec tsx scripts/run-baselines.ts --only B1 --enrich --static-tools "$st" --stratify --limit 50; done
 ```
 
 **Result (B1, no_llm + enrich, stratified n=50, deterministic heuristic judge):**
@@ -286,13 +286,13 @@ sampling variance; residual variance is reported via multi-run (§5).
 
 ```bash
 # Single run (deterministic baseline)
-bun scripts/evaluate-corpus.ts no_llm --corpus demo/juliet_cwe401 --dynamic selective
+pnpm exec tsx scripts/evaluate-corpus.ts no_llm --corpus demo/juliet_cwe401 --dynamic selective
 
 # LLM-assisted, 5 runs → mean ± std (variance.json / variance.md)
-bun scripts/evaluate-corpus.ts llm_assisted --corpus demo/juliet_cwe401 --runs 5
+pnpm exec tsx scripts/evaluate-corpus.ts llm_assisted --corpus demo/juliet_cwe401 --runs 5
 
 # Side-by-side comparison table (Markdown + LaTeX)
-bun scripts/compare-results.ts \
+pnpm exec tsx scripts/compare-results.ts \
   --label "Heuristic" results/eval-no_llm-<ts> \
   --label "LLM-assisted" results/eval-llm_assisted-<ts> \
   --out results/compare.md
@@ -368,8 +368,8 @@ Because Tier-1 identity is unattainable for the LLM judge, `llm_assisted` number
 are reported as a distribution, not a point:
 
 ```bash
-bun scripts/evaluate-corpus.ts llm_assisted --runs 5      # mean ± std (variance.json/md)
-bun scripts/verdict-stability.ts <runA> <runB> [<runC> …]  # case-level flip rate
+pnpm exec tsx scripts/evaluate-corpus.ts llm_assisted --runs 5      # mean ± std (variance.json/md)
+pnpm exec tsx scripts/verdict-stability.ts <runA> <runB> [<runC> …]  # case-level flip rate
 ```
 
 `verdict-stability.ts` makes the churn explicit (case-level stability, flip rate,

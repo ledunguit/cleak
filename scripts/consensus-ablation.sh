@@ -24,7 +24,7 @@ export EVAL_DYNAMIC_URL="${EVAL_DYNAMIC_URL:-http://127.0.0.1:50062/mcp}"
 rm -rf "$OUT"; mkdir -p "$OUT"/s1a "$OUT"/s1b "$OUT"/sca "$OUT"/scb
 
 run () { # <subdir> <consensus-n>
-  RESULTS_DIR="$OUT/$1" bun scripts/evaluate-corpus.ts llm_assisted --limit "$LIMIT" --consensus-n "$2"
+  RESULTS_DIR="$OUT/$1" pnpm exec tsx scripts/evaluate-corpus.ts llm_assisted --limit "$LIMIT" --consensus-n "$2"
 }
 
 echo "############ single-LLM (n=1) — run A ############"; run s1a 1
@@ -36,13 +36,13 @@ S1A=$(ls -d "$OUT"/s1a/eval-* | head -1); S1B=$(ls -d "$OUT"/s1b/eval-* | head -
 SCA=$(ls -d "$OUT"/sca/eval-* | head -1); SCB=$(ls -d "$OUT"/scb/eval-* | head -1)
 
 echo; echo "════════════ SINGLE-LLM (n=1) stability ════════════"
-bun scripts/verdict-stability.ts "$S1A" "$S1B"
+pnpm exec tsx scripts/verdict-stability.ts "$S1A" "$S1B"
 echo; echo "════════════ CONSENSUS (n=$K) stability ════════════"
-bun scripts/verdict-stability.ts "$SCA" "$SCB"
+pnpm exec tsx scripts/verdict-stability.ts "$SCA" "$SCB"
 echo; echo "(lower verdict flip rate in the consensus arm ⇒ the judge damps run-to-run churn)"
 
 # Paired significance: do the two judge arms differ on the SAME sites? Compare run-A
 # of each arm site-by-site (McNemar). Stability is about run-to-run churn; this is
 # about whether the consensus verdicts differ from single-LLM at all, with a p-value.
 echo; echo "════════════ SINGLE-LLM vs CONSENSUS — McNemar (paired, run A) ════════════"
-bun scripts/mcnemar-compare.ts "single=$S1A" "consensus=$SCA"
+pnpm exec tsx scripts/mcnemar-compare.ts "single=$S1A" "consensus=$SCA"

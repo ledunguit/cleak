@@ -30,7 +30,7 @@ Key/provider LLM đọc từ `<cwd>/.env`, `apps/leak-inspector-tui/.env` hoặc
 ### Từ source (trong monorepo này)
 
 ```bash
-bun run cleak:install     # build bundle tự chứa + npm i -g
+pnpm run cleak:install     # build bundle tự chứa + npm i -g
 ```
 
 ## Kiến trúc
@@ -72,8 +72,8 @@ investigation là nơi mô hình thực sự agentic.
 Bật analyzer (MCP là transport duy nhất):
 
 ```bash
-(cd apps/static-analyzer  && MCP_HTTP_PORT=50061 bun run dev)
-(cd apps/dynamic-analyzer && MCP_HTTP_PORT=50062 bun run dev)
+(cd apps/static-analyzer  && MCP_HTTP_PORT=50061 pnpm run dev)
+(cd apps/dynamic-analyzer && MCP_HTTP_PORT=50062 pnpm run dev)
 # hoặc đơn giản: docker compose up --build
 ```
 
@@ -81,13 +81,13 @@ Rồi:
 
 ```bash
 # liệt kê/kiểm tra tool của analyzer
-bun apps/leak-inspector-tui/src/cli.ts tools
+pnpm exec tsx apps/leak-inspector-tui/src/cli.ts tools
 
 # scan headless (ghi results/<scanId>/)
-bun apps/leak-inspector-tui/src/cli.ts scan --repo demo/memory_leak_corpus/early_return_leak --mode llm_assisted
+pnpm exec tsx apps/leak-inspector-tui/src/cli.ts scan --repo demo/memory_leak_corpus/early_return_leak --mode llm_assisted
 
 # TUI tương tác (cần terminal)
-bun apps/leak-inspector-tui/src/cli.ts tui
+pnpm exec tsx apps/leak-inspector-tui/src/cli.ts tui
 #   /scan <path>  /mode no_llm|llm_assisted  /dynamic off|selective|aggressive  /report  /tools  /quit
 ```
 
@@ -141,10 +141,10 @@ default. Tức là env vẫn thắng config file — tiện cho workflow `.env`/
 ## Script thực nghiệm luận văn
 
 ```bash
-bun scripts/evaluate-corpus.ts [no_llm|llm_assisted] [limit]   # chấm điểm vs expected_leak_count
-bun scripts/compare-modes.ts [limit]                           # no_llm vs llm_assisted
-bun scripts/run-local-scan-smoke.ts                            # sanity 1 scan
-bun scripts/mcp-contract-test.ts                               # kiểm catalog tool analyzer
+pnpm exec tsx scripts/evaluate-corpus.ts [no_llm|llm_assisted] [limit]   # chấm điểm vs expected_leak_count
+pnpm exec tsx scripts/compare-modes.ts [limit]                           # no_llm vs llm_assisted
+pnpm exec tsx scripts/run-local-scan-smoke.ts                            # sanity 1 scan
+pnpm exec tsx scripts/mcp-contract-test.ts                               # kiểm catalog tool analyzer
 ```
 
 ## Ghi chú

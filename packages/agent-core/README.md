@@ -56,5 +56,5 @@ do consumer (TUI) đọc từ env của nó — xem `apps/leak-inspector-tui/.en
 
 ```bash
 turbo run build --filter=@cleak/agent-core    # tsup bundle
-turbo run test  --filter=@cleak/agent-core    # bun test
+turbo run test  --filter=@cleak/agent-core    # vitest run
 ```

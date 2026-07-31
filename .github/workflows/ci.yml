@@ -15,31 +15,31 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      - uses: pnpm/action-setup@v4
+
       # Node is pinned (not the runner default) so the tree-sitter native binding
       # builds: tree-sitter@0.25.0 has no Node-24 prebuild and its C++ does not
-      # compile against Node 24's V8 13.x headers.
+      # compile against Node 24's V8 13.x headers. Node is also now the runtime
+      # for dev/test/scripts (no Bun anywhere), which is what lets tree-sitter's
+      # own node-gyp-build fallback find that compiled binary at all.
       - uses: actions/setup-node@v5
         with:
           node-version: 22
 
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: 1.3.14
-
       - name: Install
-        run: bun install --frozen-lockfile
+        run: pnpm install --frozen-lockfile
 
       - name: Ingest Juliet CWE-401 corpus
         run: |
           curl -sL -o /tmp/juliet.zip 'https://samate.nist.gov/SARD/downloads/test-suites/2017-10-01-juliet-test-suite-for-c-cplusplus-v1-3.zip'
           unzip -q /tmp/juliet.zip -d /tmp/juliet
-          bun scripts/juliet/ingest.ts --juliet /tmp/juliet --out demo/juliet_cwe401
+          pnpm exec tsx scripts/juliet/ingest.ts --juliet /tmp/juliet --out demo/juliet_cwe401
 
       - name: Build
-        run: bun run build
+        run: pnpm run build
 
       - name: Typecheck
-        run: bun run typecheck
+        run: pnpm run typecheck
 
       - name: Test
-        run: bun run test
+        run: pnpm run test

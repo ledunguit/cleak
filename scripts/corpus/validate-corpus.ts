@@ -1,4 +1,4 @@
-#!/usr/bin/env bun
+#!/usr/bin/env -S tsx
 /**
  * Corpus integrity validator — the post-ingest gate that makes benchmark numbers
  * trustworthy. A defect in the INPUT data (e.g. Juliet C++ cases whose synthetic
@@ -17,8 +17,8 @@
  *                      convention, so this is imprecision, not a wrong score)      [SOFT]
  *   (e) content-hash — sha256 over ALL case source files (the corpus's true identity)
  *
- *   bun scripts/corpus/validate-corpus.ts --corpus demo/juliet_cwe401
- *   bun scripts/corpus/validate-corpus.ts --corpus demo/lamed --skip-compile --strict-labels
+ *   tsx scripts/corpus/validate-corpus.ts --corpus demo/juliet_cwe401
+ *   tsx scripts/corpus/validate-corpus.ts --corpus demo/lamed --skip-compile --strict-labels
  *
  * `--strict-labels` promotes label-drift to HARD — for label-authoritative corpora
  * (LAMeD / real projects) where there is NO naming convention to fall back on.

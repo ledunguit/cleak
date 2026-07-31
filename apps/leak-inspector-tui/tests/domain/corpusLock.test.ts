@@ -1,4 +1,4 @@
-import { afterAll, afterEach, beforeAll, describe, expect, test, mock } from 'bun:test';
+import { afterAll, afterEach, beforeAll, describe, expect, test, mock } from 'vitest';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, appendFileSync, unlinkSync, existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
