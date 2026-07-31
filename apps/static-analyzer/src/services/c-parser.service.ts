@@ -137,7 +137,7 @@ export class CParserService {
       return { functions, functionNames: functions.map((f) => f.functionName) };
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
-      this.logger.debug(`tree-sitter parse failed: ${msg}`);
+      this.logger.error(`tree-sitter parse failed: ${msg}`, err instanceof Error ? err.stack : undefined);
       return { functions: [], functionNames: [] };
     }
   }
