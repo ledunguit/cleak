@@ -5,8 +5,8 @@ import { tmpdir } from 'node:os';
 import type { CallModel } from '@cleak/agent-core';
 import { parseStrategyPlan, fallbackPlan, gatherRepoMetadata, decideStrategy, type RepoMetadata } from '../../src/domain/strategist';
 
-const mockModel = (text: string): CallModel =>
-  (async () => ({ text, toolUses: [], usage: { inputTokens: 0, outputTokens: 0 } })) as unknown as CallModel;
+const mockModel = (text: string, usage = { inputTokens: 0, outputTokens: 0 }): CallModel =>
+  (async () => ({ text, toolUses: [], usage })) as unknown as CallModel;
 
 describe('parseStrategyPlan', () => {
   test('clean JSON', () => {
@@ -64,5 +64,19 @@ describe('gatherRepoMetadata + decideStrategy', () => {
     const plan = await decideStrategy(repo, failing);
     expect(plan.runDynamic).toBe(true); // CMakeLists present → fallback runDynamic true
     expect(plan.rationale).toContain('fallback');
+  });
+
+  test('reports usage via onUsage — this token spend used to be dropped entirely', async () => {
+    const model = mockModel('{"runDynamic":true,"judge":"single","staticDepth":"full"}', { inputTokens: 88, outputTokens: 12 });
+    let reported: { inputTokens: number; outputTokens: number } | undefined;
+    await decideStrategy(repo, model, { onUsage: (u) => (reported = u) });
+    expect(reported).toEqual({ inputTokens: 88, outputTokens: 12 });
+  });
+
+  test('a failed call reports no usage (fallback path)', async () => {
+    const failing = (async () => { throw new Error('boom'); }) as unknown as CallModel;
+    let called = false;
+    await decideStrategy(repo, failing, { onUsage: () => (called = true) });
+    expect(called).toBe(false);
   });
 });

@@ -29,7 +29,8 @@ function makeRow(over: Partial<CaseRow> = {}): CaseRow {
     loc: 100,
     judgePathCounts: { heuristic: 1 },
     durationMs: 1000,
-    tokens: 1000,
+    inputTokens: 700,
+    outputTokens: 300,
     mcpCalls: 10,
     ...over,
   };
@@ -76,10 +77,15 @@ function makeEvalResult(over: Partial<EvalResult> = {}): EvalResult {
       meanDurationMs: 1200,
       totalTokens: 5000,
       meanTokens: 1000,
+      totalInputTokens: 3500,
+      totalOutputTokens: 1500,
+      meanInputTokens: 700,
+      meanOutputTokens: 300,
       totalMcpCalls: 50,
       meanMcpCalls: 10,
       totalLoc: 500,
       fpPerKloc: 2,
+      priced: false,
     },
     rows: [makeRow()],
     samples: [],
@@ -303,7 +309,7 @@ describe('metricsCsv', () => {
   test('has CSV header with expected columns', () => {
     const { metrics_csv } = writeAndRead(makeEvalResult());
     const lines = metrics_csv.trim().split('\n');
-    expect(lines[0]).toBe('scope,n,tp,fp,fn,tn,precision,recall,f1,accuracy,specificity,fpr,mcc');
+    expect(lines[0]).toBe('scope,n,tp,fp,fn,tn,precision,recall,f1,accuracy,specificity,fpr,mcc,inputTokens,outputTokens,costUsd');
   });
 
   test('has overall row', () => {
@@ -357,7 +363,7 @@ describe('rowsCsv', () => {
   test('has CSV header with expected columns', () => {
     const { rows_csv } = writeAndRead(makeEvalResult());
     const header = rows_csv.trim().split('\n')[0];
-    expect(header).toBe('id,status,cwe,flowVariant,functionalVariant,tp,fp,fn,tn,candidates,flagged,durationMs,tokens,scanId,error');
+    expect(header).toBe('id,status,cwe,flowVariant,functionalVariant,tp,fp,fn,tn,candidates,flagged,durationMs,inputTokens,outputTokens,scanId,error');
   });
 
   test('contains case data row', () => {

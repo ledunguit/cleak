@@ -193,12 +193,12 @@ export async function main(): Promise<void> {
   const pct = (x: number) => `${(x * 100).toFixed(1)}%`;
 
   let runningTP = 0, runningFP = 0, runningFN = 0, runningTN = 0;
-  let runningDone = 0, runningTokens = 0, runningMcpCalls = 0;
+  let runningDone = 0, runningInputTokens = 0, runningOutputTokens = 0, runningMcpCalls = 0;
   let runningOk = 0, runningErr = 0, runningSkp = 0;
 
   function makeCallbacks(verbose: boolean) {
     runningTP = 0; runningFP = 0; runningFN = 0; runningTN = 0;
-    runningDone = 0; runningTokens = 0; runningMcpCalls = 0;
+    runningDone = 0; runningInputTokens = 0; runningOutputTokens = 0; runningMcpCalls = 0;
     runningOk = 0; runningErr = 0; runningSkp = 0;
     let totalCases = 0;
 
@@ -214,13 +214,15 @@ export async function main(): Promise<void> {
       process.stderr.write(`    ${id}: ${phase}\n`);
     } : undefined;
 
+    const fmtTok = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(1)}K` : `${n}`);
+
     const onCaseResult = (detail: EvalCaseDetail) => {
       const r = detail.row;
       runningDone++;
       if (r.status === 'ok') {
         runningOk++;
         runningTP += r.tp; runningFP += r.fp; runningFN += r.fn; runningTN += r.tn;
-        runningTokens += r.tokens ?? 0; runningMcpCalls += r.mcpCalls ?? 0;
+        runningInputTokens += r.inputTokens ?? 0; runningOutputTokens += r.outputTokens ?? 0; runningMcpCalls += r.mcpCalls ?? 0;
       } else if (r.status === 'error') runningErr++;
       else runningSkp++;
 
@@ -233,9 +235,7 @@ export async function main(): Promise<void> {
       if (r.status === 'ok') {
         const dur = r.durationMs >= 1000
           ? `${(r.durationMs / 1000).toFixed(1)}s` : `${r.durationMs}ms`;
-        const tok = r.tokens
-          ? (r.tokens >= 1000 ? `${(r.tokens / 1000).toFixed(1)}Ktok` : `${r.tokens}tok`)
-          : '0tok';
+        const tok = `in=${fmtTok(r.inputTokens ?? 0)}/out=${fmtTok(r.outputTokens ?? 0)}`;
         process.stderr.write(
           `  ${icon} ${detail.id}${fv} · TP=${r.tp} FP=${r.fp} FN=${r.fn} TN=${r.tn}` +
           ` · cand=${r.candidates} flg=${r.flagged} · ${dur} · ${r.mcpCalls ?? 0}MCP · ${tok} · ${jp}\n`,
@@ -245,8 +245,7 @@ export async function main(): Promise<void> {
       }
 
       const denom = totalCases || runningDone;
-      const sumTok = runningTokens >= 1000
-        ? `${(runningTokens / 1000).toFixed(1)}Ktok` : `${runningTokens}tok`;
+      const sumTok = `in=${fmtTok(runningInputTokens)}/out=${fmtTok(runningOutputTokens)}`;
       process.stderr.write(
         `  ─ ${runningDone}/${denom} · TP=${runningTP} FP=${runningFP} FN=${runningFN} TN=${runningTN}` +
         ` · ∑${sumTok} · ∑${runningMcpCalls}MCP · ${runningOk}ok ${runningErr}err ${runningSkp}skp\n`,

@@ -31,9 +31,12 @@ export function writeEval(outDir: string, r: EvalResult): string[] {
   return files;
 }
 
-const METRIC_COLS = ['n', 'tp', 'fp', 'fn', 'tn', 'precision', 'recall', 'f1', 'accuracy', 'specificity', 'fpr', 'mcc'];
+const METRIC_COLS = ['n', 'tp', 'fp', 'fn', 'tn', 'precision', 'recall', 'f1', 'accuracy', 'specificity', 'fpr', 'mcc', 'inputTokens', 'outputTokens', 'costUsd'];
 
-function metricRow(scope: string, m: Metrics): string {
+// Token/cost are whole-run aggregates, not scoped per flow/functional-variant/CWE
+// breakdown — `cost` is blank on every row but 'overall' rather than adding a
+// separate file for 3 numbers.
+function metricRow(scope: string, m: Metrics, cost?: EvalResult['cost']): string {
   return [
     scope,
     m.total,
@@ -48,12 +51,15 @@ function metricRow(scope: string, m: Metrics): string {
     f3(m.specificity),
     f3(m.fpr),
     f3(m.mcc),
+    cost?.totalInputTokens ?? '',
+    cost?.totalOutputTokens ?? '',
+    cost && cost.priced ? f3(cost.costUsd!) : '',
   ].join(',');
 }
 
 function metricsCsv(r: EvalResult): string {
   const lines = [`scope,${METRIC_COLS.join(',')}`];
-  lines.push(metricRow('overall', r.overall));
+  lines.push(metricRow('overall', r.overall, r.cost));
   for (const [k, m] of Object.entries(r.byFlowVariant)) lines.push(metricRow(`flow:${k}`, m));
   for (const [k, m] of Object.entries(r.byFunctionalVariant)) lines.push(metricRow(`func:${k}`, m));
   for (const [k, m] of Object.entries(r.byCwe)) lines.push(metricRow(`cwe:${k}`, m));
@@ -61,7 +67,7 @@ function metricsCsv(r: EvalResult): string {
 }
 
 function rowsCsv(rows: CaseRow[]): string {
-  const cols = ['id', 'status', 'cwe', 'flowVariant', 'functionalVariant', 'tp', 'fp', 'fn', 'tn', 'candidates', 'flagged', 'durationMs', 'tokens', 'scanId', 'error'];
+  const cols = ['id', 'status', 'cwe', 'flowVariant', 'functionalVariant', 'tp', 'fp', 'fn', 'tn', 'candidates', 'flagged', 'durationMs', 'inputTokens', 'outputTokens', 'scanId', 'error'];
   const esc = (v: unknown) => {
     const s = v == null ? '' : String(v);
     return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
@@ -128,7 +134,9 @@ function reportMarkdown(r: EvalResult): string {
     `- Corpus: \`${r.corpus}\``,
     `- Generated: ${r.generatedAt}`,
     `- Cases: ${r.ranOk}/${r.caseCount} ran ok`,
-    `- Cost: mean ${r.cost.meanDurationMs} ms/case · ${r.cost.totalTokens} tokens total (${r.cost.meanTokens}/case) · ${r.cost.totalMcpCalls} MCP calls (${r.cost.meanMcpCalls}/case)`,
+    `- Cost: mean ${r.cost.meanDurationMs} ms/case · ${r.cost.totalInputTokens} in / ${r.cost.totalOutputTokens} out tokens total ` +
+      `(${r.cost.meanInputTokens} in / ${r.cost.meanOutputTokens} out per case) · ${r.cost.totalMcpCalls} MCP calls (${r.cost.meanMcpCalls}/case)` +
+      (r.cost.priced ? ` · $${r.cost.costUsd!.toFixed(2)}` : ` · cost: unpriced (set \`pricing.${r.provenance.model ?? '<model>'}\` to see $)`),
     `- FP density: ${f3(r.cost.fpPerKloc)} FP / KLOC (${m.fp} FP over ${r.cost.totalLoc} non-blank LOC)`,
     judgePathLine(r),
     `- Expected Calibration Error: ${f3(r.ece)}`,
@@ -277,5 +285,28 @@ function latexTables(r: EvalResult): string {
     );
   }
 
-  return [...overall, ...byFlow, ...byFunc, ...byCwe, ...calTable].join('\n') + '\n';
+  const costTable: string[] = [];
+  if (r.cost.totalInputTokens > 0 || r.cost.totalOutputTokens > 0) {
+    costTable.push(
+      '',
+      '% Cost',
+      '\\begin{table}[h]\\centering',
+      r.cost.priced ? '\\caption{Cost}' : `\\caption{Cost — unpriced, configure pricing.${texEsc(r.provenance.model ?? '<model>')}}`,
+      '\\begin{tabular}{lr}',
+      '\\toprule',
+      'Metric & Value \\\\',
+      '\\midrule',
+      `Cases & ${r.cost.cases} \\\\`,
+      `Mean duration (ms) & ${r.cost.meanDurationMs} \\\\`,
+      `Input tokens (total / mean) & ${r.cost.totalInputTokens} / ${r.cost.meanInputTokens} \\\\`,
+      `Output tokens (total / mean) & ${r.cost.totalOutputTokens} / ${r.cost.meanOutputTokens} \\\\`,
+      `MCP calls (total / mean) & ${r.cost.totalMcpCalls} / ${r.cost.meanMcpCalls} \\\\`,
+      ...(r.cost.priced ? [`USD & \\$${r.cost.costUsd!.toFixed(2)} \\\\`] : []),
+      '\\bottomrule',
+      '\\end{tabular}',
+      '\\end{table}',
+    );
+  }
+
+  return [...overall, ...byFlow, ...byFunc, ...byCwe, ...calTable, ...costTable].join('\n') + '\n';
 }

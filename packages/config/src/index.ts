@@ -9,3 +9,5 @@ export { loadConfigFile, saveConfigFile, configFilePath, redactConfig } from './
 export { loadConfig, resolveProvider, clampConfig } from './loader.js';
 export { setConfigKey, unsetConfigKey, configTemplate } from './cli.js';
 export { toProviderSettings } from './to-provider-settings.js';
+export { computeCostUsd } from './cost.js';
+export type { CostComputation } from './cost.js';

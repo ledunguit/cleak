@@ -113,6 +113,10 @@ export interface RunConfig {
   baselines: BaselinesConfig;
   /** Eval-time host→container path remapping (format: "from=to"). */
   evalStaticPathMap?: string;
+  /** User-supplied $/1M-token price table, keyed by exact model ID string
+   * (must match `llm.model`). No baked-in defaults — filled in by the user via
+   * `cleak config set pricing.<modelId>.inputPerMillion <price>`. */
+  pricing: Record<string, { inputPerMillion?: number; outputPerMillion?: number }>;
 }
 
 export interface EnvOverrides {

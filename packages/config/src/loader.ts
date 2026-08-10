@@ -218,6 +218,7 @@ export function loadConfig(
       inferBin: pickStr(file.baselines?.inferBin, "infer"),
     },
     evalStaticPathMap: pickOpt(file.eval?.staticPathMap),
+    pricing: file.pricing ?? {},
   };
 
   if (env.llm?.baseUrl !== undefined) base.llm.baseUrl = env.llm.baseUrl;

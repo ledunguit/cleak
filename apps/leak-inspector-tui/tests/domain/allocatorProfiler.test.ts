@@ -12,8 +12,8 @@ import {
 
 // A mock model that returns a fixed text (no real LLM). Cast through unknown since we
 // only exercise `resp.text`.
-const mockModel = (text: string): CallModel =>
-  (async () => ({ text, toolUses: [], usage: { inputTokens: 0, outputTokens: 0 } })) as unknown as CallModel;
+const mockModel = (text: string, usage = { inputTokens: 0, outputTokens: 0 }): CallModel =>
+  (async () => ({ text, toolUses: [], usage })) as unknown as CallModel;
 
 describe('verifyNames — anti-hallucination + libc filter', () => {
   const src = 'cJSON *cJSON_CreateObject(void); void cJSON_Delete(cJSON *c); cJSON_New_Item(h);';
@@ -83,5 +83,24 @@ describe('profileAllocators — end to end with a mock model', () => {
       throw new Error('boom');
     }) as unknown as CallModel;
     expect(await profileAllocators(repo, failing)).toBeNull();
+  });
+
+  test('reports usage via onUsage — this token spend used to be dropped entirely', async () => {
+    const model = mockModel(JSON.stringify({ allocators: ['cJSON_CreateObject'], deallocators: [] }), {
+      inputTokens: 123,
+      outputTokens: 45,
+    });
+    let reported: { inputTokens: number; outputTokens: number } | undefined;
+    await profileAllocators(repo, model, { onUsage: (u) => (reported = u) });
+    expect(reported).toEqual({ inputTokens: 123, outputTokens: 45 });
+  });
+
+  test('a failed call reports no usage', async () => {
+    const failing = (async () => {
+      throw new Error('boom');
+    }) as unknown as CallModel;
+    let called = false;
+    await profileAllocators(repo, failing, { onUsage: () => (called = true) });
+    expect(called).toBe(false);
   });
 });

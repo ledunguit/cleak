@@ -6,6 +6,8 @@
  * classification metrics (Precision/Recall/F1) which need ground truth.
  */
 
+import { computeCostUsd } from '@cleak/config';
+
 interface SnapshotLike {
   scan_id?: string;
   finding_count?: number;
@@ -36,6 +38,8 @@ export interface ScanMetricsContext {
   durationMs?: number;
   /** Total MCP tool calls (static + dynamic) — efficiency metric for the ablation. */
   mcpCalls?: number;
+  /** User-supplied $/1M-token price table, keyed by model ID (`RunConfig.pricing`). */
+  pricing?: Record<string, { inputPerMillion?: number; outputPerMillion?: number }>;
 }
 
 export interface ScanMetrics {
@@ -62,6 +66,9 @@ export interface ScanMetrics {
   total_tokens?: number;
   duration_ms?: number;
   mcp_calls?: number;
+  /** undefined when no price is configured for `model` — never $0 as a stand-in. */
+  cost_usd?: number;
+  priced: boolean;
 }
 
 function tally(into: Record<string, number>, key: string | undefined): void {
@@ -93,6 +100,7 @@ export function computeScanMetrics(snapshot: SnapshotLike, ctx: ScanMetricsConte
         };
   const input = ctx.inputTokens ?? 0;
   const output = ctx.outputTokens ?? 0;
+  const { costUsd, priced } = computeCostUsd(input, output, ctx.model, ctx.pricing);
   return {
     scan_id: snapshot.scan_id,
     generated_at: new Date().toISOString(),
@@ -117,5 +125,7 @@ export function computeScanMetrics(snapshot: SnapshotLike, ctx: ScanMetricsConte
     total_tokens: input + output,
     duration_ms: ctx.durationMs,
     mcp_calls: ctx.mcpCalls,
+    cost_usd: costUsd,
+    priced,
   };
 }

@@ -195,5 +195,7 @@ export function configTemplate(): CleakConfig {
     sidebarPosition: 'right',
     thresholds: { borderlineLow: 0.35, borderlineHigh: 0.7 },
     baselines: { clangBin: 'clang', inferBin: 'infer' },
+    // Empty by design — fill in via `cleak config set pricing.<modelId>.inputPerMillion <price>`.
+    pricing: {},
   };
 }

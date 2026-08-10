@@ -34,7 +34,7 @@
     "build": "tsup",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "lint": "echo 'lint ok'",
-    "test": "echo 'no tests yet'"
+    "test": "vitest run"
   },
   "dependencies": {
     "@cleak/common": "workspace:*",

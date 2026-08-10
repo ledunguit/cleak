@@ -93,6 +93,10 @@ export interface HeadlessResult extends ScanResult {
   /** Total MCP tool calls (static + dynamic) made during this scan — an efficiency
    *  metric for the ablation (#MCP calls). */
   mcpCalls: number;
+  /** LLM token usage for the whole scan — investigation phase (Stage A/D) plus
+   * pre-investigation allocator-profiler/strategist calls, which used to be
+   * dropped entirely. */
+  usage: { inputTokens: number; outputTokens: number };
 }
 
 export async function runHeadless(opts: HeadlessOptions): Promise<HeadlessResult> {
@@ -153,6 +157,16 @@ export async function runHeadless(opts: HeadlessOptions): Promise<HeadlessResult
       ? buildWorkflowInvestigationPhase(cfg, dynamicMode, { toolSelect: opts.toolSelect ?? true })
       : undefined;
 
+  // Allocator profiling + strategist run BEFORE the investigation phase, from
+  // ad-hoc `callModel` instances of their own — accumulate their token usage
+  // here so it merges into the final result instead of vanishing (previously
+  // dropped entirely, not even counted in the combined total).
+  const preUsage = { inputTokens: 0, outputTokens: 0 };
+  const addPreUsage = (u: { inputTokens: number; outputTokens: number }) => {
+    preUsage.inputTokens += u.inputTokens;
+    preUsage.outputTokens += u.outputTokens;
+  };
+
   const { extraAllocators, extraDeallocators, ownershipNotes } = await runAllocatorProfile(
     repoPath,
     cfg,
@@ -161,15 +175,16 @@ export async function runHeadless(opts: HeadlessOptions): Promise<HeadlessResult
     staticClient,
     dynamicClient,
     pathResolver,
+    addPreUsage,
   );
 
-  const adaptiveResult = await runAdaptiveStrategy(repoPath, cfg, dynamicMode, dynamicClient, opts, analysisMode, extraAllocators, extraDeallocators);
+  const adaptiveResult = await runAdaptiveStrategy(repoPath, cfg, dynamicMode, dynamicClient, opts, analysisMode, extraAllocators, extraDeallocators, addPreUsage);
   dynamicMode = adaptiveResult.dynamicMode;
   dynamicClient = adaptiveResult.dynamicClient;
 
   const startedAt = Date.now();
   try {
-    return await runScanAndReport(cfg, dir, opts, startedAt, staticClient, dynamicClient, analysisMode, scanId, repoPath, dynamicMode, extraAllocators, extraDeallocators, ownershipNotes, emitter, pathResolver, investigation);
+    return await runScanAndReport(cfg, dir, opts, startedAt, staticClient, dynamicClient, analysisMode, scanId, repoPath, dynamicMode, extraAllocators, extraDeallocators, ownershipNotes, emitter, pathResolver, investigation, preUsage);
   } finally {
     await staticClient.close();
     await dynamicClient?.close();
@@ -193,6 +208,7 @@ async function runAllocatorProfile(
   staticClient: McpClient,
   dynamicClient: McpClient | undefined,
   pathResolver: PathResolver,
+  onUsage: (u: { inputTokens: number; outputTokens: number }) => void,
 ): Promise<{ extraAllocators?: string[]; extraDeallocators?: string[]; ownershipNotes?: string[] }> {
   let extraAllocators = opts.extraAllocators;
   let extraDeallocators = opts.extraDeallocators;
@@ -209,6 +225,7 @@ async function runAllocatorProfile(
       signal: opts.signal,
       temperature: cfg.llm.temperature,
       onNotice: notice,
+      onUsage,
     });
     // Dynamic verification (opt-in): harness-check each candidate name instead of
     // trusting the LLM's textual grep-verify alone. Needs a build command AND a
@@ -271,6 +288,7 @@ async function runAdaptiveStrategy(
   analysisMode: AnalysisMode,
   extraAllocators: string[] | undefined,
   extraDeallocators: string[] | undefined,
+  onUsage: (u: { inputTokens: number; outputTokens: number }) => void,
 ): Promise<{ dynamicMode: DynamicMode; dynamicClient: McpClient | undefined }> {
   if (opts.strategy === 'auto' && analysisMode === AnalysisMode.LLM_ASSISTED) {
     const callModel = buildCallModel(toProviderSettings(cfg), () => globalThis.crypto.randomUUID());
@@ -279,6 +297,7 @@ async function runAdaptiveStrategy(
       temperature: cfg.llm.temperature,
       signal: opts.signal,
       onNotice: opts.quiet ? undefined : (r) => process.stderr.write(`  ${r}\n`),
+      onUsage,
     });
     if (!opts.quiet) {
       process.stdout.write(`  strategy: runDynamic=${plan.runDynamic} judge=${plan.judge} staticDepth=${plan.staticDepth}${plan.rationale ? ` — ${plan.rationale}` : ''}\n`);
@@ -323,6 +342,7 @@ async function runScanAndReport(
   emitter: ScanEmitter,
   pathResolver: ReturnType<typeof buildPathResolver>,
   investigation: InvestigationPhase | undefined,
+  preUsage: { inputTokens: number; outputTokens: number },
 ): Promise<HeadlessResult> {
   const result = await runScan(
     {
@@ -345,6 +365,12 @@ async function runScanAndReport(
   // Sum logical MCP calls across both analyzer clients (the investigation phase
   // reuses these same instances, so the count covers discovery + investigation).
   const mcpCalls = staticClient.callCount + (dynamicClient?.callCount ?? 0);
+  // Merge the pre-investigation profiler/strategist usage with the
+  // investigation-phase ledger — both are real LLM cost for this scan.
+  const usage = {
+    inputTokens: (result.investigation?.usage?.inputTokens ?? 0) + preUsage.inputTokens,
+    outputTokens: (result.investigation?.usage?.outputTokens ?? 0) + preUsage.outputTokens,
+  };
 
   const formats = parseFormats(opts.format);
   const { files } = writeReports(
@@ -364,11 +390,11 @@ async function runScanAndReport(
           dynamic: opts.dynamic,
           // Provenance only meaningful when the LLM actually drove the scan.
           ...(analysisMode === AnalysisMode.LLM_ASSISTED
-            ? { provider: cfg.llm.provider, model: cfg.llm.model, temperature: cfg.llm.temperature }
+            ? { provider: cfg.llm.provider, model: cfg.llm.model, temperature: cfg.llm.temperature, pricing: cfg.pricing }
             : {}),
           turns: result.investigation?.turns,
-          inputTokens: result.investigation?.usage?.inputTokens,
-          outputTokens: result.investigation?.usage?.outputTokens,
+          inputTokens: usage.inputTokens,
+          outputTokens: usage.outputTokens,
           durationMs: Date.now() - startedAt,
           mcpCalls,
         }),
@@ -389,7 +415,7 @@ async function runScanAndReport(
         `  coverage: ${coverage} · judge: ${judge}\n`,
     );
   }
-  return { ...result, scanId, dir, files, mcpCalls };
+  return { ...result, scanId, dir, files, mcpCalls, usage };
 }
 
 /** Count occurrences of each value (for the coverage / judge-path distributions). */

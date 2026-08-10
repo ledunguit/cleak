@@ -30,7 +30,7 @@ import type { ConsensusRule } from '@cleak/common/analysis/consensus-judge';
 import { countSourceLoc } from '@cleak/common/analysis/harness-utils';
 import { EVENT_PHASE, EVENT_KIND, type ScanEventName } from '@cleak/common/flow/scan-flow-contract';
 import { runHeadless } from '../surfaces/headless';
-import { loadConfig, type Provider, toProviderSettings } from '@cleak/config';
+import { loadConfig, type Provider, type RunConfig, toProviderSettings, computeCostUsd } from '@cleak/config';
 import { captureProvenance, summarizeStat, type EvalProvenance, type Stat } from './provenance';
 import { checkCorpusGate, type CorpusGateResult } from './corpusLock';
 import {
@@ -167,7 +167,8 @@ export interface CaseRow {
   /** Per-case judge-path tally (`llm` / `heuristic` / `consensus`) from verdict_tool. */
   judgePathCounts: Record<string, number>;
   durationMs: number;
-  tokens: number;
+  inputTokens: number;
+  outputTokens: number;
   /** Total MCP tool calls (static + dynamic) for this case — efficiency metric. */
   mcpCalls: number;
   scanId?: string;
@@ -203,6 +204,10 @@ export interface EvalResult {
     meanDurationMs: number;
     totalTokens: number;
     meanTokens: number;
+    totalInputTokens: number;
+    totalOutputTokens: number;
+    meanInputTokens: number;
+    meanOutputTokens: number;
     /** Total + mean MCP tool calls across ok cases (efficiency metric). */
     totalMcpCalls: number;
     meanMcpCalls: number;
@@ -210,6 +215,9 @@ export interface EvalResult {
      * (the LAMeD-style FP-density headline). */
     totalLoc: number;
     fpPerKloc: number;
+    /** undefined when no price is configured for `provenance.model` — never $0 as a stand-in. */
+    costUsd?: number;
+    priced: boolean;
   };
   rows: CaseRow[];
   /** Every per-site classification sample (with `siteId`), so two runs of the same
@@ -415,7 +423,12 @@ export function captureRunProvenance(opts: EvalOptions, _manifest: LabeledManife
 export function prepareCaseCache(outDir: string, concurrencyOverride?: number, mode?: 'no_llm' | 'llm_assisted'): { cacheDir: string; concurrency: number } {
   const cacheDir = join(outDir, 'cases');
   mkdirSync(cacheDir, { recursive: true });
-  const concurrency = concurrencyOverride ?? (mode === 'no_llm' ? 6 : 3);
+  // no_llm lowered 6→3 (now matching llm_assisted's existing default): stacked
+  // with per-case discoveryConcurrency, the old default put up to 48 concurrent
+  // MCP calls on static-analyzer, timing out its largest cases (reproduced:
+  // 9/19 MemHint cases at defaults). Stopgap on the caller side;
+  // static-analyzer's worker-thread pool fixes the server side.
+  const concurrency = concurrencyOverride ?? 3;
   return { cacheDir, concurrency };
 }
 
@@ -463,7 +476,8 @@ export async function scoreCases(
     loc: 0,
     judgePathCounts: {},
     durationMs: 0,
-    tokens: 0,
+    inputTokens: 0,
+    outputTokens: 0,
     mcpCalls: 0,
   });
 
@@ -472,6 +486,11 @@ export async function scoreCases(
     if (opts.resume && existsSync(cachePath)) {
       try {
         const cached = JSON.parse(readFileSync(cachePath, 'utf-8')) as CachedCase;
+        // Pre-split-token cache files lack inputTokens/outputTokens — re-run
+        // rather than silently report 0 (would understate cost, not just be absent).
+        if (typeof cached.row.inputTokens !== 'number' || typeof cached.row.outputTokens !== 'number') {
+          throw new Error('stale cache schema (pre-split-tokens)');
+        }
         emitResult(c, cached);
         onProgress?.(++done, cases.length, `${c.id} (cached)`);
         return cached;
@@ -533,7 +552,8 @@ export async function scoreCases(
       const findings = snapshot.findings;
       const samples = scoreCase(findings, c);
       const cm = accumulate(samples);
-      const tokens = (r.investigation?.usage?.inputTokens ?? 0) + (r.investigation?.usage?.outputTokens ?? 0);
+      const inputTokens = r.usage.inputTokens;
+      const outputTokens = r.usage.outputTokens;
       // Per-case judge-path tally from verdict_tool (only for findings that were
       // actually flagged — those are the verdicts whose provenance matters).
       const judgePathCounts: Record<string, number> = {};
@@ -555,7 +575,8 @@ export async function scoreCases(
         loc: countSourceLoc(repo),
         judgePathCounts,
         durationMs,
-        tokens,
+        inputTokens,
+        outputTokens,
         mcpCalls: r.mcpCalls,
         scanId: r.scanId,
       };
@@ -584,7 +605,8 @@ export async function scoreCases(
         loc: 0,
         judgePathCounts: {},
         durationMs: Date.now() - started,
-        tokens: 0,
+        inputTokens: 0,
+        outputTokens: 0,
         mcpCalls: 0,
         ...(aborted ? {} : { error: msg }),
       };
@@ -603,7 +625,7 @@ export async function scoreCases(
  * by flow variant, functional variant, and CWE, plus calibration, confidence
  * intervals, judge-path distribution, and cost reporting.
  */
-export function aggregateResults(cached: CachedCase[], cases: LabeledCase[], opts: EvalOptions, provenance: EvalProvenance): EvalResult {
+export function aggregateResults(cached: CachedCase[], cases: LabeledCase[], opts: EvalOptions, provenance: EvalProvenance, pricing?: RunConfig['pricing']): EvalResult {
   const allSamples: Sample[] = [];
   const byFlow = new Map<string, Sample[]>();
   const byFunc = new Map<string, Sample[]>();
@@ -624,7 +646,9 @@ export function aggregateResults(cached: CachedCase[], cases: LabeledCase[], opt
 
   const rows = cached.map((c) => c.row);
   const okRows = rows.filter((r) => r.status === 'ok');
-  const totalTokens = okRows.reduce((a, r) => a + r.tokens, 0);
+  const totalInputTokens = okRows.reduce((a, r) => a + r.inputTokens, 0);
+  const totalOutputTokens = okRows.reduce((a, r) => a + r.outputTokens, 0);
+  const totalTokens = totalInputTokens + totalOutputTokens;
   const totalDuration = okRows.reduce((a, r) => a + r.durationMs, 0);
   const totalLoc = okRows.reduce((a, r) => a + r.loc, 0);
   const totalMcpCalls = okRows.reduce((a, r) => a + (r.mcpCalls ?? 0), 0);
@@ -681,10 +705,15 @@ export function aggregateResults(cached: CachedCase[], cases: LabeledCase[], opt
       meanDurationMs: okRows.length ? Math.round(totalDuration / okRows.length) : 0,
       totalTokens,
       meanTokens: okRows.length ? Math.round(totalTokens / okRows.length) : 0,
+      totalInputTokens,
+      totalOutputTokens,
+      meanInputTokens: okRows.length ? Math.round(totalInputTokens / okRows.length) : 0,
+      meanOutputTokens: okRows.length ? Math.round(totalOutputTokens / okRows.length) : 0,
       totalMcpCalls,
       meanMcpCalls: okRows.length ? Math.round(totalMcpCalls / okRows.length) : 0,
       totalLoc,
       fpPerKloc: totalLoc > 0 ? (cm.fp / totalLoc) * 1000 : 0,
+      ...computeCostUsd(totalInputTokens, totalOutputTokens, provenance.model, pricing),
     },
     rows,
     samples: allSamples,
@@ -705,7 +734,9 @@ export async function runEval(opts: EvalOptions): Promise<EvalResult> {
     cases, opts, manifest, cacheDir, concurrency,
     opts.onProgress, opts.onCaseStart, opts.onCasePhase, opts.onCaseResult,
   );
-  return aggregateResults(cached, cases, opts, provenance);
+  // No LLM calls happen in no_llm mode — pricing wouldn't mean anything there.
+  const pricing = opts.mode === 'llm_assisted' ? loadConfig({ provider: opts.provider }).pricing : undefined;
+  return aggregateResults(cached, cases, opts, provenance, pricing);
 }
 
 /** Aggregate of N independent eval runs: headline metric mean ± std across runs. */

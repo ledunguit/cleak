@@ -154,6 +154,7 @@ export interface ProfileOptions {
   temperature?: number;
   signal?: AbortSignal;
   onNotice?: (reason: string) => void;
+  onUsage?: (u: { inputTokens: number; outputTokens: number }) => void;
 }
 
 /**
@@ -195,6 +196,7 @@ export async function profileAllocators(
     opts.onNotice?.(`allocator-profile: model call failed (${msg})`);
     return null;
   }
+  if (resp.usage) opts.onUsage?.({ inputTokens: resp.usage.inputTokens ?? 0, outputTokens: resp.usage.outputTokens ?? 0 });
   const parsed = parseAllocatorProfile(resp.text ?? '');
   if (!parsed.ok) {
     opts.onNotice?.(`allocator-profile: ${parsed.reason}`);

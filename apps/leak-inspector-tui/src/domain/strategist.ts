@@ -105,6 +105,7 @@ export interface StrategyOptions {
   temperature?: number;
   signal?: AbortSignal;
   onNotice?: (reason: string) => void;
+  onUsage?: (u: { inputTokens: number; outputTokens: number }) => void;
 }
 
 /**
@@ -141,6 +142,7 @@ export async function decideStrategy(
     opts.onNotice?.(`strategist: model call failed (${msg}); using fallback`);
     return fallbackPlan(meta);
   }
+  if (resp.usage) opts.onUsage?.({ inputTokens: resp.usage.inputTokens ?? 0, outputTokens: resp.usage.outputTokens ?? 0 });
   const parsed = parseStrategyPlan(resp.text ?? '');
   if (!parsed.ok) {
     opts.onNotice?.(`strategist: ${parsed.reason}; using fallback`);

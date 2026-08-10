@@ -108,6 +108,9 @@ export const CleakConfigSchema = z
     baselines: z.object({ clangBin: z.string(), inferBin: z.string() }).partial(),
     // Eval-time path remapping (previously env-only).
     eval: z.object({ staticPathMap: z.string() }).partial(),
+    // User-supplied $/1M-token price table, keyed by exact model ID — no
+    // baked-in defaults, the user fills this in themselves.
+    pricing: z.record(z.string(), z.object({ inputPerMillion: zNum, outputPerMillion: zNum }).partial()),
   })
   .partial();
 

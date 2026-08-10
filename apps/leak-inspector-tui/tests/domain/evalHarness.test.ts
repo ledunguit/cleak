@@ -24,6 +24,7 @@ const { mockRunHeadless } = vi.hoisted(() => ({
     scanId: 'mock-scan',
     investigation: { usage: { inputTokens: 0, outputTokens: 0 } },
     mcpCalls: 0,
+    usage: { inputTokens: 0, outputTokens: 0 },
   })),
 }));
 
@@ -337,6 +338,7 @@ describe('runEval', () => {
       scanId: 'mock-scan-id',
       investigation: { usage: { inputTokens: 50, outputTokens: 20 } },
       mcpCalls: 3,
+      usage: { inputTokens: 50, outputTokens: 20 },
     }));
 
     const { runEval } = await import('../../src/domain/evalHarness');
@@ -385,8 +387,13 @@ describe('runEval', () => {
       // Cost
       expect(result.cost.cases).toBe(1);
       expect(result.cost.totalTokens).toBe(70); // 50 + 20
+      expect(result.cost.totalInputTokens).toBe(50);
+      expect(result.cost.totalOutputTokens).toBe(20);
       expect(result.cost.totalMcpCalls).toBe(3);
       expect(result.cost.totalLoc).toBe(2); // 2 non-blank lines in main.c
+      // no_llm mode never loads pricing — nothing to price, never a silent $0.
+      expect(result.cost.priced).toBe(false);
+      expect(result.cost.costUsd).toBeUndefined();
 
       // Per-case rows
       expect(result.rows).toHaveLength(1);
@@ -401,6 +408,52 @@ describe('runEval', () => {
 
       // Samples array
       expect(result.samples.length).toBeGreaterThan(0);
+    } finally {
+      rmSync(tmp, { recursive: true, force: true });
+      rmSync(scanOut, { recursive: true, force: true });
+    }
+  });
+
+  test('--resume re-runs a case whose cache predates the split-token schema, instead of reporting 0 tokens', async () => {
+    const tmp = setupCorpus();
+    const scanOut = setupScanOut();
+    mockRunHeadless.mockClear();
+    mockRunHeadless.mockImplementation(() => ({
+      dir: scanOut,
+      scanId: 'mock-scan-id',
+      investigation: { usage: { inputTokens: 50, outputTokens: 20 } },
+      mcpCalls: 3,
+      usage: { inputTokens: 50, outputTokens: 20 },
+    }));
+
+    const outDir = join(tmp, 'out');
+    const cacheDir = join(outDir, 'cases');
+    mkdirSync(cacheDir, { recursive: true });
+    // Old cache shape: combined `tokens`, no `inputTokens`/`outputTokens`.
+    writeFileSync(
+      join(cacheDir, 'test-case-1.json'),
+      JSON.stringify({
+        id: 'test-case-1',
+        samples: [],
+        row: { id: 'test-case-1', status: 'ok', tp: 1, fp: 0, fn: 0, tn: 0, candidates: 1, flagged: 1, loc: 2, judgePathCounts: {}, durationMs: 10, tokens: 999, mcpCalls: 1 },
+        findings: [],
+      }),
+    );
+
+    const { runEval } = await import('../../src/domain/evalHarness');
+    try {
+      const result = await runEval({
+        corpusDir: tmp,
+        mode: 'no_llm',
+        dynamic: 'off',
+        outDir,
+        allowUnvalidated: true,
+        limit: 1,
+        resume: true,
+      });
+      expect(mockRunHeadless).toHaveBeenCalled(); // re-ran, didn't trust the stale cache
+      expect(result.rows[0].inputTokens).toBe(50);
+      expect(result.rows[0].outputTokens).toBe(20);
     } finally {
       rmSync(tmp, { recursive: true, force: true });
       rmSync(scanOut, { recursive: true, force: true });
@@ -461,6 +514,7 @@ describe('runEvalRepeated', () => {
         scanId: 'mock-repeated',
         investigation: { usage: { inputTokens: 50, outputTokens: 20 } },
         mcpCalls: 3,
+        usage: { inputTokens: 50, outputTokens: 20 },
       }));
 
       const { runEvalRepeated } = await import('../../src/domain/evalHarness');
