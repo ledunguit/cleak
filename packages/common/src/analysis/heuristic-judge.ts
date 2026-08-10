@@ -51,15 +51,25 @@ export function judgeHeuristically(
    * frozen JUDGE_VERDICT_THRESHOLDS are used ⇒ eval stays deterministic. */
   thresholds: VerdictThresholds = JUDGE_VERDICT_THRESHOLDS,
 ): VerdictResult {
-  const hasStaticFree = staticContext?.hasExplicitFree === true;
-  const hasStaticAllocation = (staticContext?.allocations || []).length > 0;
-  const hasFeasiblePaths = (staticContext?.feasiblePaths || []).length > 0;
-  const hasOwnershipIssue = staticContext?.ownership?.ownershipType === 'malloc_without_free';
-  const earlyReturnCount: number = staticContext?.earlyReturnCount || 0;
   const location = `${bundle.candidate.file_path}:${bundle.candidate.line_number}`;
-  // Prefer the rich, typed static evidence; fall back to the loose context keys
-  // so no_llm runs against pre-existing reports stay comparable.
+  // Prefer the rich, typed static evidence (`se`); OR-fall-back to the loose context
+  // keys so no_llm runs against pre-existing reports stay comparable. `se` alone used
+  // to be dead in no_llm mode — `runJudging` there always passes `{}` as staticContext
+  // (scanController.ts), so these 4 signals never fired even when enrichment
+  // succeeded and populated `bundle.staticEvidence`. OR (not replace) so this can only
+  // ADD signal, never remove one the loose context already provided.
   const se = bundle.staticEvidence;
+  const hasStaticFree =
+    staticContext?.hasExplicitFree === true || (se?.allocFreePairs ?? []).some((p) => p.status === 'paired');
+  const hasStaticAllocation = (staticContext?.allocations || []).length > 0 || (se?.allocFreePairs?.length ?? 0) > 0;
+  const hasFeasiblePaths =
+    (staticContext?.feasiblePaths || []).length > 0 || (se?.feasibleLeakPaths?.length ?? 0) > 0;
+  // hasOwnershipIssue is intentionally left reading staticContext only — it's the
+  // last `else if` in the ownership chain below (lines ~180-207), which already
+  // checks `se?.ownership` first; it only matters precisely when `se` lacks
+  // ownership info, so there's no "prefer se" form for it.
+  const hasOwnershipIssue = staticContext?.ownership?.ownershipType === 'malloc_without_free';
+  const earlyReturnCount: number = staticContext?.earlyReturnCount || se?.earlyReturnCount || 0;
 
   let score = 0;
   const reasons: string[] = [];
@@ -206,7 +216,7 @@ export function judgeHeuristically(
     reasons.push('ownership convention: malloc_without_free');
   }
 
-  if ((staticContext?.earlyReturnCount || 0) > 0 && hasStaticAllocation) {
+  if (earlyReturnCount > 0 && hasStaticAllocation) {
     score += 0.1;
     reasons.push(`function has ${earlyReturnCount} early return(s) that may skip cleanup`);
   }
@@ -250,13 +260,32 @@ export function judgeHeuristically(
 
   const structuralHigh = analysis.structuralLikelihood === 'high';
 
-  // ── Precision gate 1 — clean dynamic run is exculpatory. A sanitizer exercised
-  // this site and reported no leak, and no decisive static evidence says otherwise
-  // → answer likely_false_positive (non-borderline, so it neither flags NOR escalates
-  // to the LLM, which can't see the whole program). Every Juliet `*_bad` either leaks
-  // at runtime (correlated leak) or frees nowhere (structural 'high'), so this never
+  // Whether ANY decisive signal (runtime or static) argues FOR a leak — computed
+  // once, shared by both precision gates below. Hoisted above gate 1 (it used to be
+  // computed only for gate 2, after gate 1's `return`) so gate 1 can no longer let a
+  // BLIND, whole-binary "nothing crashed" dynamic run override good static evidence.
+  // On a real (non-Juliet) project, `buildTarget → lsanRun` runs the binary with NO
+  // arguments/input — for curl/vim/openssl/etc. this touches essentially no
+  // application logic, so `dynamicCoverage === 'exercised_clean'` there means "never
+  // reached", not "proven clean" (see dynamicEvidence.ts's `computeDynamicCoverage`
+  // doc comment: its 'exercised_clean' contract explicitly assumes "under the
+  // good+bad build" — i.e. a Juliet-style self-contained main() that already
+  // exercises both paths, which doesn't hold for a bare real-project CLI binary).
+  const hasStrongSignal =
+    correlatedRuntimeLeak ||
+    structuralHigh ||
+    candidatePair?.status === 'unpaired' ||
+    pathSensitiveLeak ||
+    hasOwnershipIssue;
+
+  // ── Precision gate 1 — clean dynamic run is exculpatory, UNLESS static or runtime
+  // evidence decisively argues otherwise. A sanitizer exercised this site and
+  // reported no leak, and no decisive signal says otherwise → answer
+  // likely_false_positive (non-borderline, so it neither flags NOR escalates to the
+  // LLM, which can't see the whole program). Every Juliet `*_bad` either leaks at
+  // runtime (correlated leak) or frees nowhere (structural 'high'), so this never
   // fires for a real flaw → recall preserved. ──
-  if (dynamicallyCleared && !correlatedRuntimeLeak && !structuralHigh) {
+  if (dynamicallyCleared && !hasStrongSignal) {
     return {
       verdict: InvestigationVerdict.LIKELY_FALSE_POSITIVE,
       confidence: 0.8,
@@ -271,12 +300,6 @@ export function judgeHeuristically(
   // located missing-free, an unpaired alloc→free, or malloc_without_free ownership);
   // a pile of weak lexical heuristics alone is downgraded to `uncertain` rather than
   // asserted as a leak. Bad variants always carry a strong signal → recall preserved. ──
-  const hasStrongSignal =
-    correlatedRuntimeLeak ||
-    structuralHigh ||
-    candidatePair?.status === 'unpaired' ||
-    pathSensitiveLeak ||
-    hasOwnershipIssue;
   const flagged =
     verdict === InvestigationVerdict.CONFIRMED_LEAK || verdict === InvestigationVerdict.LIKELY_LEAK;
   if (flagged && !hasStrongSignal) {

@@ -22,7 +22,8 @@ const SYSTEM_PROMPT = [
   `Calibrate using the EVIDENCE, in this priority order:`,
   `- A runtime leak (sanitizer/valgrind) whose allocation site is LINKED to this candidate is decisive → confirmed_leak (confidence ≥ 0.9). Weight by leak kind: definitely_lost / asan_leak ⇒ decisive; possibly_lost ⇒ weak corroboration; still_reachable ⇒ usually benign, lean false_positive.`,
   `- A runtime finding in the SAME FILE but a DIFFERENT site (not linked) is weak — do not treat it as proof for this allocation. still_reachable with no other evidence → false_positive.`,
-  `- A CLEAN sanitizer/valgrind run that EXERCISED this allocation and reported NO leak here is strong evidence this is NOT a leak → lean false_positive / likely_false_positive (unless a runtime leak is LINKED to this very allocation).`,
+  `- A CLEAN sanitizer/valgrind run is only strong exculpation when it EXERCISED THIS ALLOCATION (the evidence entry is CORRELATED to this candidate). A clean run that merely covered the FILE (a different site, or a run with no correlated entry) is weak — it does NOT clear this allocation.`,
+  `- UNPAIRED alloc→free at the allocation site is a STRONG leak signal. When the static pairing table marks an allocation 'UNPAIRED' (no free found in this function), do NOT dismiss it with an ownership-transfer narrative (returned / stored in a struct / handed to a callback) UNLESS the code snippet actually shows the pointer being returned, stored, or handed off. When the static pairing is UNPAIRED and the only counter-evidence is an ambiguous clean dynamic run, default to likely_leak — not false_positive.`,
   `- Ownership is decisive for false positives: if the allocation is RETURNED to the caller or its pointer is HANDED OFF to a sink/callback/another function (ownership transferred), freeing it is NOT this function's job. When ownership is transferred AND no runtime leak is linked to THIS allocation, answer likely_false_positive or false_positive — do NOT flag it just because you cannot see the free inside this snippet. An UNPAIRED alloc→free with a reachable leak path and NO ownership transfer → confirmed_leak (≥ 0.85).`,
   `- PATH-SENSITIVE leak: an allocation freed on the main/success path but NOT on an error or early-return path (e.g. \`if (err) return NULL;\` or \`goto fail;\` before the free) IS a leak — confirmed_leak — EVEN IF the value is returned or added to a structure on the success path. Ownership transferring on success does not cover the error path that loses the object. If the static context lists the allocation as freed "on some paths only" (conditional) or names it on a reachable un-freed exit path, treat that as decisive.`,
   `- PARAMETER-ownership leak (allocation_type 'parameter_ownership'): when a function frees a pointer PARAMETER on some paths (taking ownership from the caller, e.g. cJSON's \`merge_patch\` does \`cJSON_Delete(target)\`) but a reachable branch returns WITHOUT freeing it, that branch leaks the parameter — confirmed_leak. The parameter has no allocation site in the function; judge it by the conditional free + the reachable un-freed exit.`,
@@ -105,9 +106,13 @@ function summarizeEvidence(bundle: LeakBundle): string {
     const clean = evidenceIndicatesLeak(e) ? '' : ' — CLEAN (no leak reported here)';
     return `  - ${e.tool}:${kind} ${e.bytes_lost ?? 0} bytes / ${e.blocks_lost ?? 0} blocks${e.function_name ? ` in ${e.function_name}` : ''}${site}${link}${clean}`;
   });
-  // A dynamic run happened but flagged no leak here → strong exculpatory signal.
-  if (!anyLeak) {
-    lines.unshift('  NOTE: a sanitizer/valgrind run exercised this allocation and reported NO leak — strong evidence this is NOT a leak.');
+  // A dynamic run cleared THIS allocation (correlated) → meaningful exculpation.
+  // A clean run that only covered the file (uncorrelated/different site) is weak
+  // and must NOT be presented as "this allocation was exercised clean" — the judge
+  // over-weighted that wording and exculpated UNPAIRED static allocations (task-5
+  // class-(b) hardening). Only correlated clean entries claim the allocation itself.
+  if (!anyLeak && bundle.evidence.some((e) => e.correlatedToCandidate === true && !evidenceIndicatesLeak(e))) {
+    lines.unshift('  NOTE: this allocation was exercised and reported NO leak — correlated evidence it is NOT a leak.');
   }
   return lines.join('\n');
 }
@@ -231,7 +236,67 @@ export async function judgeBundleWithLlm(
     evidence: parsed.value.evidence,
     tool: ToolKind.LLM,
   };
-  return enrichLeakVerdict(bundle, staticContext ?? {}, base);
+  const hardened = applyStaticUnpairedGuard(bundle, staticContext, base);
+  return enrichLeakVerdict(bundle, staticContext ?? {}, hardened);
+}
+
+/**
+ * Task-5 class-(b) judge hardening: a confident LLM exculpation (false_positive /
+ * likely_false_positive) must NOT survive when the static evidence marks the
+ * allocation's alloc→free pair UNPAIRED at the site AND no ownership transfer is
+ * evidenced AND the dynamic run did not CONFIRM a leak. This is exactly the
+ * LAMeD class-(b) shape (cJSON_Duplicate `newitem->string`, curl `xoauth@519`):
+ * the model rationalized an ownership transfer the static context does not show,
+ * over an UNPAIRED pairing — producing a false negative. The guard demotes the
+ * verdict to `uncertain` (it never invents a leak — it only refuses a confident
+ * false_positive the evidence contradicts). Prompt-hardening (the UNPAIRED rule
+ * in SYSTEM_PROMPT) fixes the model; this guard fixes the residual case where
+ * the model still answers false_positive.
+ */
+function applyStaticUnpairedGuard(
+  bundle: LeakBundle,
+  staticContext: Record<string, any> | undefined,
+  llmVerdict: VerdictResult,
+): VerdictResult {
+  const v = llmVerdict.verdict;
+  if (v !== InvestigationVerdict.FALSE_POSITIVE && v !== InvestigationVerdict.LIKELY_FALSE_POSITIVE) return llmVerdict;
+
+  const dynamicConfirmedLeak =
+    bundle.dynamicCoverage === 'exercised_leak' || bundle.evidence.some((e) => e.correlatedToCandidate === true && evidenceIndicatesLeak(e));
+
+  // A correlated dynamic leak is the strongest evidence class there is — it must
+  // never be silently overridden by an LLM false_positive, WHETHER OR NOT static
+  // enrichment succeeded for this candidate. Checked first, independent of
+  // `staticContext`, because the static-based check below used to be the only
+  // guard and bailed out entirely (`if (!staticContext) return llmVerdict`)
+  // whenever functionSummary/pathConstraints failed — silently letting a
+  // dynamically-confirmed leak get dismissed on exactly the candidates with the
+  // weakest static evidence.
+  if (dynamicConfirmedLeak) {
+    return {
+      ...llmVerdict,
+      verdict: InvestigationVerdict.UNCERTAIN,
+      confidence: Math.min(llmVerdict.confidence ?? 0.5, 0.5),
+      explanation: `[correlated dynamic leak not exculpable by an LLM false_positive] ${llmVerdict.explanation ?? ''}`.trim(),
+    };
+  }
+
+  if (!staticContext) return llmVerdict;
+
+  const pairs = (staticContext.allocFreePairs ?? []) as Array<Record<string, any>>;
+  const unpaired = pairs.some((p) => p.status === 'unpaired');
+  if (!unpaired) return llmVerdict;
+
+  const carrier = (staticContext.ownershipSummary ?? staticContext.ownership)?.ownershipCarrier;
+  const ownershipTransferred = !!carrier && typeof carrier.kind === 'string' && carrier.kind !== 'none';
+  if (ownershipTransferred) return llmVerdict;
+
+  return {
+    ...llmVerdict,
+    verdict: InvestigationVerdict.UNCERTAIN,
+    confidence: Math.min(llmVerdict.confidence ?? 0.5, 0.5),
+    explanation: `[unpaired static alloc→free not exculpable by an ambiguous clean run] ${llmVerdict.explanation ?? ''}`.trim(),
+  };
 }
 
 /** A bundle is borderline (worth an LLM second opinion) when the heuristic is unsure. */

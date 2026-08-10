@@ -159,6 +159,142 @@ describe('judgeBundleWithLlm', () => {
   });
 });
 
+// ── task-5 regression: unpaired static alloc→free must not be exculpated by a
+//    confident LLM verdict on a clean-dynamic-only run (class-(b) judge hardening) ──
+
+/** The exact class-(b) shape (triage #14/#27): static pair table marks the
+ *  allocation status='unpaired', ownership evidence absent, dynamic run clean
+ *  (exercised_clean) but no correlated evidence entry. */
+function classBStaticContext(unpairedAllocs: Array<{ variable: string; allocLine: number }> = []) {
+  return {
+    allocFreePairs: unpairedAllocs.length
+      ? unpairedAllocs.map((a) => ({ variable: a.variable, allocCall: 'malloc', allocLine: a.allocLine, freeLine: null, status: 'unpaired' }))
+      : [{ variable: 'xoauth', allocCall: 'aprintf', allocLine: 519, freeLine: null, status: 'unpaired' }],
+    feasibleLeakPaths: [],
+    ownership: { ownershipType: 'unknown' },
+  };
+}
+
+describe('judgeBundleWithLlm — judge-hardening for unpaired static evidence (task-5)', () => {
+  test('a confident LLM false_positive does NOT survive an unpaired alloc→free at the site + clean run (≥ uncertain)', async () => {
+    const callModel: CallModel = async () => ({
+      text: '{"verdict":"false_positive","confidence":0.96,"explanation":"handed to the caller through outptr, transferring ownership; no leak"}',
+      toolUses: [],
+      stopReason: 'stop',
+    });
+    const b = bundle();
+    b.evidence = [cleanEv()];
+    b.dynamicCoverage = 'exercised_clean';
+    const v = await judgeBundleWithLlm(b, classBStaticContext(), callModel);
+    expect(v).not.toBeNull();
+    expect(['uncertain', InvestigationVerdict.LIKELY_LEAK, InvestigationVerdict.CONFIRMED_LEAK]).toContain(v!.verdict);
+  });
+
+  test('multiple unpaired allocations at the site (cjson case) also survive the guard', async () => {
+    const callModel: CallModel = async () => ({
+      text: '{"verdict":"false_positive","confidence":0.95,"explanation":"duplication returns a new object by contract"}',
+      toolUses: [],
+      stopReason: 'stop',
+    });
+    const b = bundle();
+    b.dynamicCoverage = 'exercised_clean';
+    const ctx = classBStaticContext([
+      { variable: 'newitem->valuestring', allocLine: 2147 },
+      { variable: 'newitem->string', allocLine: 2156 },
+      { variable: 'newchild', allocLine: 2172 },
+    ]);
+    const v = await judgeBundleWithLlm(b, ctx, callModel);
+    expect(v).not.toBeNull();
+    expect(['uncertain', InvestigationVerdict.LIKELY_LEAK, InvestigationVerdict.CONFIRMED_LEAK]).toContain(v!.verdict);
+  });
+
+  test('existing verdict preserved when the allocation IS paired (exculpatory LLM verdicts stay)', async () => {
+    const callModel: CallModel = async () => ({
+      text: '{"verdict":"false_positive","confidence":0.9,"explanation":"freed on all paths"}',
+      toolUses: [],
+      stopReason: 'stop',
+    });
+    const b = bundle();
+    const ctx = {
+      allocFreePairs: [{ variable: 'p', allocCall: 'malloc', allocLine: 10, freeLine: 42, status: 'paired' }],
+      feasibleLeakPaths: [],
+      ownership: { ownershipType: 'scoped', ownershipCarrier: { kind: 'none' } },
+    };
+    const v = await judgeBundleWithLlm(b, ctx, callModel);
+    expect(v).not.toBeNull();
+    expect(v!.verdict).toBe(InvestigationVerdict.FALSE_POSITIVE);
+  });
+
+  test('existing-behavior preserved for a clean run that exercises THIS allocation with correlated evidence and paired static', async () => {
+    const callModel: CallModel = async () => ({
+      text: '{"verdict":"likely_false_positive","confidence":0.8,"explanation":"exercised and clean; ownership to parameter"}',
+      toolUses: [],
+      stopReason: 'stop',
+    });
+    const b = bundle();
+    b.evidence = [ev({ leakKind: null, severity: 'info', correlatedToCandidate: true })];
+    const ctx = {
+      allocFreePairs: [{ variable: 'p', allocCall: 'alloc', allocLine: 10, freeLine: 99, status: 'paired' }],
+      feasibleLeakPaths: [],
+      ownership: { ownershipType: 'scoped', ownershipCarrier: { kind: 'none' } },
+    };
+    const v = await judgeBundleWithLlm(b, ctx, callModel);
+    expect(v).not.toBeNull();
+    expect(v!.verdict).toBe(InvestigationVerdict.LIKELY_FALSE_POSITIVE);
+  });
+
+  test('exculpation preserved when ownership IS transferred even with an unpaired pair (guard skips on carrier)', async () => {
+    const callModel: CallModel = async () => ({
+      text: '{"verdict":"false_positive","confidence":0.9,"explanation":"returned to caller via ownership carrier"}',
+      toolUses: [],
+      stopReason: 'stop',
+    });
+    const b = bundle();
+    const ctx = {
+      allocFreePairs: [{ variable: 'copy', allocCall: 'strdup', allocLine: 13, freeLine: null, status: 'unpaired' }],
+      feasibleLeakPaths: [],
+      ownershipSummary: { role: 'allocator', ownershipCarrier: { kind: 'return_value', name: 'copy' }, rationale: 'return copy' },
+    };
+    const v = await judgeBundleWithLlm(b, ctx, callModel);
+    expect(v).not.toBeNull();
+    expect(v!.verdict).toBe(InvestigationVerdict.FALSE_POSITIVE);
+  });
+});
+
+describe('judgeBundleWithLlm — correlated dynamic leak guard (independent of static context)', () => {
+  test('a confident LLM false_positive does NOT survive a correlated dynamic leak, even with NO static context at all', async () => {
+    // Previously the guard bailed out entirely (`if (!staticContext) return llmVerdict`)
+    // whenever enrichment failed for this candidate — silently letting a
+    // dynamically-confirmed leak get dismissed on exactly the candidates with the
+    // weakest static evidence.
+    const callModel: CallModel = async () => ({
+      text: '{"verdict":"false_positive","confidence":0.95,"explanation":"looks scoped, no leak"}',
+      toolUses: [],
+      stopReason: 'stop',
+    });
+    const b = bundle();
+    b.evidence = [leakEv(true)];
+    b.dynamicCoverage = 'exercised_leak';
+    const v = await judgeBundleWithLlm(b, undefined as any, callModel);
+    expect(v).not.toBeNull();
+    expect(v!.verdict).not.toBe(InvestigationVerdict.FALSE_POSITIVE);
+    expect(v!.verdict).not.toBe(InvestigationVerdict.LIKELY_FALSE_POSITIVE);
+  });
+
+  test('NO REGRESSION: an uncorrelated / no dynamic evidence + no static context leaves the LLM verdict alone', async () => {
+    const callModel: CallModel = async () => ({
+      text: '{"verdict":"false_positive","confidence":0.9,"explanation":"scoped, freed on all paths"}',
+      toolUses: [],
+      stopReason: 'stop',
+    });
+    const b = bundle();
+    b.evidence = [];
+    const v = await judgeBundleWithLlm(b, undefined as any, callModel);
+    expect(v).not.toBeNull();
+    expect(v!.verdict).toBe(InvestigationVerdict.FALSE_POSITIVE);
+  });
+});
+
 describe('parseVerdict (discriminated result)', () => {
   test('valid verdict → ok with clamped confidence', () => {
     const r = parseVerdict('{"verdict":"likely_leak","confidence":1.4,"explanation":"x","evidence":["a",1]}');

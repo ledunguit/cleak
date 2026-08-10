@@ -268,6 +268,78 @@ function scanBuildBundle(diags?: Array<{ file: string; line: number; message: st
   } as unknown as LeakBundle;
 }
 
+// ── no_llm mode: `staticContext` is always `{}` (scanController.ts's `runJudging`
+// only builds it in llm_assisted mode), so these signals must be derivable from
+// `bundle.staticEvidence` alone or they're permanently dead in no_llm — even when
+// enrichment (functionSummary/pathConstraints) succeeded and populated `se`. ──
+describe('judgeHeuristically — se-derived signals survive an empty staticContext (no_llm mode)', () => {
+  test('allocFreePairs/feasibleLeakPaths in `se` raise confidence even with staticContext={} and no direct candidate pairing', () => {
+    const withSe = pathBundle({});
+    // Evidence far from the candidate's own line: candidatePair stays undefined
+    // (the direct-match branch doesn't fire), but hasStaticAllocation/hasStaticFree/
+    // hasFeasiblePaths should still pick this up via `se` now.
+    withSe.staticEvidence!.allocFreePairs = [
+      { variable: 'other', allocCall: 'malloc', allocLine: 500, allocFile: 'x.c', freeLine: null, freeFunction: null, bindsToNewVariable: true, status: 'unpaired' },
+    ];
+    withSe.staticEvidence!.feasibleLeakPaths = [
+      { kind: 'return', exitLine: 600, reachable: false, conditions: [], unreconciledAllocations: [], leakRisk: 'high', narrative: 'unreachable elsewhere', feasibilityChecked: 'heuristic' },
+    ];
+
+    const withoutSe = pathBundle({});
+    withoutSe.staticEvidence = undefined;
+
+    const vWith = judgeHeuristically(withSe, {});
+    const vWithout = judgeHeuristically(withoutSe, {});
+    expect(vWith.confidence).toBeGreaterThan(vWithout.confidence);
+  });
+
+  test('earlyReturnCount from `se` contributes even with staticContext={}', () => {
+    const withSe = pathBundle({});
+    withSe.staticEvidence!.allocFreePairs = [
+      { variable: 'other', allocCall: 'malloc', allocLine: 500, allocFile: 'x.c', freeLine: null, freeFunction: null, bindsToNewVariable: true, status: 'unpaired' },
+    ];
+    withSe.staticEvidence!.earlyReturnCount = 3;
+
+    const withoutEarlyReturn = pathBundle({});
+    withoutEarlyReturn.staticEvidence!.allocFreePairs = withSe.staticEvidence!.allocFreePairs;
+    withoutEarlyReturn.staticEvidence!.earlyReturnCount = 0;
+
+    const vWith = judgeHeuristically(withSe, {});
+    const vWithout = judgeHeuristically(withoutEarlyReturn, {});
+    expect(vWith.confidence).toBeGreaterThan(vWithout.confidence);
+  });
+});
+
+// ── Precision gate 1 must not let a coarse, whole-binary "ran clean" verdict
+// override strong static evidence. On a real (non-Juliet) project, a blind
+// `buildTarget → lsanRun` invocation with no arguments rarely reaches deep
+// application logic — `dynamicCoverage: 'exercised_clean'` there means "never
+// reached", not "proven clean". A candidate with an unpaired alloc/free (or any
+// other strong static signal) must stay flagged/uncertain, not get confidently
+// dismissed just because the bare binary run didn't crash. ──
+describe('judgeHeuristically — precision gate 1 respects strong static evidence', () => {
+  test('exercised_clean does NOT exonerate an unpaired alloc/free (strong static signal wins)', () => {
+    const b = pathBundle({ pairStatus: 'unpaired', reachable: true, unrec: ['p'] });
+    b.dynamicCoverage = 'exercised_clean';
+    const v = judgeHeuristically(b, {});
+    expect(v.verdict).not.toBe('likely_false_positive');
+  });
+
+  test('exercised_clean does NOT exonerate a path-sensitive (conditional free + reachable leak) candidate', () => {
+    const b = pathBundle({ pairStatus: 'conditional', reachable: true, unrec: ['p'] });
+    b.dynamicCoverage = 'exercised_clean';
+    const v = judgeHeuristically(b, {});
+    expect(v.verdict).not.toBe('likely_false_positive');
+  });
+
+  test('NO REGRESSION: exercised_clean STILL exonerates when there is genuinely no strong static signal', () => {
+    const b = pathBundle({});
+    b.dynamicCoverage = 'exercised_clean';
+    const v = judgeHeuristically(b, {});
+    expect(v.verdict).toBe('likely_false_positive');
+  });
+});
+
 describe('judgeHeuristically — scan-build corroboration', () => {
   test('a scan-build diagnostic near the candidate raises confidence (corroborates)', () => {
     const withDiag = judgeHeuristically(scanBuildBundle([{ file: 'x.c', line: 10, message: 'Potential leak of memory pointed to by p', confidence: 'high' }]), {});
