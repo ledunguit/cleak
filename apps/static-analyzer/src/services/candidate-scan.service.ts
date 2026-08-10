@@ -87,7 +87,7 @@ export class CandidateScanService {
   private readonly logger = new Logger(CandidateScanService.name);
   constructor(private readonly cParser: CParserService) {}
 
-  scan(filePath: string, content?: string, extraAllocators?: string[], extraDeallocators?: string[]) {
+  async scan(filePath: string, content?: string, extraAllocators?: string[], extraDeallocators?: string[]) {
     const allocPatterns = [...ALLOC_PATTERNS, ...namePatterns(extraAllocators, 'EXTRA_ALLOCATOR_NAMES')];
     const freePatterns = [...FREE_PATTERNS, ...namePatterns(extraDeallocators, 'EXTRA_DEALLOCATOR_NAMES')];
     const source = content || readFileSync(filePath, 'utf-8');
@@ -96,7 +96,7 @@ export class CandidateScanService {
     // function. LAMeD scores function-level, so a wrong attribution = a missed flaw.
     let functions: FunctionInfo[] = [];
     try {
-      functions = this.cParser.parse(source, filePath, extraAllocators, extraDeallocators).functions;
+      functions = (await this.cParser.parse(source, filePath, extraAllocators, extraDeallocators)).functions;
     } catch {
       this.logger.warn(`AST parse failed for ${filePath}, falling back to lexical`);
       functions = []; // fall back to the lexical scan below

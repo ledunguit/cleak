@@ -234,7 +234,14 @@ flowchart LR
 
 - **static-analyzer** (NestJS + Tree-sitter): mỗi service → một tool MCP (file indexing,
   candidate scan, AST, call graph, function summary, interprocedural flow, path constraints,
-  ownership, **Clang scan-build**). Phục vụ MCP :50061 cho TUI. **Engine c-parser** (`c-parser.service.ts`):
+  ownership, **Clang scan-build**). Phục vụ MCP :50061 cho TUI. **Parse chạy trên
+  worker-thread pool** (Piscina, `apps/static-analyzer/src/workers/parse.worker.ts`) — tree-sitter
+  parse là CPU-bound và trước đây chạy đồng bộ trên main thread, khiến mọi MCP call khác
+  (kể cả từ case khác đang chạy song song) phải xếp hàng, gây timeout trên repo lớn dưới tải
+  đồng thời. Số thread cấu hình qua `STATIC_PARSER_WORKERS` (mặc định `os.cpus()-1`, đặt
+  tường minh trong `docker-compose.yml` theo dung lượng RAM thật của host — xem §6
+  `docs/OPERATIONS.md`). Cache LRU 512-entry theo content-hash vẫn ở main thread (single
+  source of truth), worker không giữ state. **Engine c-parser** (`c-parser.service.ts`):
   - **C/C++**: định tuyến theo đuôi file → `tree-sitter-c` (`.c/.h`) hoặc `tree-sitter-cpp`
     (`.cc/.cpp/.cxx/.hpp/…`). C++ `new`→alloc, `delete`→free.
   - **Allocator set per-parse**: libc + tên project (LLM-discovered) truyền qua `extraAllocators/
@@ -250,7 +257,10 @@ flowchart LR
   - **Leak tham số**: param con trỏ free-một-số-đường → candidate `parameter_ownership`.
 - **dynamic-analyzer** (NestJS + child_process): build target (sanitizer flags), Valgrind
   Memcheck, ASan, LSan, run binary, so sánh run. Phục vụ MCP :50062. **Chỉ chạy trên
-  Linux/Docker** (valgrind/LSan không chạy native trên macOS).
+  Linux/Docker** (valgrind/LSan không chạy native trên macOS). `execFile` đã async nên
+  không block event loop như static-analyzer, nhưng vẫn giới hạn số tiến trình con chạy
+  đồng thời qua semaphore trong `safe-exec.ts` (`DYNAMIC_MAX_CONCURRENT_RUNS`, mặc định
+  `os.cpus()/2`) — tránh nhiều Valgrind/ASan nặng cùng lúc làm cạn RAM container.
 
 ## 9. Hiện trạng vs. cũ (đính chính)
 

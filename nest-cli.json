@@ -16,7 +16,8 @@
       "entryFile": "main",
       "sourceRoot": "apps/static-analyzer/src",
       "compilerOptions": {
-        "tsConfigPath": "apps/static-analyzer/tsconfig.app.json"
+        "tsConfigPath": "apps/static-analyzer/tsconfig.app.json",
+        "webpackConfigPath": "apps/static-analyzer/webpack.config.js"
       }
     },
     "dynamic-analyzer": {

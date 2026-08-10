@@ -1,63 +1,68 @@
 import { Injectable } from '@nestjs/common';
 import { readFileSync } from 'fs';
-import { CParserService, ControlFlowGraph } from './c-parser.service';
+import { CParserService, ControlFlowGraph, FunctionInfo } from './c-parser.service';
 
 @Injectable()
 export class CallGraphService {
   constructor(private readonly cParser: CParserService) {}
 
-  extract(rootPath: string, files: string[], extraAllocators?: string[], extraDeallocators?: string[]) {
+  // Parses each file concurrently (spread across the worker pool) but always
+  // applies the per-file results back in the ORIGINAL `files` order — a
+  // duplicate function name across files must still resolve to the same file
+  // deterministically regardless of which worker finishes first.
+  private async parseAll(files: string[]): Promise<{ file: string; functions: FunctionInfo[] }[]> {
+    return Promise.all(
+      files.map(async (file) => {
+        try {
+          const content = readFileSync(file, 'utf-8');
+          const result = await this.cParser.parse(content, file);
+          return { file, functions: result.functions };
+        } catch {
+          return { file, functions: [] as FunctionInfo[] };
+        }
+      }),
+    );
+  }
+
+  async extract(rootPath: string, files: string[], extraAllocators?: string[], extraDeallocators?: string[]) {
     const allFunctions: Map<string, string> = new Map();
     const callEdges: { caller: string; callee: string; filePath: string; lineNumber: number; callee_file?: string }[] = [];
     const recursionCycles: string[][] = [];
 
     // First pass: collect all internal function names with their files
     const functionToFile = new Map<string, string>();
-
-    for (const file of files) {
-      try {
-        const content = readFileSync(file, 'utf-8');
-        const result = this.cParser.parse(content, file);
-        for (const fn of result.functions) {
-          allFunctions.set(fn.functionName, file);
-          functionToFile.set(fn.functionName, file);
-        }
-      } catch {
-        // skip unreadable
+    const firstPass = await this.parseAll(files);
+    for (const { file, functions } of firstPass) {
+      for (const fn of functions) {
+        allFunctions.set(fn.functionName, file);
+        functionToFile.set(fn.functionName, file);
       }
     }
 
     // Second pass: build edges with CFG-aware analysis
     const calleeToCallers = new Map<string, string[]>();
+    const secondPass = await this.parseAll(files);
+    for (const { file, functions } of secondPass) {
+      for (const fn of functions) {
+        for (const call of fn.functionCalls) {
+          // Only track calls to functions defined in this project (internal calls)
+          const calleeFile = functionToFile.get(call.name);
+          callEdges.push({
+            caller: fn.functionName,
+            callee: call.name,
+            filePath: file,
+            lineNumber: call.line,
+            callee_file: calleeFile || undefined,
+          });
 
-    for (const file of files) {
-      try {
-        const content = readFileSync(file, 'utf-8');
-        const result = this.cParser.parse(content, file);
-
-        for (const fn of result.functions) {
-          for (const call of fn.functionCalls) {
-            // Only track calls to functions defined in this project (internal calls)
-            const calleeFile = functionToFile.get(call.name);
-            callEdges.push({
-              caller: fn.functionName,
-              callee: call.name,
-              filePath: file,
-              lineNumber: call.line,
-              callee_file: calleeFile || undefined,
-            });
-
-            // Track for cycle detection
-            if (calleeFile) {
-              if (!calleeToCallers.has(call.name)) {
-                calleeToCallers.set(call.name, []);
-              }
-              calleeToCallers.get(call.name)!.push(fn.functionName);
+          // Track for cycle detection
+          if (calleeFile) {
+            if (!calleeToCallers.has(call.name)) {
+              calleeToCallers.set(call.name, []);
             }
+            calleeToCallers.get(call.name)!.push(fn.functionName);
           }
         }
-      } catch {
-        // skip
       }
     }
 

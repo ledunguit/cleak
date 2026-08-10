@@ -2,17 +2,17 @@ import { describe, expect, test } from 'vitest';
 import { CParserService } from '../../src/services/c-parser.service';
 
 const svc = new CParserService();
-const parseOne = (src: string, name: string) => svc.parse(src, 't.c').functions.find((f) => f.functionName === name);
+const parseOne = async (src: string, name: string) => (await svc.parse(src, 't.c')).functions.find((f) => f.functionName === name);
 
 describe('CParserService — signature/linkage extraction (Stage B2 harness synthesis needs these)', () => {
-  test('static function → storageClass "static", pointer return type, pointer params', () => {
+  test('static function → storageClass "static", pointer return type, pointer params', async () => {
     const src = `
 static char *build_buffer(const char *name, int shout) {
     char *buf = (char *)malloc(64);
     return buf;
 }
 `;
-    const fn = parseOne(src, 'build_buffer');
+    const fn = await parseOne(src, 'build_buffer');
     expect(fn?.storageClass).toBe('static');
     expect(fn?.returnType).toBe('char *');
     expect(fn?.parameters).toEqual([
@@ -21,24 +21,24 @@ static char *build_buffer(const char *name, int shout) {
     ]);
   });
 
-  test('non-static (externally linked) function → storageClass "none"', () => {
+  test('non-static (externally linked) function → storageClass "none"', async () => {
     const src = `
 char *make_greeting(const char *name, int shout) {
     return name;
 }
 `;
-    const fn = parseOne(src, 'make_greeting');
+    const fn = await parseOne(src, 'make_greeting');
     expect(fn?.storageClass).toBe('none');
     expect(fn?.returnType).toBe('char *');
   });
 
-  test('extern function → storageClass "extern"', () => {
+  test('extern function → storageClass "extern"', async () => {
     const src = `
 extern int compute_total(int a, int b) {
     return a + b;
 }
 `;
-    const fn = parseOne(src, 'compute_total');
+    const fn = await parseOne(src, 'compute_total');
     expect(fn?.storageClass).toBe('extern');
     expect(fn?.returnType).toBe('int');
     expect(fn?.parameters).toEqual([
@@ -47,8 +47,8 @@ extern int compute_total(int a, int b) {
     ]);
   });
 
-  test('non-pointer return type has no trailing " *"', () => {
+  test('non-pointer return type has no trailing " *"', async () => {
     const src = `int add(int a, int b) { return a + b; }`;
-    expect(parseOne(src, 'add')?.returnType).toBe('int');
+    expect((await parseOne(src, 'add'))?.returnType).toBe('int');
   });
 });

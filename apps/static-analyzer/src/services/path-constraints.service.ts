@@ -7,7 +7,7 @@ export class PathConstraintsService {
   constructor(private readonly cParser: CParserService) {}
 
   async analyze(filePath: string, content: string, lineNumber: number, extraAllocators?: string[], extraDeallocators?: string[]) {
-    const result = this.cParser.parse(content, filePath, extraAllocators, extraDeallocators);
+    const result = await this.cParser.parse(content, filePath, extraAllocators, extraDeallocators);
 
     // Innermost enclosing function by the ACCURATE tree-sitter range (fn.endLine),
     // not the old "next function − 1" heuristic — picks the smallest range on nesting.

@@ -33,8 +33,16 @@ export function makeThresholds(cfg?: ThresholdsInput) {
     maxAllocFreePairsShown: 12,
     maxFeasibleLeakPathsShown: 5,
 
-    /** Discovery file-scan concurrency. */
-    discoveryConcurrency: Math.max(1, cfg?.discoveryConcurrency ?? 8),
+    /**
+     * Discovery file-scan concurrency (MCP workers per case hitting static-analyzer).
+     * Lowered 8→4: at the old default, a corpus eval's case-level concurrency (up to
+     * 6 in `no_llm` mode) stacked with this to put up to 48 concurrent MCP calls on
+     * static-analyzer, timing out on the largest repos (reproduced directly: 9/19
+     * MemHint cases timed out at defaults). This is a stopgap independent of the
+     * static-analyzer worker-thread pool fix — it caps load from the CALLER side;
+     * the pool fixes the SERVER side (parsing no longer serializes on one thread).
+     */
+    discoveryConcurrency: Math.max(1, cfg?.discoveryConcurrency ?? 4),
   };
 }
 

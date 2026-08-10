@@ -20,27 +20,31 @@ export class InterproceduralFlowService {
   // cache that re-parse dominates wall-clock on big repos (curl ≈ 1500 files × N candidates).
   // Key includes mtime + the allocator set so a changed file or a different per-project
   // profile correctly misses. Files don't change mid-run, so this is safe + a large win.
-  private parseCache = new Map<string, FunctionInfo[]>();
+  // Cached as a Promise (not the resolved array) so concurrent requests for the
+  // same file+allocator-set during the same analyze() call dedupe onto one
+  // in-flight parse instead of racing to populate the cache separately.
+  private parseCache = new Map<string, Promise<FunctionInfo[]>>();
 
-  private parseFile(file: string, extraAllocators?: string[], extraDeallocators?: string[]): FunctionInfo[] {
+  private parseFile(file: string, extraAllocators?: string[], extraDeallocators?: string[]): Promise<FunctionInfo[]> {
     let mtime = 0;
     try {
       mtime = statSync(file).mtimeMs;
     } catch {
-      return [];
+      return Promise.resolve([]);
     }
     const key = `${file}::${mtime}::${(extraAllocators || []).join(',')}::${(extraDeallocators || []).join(',')}`;
     const hit = this.parseCache.get(key);
     if (hit) return hit;
-    let functions: FunctionInfo[] = [];
-    try {
-      const content = readFileSync(file, 'utf-8');
-      functions = this.cParser.parse(content, file, extraAllocators, extraDeallocators).functions;
-    } catch {
-      functions = [];
-    }
-    this.parseCache.set(key, functions);
-    return functions;
+    const promise = (async (): Promise<FunctionInfo[]> => {
+      try {
+        const content = readFileSync(file, 'utf-8');
+        return (await this.cParser.parse(content, file, extraAllocators, extraDeallocators)).functions;
+      } catch {
+        return [];
+      }
+    })();
+    this.parseCache.set(key, promise);
+    return promise;
   }
 
   /**
@@ -55,7 +59,7 @@ export class InterproceduralFlowService {
    * the index (the old version re-read + re-parsed the whole file set for EACH function in
    * the trace — O(depth × files), pathological on big repos).
    */
-  analyze(
+  async analyze(
     rootPath: string,
     functionName: string,
     files: string[],
@@ -63,10 +67,16 @@ export class InterproceduralFlowService {
     extraDeallocators?: string[],
   ) {
     // Parse-once index: functionName → {fn, file}. First definition wins (matches CallGraph).
-    // Files are parsed through `parseFile` (cached across candidates of the same case).
+    // Files are parsed through `parseFile` (cached across candidates of the same case),
+    // concurrently across the worker pool — but the index is built by walking the
+    // results back in the ORIGINAL `files` order, so "first definition wins" stays
+    // deterministic regardless of which file's parse finishes first.
     const index = new Map<string, { fn: FunctionInfo; file: string }>();
-    for (const file of files) {
-      for (const fn of this.parseFile(file, extraAllocators, extraDeallocators)) {
+    const parsed = await Promise.all(
+      files.map(async (file) => ({ file, functions: await this.parseFile(file, extraAllocators, extraDeallocators) })),
+    );
+    for (const { file, functions } of parsed) {
+      for (const fn of functions) {
         if (!index.has(fn.functionName)) index.set(fn.functionName, { fn, file });
       }
     }

@@ -15,6 +15,7 @@
  */
 
 import { execFile } from 'node:child_process';
+import os from 'node:os';
 
 export interface ConfinedResult {
   stdout: string;
@@ -52,6 +53,39 @@ export const intEnv = (name: string, fallback: number): number => {
 };
 
 /**
+ * Bound how many `runConfined` calls (Valgrind/ASan/LSan/binary runs) execute
+ * simultaneously. Unlike the static-analyzer's tree-sitter parse, `execFile`
+ * here is already async/non-blocking for Node's own event loop — the risk
+ * isn't event-loop serialization, it's the container's shared CPU/RAM getting
+ * thrashed by too many concurrent child processes (ASan/LSan runs additionally
+ * disable the address-space ulimit, see `unlimitedAddressSpace` above, which
+ * makes unbounded concurrency an overcommit risk with no other guard rail —
+ * `docker-compose.yml` sets no memory/cpu limits on this container either).
+ * `DYNAMIC_MAX_CONCURRENT_RUNS` env-tunable, default leaves headroom since
+ * Valgrind alone can be far heavier per-process than the native binary.
+ */
+const maxConcurrentRuns = intEnv('DYNAMIC_MAX_CONCURRENT_RUNS', Math.max(1, Math.floor(os.cpus().length / 2)));
+let activeRuns = 0;
+const waitQueue: (() => void)[] = [];
+
+function acquireRunSlot(): Promise<void> {
+  if (activeRuns < maxConcurrentRuns) {
+    activeRuns++;
+    return Promise.resolve();
+  }
+  return new Promise((resolve) => waitQueue.push(resolve));
+}
+
+function releaseRunSlot(): void {
+  const next = waitQueue.shift();
+  if (next) {
+    next(); // hand the slot directly to the next waiter; activeRuns stays the same
+  } else {
+    activeRuns--;
+  }
+}
+
+/**
  * Build the `bash -c` ulimit wrapper argv (Linux only). Limits are env-tunable:
  *   DYNAMIC_ULIMIT_AS_KB   address space   (default 2 GiB)
  *   DYNAMIC_ULIMIT_FSIZE_KB max file size  (default 256 MiB)
@@ -79,29 +113,34 @@ function confine(bin: string, args: string[], cpuSec: number, unlimitedAS = fals
  * non-zero exit (sanitizers report leaks via a non-zero exit + stderr). Never
  * throws for process-level failures — returns the captured streams + exit code.
  */
-export function runConfined(binaryPath: string, args: string[], opts: ConfinedOptions = {}): Promise<ConfinedResult> {
-  const timeoutSec = opts.timeoutSec ?? 120;
-  const { cmd, argv } = confine(binaryPath, args ?? [], timeoutSec + 5, opts.unlimitedAddressSpace);
-  return new Promise((resolve) => {
-    execFile(
-      cmd,
-      argv,
-      {
-        timeout: timeoutSec * 1000,
-        maxBuffer: opts.maxBufferBytes ?? 10 * 1024 * 1024,
-        encoding: 'utf-8',
-        env: opts.env ?? process.env,
-        cwd: opts.cwd,
-        killSignal: 'SIGKILL',
-      },
-      (err: any, stdout: string, stderr: string) => {
-        resolve({
-          stdout: stdout ?? '',
-          stderr: stderr ?? '',
-          code: typeof err?.code === 'number' ? err.code : 0,
-          timedOut: err?.killed === true || err?.signal === 'SIGKILL' || err?.signal === 'SIGTERM',
-        });
-      },
-    );
-  });
+export async function runConfined(binaryPath: string, args: string[], opts: ConfinedOptions = {}): Promise<ConfinedResult> {
+  await acquireRunSlot();
+  try {
+    const timeoutSec = opts.timeoutSec ?? 120;
+    const { cmd, argv } = confine(binaryPath, args ?? [], timeoutSec + 5, opts.unlimitedAddressSpace);
+    return await new Promise((resolve) => {
+      execFile(
+        cmd,
+        argv,
+        {
+          timeout: timeoutSec * 1000,
+          maxBuffer: opts.maxBufferBytes ?? 10 * 1024 * 1024,
+          encoding: 'utf-8',
+          env: opts.env ?? process.env,
+          cwd: opts.cwd,
+          killSignal: 'SIGKILL',
+        },
+        (err: any, stdout: string, stderr: string) => {
+          resolve({
+            stdout: stdout ?? '',
+            stderr: stderr ?? '',
+            code: typeof err?.code === 'number' ? err.code : 0,
+            timedOut: err?.killed === true || err?.signal === 'SIGKILL' || err?.signal === 'SIGTERM',
+          });
+        },
+      );
+    });
+  } finally {
+    releaseRunSlot();
+  }
 }

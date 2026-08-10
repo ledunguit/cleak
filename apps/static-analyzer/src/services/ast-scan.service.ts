@@ -45,9 +45,9 @@ export class AstScanService {
 
   constructor(private readonly cParser: CParserService) {}
 
-  parse(filePath: string, content?: string): ScanResult {
+  async parse(filePath: string, content?: string): Promise<ScanResult> {
     const source = content || readFileSync(filePath, 'utf-8');
-    const parseResult = this.cParser.parse(source, filePath);
+    const parseResult = await this.cParser.parse(source, filePath);
     const patterns: MemoryPattern[] = [];
     const summaries: FunctionSummary[] = [];
 

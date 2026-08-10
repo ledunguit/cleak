@@ -140,3 +140,9 @@ pnpm exec tsx scripts/compare-baselines.ts --corpus demo/juliet_cwe401 --limit 3
 | `CONSENSUS_N` / `CONSENSUS_RULE` / `CONSENSUS_TEMPERATURE` | knob consensus judge | `1` / `weighted` / `0.7` |
 | `RESULTS_DIR` | thư mục output eval | `results` |
 | `CLANG_BIN` / `INFER_BIN` | binary baseline | `clang` / `infer` |
+| `STATIC_PARSER_WORKERS` | số worker-thread parse tree-sitter (static-analyzer) | `os.cpus()-1` |
+| `DYNAMIC_MAX_CONCURRENT_RUNS` | số tiến trình Valgrind/ASan/LSan chạy đồng thời tối đa | `os.cpus()/2` |
+
+**Pricing (tuỳ chọn, để có cột chi phí $ trong report):** `cleak config set
+pricing.<modelId>.inputPerMillion <giá>` và `...outputPerMillion <giá>` — không có giá mặc
+định sẵn, `report.md`/`metrics.json` báo "unpriced" thay vì `$0` giả nếu chưa cấu hình.

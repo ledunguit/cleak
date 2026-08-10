@@ -23,6 +23,21 @@ services:
     env_file:
       - path: apps/static-analyzer/.env
         required: false
+    environment:
+      # Explicit worker-pool size (rather than the `os.cpus() - 1` default).
+      # A real load test (19-case MemHint corpus, including large repos —
+      # freerdp/vim/openssl) found the ACTUAL constraint on this host isn't
+      # CPU, it's memory: each worker thread holds full tree-sitter ASTs for
+      # whatever it's parsing, and with `discoveryConcurrency` also feeding
+      # several files per case into the pool at once, 5 threads was enough to
+      # OOM-kill the container even with NO `deploy.resources.limits` set (the
+      # Docker Desktop VM's own ~8GB ceiling was hit — confirmed via
+      # `docker events` showing `container oom`). Lowered to 2, which held up
+      # under the same load test with 3 concurrent large-repo cases running.
+      # Tune per-host: this reflects THIS host's ~8GB Docker VM allocation,
+      # not a profiled memory-per-thread constant — a host with more RAM can
+      # likely afford more threads.
+      STATIC_PARSER_WORKERS: 2
     volumes:
       - ./demo:/workspace/demo
       - ./targets:/workspace/targets
@@ -46,6 +61,10 @@ services:
       # fact (must differ from the host ./runs default in the app .env), so it
       # stays here and intentionally overrides RUNS_DIR from env_file.
       RUNS_DIR: /runs
+      # See static-analyzer's comment above — no `deploy.resources.limits`
+      # here either, for the same reason (an untested guess caused an OOM
+      # crash-loop when tried).
+      DYNAMIC_MAX_CONCURRENT_RUNS: 3
     volumes:
       - runs:/runs
       - ./demo:/workspace/demo

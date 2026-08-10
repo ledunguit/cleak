@@ -168,7 +168,12 @@ export function loadConfig(
       staticConcurrency: Math.max(1, pickNum(file.workflow?.staticConcurrency, 3)),
       staticGroupSize: Math.max(1, pickNum(file.workflow?.staticGroupSize, 4)),
       judgeConcurrency: Math.max(1, pickNum(file.workflow?.judgeConcurrency, 3)),
-      discoveryConcurrency: Math.max(1, pickNum(file.workflow?.discoveryConcurrency, 8)),
+      // Lowered 8→4: stacked with case-level eval concurrency, the old default put
+      // up to 48 concurrent MCP calls on static-analyzer, timing out its largest
+      // cases (reproduced: 9/19 MemHint corpus cases at defaults). Stopgap on the
+      // caller side; `apps/static-analyzer`'s worker-thread pool fixes the server
+      // side (see `CParserService`).
+      discoveryConcurrency: Math.max(1, pickNum(file.workflow?.discoveryConcurrency, 4)),
       targetedHarness: {
         // Opt-in: compiles/runs LLM-authored C source (new attack surface) and adds
         // scan cost. Off by default — enable via `cleak config set workflow.targetedHarness.enabled true` or `--harness`.

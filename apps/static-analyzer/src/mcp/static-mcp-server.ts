@@ -23,13 +23,13 @@ import type {
  */
 export interface StaticToolServices {
   fileIndexing: { indexFiles(rootPath: string, fileLimit?: number, excludePatterns?: string[]): RepoIndexResponse };
-  candidateScan: { scan(filePath: string, content: string, extraAllocators?: string[], extraDeallocators?: string[]): CandidateScanResponse };
-  astScan: { parse(filePath: string, content?: string): AstScanResponse };
-  callGraph: { extract(rootPath: string, files: string[], extraAllocators?: string[], extraDeallocators?: string[]): CallGraphResponse };
-  functionSummary: { summarize(filePath: string, content: string, functionName: string, extraAllocators?: string[], extraDeallocators?: string[]): FunctionSummaryResponse };
-  interproceduralFlow: { analyze(rootPath: string, functionName: string, files: string[], extraAllocators?: string[], extraDeallocators?: string[]): InterproceduralFlowResponse };
-  pathConstraints: { analyze(filePath: string, content: string, lineNumber: number, extraAllocators?: string[], extraDeallocators?: string[]): PathConstraintsResponse | Promise<PathConstraintsResponse> };
-  ownership: { summarize(files: string[], rootPath: string): OwnershipSummaryResponse; conventions(content: string, filePath: string): OwnershipConventionsResponse };
+  candidateScan: { scan(filePath: string, content: string, extraAllocators?: string[], extraDeallocators?: string[]): Promise<CandidateScanResponse> };
+  astScan: { parse(filePath: string, content?: string): Promise<AstScanResponse> };
+  callGraph: { extract(rootPath: string, files: string[], extraAllocators?: string[], extraDeallocators?: string[]): Promise<CallGraphResponse> };
+  functionSummary: { summarize(filePath: string, content: string, functionName: string, extraAllocators?: string[], extraDeallocators?: string[]): Promise<FunctionSummaryResponse> };
+  interproceduralFlow: { analyze(rootPath: string, functionName: string, files: string[], extraAllocators?: string[], extraDeallocators?: string[]): Promise<InterproceduralFlowResponse> };
+  pathConstraints: { analyze(filePath: string, content: string, lineNumber: number, extraAllocators?: string[], extraDeallocators?: string[]): Promise<PathConstraintsResponse> };
+  ownership: { summarize(files: string[], rootPath: string): Promise<OwnershipSummaryResponse>; conventions(content: string, filePath: string): Promise<OwnershipConventionsResponse> };
   scanBuild: { run(projectPath: string, buildCommand: string, timeoutSec?: number): Promise<ScanBuildRunResponse>; getReport(runId: string): Promise<ScanBuildReportResponse> };
 }
 

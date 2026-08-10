@@ -7,7 +7,7 @@ import { CParserService, FunctionInfo } from './c-parser.service';
 export class OwnershipAnalysisService {
   constructor(private readonly cParser: CParserService) {}
 
-  summarize(files: string[], rootPath: string) {
+  async summarize(files: string[], rootPath: string) {
     const ownerships: {
       functionName: string;
       filePath: string;
@@ -19,30 +19,37 @@ export class OwnershipAnalysisService {
       summary: OwnershipSummary;
     }[] = [];
 
-    for (const file of files) {
-      try {
-        const content = readFileSync(file, 'utf-8');
-        const result = this.cParser.parse(content, file);
-
-        for (const fn of result.functions) {
-          const ownershipType = this.inferOwnershipType(fn);
-          const allocatedObjects = fn.allocationVariables.map((a) => a.variable);
-          const leakyPaths = fn.exitPaths.filter((p) => p.leakRisk !== 'none');
-
-          if (allocatedObjects.length > 0 || ownershipType !== 'none') {
-            ownerships.push({
-              functionName: fn.functionName,
-              filePath: file,
-              ownershipType,
-              allocatedObjects,
-              leakPaths: leakyPaths.length,
-              leakRisk: this.computeLeakRisk(fn),
-              summary: this.inferOwnershipSummary(fn, file, ownershipType),
-            });
-          }
+    // Parse concurrently across the worker pool, but append to `ownerships` by
+    // walking results back in the original `files` order for deterministic output.
+    const parsed = await Promise.all(
+      files.map(async (file) => {
+        try {
+          const content = readFileSync(file, 'utf-8');
+          const result = await this.cParser.parse(content, file);
+          return { file, functions: result.functions };
+        } catch {
+          return { file, functions: [] as FunctionInfo[] };
         }
-      } catch {
-        // skip
+      }),
+    );
+
+    for (const { file, functions } of parsed) {
+      for (const fn of functions) {
+        const ownershipType = this.inferOwnershipType(fn);
+        const allocatedObjects = fn.allocationVariables.map((a) => a.variable);
+        const leakyPaths = fn.exitPaths.filter((p) => p.leakRisk !== 'none');
+
+        if (allocatedObjects.length > 0 || ownershipType !== 'none') {
+          ownerships.push({
+            functionName: fn.functionName,
+            filePath: file,
+            ownershipType,
+            allocatedObjects,
+            leakPaths: leakyPaths.length,
+            leakRisk: this.computeLeakRisk(fn),
+            summary: this.inferOwnershipSummary(fn, file, ownershipType),
+          });
+        }
       }
     }
 
@@ -119,9 +126,9 @@ export class OwnershipAnalysisService {
     return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   }
 
-  conventions(content: string, filePath: string) {
+  async conventions(content: string, filePath: string) {
     const rules: { pattern: string; description: string; conventionType: string }[] = [];
-    const result = this.cParser.parse(content, filePath);
+    const result = await this.cParser.parse(content, filePath);
 
     for (const fn of result.functions) {
       const hasAlloc = fn.allocationCalls.length > 0;

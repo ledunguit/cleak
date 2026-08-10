@@ -183,7 +183,7 @@ export function configTemplate(): CleakConfig {
       staticConcurrency: 3,
       staticGroupSize: 4,
       judgeConcurrency: 3,
-      discoveryConcurrency: 8,
+      discoveryConcurrency: 4,
       targetedHarness: { enabled: false, maxHarnessesPerScan: 5, concurrency: 2, timeoutMs: 60000, fuzzBudgetMs: 15000, maxClosureFiles: 8, verifyConfirmedLeaks: false },
       allocatorVerification: { enabled: false, maxVerifications: 20, concurrency: 2, timeoutMs: 30000 },
       ownershipVerification: { enabled: false, maxVerifications: 15, concurrency: 2, timeoutMs: 30000 },

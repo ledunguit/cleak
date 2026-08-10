@@ -41,13 +41,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     bear \
     && rm -rf /var/lib/apt/lists/*
 
-# libFuzzer's runtime archive (libclang_rt.fuzzer-*.a) is only a RECOMMENDED dep of
-# `clang` on Debian/Ubuntu, so --no-install-recommends above skips it — without it,
-# `buildHarness(entryStyle="fuzzer")` links fine locally but fails on this image with
-# "libclang_rt.fuzzer-x86_64.a not found". ubuntu:22.04's `clang` package is LLVM 14;
-# update this version if the base image's default clang version changes.
-RUN apt-get update && apt-get install -y --no-install-recommends libclang-rt-14-dev \
-    && rm -rf /var/lib/apt/lists/*
+# libFuzzer's runtime archive (libclang_rt.fuzzer-*.a, needed by
+# buildHarness(entryStyle="fuzzer")) ships in `libclang-common-14-dev`, which
+# `clang` above already pulls in as a hard dependency — verified directly
+# (`dpkg -L libclang-common-14-dev | grep libclang_rt.fuzzer`), no separate
+# install needed. (A prior `libclang-rt-14-dev` package no longer resolves on
+# current ubuntu:22.04 archives — "E: Unable to locate package" — this step
+# used to install it explicitly; removed as redundant now that the file is
+# confirmed present via the dependency above.)
 
 # ASan/LSan symbolize stack frames at RUNTIME via llvm-symbolizer. Without it, leak
 # frames are bare addresses (a.out+0x…) with no file:line — so dynamic findings cannot
