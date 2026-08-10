@@ -5,6 +5,7 @@
  * CandidateManager so both produce the same bundle ids and dedup behaviour.
  */
 
+import { createHash } from 'node:crypto';
 import type { LeakBundle, LeakCandidate, LeakEvidence } from '@cleak/common/types';
 import { FindingStatus } from '@cleak/common/types';
 
@@ -51,10 +52,17 @@ export class CandidateManager {
 }
 
 export function computeBundleId(candidate: LeakCandidate): string {
-  const hash = candidate.allocation_site || `${candidate.file_path}:${candidate.line_number}`;
-  const fullHex = Buffer.from(hash).toString('hex');
-  const suffix = fullHex.slice(-20) + fullHex.slice(0, 12);
-  return `bundle_${suffix}`;
+  const key = candidate.allocation_site || `${candidate.file_path}:${candidate.line_number}`;
+  // Was `Buffer.from(key).toString('hex').slice(-20) + .slice(0, 12)` — for any `key`
+  // longer than 16 chars (every real-project allocation_site: full file path + line +
+  // allocator name) that keeps only the string's first 6 and last 10 characters, so
+  // candidates sharing a common path prefix (all of them, within one repo) and the same
+  // allocator-name suffix (e.g. every `curlx_malloc` call in the whole codebase)
+  // collapsed onto the IDENTICAL bundleId regardless of file or line — confirmed on
+  // curl_1098e104: 622 distinct raw candidates ingested down to 65 surviving bundles.
+  // A real digest over the full key has no such blind spot.
+  const digest = createHash('sha1').update(key).digest('hex');
+  return `bundle_${digest}`;
 }
 
 /** Normalize a raw analyzer candidate (camelCase) into the snake_case LeakCandidate shape. */
