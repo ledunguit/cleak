@@ -13,8 +13,8 @@
  */
 
 import { basename, resolve as resolvePath } from 'node:path';
-import { mapWithLimit } from '@cleak/agent-core';
-import type { AgentEvent, McpClient } from '@cleak/agent-core';
+import { mapWithLimit, McpClient } from '@cleak/agent-core';
+import type { AgentEvent } from '@cleak/agent-core';
 import {
   AnalysisMode,
   DynamicMode,
@@ -237,7 +237,18 @@ async function runDiscovery(
   candidates: CandidateManager,
   emitter: ScanEmitter,
   pathResolver: PathResolver,
-): Promise<{totalFiles: number; warning?: string; dynamicRanInDiscovery: boolean}> {
+): Promise<{
+  totalFiles: number;
+  warning?: string;
+  dynamicRanInDiscovery: boolean;
+  /** Diagnostic counters for the static-discovery loop — permanent, cheap (counts
+   * only, no per-file logging), and the one place today that can tell a "genuinely
+   * empty file" apart from a silent drop. Undefined when static discovery didn't run
+   * (dynamic-only ablation). See scanController.ts's `runDiscovery` doc comment. */
+  filesReadFailed?: number;
+  filesScanFailed?: number;
+  filesZeroCandidates?: number;
+}> {
   emitter.emit(ScanEventName.DISCOVERY_STARTED, { repoPath: input.repoPath });
   const staticDiscovery = input.staticDiscovery !== false;
   let totalFiles = 0;
@@ -245,6 +256,14 @@ async function runDiscovery(
   // True once the dynamic stage has already executed during discovery (static=false),
   // so the later dynamic stages don't build+run a second time.
   let dynamicRanInDiscovery = false;
+  // Discovery accounting (static path only — see the doc comment on the return
+  // type). Declared here, not inside the `if (staticDiscovery)` block, so they
+  // flow through the single shared `return` at the end alongside `totalFiles`/
+  // `warning` instead of needing an early return that would skip
+  // DISCOVERY_FINISHED below.
+  let filesReadFailed: number | undefined;
+  let filesScanFailed: number | undefined;
+  let filesZeroCandidates: number | undefined;
 
   if (staticDiscovery) {
     const cFiles = walkCFiles(input.repoPath, input.fileLimit && input.fileLimit > 0 ? input.fileLimit : 2000).filter(
@@ -255,33 +274,99 @@ async function runDiscovery(
 
     // Scan files concurrently (each candidateScan is an independent, stateless MCP
     // call) — the sequential per-file round-trips were the discovery bottleneck.
-    const scanned = await mapWithLimit(cFiles, THRESHOLDS.discoveryConcurrency, async (file) => {
-      if (deps.abortSignal?.aborted) return null;
-      const content = readFileSafe(file);
-      if (content === null) return null;
-      try {
-        return (await deps.staticClient.callTool('candidateScan', {
-          filePath: file,
-          content,
-          ...(input.extraAllocators?.length ? { extraAllocators: input.extraAllocators } : {}),
-          ...(input.extraDeallocators?.length ? { extraDeallocators: input.extraDeallocators } : {}),
-        })) as any;
-      } catch {
-        console.debug(`candidateScan failed for ${file}`);
-        return null;
+    //
+    // Each of the N concurrent workers gets its OWN McpClient — NOT a shared one.
+    // `McpClient` memoizes a single underlying transport connection, and its retry
+    // path calls `close()` on that shared connection when ANY in-flight call hits a
+    // transient error. With one client shared across `discoveryConcurrency` workers,
+    // one bad file (e.g. a 46K-line generated test file) closing the connection took
+    // every OTHER concurrently in-flight file down with it — including trivial ones
+    // (a 12-line file failed alongside it) — silently losing their candidates and
+    // skewing recall. Dedicated per-worker clients isolate that blast radius to the
+    // worker that actually hit the fault.
+    const poolSize = Math.min(Math.max(1, THRESHOLDS.discoveryConcurrency), cFiles.length || 1);
+    const workerClients = Array.from(
+      { length: poolSize },
+      (_, i) => new McpClient(deps.staticClient.endpoint, `static-discovery-${i}`),
+    );
+    const scanned = new Array<any>(cFiles.length);
+    let nextIdx = 0;
+    // Local, definitely-assigned counters for the closures below — TS can't narrow
+    // the outer `number | undefined` fields across an async closure, so count here
+    // and copy into the return-shaped variables once discovery finishes.
+    let readFailedCount = 0;
+    let scanFailedCount = 0;
+    const scanWorker = async (client: McpClient) => {
+      while (true) {
+        const idx = nextIdx++;
+        if (idx >= cFiles.length) return;
+        if (deps.abortSignal?.aborted) return;
+        const file = cFiles[idx];
+        const content = readFileSafe(file);
+        if (content === null) {
+          readFailedCount++;
+          continue;
+        }
+        try {
+          scanned[idx] = (await client.callTool(
+            'candidateScan',
+            {
+              filePath: file,
+              content,
+              ...(input.extraAllocators?.length ? { extraAllocators: input.extraAllocators } : {}),
+              ...(input.extraDeallocators?.length ? { extraDeallocators: input.extraDeallocators } : {}),
+            },
+            // Default 60s is tuned for Juliet's small single-function files; real-world
+            // sources can run tens of thousands of lines (e.g. libxml2's testapi.c,
+            // 46K lines) and legitimately need longer to parse.
+            { timeoutMs: 180_000 },
+          )) as any;
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : String(err);
+          console.error(`candidateScan failed for ${file}: ${msg}`, err instanceof Error ? err.stack : undefined);
+          scanned[idx] = null;
+          scanFailedCount++;
+        }
       }
-    });
-    // Ingest IN FILE ORDER (mapWithLimit preserves input order) so the candidate set
-    // and its ordering stay deterministic regardless of completion order.
+    };
+    try {
+      await Promise.all(workerClients.map(scanWorker));
+    } finally {
+      await Promise.all(workerClients.map((c) => c.close()));
+    }
+    // Ingest IN FILE ORDER (scanned[] is indexed by cFiles position, not completion
+    // order) so the candidate set and its ordering stay deterministic.
+    let zeroCandidatesCount = 0;
+    let rawCandidatesSeen = 0;
     scanned.forEach((cs, i) => {
       if (!cs) return;
       const file = cFiles[i];
-      for (const c of cs.candidates || []) {
+      const fileCandidates = cs.candidates || [];
+      if (fileCandidates.length === 0) zeroCandidatesCount++;
+      rawCandidatesSeen += fileCandidates.length;
+      for (const c of fileCandidates) {
         // file_path is the real host path (identity) — the host reads it for
         // snippets/diffs and content is sent to the analyzers.
         candidates.ingest(normalizeCandidate({ ...c, filePath: c.filePath || c.file_path || file }, (p) => p));
       }
     });
+    filesReadFailed = readFailedCount;
+    filesScanFailed = scanFailedCount;
+    filesZeroCandidates = zeroCandidatesCount;
+    // Always-on discovery accounting — the one place today that can tell "this file
+    // genuinely has no allocations" apart from a silent per-file drop (an MCP
+    // response that comes back neither an error nor containing `candidates`, or a
+    // host-side read failure). Cheap (counts only) and unconditional, unlike the
+    // per-file `candidateScan failed` log above which only fires on a thrown error.
+    // `rawCandidatesSeen` vs the final ingested-bundle count also catches silent
+    // de-dup/collision inside `CandidateManager.ingest` (a Map keyed by bundleId) —
+    // if they diverge, candidates are being collapsed AFTER a successful scan, not
+    // lost during discovery itself.
+    console.error(
+      `discovery: ${cFiles.length} files walked · ${filesReadFailed} read-failed · ` +
+        `${filesScanFailed} scan-failed · ${filesZeroCandidates} zero-candidate · ` +
+        `${rawCandidatesSeen} raw candidates seen · ${candidates.getAllBundles().length} candidates ingested`,
+    );
     if (candidates.getAllBundles().length === 0) {
       warning =
         cFiles.length === 0
@@ -324,7 +409,7 @@ async function runDiscovery(
     ...(warning ? { warning } : {}),
   });
 
-  return { totalFiles, warning, dynamicRanInDiscovery };
+  return { totalFiles, warning, dynamicRanInDiscovery, filesReadFailed, filesScanFailed, filesZeroCandidates };
 }
 
 // ── Deterministic static enrichment: populate each bundle's staticEvidence so the
