@@ -50,6 +50,7 @@ export async function callAnthropic(
     {
       connectTimeoutMs: settings.connectTimeoutMs,
       idleTimeoutMs: settings.idleTimeoutMs,
+      maxTotalMs: settings.timeoutMs,
       retries: settings.retries,
       signal: req.signal,
       onRetry: ({ attempt, reason, nextInMs }) =>

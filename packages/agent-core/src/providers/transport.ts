@@ -80,6 +80,13 @@ export interface StreamOptions {
   connectTimeoutMs: number;
   /** Max silence between streamed chunks before the request is treated as hung. */
   idleTimeoutMs: number;
+  /** Absolute wall-clock budget for ONE attempt, independent of `idleTimeoutMs`.
+   * A gateway that keeps the connection alive with periodic SSE comment/heartbeat
+   * lines (blank or `:`-prefixed) re-arms the idle timer on every one of them —
+   * so a model that is genuinely stuck (not silent, just never producing real
+   * output) can stall past `idleTimeoutMs` indefinitely. This is the backstop.
+   * Optional — omitting it preserves the old idle-only behavior. */
+  maxTotalMs?: number;
   retries: number;
   signal?: AbortSignal;
   onRetry?: (info: { attempt: number; reason: string; nextInMs: number }) => void;
@@ -110,6 +117,7 @@ export async function streamWithRetry(url: string, init: RequestInit, opts: Stre
     let phase: 'connecting' | 'streaming' = 'connecting';
     let delivered = false;
     let timedOut = false;
+    let deadlineExceeded = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const arm = (ms: number) => {
       if (timer) clearTimeout(timer);
@@ -118,6 +126,16 @@ export async function streamWithRetry(url: string, init: RequestInit, opts: Stre
         ac.abort();
       }, ms);
     };
+    // Absolute per-attempt deadline — armed ONCE, never re-armed by chunk/heartbeat
+    // activity (unlike `arm`/idleTimeoutMs above). Backstops a gateway that keeps
+    // the connection alive with SSE comment/heartbeat lines while the underlying
+    // model is genuinely stuck, which would otherwise reset the idle timer forever.
+    const deadlineTimer = opts.maxTotalMs
+      ? setTimeout(() => {
+          deadlineExceeded = true;
+          ac.abort();
+        }, opts.maxTotalMs)
+      : undefined;
     const onAbort = () => ac.abort();
     opts.signal?.addEventListener('abort', onAbort, { once: true });
     opts.onAttemptStart?.();
@@ -179,11 +197,13 @@ export async function streamWithRetry(url: string, init: RequestInit, opts: Stre
       return;
     } catch (err: unknown) {
       if (opts.signal?.aborted) throw new Error('interrupted');
-      const reason = timedOut
-        ? phase === 'connecting'
-          ? `connect timed out after ${secs(opts.connectTimeoutMs)}`
-          : `stalled (no data for ${secs(opts.idleTimeoutMs)})`
-        : 'network error';
+      const reason = deadlineExceeded
+        ? `exceeded absolute deadline of ${secs(opts.maxTotalMs!)} (gateway likely stuck — kept alive by heartbeats past the idle timeout)`
+        : timedOut
+          ? phase === 'connecting'
+            ? `connect timed out after ${secs(opts.connectTimeoutMs)}`
+            : `stalled (no data for ${secs(opts.idleTimeoutMs)})`
+          : 'network error';
       lastErr = new Error(`request ${reason}`);
       // Retry only pre-stream failures; never re-POST a request that already streamed.
       if (!delivered && attempt < opts.retries) {
@@ -193,6 +213,7 @@ export async function streamWithRetry(url: string, init: RequestInit, opts: Stre
       throw lastErr;
     } finally {
       if (timer) clearTimeout(timer);
+      if (deadlineTimer) clearTimeout(deadlineTimer);
       opts.signal?.removeEventListener('abort', onAbort);
     }
   }

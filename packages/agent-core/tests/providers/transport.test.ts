@@ -96,6 +96,35 @@ describe('streamWithRetry idle timeout', () => {
     expect(raw).toContain('"content":"hi"');
   });
 
+  test('maxTotalMs aborts even when chunks keep arriving well within the idle timeout', async () => {
+    // Simulates a gateway that sends periodic heartbeats/chunks — each gap is far
+    // below idleTimeoutMs (150ms), so the idle timer alone would never fire — but
+    // the cumulative stream time exceeds maxTotalMs. Regression test for the bug
+    // where `settings.timeoutMs` existed but was never wired into streamWithRetry,
+    // letting a "kept alive but never finishing" gateway hang indefinitely.
+    reset({
+      chunks: [
+        { data: '{"n":1}', gapMs: 60 },
+        { data: '{"n":2}', gapMs: 60 },
+        { data: '{"n":3}', gapMs: 60 },
+        { data: '{"n":4}', gapMs: 60 },
+        { data: '{"n":5}', gapMs: 60 },
+      ],
+    });
+    let err: unknown;
+    await streamWithRetry(url, { method: 'POST' }, { ...base, retries: 0, maxTotalMs: 150, onData: () => {} }).catch(
+      (e) => (err = e),
+    );
+    expect(String(err)).toContain('exceeded absolute deadline');
+  });
+
+  test('maxTotalMs does not interfere with a stream that finishes within budget', async () => {
+    reset({ chunks: [{ data: '{"n":1}', gapMs: 10 }, { data: '{"n":2}', gapMs: 10 }] });
+    const seen: string[] = [];
+    await streamWithRetry(url, { method: 'POST' }, { ...base, maxTotalMs: 5000, onData: (p) => seen.push(p) });
+    expect(seen).toEqual(['{"n":1}', '{"n":2}']);
+  });
+
   test('fires onFirstChunk exactly once, before onData', async () => {
     reset({ chunks: [{ data: '{"n":1}', gapMs: 0 }, { data: '{"n":2}', gapMs: 20 }, { data: '{"n":3}', gapMs: 20 }] });
     let firstChunks = 0;
