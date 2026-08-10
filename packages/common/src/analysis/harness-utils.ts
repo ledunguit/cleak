@@ -12,15 +12,26 @@ import { join, extname } from 'node:path';
 const DEFAULT_SRC_EXT = new Set(['.c', '.cc', '.cpp', '.cxx', '.h', '.hh', '.hpp', '.hxx']);
 
 /**
+ * Directories that are never part of a case's checked-in source identity, even
+ * when they land inside the case dir — build outputs from a prior dynamic run
+ * (`buildTarget` builds in-place, e.g. `cmake -S . -B build`) as well as VCS/
+ * dependency dirs. Without this exclusion, running the dynamic worker once
+ * against a case would leak generated headers/objects into both the corpus
+ * content-hash (spurious "corpus drifted from lock" gate failures on rerun)
+ * and the FP/KLOC denominator (silently inflating it with non-source LOC).
+ */
+const SKIP_DIRS = new Set(['build', '_build', 'cmake-build-debug', 'node_modules', '.git', 'dist', 'out', '.cache']);
+
+/**
  * Non-blank lines of a case's IMPLEMENTATION files — the FP/KLOC denominator.
  * Counts only `.c/.cc/.cpp/.cxx` (NOT headers): false positives are flagged at
  * allocation sites in implementation code, so including header declaration lines
  * would dilute the rate without adding flaggable sites.
  *
- * Uses a simple recursive directory walk (no SKIP_DIRS, no file limit) — this is
- * the intersection of the old `evalHarness.ts` version (recursive via walkCFiles)
- * and `runBaselineEval.ts` (flat readdir). Works correctly for both flat Juliet
- * cases and real multi-directory projects.
+ * Uses a simple recursive directory walk (SKIP_DIRS-filtered, no file limit) —
+ * this is the intersection of the old `evalHarness.ts` version (recursive via
+ * walkCFiles) and `runBaselineEval.ts` (flat readdir). Works correctly for both
+ * flat Juliet cases and real multi-directory projects.
  *
  * @param repoDir - Absolute path to the case/repo directory
  * @returns Total non-blank lines in .c/.cc/.cpp/.cxx implementation files
@@ -35,7 +46,7 @@ export function countSourceLoc(repoDir: string): number {
       return;
     }
     for (const entry of entries) {
-      if (entry.startsWith('.')) continue;
+      if (entry.startsWith('.') || SKIP_DIRS.has(entry)) continue;
       const fullPath = join(dir, entry);
       let st;
       try {
@@ -80,6 +91,7 @@ export function listSourceFiles(dir: string, exts?: Set<string>): string[] {
     return out;
   }
   for (const e of entries) {
+    if (e.startsWith('.') || SKIP_DIRS.has(e)) continue;
     const full = join(dir, e);
     let st;
     try {
