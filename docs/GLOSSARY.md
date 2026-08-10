@@ -39,8 +39,9 @@
   bị flag ⇒ FP thật; flaw bị bỏ ⇒ FN. (KHÔNG còn count-based.)
 - **siteId** — khoá định danh một site (`<caseId>::<siteKey>`) để **ghép cặp** giữa hai run
   cho McNemar.
-- **function-mode / line-mode** — chế độ khớp finding với ground-truth: theo **tên hàm** (Juliet)
-  hay theo **(file, dòng)** (real_projects).
+- **function-mode / line-mode** — chế độ khớp finding với ground-truth: theo **tên hàm** (Juliet,
+  LAMeD) hay theo **(file, dòng)**. Line-mode vẫn được code hỗ trợ nhưng hiện không có corpus nào
+  đang dùng (corpus line-mode duy nhất, `real_projects`, đã bị xoá — tự sinh, không đủ uy tín).
 - **verdict flip rate** — tỉ lệ ca có chữ ký nhầm-lẫn (tp,fp,fn,tn) **đổi** giữa các run; đo
   dao động run-to-run của judge.
 - **modal agreement** — trung bình (mẫu trùng-mode / N) trên mỗi ca; 1.0 = mọi run đồng ý.

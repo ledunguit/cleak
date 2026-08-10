@@ -160,4 +160,4 @@ judging path-sensitive/interprocedural — đúng hướng LAMeD, và lớp đ�
 | `verdict-stability.ts` | Tier-2 (flip rate) | `pnpm exec tsx scripts/verdict-stability.ts <A> <B> [..]` |
 | `consensus-ablation.sh` | single vs consensus (flip rate) | `K=3 LIMIT=30 bash scripts/consensus-ablation.sh` |
 
-Corpus: xem [DATASETS.md](DATASETS.md) (Juliet CWE-401 + real_projects) và lệnh ingest.
+Corpus: xem [DATASETS.md](DATASETS.md) (Juliet CWE-401 + LAMeD) và lệnh ingest.

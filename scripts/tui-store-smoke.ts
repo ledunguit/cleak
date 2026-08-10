@@ -12,7 +12,7 @@ import { loadConfig } from '@cleak/config';
 const cfg = loadConfig();
 
 const mode = (process.argv[2] as 'no_llm' | 'llm_assisted') ?? 'no_llm';
-const repo = process.argv[3] ?? 'demo/memory_leak_corpus/simple_leak';
+const repo = process.argv[3] ?? 'apps/leak-inspector-tui/tests/fixtures/simple-leak';
 // In this dev environment the docker stack holds 50061/50062 in gRPC mode, so the
 // MCP analyzers run on 50071/50072. Override via SMOKE_STATIC_URL if needed.
 const staticUrl = cfg.staticUrl;

@@ -25,7 +25,7 @@ Bộ tài liệu cho luận văn **"LLM điều phối điều tra rò rỉ bộ
 | [PROMPTS.md](PROMPTS.md) | Danh mục mọi prompt LLM (anchored tới file:line) |
 | [MCP-TOOLS.md](MCP-TOOLS.md) | Tham chiếu đầy đủ 20 MCP tools (static + dynamic) — input schema, handler, return type, JSON-RPC examples |
 | [EVALUATION.md](EVALUATION.md) | Phương pháp đánh giá, scoring, two-tier determinism (§7), baseline protocol (§6) |
-| [DATASETS.md](DATASETS.md) | Lấy/dựng corpus (Juliet CWE-401, real_projects) |
+| [DATASETS.md](DATASETS.md) | Lấy/dựng corpus (Juliet CWE-401, LAMeD) |
 | [SECURITY.md](SECURITY.md) | Mô hình tin cậy & kiểm soát khi chạy mã không tin cậy |
 | [GOAL.md](GOAL.md) | Mục tiêu & tiêu chí thành công |
 

@@ -84,7 +84,7 @@ Rồi:
 pnpm exec tsx apps/leak-inspector-tui/src/cli.ts tools
 
 # scan headless (ghi results/<scanId>/)
-pnpm exec tsx apps/leak-inspector-tui/src/cli.ts scan --repo demo/memory_leak_corpus/early_return_leak --mode llm_assisted
+pnpm exec tsx apps/leak-inspector-tui/src/cli.ts scan --repo apps/leak-inspector-tui/tests/fixtures/simple-leak --mode llm_assisted
 
 # TUI tương tác (cần terminal)
 pnpm exec tsx apps/leak-inspector-tui/src/cli.ts tui

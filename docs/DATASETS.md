@@ -5,6 +5,14 @@ Benchmark archives, ingested corpora, compiled binaries, and scan outputs are
 is how to obtain/rebuild them. See `.gitignore` for the exact ignored paths and
 `docs/EVALUATION.md` for how the corpora are scored.
 
+Two hand-generated toy corpora (`demo/real_projects/` — 2 cJSON commit pairs;
+`demo/memory_leak_corpus/` — ~12 lab cases) were removed: self-authored data isn't
+credible evidence for thesis-level verification. The two evaluation corpora below
+(Juliet, LAMeD) are the only ones cited for results. A single minimal fixture
+(`apps/leak-inspector-tui/tests/fixtures/simple-leak/`) was kept outside `demo/`
+for CI/dev smoke tests only — it is not, and should never be cited as, an
+evaluation dataset.
+
 ## Juliet CWE-401 (memory leak)
 
 1. Download the NIST Juliet C/C++ suite (public domain):
@@ -28,21 +36,6 @@ is how to obtain/rebuild them. See `.gitignore` for the exact ignored paths and
    and uses `-fsanitize=leak`, so the binary runs **both** the good and bad paths → good
    functions are genuinely `exercised_clean` (and LSan reports only the real leak).
 
-## Real-project corpus (leak-fix commit oracle)
-
-`demo/real_projects/` (git-ignored) is built from upstream **leak-fix commits**: the pre-fix
-revision is the flaw (`actual:true`), the post-fix revision is clean (`actual:false`) — a
-**line-mode** corpus (matched by `(file, line)`, not function name). Current: **4 cases** =
-2 cJSON leak-fix pairs (`cjson-printbuffered`, `cjson-mergepatch`, each `-bad` + `-fixed`).
-
-```bash
-pnpm exec tsx scripts/real-projects/ingest.ts \
-  --ground-truth demo/real_projects/ground-truth.json --out demo/real_projects
-```
-`ground-truth.json` (the oracle: project repo + fixCommit + file/function/flawLine/fixedLine)
-**is committed**; clones + materialized cases are git-ignored. See [EVALUATION.md](EVALUATION.md)
-§2 for function-mode vs line-mode scoring.
-
 ## LAMeD benchmark (peer-reviewed external baseline)
 
 LAMeD (EASE 2025) is the only peer-reviewed C/C++ leak benchmark. Its released
@@ -61,8 +54,13 @@ pnpm exec tsx scripts/lamed/ingest.ts --manifest-only
 pnpm exec tsx scripts/lamed/ingest.ts            # needs network + git; ~7 repos
 
 # 3. Evaluate (positive-only → report RECALL + FP count, NOT specificity/MCC)
-pnpm exec tsx scripts/evaluate-corpus.ts no_llm  --corpus demo/lamed
-pnpm exec tsx scripts/evaluate-corpus.ts llm_assisted --corpus demo/lamed --consensus-n 3
+# --enrich is REQUIRED for a representative number: without it the heuristic judge
+# gets no static evidence (functionSummary/pathConstraints) and recall collapses
+# (verified 2026-08-06: 15.9% without --enrich vs 29.5% with it, same 41 cases,
+# same commit — the old `STATIC_ENRICH=on` env var this replaced is no longer
+# wired anywhere in the eval path, so it silently defaults off if omitted).
+pnpm exec tsx scripts/evaluate-corpus.ts no_llm  --corpus demo/lamed --enrich
+pnpm exec tsx scripts/evaluate-corpus.ts llm_assisted --corpus demo/lamed --consensus-n 3 --enrich
 ```
 
 > **Real-project allocators — per-project profile (frozen for eval).** Real leaks flow
@@ -84,6 +82,27 @@ pnpm exec tsx scripts/evaluate-corpus.ts llm_assisted --corpus demo/lamed --cons
 > cjson misses are deallocator-semantics (const-skip) + nested-loop control flow (see
 > [CONTRIBUTION.md](CONTRIBUTION.md)).
 
+> **Buildability — `build_command` per project (verified 2026-08).** Every case now carries
+> a `build_command` (`PROJECT_BUILD_COMMANDS` in `scripts/lamed/ingest.ts`) — a CMake
+> configure+build with optional external deps (OpenSSL/zlib/lzma/jpeg/...) switched OFF so
+> the build succeeds offline, except **libssh2** which mandates one crypto backend (OpenSSL,
+> via Homebrew). All 7 projects were **actually built** (`cmake --build`, not just configured)
+> to confirm this — not assumed. This unlocks the deterministic `buildTarget → lsanRun`
+> recipe and, more importantly, **Stage B2 targeted-harness synthesis** (`bear -- sh -c
+> '<build_command>'` → `compile_commands.json` → `buildHarness`) — the mechanism a real
+> leak *inside a library function* needs, since the base build alone rarely exercises it
+> (unlike Juliet's self-contained `main()`). libtiff needs `tiff-tools=ON` specifically
+> (unlike a minimal library build) because its LAMeD bug lives in `tools/tiffmedian.c`.
+>
+> **`validate-corpus.ts`'s per-file compile gate does NOT apply here — use `--skip-compile`.**
+> Turning the gate on quarantined 38/41 cases, but every failure was the gate blindly
+> `clang -fsyntax-only`-checking an UNRELATED file elsewhere in the tree (`docs/examples/
+> cacertinmem.c`, `tools/bmp2tiff.c`, `examples/solv/checksig.c`, a Unity test fixture) that
+> needs a build-generated header (`tif_config.h`, `pool.h`, `openssl/err.h`) the raw checkout
+> doesn't have. That gate assumes Juliet-style flat, self-contained single-file cases; it is
+> the wrong tool for a real multi-file autotools/CMake project and was never meant to replace
+> an actual build. Trust the `cmake --build` audit above, not this gate, for LAMeD.
+
 The ingest handles LAMeD's quirks: `target_function` overloads `;` as **both** a
 parameter separator (inside the signature) and a multi-function separator, and
 truncates mid-signature with ALL-CAPS return-type macros — so names are extracted
@@ -92,17 +111,6 @@ with a paren-depth-aware split + macro skip. 6 entries have an empty
 dropped). Fairness: LAMeD has no clean labels, so compare on **recall + FP/KLOC**,
 the same rule as the other positive-only baselines (see
 [BASELINE-COMPARISON.md](BASELINE-COMPARISON.md)).
-
-## Demo memory-leak corpus (legacy, hand-labeled)
-
-`demo/memory_leak_corpus/` holds the hand-labeled cases (sources + per-case
-`Makefile`/build instructions are committed; compiled binaries and `results/` are
-not). Rebuild a case's binary from source:
-
-```bash
-cd demo/memory_leak_corpus/<case>
-make            # or the build command in the case's manifest entry
-```
 
 ## Scan / eval outputs
 

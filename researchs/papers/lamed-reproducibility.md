@@ -93,7 +93,7 @@ LAMeD **không có repo GitHub/GitLab chính thức**. Thay vào đó, artifact 
 7. **Scale lên real-life:** chạy 7 dự án, dùng `memleak_benchmark.json` làm ground-truth, tính P/R so với paper. **Kỳ vọng có sai lệch** (analyzer drift + LLM nondeterminism + inference config ẩn) → báo cáo delta như threat-to-validity, **đừng** kỳ vọng khớp tuyệt đối.
 8. **(Tùy chọn) so chéo analyzer:** CodeQL/Infer phải **tự implement harness** (artifact không có).
 
-> **Setup gọn nhất, dễ bảo vệ nhất cho luận văn:** `LAMeD-prompt + Cooddy + Qwen2.5-Coder-32B` (tất cả open/permissive), chạy trên **chính corpus của bạn** (`demo/memory_leak_corpus`) **và** `memleak_benchmark.json` (để so sánh). Document commit Cooddy, cấu hình LLM/inference, và mọi sai lệch.
+> **Setup gọn nhất, dễ bảo vệ nhất cho luận văn:** `LAMeD-prompt + Cooddy + Qwen2.5-Coder-32B` (tất cả open/permissive), chạy trên `memleak_benchmark.json` (để so sánh trực tiếp với LAMeD gốc — corpus tự sinh cũ, `demo/memory_leak_corpus`, đã bị xoá vì không đủ uy tín làm căn cứ đánh giá). Document commit Cooddy, cấu hình LLM/inference, và mọi sai lệch.
 
 ---
 

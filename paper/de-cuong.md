@@ -38,13 +38,81 @@ iAudit [3], LLMxCPG [4]; hệ multi-agent như FuzzingBrain V2 [5]) cho thấy L
 **điều phối** nhiều công cụ phân tích và **phán xử** kết quả. Tuy nhiên, các hệ này hoặc
 **chỉ tĩnh** (LAMeD [1]), hoặc **xác minh bằng crash** cho lớp lỗi gây sập
 (use-after-free, double-free, buffer overflow) — chưa có hệ nào **kết hợp tĩnh + động chuyên
-cho lớp rò rỉ không-crash** trong C/C++ (xem §4.1).
+cho lớp rò rỉ không-crash** trong C/C++ (chi tiết khảo sát xem mục "Các giải pháp hiện có"
+ngay dưới đây).
 
 **Ý tưởng đề tài:** xây dựng một hệ thống trong đó **LLM điều phối** một vòng lặp điều tra
 rò rỉ — chọn công cụ phân tích chạy tiếp theo, **hợp nhất bằng chứng tĩnh và động**, rồi một
 **tầng phán xử (judge)** sinh **kết luận (verdict) + giải thích nguyên nhân gốc + bản vá
 (diff)** — đồng thời giải quyết hai vấn đề học thuật then chốt: (i) **độ tin cậy/dao động**
 của phán xử LLM, và (ii) **tính tái lập (reproducibility)** của kết quả đánh giá.
+
+## Các giải pháp hiện có
+
+Khảo sát 2025–2026 (đã kiểm chứng đối kháng — fetch + bỏ phiếu 3 agent/claim, xem `researchs/`
+và bước verify deep-research) theo ba trục:
+
+**Trục A — phát hiện rò rỉ C/C++ trực tiếp:**
+- **LAMeD** [1] (EASE 2025, peer-reviewed): LLM sinh annotation AllocSource/FreeSink nạp cho
+  analyzer cổ điển (Cooddy/CodeQL/Infer); theo công bố của nhóm tác giả, khi tích hợp annotation
+  thì **phát hiện leak cải thiện rõ và giảm path-explosion**, nhưng **số cảnh báo cũng tăng** —
+  minh hoạ đánh đổi *recall↑ / FP↑* mà consensus judge của đề tài nhắm giải quyết. **Static-only**,
+  và là baseline peer-reviewed sát đề tài nhất.
+- Một số hướng *neuro-symbolic* (LLM kết hợp SMT/Z3) cho leak C/C++ đang xuất hiện dưới dạng
+  **preprint 2026** (ví dụ MemHint); ở lần kiểm chứng mới nhất chưa xác minh độc lập được định
+  danh nên **không đưa vào danh mục trích dẫn chính thức** (xem ghi chú ở mục Tài liệu tham khảo).
+
+**Trục B — kiến trúc agentic + judge (analogue):**
+- **RepoAudit** [2] (ICML 2025, PMLR vol. 267): agent tự động + validator path-condition SAT;
+  theo công bố của nhóm tác giả đạt precision **78.43%** trên 40 bug thật (đa ngôn ngữ, đa loại
+  lỗi — *không* leak-only, *không* báo recall).
+- **iAudit** [3] (ICSE 2025, IEEE/ACM): kiến trúc **đa agent tranh luận** (Ranker–Critic) trên
+  nền Reasoner đã fine-tune để chọn + biện minh nguyên nhân lỗi. *Lưu ý:* đây là cơ chế *tranh
+  luận* hai agent, **không phải bỏ phiếu đồng thuận** như đề tài (miền là smart contract).
+- **LLMxCPG** [4] (USENIX Security 2025): hợp nhất **Code Property Graph** với LLM để phát hiện
+  lỗ hổng — ví dụ điển hình của hướng *phân tích chương trình + LLM*.
+- **FuzzingBrain V2** [5] (preprint 2026): multi-agent **trên MCP**, kết hợp static (Fuzz
+  Introspector) + dynamic (libFuzzer + ASan/MSan/UBSan), đạt 90% (36/40) trên AIxCC 2025 — nhưng
+  xác minh **bằng crash**, leak chỉ là phụ. Cùng nhóm AIxCC có **ATLANTIS** [6] (và Buttercup),
+  kiến trúc static+dynamic+agentic+judge, đều xác minh qua crash.
+
+**Trục C — formal / dataset (phụ trợ):**
+- **POM** [7] (CMU SEI Tech Report CMU/SEI-2025-TR-008): LLM gán nhãn ownership + SAT verify
+  (hướng *prevention*); độ chính xác gán nhãn con trỏ **94.1%** trên Juliet. (Không trích các số
+  precision/recall headline — đã bị loại trong kiểm chứng.)
+- **SecVulEval** [8] (preprint 2025): **dataset** 25.440 hàm / 145 CWE — tập đánh giá phụ, không
+  chuyên leak.
+
+> **Loại trừ minh bạch:** một paper LLM4Code (ICSE 2025 workshop) chỉ nhắm **Java** (GC) → ngoài
+> phạm vi, không dùng làm baseline.
+
+**Khoảng trống nghiên cứu:** chưa tìm thấy hệ 2025–2026 nào **kết hợp tĩnh + động (Valgrind/ASan/
+LSan) chuyên cho memory-LEAK** trong C/C++ — đây là vị trí định vị của đề tài (mang mô hình
+agentic static+dynamic từ lỗi-gây-crash sang lớp **rò rỉ không-crash**). Đây chính là khoảng
+trống mà phần Mục tiêu đề tài dưới đây trình bày hướng giải quyết.
+
+| Hệ | Static | Dynamic | Agentic | Judge | Leak trọng tâm? | Peer-review |
+|---|:--:|:--:|:--:|:--:|:--:|---|
+| LAMeD [1] | ✅ | ❌ | ❌ | 🟡 | ✅ | ✅ EASE 2025 |
+| RepoAudit [2] | 🟡 | ❌ | ✅ | ✅ | 🟡 | ✅ ICML 2025 |
+| iAudit [3] | ❌ | ❌ | ✅ (debate) | ✅ | ❌ (smart contract) | ✅ ICSE 2025 |
+| LLMxCPG [4] | ✅ (CPG) | ❌ | 🟡 | 🟡 | ❌ (vuln chung) | ✅ USENIX Sec 2025 |
+| FuzzingBrain V2 [5] | ✅ | ✅ | ✅ | 🟡 | 🔶 crash | ❌ preprint |
+| POM [7] | ✅ | ❌ | ❌ | ✅ | 🔶 | ❌ tech report |
+| **Đề tài** | ✅ | ✅ | ✅ | ✅ (consensus) | ✅ | — |
+
+## Nền tảng khái niệm và công nghệ
+
+Về mặt khái niệm và công nghệ, đề tài dựa trên bốn nền tảng chính, đóng vai trò cơ sở trực
+tiếp cho hướng giải quyết trình bày ở phần Mục tiêu đề tài. **Phân tích tĩnh** (Clang Static
+Analyzer/`scan-build`, AST tree-sitter, call graph, interprocedural data-flow) kiểm tra mã
+nguồn không cần thực thi. **Phân tích động** — Valgrind/Memcheck [10], [11], AddressSanitizer
+[9], LeakSanitizer [12] — quan sát hành vi thực tế nhưng phụ thuộc dữ liệu kiểm thử. **LLM
+tool-calling / agentic orchestration** cho phép LLM đóng vai trò điều phối — lựa chọn công cụ,
+tổng hợp bằng chứng — qua chuẩn **Model Context Protocol (MCP)** [15] (JSON-RPC 2.0
+streamable-HTTP). Để giảm dao động giữa các lần suy luận, đề tài kết hợp **self-consistency**
+[13] (bỏ phiếu trên nhiều mẫu độc lập) và **LLM-as-judge** [14] (dùng LLM làm bộ phán xử tổng
+hợp) — nền tảng học thuật trực tiếp cho consensus judge (C1).
 
 ---
 
@@ -92,159 +160,50 @@ Mục tiêu **nghiên cứu (đóng góp luận văn)**:
 
 ## Phương pháp phân tích cấu trúc, phân rã hệ thống
 
-Hệ thống được phân rã thành **microservices** trong một monorepo Turborepo (ngôn ngữ
-TypeScript, runtime Node.js, package manager pnpm): một **control-plane** điều phối, hai **analyzer** (tĩnh/động) phục
-vụ cả gRPC lẫn MCP, một thư viện **agent-core** (vòng lặp tool-calling), một thư viện
-**common** (type/scoring/judge dùng chung), và hai giao diện (web React + CLI/TUI). Việc phân
-rã theo *ranh giới phân tích* (tĩnh vs động) + *ranh giới điều phối* (web vs CLI) cho phép
-tái dùng analyzer cho cả hai đường và so sánh hai mô hình điều phối LLM (xem §4.2).
+Hệ thống được phân rã thành các thành phần độc lập trong một monorepo Turborepo (TypeScript,
+runtime Node.js, package manager pnpm): một **orchestrator** duy nhất (`leak-inspector-tui`,
+CLI/TUI, native tool-calling), hai **analyzer** (tĩnh/động) phục vụ MCP, một thư viện
+**agent-core** (vòng lặp tool-calling + MCP client), và một thư viện **common** (type/scoring/
+judge dùng chung). Việc phân rã theo *ranh giới phân tích* (tĩnh vs động) cho phép mỗi analyzer
+được phát triển, kiểm thử và mở rộng độc lập, trong khi orchestrator có thể tích hợp thêm công
+cụ phân tích hoặc mô hình ngôn ngữ mới mà không cần đổi kiến trúc tổng thể.
 
 ## Thiết kế hệ thống
 
-Hai đường điều phối dùng chung analyzer + scorer (chi tiết §4.2): (a) **đường web** —
-control-plane điều phối theo mô hình *JSON-action* qua Postgres/Redis; (b) **đường CLI/TUI** —
-`leak-inspector-tui` + `agent-core` điều phối theo *native tool-calling*. Vòng lặp điều tra
-3 pha: **discovery → investigation loop → judging/reporting**. Tầng judge có ba cấu hình
-so-sánh-được: heuristic (tất định) · single-LLM · consensus.
-
-## Triển khai hệ thống
-
-Triển khai qua Docker Compose (Postgres, Redis, control-plane :8090, static-analyzer
-MCP :50061, dynamic-analyzer MCP :50062, UI :5173). LLM nối qua lớp provider đa nhà cung cấp
-(`local | openai | anthropic | openai-compat`) dùng giao thức **MCP** [12] cho tool-calling.
-
-## Phương pháp nghiên cứu
-
-- **Thực nghiệm có đối chứng:** so `no_llm` (heuristic) vs `llm_assisted` (single-LLM) vs
-  `consensus` trên cùng corpus + cùng bộ chấm điểm.
-- **Chấm điểm site-based** (không count-based): mỗi site ground-truth là một mẫu; site sạch bị
-  flag = FP thật, flaw bị bỏ = FN.
-- **Thống kê:** bootstrap CI cho P/R/F1; kiểm định **McNemar** ghép cặp theo `siteId`.
-- **Tái lập:** gate tất định Tier-1 + đo verdict-stability Tier-2.
-- **So sánh baseline:** chuẩn hoá finding của baseline (clang-analyzer/infer) về cùng shape +
-  cùng `scoreCase` (xem §4.4 và `docs/BASELINE-COMPARISON.md`).
-
----
-
-# Các nội dung chính
-
-## Các nghiên cứu và công nghệ liên quan
-
-### (a) Công trình liên quan
-
-Khảo sát 2025–2026 (đã kiểm chứng đối kháng — fetch + bỏ phiếu 3 agent/claim, xem `researchs/`
-và bước verify deep-research) theo ba trục:
-
-**Trục A — phát hiện rò rỉ C/C++ trực tiếp:**
-- **LAMeD** [1] (EASE 2025, peer-reviewed): LLM sinh annotation AllocSource/FreeSink nạp cho
-  analyzer cổ điển (Cooddy/CodeQL/Infer); theo công bố của nhóm tác giả, khi tích hợp annotation
-  thì **phát hiện leak cải thiện rõ và giảm path-explosion**, nhưng **số cảnh báo cũng tăng** —
-  minh hoạ đánh đổi *recall↑ / FP↑* mà consensus judge của đề tài nhắm giải quyết. **Static-only**,
-  và là baseline peer-reviewed sát đề tài nhất.
-- Một số hướng *neuro-symbolic* (LLM kết hợp SMT/Z3) cho leak C/C++ đang xuất hiện dưới dạng
-  **preprint 2026** (ví dụ MemHint); ở lần kiểm chứng mới nhất chưa xác minh độc lập được định
-  danh nên **không đưa vào danh mục trích dẫn chính thức** (xem ghi chú ở mục Tài liệu tham khảo).
-
-**Trục B — kiến trúc agentic + judge (analogue):**
-- **RepoAudit** [2] (ICML 2025, PMLR vol. 267): agent tự động + validator path-condition SAT;
-  theo công bố của nhóm tác giả đạt precision **78.43%** trên 40 bug thật (đa ngôn ngữ, đa loại
-  lỗi — *không* leak-only, *không* báo recall).
-- **iAudit** [3] (ICSE 2025, IEEE/ACM): kiến trúc **đa agent tranh luận** (Ranker–Critic) trên
-  nền Reasoner đã fine-tune để chọn + biện minh nguyên nhân lỗi. *Lưu ý:* đây là cơ chế *tranh
-  luận* hai agent, **không phải bỏ phiếu đồng thuận** như đề tài (miền là smart contract).
-- **LLMxCPG** [4] (USENIX Security 2025): hợp nhất **Code Property Graph** với LLM để phát hiện
-  lỗ hổng — ví dụ điển hình của hướng *phân tích chương trình + LLM*.
-- **FuzzingBrain V2** [5] (preprint 2026): multi-agent **trên MCP**, kết hợp static (Fuzz
-  Introspector) + dynamic (libFuzzer + ASan/MSan/UBSan), đạt 90% (36/40) trên AIxCC 2025 — nhưng
-  xác minh **bằng crash**, leak chỉ là phụ. Cùng nhóm AIxCC có **ATLANTIS** [6] (và Buttercup),
-  kiến trúc static+dynamic+agentic+judge, đều xác minh qua crash.
-
-**Trục C — formal / dataset (phụ trợ):**
-- **POM** [7] (CMU SEI Tech Report CMU/SEI-2025-TR-008): LLM gán nhãn ownership + SAT verify
-  (hướng *prevention*); độ chính xác gán nhãn con trỏ **94.1%** trên Juliet. (Không trích các số
-  precision/recall headline — đã bị loại trong kiểm chứng.)
-- **SecVulEval** [8] (preprint 2025): **dataset** 25.440 hàm / 145 CWE — tập đánh giá phụ, không
-  chuyên leak.
-
-> **Loại trừ minh bạch:** một paper LLM4Code (ICSE 2025 workshop) chỉ nhắm **Java** (GC) → ngoài
-> phạm vi, không dùng làm baseline.
-
-**Khoảng trống nghiên cứu:** chưa tìm thấy hệ 2025–2026 nào **kết hợp tĩnh + động (Valgrind/ASan/
-LSan) chuyên cho memory-LEAK** trong C/C++ — đây là vị trí định vị của đề tài (mang mô hình
-agentic static+dynamic từ lỗi-gây-crash sang lớp **rò rỉ không-crash**).
-
-| Hệ | Static | Dynamic | Agentic | Judge | Leak trọng tâm? | Peer-review |
-|---|:--:|:--:|:--:|:--:|:--:|---|
-| LAMeD [1] | ✅ | ❌ | ❌ | 🟡 | ✅ | ✅ EASE 2025 |
-| RepoAudit [2] | 🟡 | ❌ | ✅ | ✅ | 🟡 | ✅ ICML 2025 |
-| iAudit [3] | ❌ | ❌ | ✅ (debate) | ✅ | ❌ (smart contract) | ✅ ICSE 2025 |
-| LLMxCPG [4] | ✅ (CPG) | ❌ | 🟡 | 🟡 | ❌ (vuln chung) | ✅ USENIX Sec 2025 |
-| FuzzingBrain V2 [5] | ✅ | ✅ | ✅ | 🟡 | 🔶 crash | ❌ preprint |
-| POM [7] | ✅ | ❌ | ❌ | ✅ | 🔶 | ❌ tech report |
-| **Đề tài** | ✅ | ✅ | ✅ | ✅ (consensus) | ✅ | — |
-
-### (b) Công nghệ nền
-
-- **LLM tool-calling / agentic orchestration:** mô hình agent gọi tool lặp (như RepoAudit [2],
-  iAudit [3], FuzzingBrain V2 [5]); chuẩn **Model Context Protocol (MCP)** [15] để LLM gọi tool
-  của analyzer (JSON-RPC 2.0 streamable-HTTP).
-- **Self-consistency & LLM-as-judge:** bỏ phiếu trên nhiều mẫu suy luận để chọn đáp án nhất quán,
-  tăng độ tin cậy [13]; dùng LLM làm bộ phán xử [14] — nền tảng học thuật cho consensus judge (C1).
-- **Phân tích động:** Valgrind/Memcheck (dynamic binary instrumentation) [10], [11];
-  AddressSanitizer (instrumentation thời biên dịch) [9]; LeakSanitizer (`-fsanitize=leak`) [12].
-- **Phân tích tĩnh:** Clang Static Analyzer (`scan-build`); AST qua tree-sitter; call graph;
-  interprocedural data-flow.
-- **Nền kỹ thuật:** monorepo Turborepo + pnpm (runtime Node.js); **NestJS** (control-plane + analyzer); **gRPC**
-  (proto3) cho control-plane↔analyzer; **React 19** + Vite + Ant Design + Zustand cho UI;
-  **Ink/React** cho TUI; **PostgreSQL** + **Redis/BullMQ** cho trạng thái/queue; GitHub OAuth.
-
-## Lập kế hoạch, phân tích và thiết kế hệ thống
-
-### Kiến trúc tổng thể — hai đường điều phối
+### Kiến trúc tổng thể — một đường điều phối
 
 ```mermaid
 flowchart TB
-  subgraph Clients
-    UI[React UI :5173]
-    TUI[leak-inspector-tui CLI/TUI]
+  subgraph Client
+    TUI[leak-inspector-tui<br/>Ink CLI, headless]
   end
-  subgraph Orchestration
-    CP[control-plane NestJS :8090<br/>JSON-action]
-    AC[agent-core<br/>native tool-calling]
+  subgraph Analyzers[Analyzers — MCP]
+    SA[static-analyzer<br/>MCP :50061]
+    DA[dynamic-analyzer<br/>MCP :50062]
   end
-  subgraph Analyzers
-    SA[static-analyzer<br/>gRPC :50051 / MCP :50061]
-    DA[dynamic-analyzer<br/>gRPC :50052 / MCP :50062]
-  end
-  subgraph State
-    PG[(PostgreSQL)]
-    RD[(Redis/BullMQ)]
-  end
-  LLM[LLM providers<br/>local/openai/anthropic/openai-compat]
-  UI --> CP --> PG & RD
-  TUI --> AC
-  CP -->|gRPC| SA & DA
-  AC -->|MCP| SA & DA
-  CP & AC --> LLM
+  LLM[LLM gateway<br/>local/openai/anthropic/openai-compat]
+  TUI -->|MCP Streamable-HTTP| SA
+  TUI -->|MCP Streamable-HTTP| DA
+  TUI -->|HTTP SSE| LLM
 ```
 
 ### Phân rã thành phần
 
 | Thành phần | Công nghệ | Vai trò |
 |---|---|---|
-| `apps/control-plane` | NestJS, gRPC, BullMQ | Điều phối web (JSON-action), API REST + SSE, OAuth, lưu lịch sử quét |
-| `apps/leak-inspector-tui` | Ink/React, Node.js | Điều phối CLI/TUI (native tool-calling); dùng cho eval/benchmark |
+| `apps/leak-inspector-tui` | TS + Ink, Node.js | **Orchestrator** — CLI/TUI, native tool-calling, MCP client trực tiếp tới analyzer |
+| `apps/static-analyzer` | NestJS, tree-sitter, Clang | MCP :50061 — index, candidate/AST scan, call graph, interprocedural flow, `scan-build` |
+| `apps/dynamic-analyzer` | NestJS, Valgrind/ASan/LSan | MCP :50062 — build sanitizer, chạy Memcheck/ASan/LSan, chuẩn hoá báo cáo |
 | `packages/agent-core` | TypeScript | Vòng lặp tool-calling, MCP client, `callModel` đa-provider (streaming), nén ngữ cảnh |
 | `packages/common` | TS + Zod | Type/schema, `scoreCase`, heuristic + **consensus judge**, reporting |
-| `apps/static-analyzer` | NestJS, tree-sitter, Clang | index, candidate/AST scan, call graph, interprocedural flow, `scan-build` |
-| `apps/dynamic-analyzer` | NestJS, Valgrind/ASan/LSan | build sanitizer, chạy Memcheck/ASan/LSan, chuẩn hoá báo cáo |
-| `apps/leak-inspector-ui` | React 19, Vite, Zustand | timeline + workflow DAG (SSE), trình duyệt findings |
 
 ### Giao thức & mô hình dữ liệu
 
-- **gRPC** (proto3): control-plane ↔ analyzer (mặc định đường web).
-- **MCP** (JSON-RPC 2.0 streamable-HTTP): TUI ↔ analyzer (và control-plane khi bật).
-- **SSE:** control-plane → UI (timeline thời gian thực).
+- **MCP** (JSON-RPC 2.0 streamable-HTTP): giao thức **duy nhất** giữa orchestrator và hai
+  analyzer — một gRPC server từng tồn tại để phục vụ một bản triển khai web (control-plane +
+  React SPA) nhưng đã gỡ khỏi `master` (bảo tồn trên nhánh `web-implementation`); không còn
+  consumer nên toàn bộ code gRPC đã bị xoá (xem `docs/ARCHITECTURE.md` §2).
+- **HTTP SSE:** orchestrator → LLM provider (streaming).
 - **`LeakBundle`** (mô hình trung tâm): một ứng viên + `staticEvidence` (ownership, cặp
   alloc→free, đường rò khả thi) + `evidence[]` động (valgrind/asan/lsan + tương quan
   LINKED/file-only) + `dynamicCoverage` + `verdict` (`VerdictResult`).
@@ -270,10 +229,11 @@ flowchart LR
   J --> R[Reporting<br/>JSON/MD/HTML/snapshot]
 ```
 
-## Hiện thực, triển khai hệ thống
+## Triển khai hệ thống
 
-- **Khởi chạy:** `docker compose up --build` (toàn stack). Quét: TUI tương tác
-  (`/scan <repo>`, `/config` chọn provider) hoặc headless (`leak-tui scan --repo … --mode …`).
+- **Khởi chạy:** `docker compose up --build` (static-analyzer + dynamic-analyzer, nối qua Docker
+  bridge network). Quét: TUI tương tác (`/scan <repo>`, `/config` chọn provider) hoặc headless
+  (`leak-tui scan --repo … --mode …`).
 - **Provider LLM:** ngoài `local/openai/anthropic`, hỗ trợ **`openai-compat`** — trỏ tới bất kỳ
   endpoint kiểu OpenAI `/chat/completions` (LM Studio, vLLM, Ollama, gateway riêng), cấu hình
   qua `/config` / CLI (`--base-url/--model/--api-key`) / env.
@@ -283,7 +243,20 @@ flowchart LR
 - **Báo cáo:** JSON (máy đọc), Markdown, HTML (verdict card: coverage/judge/correlation/static),
   Snapshot (so sánh thực nghiệm).
 
-## Đánh giá kết quả
+## Phương pháp nghiên cứu
+
+- **Thực nghiệm có đối chứng:** so `no_llm` (heuristic) vs `llm_assisted` (single-LLM) vs
+  `consensus` trên cùng corpus + cùng bộ chấm điểm.
+- **Chấm điểm site-based** (không count-based): mỗi site ground-truth là một mẫu; site sạch bị
+  flag = FP thật, flaw bị bỏ = FN.
+- **Thống kê:** bootstrap CI cho P/R/F1; kiểm định **McNemar** ghép cặp theo `siteId`.
+- **Tái lập:** gate tất định Tier-1 + đo verdict-stability Tier-2.
+- **So sánh baseline:** chuẩn hoá finding của baseline (clang-analyzer/infer) về cùng shape +
+  cùng `scoreCase` (xem §4.4 và `docs/BASELINE-COMPARISON.md`).
+
+---
+
+# Đánh giá kết quả
 
 ### Phương pháp & dữ liệu
 
@@ -315,6 +288,24 @@ flowchart LR
 → Bỏ phiếu k=3 **cắt tỉ lệ lật verdict ~4×** (26.7% → 6.7%), nâng case-stability 73% → 93%.
 **Tier-1:** hai lần chạy `no_llm` cho **chấm điểm y hệt** (TP29 FP7 FN3 TN38).
 
+### Kết quả thực (LAMeD: 41 ca / 44 site, 7 dự án, positive-only)
+
+| Hệ / cấu hình | sites | TP | FP | FN | TN | Precision | Recall | **F1** | Notes |
+|---|--:|--:|--:|--:|--:|--:|--:|--:|---|
+| **no_llm (heuristic, `--enrich`)** | 44 | 13 | 0 | 31 | 0 | 100% | 29.5% | **0.456** | baseline (`docs/DATASETS.md`) |
+| **llm_assisted (oc/deepseek-v4-flash-free)** | 44 | 7 | 0 | 37 | 0 | 100% | 15.9% | **0.2745** | temp 0, consensus n=1, dynamic selective |
+
+> *LAMeD positive-only* → chỉ báo recall + FP count (specificity/MCC: N/A); precision/F1 chỉ
+> mang tính thông tin. `llm_assisted` đạt precision 100% (FP=0) nhưng **recall 15.9% thấp hơn
+> baseline heuristic 29.5%**: agentic path không vượt heuristic trên corpus dự án thực này.
+> **FN triage (35 ca):** 33/35 là corpus-hardness (lỗi nằm ở function mà build nền không
+> exercise, hoặc manifest `target_function` rỗng) + 2/35 là pipeline defect đã fix (judge cấp
+> cứng cho alloc→free UNPAIRED, `.omo/evidence/task-5`). **Consensus run chưa chạy** (chờ
+> quyết định).
+
+**Phân rã per-project (llm_assisted, 41 ca):** libtiff 6 ca (TP1), cJSON 6 (TP1), curl 15 (TP4),
+libssh2 3 (TP1), libsolv 5 (TP0), libxml2 4 (TP0), rabbitmq-c 2 (TP0).
+
 ### Bàn luận trung thực (threats to validity)
 
 Trên Juliet *dễ*, heuristic baseline là mạnh nhất; LLM + dynamic có thể **tăng FP** vì bằng
@@ -324,7 +315,7 @@ quan dynamic↔ứng viên còn thô. Giá trị của LLM/consensus kỳ vọng
 multi-seed + McNemar trước khi quy kết. Baseline peer-reviewed mỏng (chỉ LAMeD [1] đầy đủ phản
 biện) → cân nhắc khi nộp.
 
-## Kết luận và hướng phát triển trong tương lai
+# Kết luận và hướng phát triển trong tương lai
 
 Đề tài đề xuất và hiện thực một hệ thống LLM điều phối hợp nhất tĩnh–động cho rò rỉ bộ nhớ
 C/C++, với ba đóng góp đo được: (i) consensus judge giảm dao động phán xử ~4×; (ii) giao thức
@@ -340,8 +331,8 @@ McNemar để khẳng định hiệu ứng có ý nghĩa thống kê.
 | Giai đoạn | Nội dung | Trạng thái |
 |---|---|---|
 | 1 | Khảo sát công trình + công nghệ liên quan (`researchs/`) | ✅ Hoàn thành |
-| 2 | Thiết kế kiến trúc + phân rã + giao thức (gRPC/MCP/SSE) | ✅ Hoàn thành |
-| 3 | Hiện thực analyzer tĩnh/động + agent-core + control-plane + UI/TUI | ✅ Hoàn thành |
+| 2 | Thiết kế kiến trúc + phân rã + giao thức MCP | ✅ Hoàn thành |
+| 3 | Hiện thực analyzer tĩnh/động + agent-core + orchestrator TUI | ✅ Hoàn thành |
 | 4 | Tầng judge (heuristic/single-LLM/consensus) + làm giàu bằng chứng | ✅ Hoàn thành |
 | 5 | Khung đánh giá (site-based scoring, CI, McNemar) + two-tier determinism | ✅ Hoàn thành |
 | 6 | So sánh baseline (clang/infer) + ablation consensus | ✅ Hoàn thành |

@@ -23,7 +23,7 @@ export interface CorpusInfo {
 /** Known dataset roots documented in `docs/DATASETS.md` — all git-ignored except
  * committed sources, so presence varies by checkout; missing ones are just
  * skipped, not an error. */
-const DEFAULT_CORPUS_DIRS = ['demo/juliet_cwe401', 'demo/real_projects', 'demo/lamed', 'demo/memory_leak_corpus'];
+const DEFAULT_CORPUS_DIRS = ['demo/juliet_cwe401', 'demo/lamed'];
 
 function caseCountOf(corpusDir: string): number {
   try {

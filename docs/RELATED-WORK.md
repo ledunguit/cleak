@@ -104,6 +104,86 @@ nên ta chọn theo ba trục bù nhau:
 | POM | ✅(formal) | ❌ | ❌ | ✅ (SAT) | ❌ | 94.1% gán nhãn | formal/prevention |
 | SecVulEval | — | — | — | — | — | 25.4K hàm | dataset đánh giá |
 
+## 6a. Ma trận năng lực cốt lõi
+
+Ma trận đối chiếu 10 tiêu chí năng lực giữa các baseline và **cleak** (`leak-investigator` —
+hệ của luận văn, cột cuối). Ô của cleak đối chiếu kiến trúc + số liệu thực tế trong
+[BASELINE-COMPARISON.md](BASELINE-COMPARISON.md); ô của baseline lấy từ §3-5 và
+`researchs/02-bang-so-sanh-baselines.md`.
+
+**Chú giải:** ✅ có · ❌ không · 🟡 có nhưng hạn chế / có điều kiện · 🔶 phụ trợ, không trọng tâm ·
+◐ một phần / gián tiếp · — không áp dụng / chưa công bố
+
+| Tiêu chí | LAMeD | MemHint | RepoAudit | FuzzingBrain V2 | POM | SecVulEval | **cleak** |
+|---|---|---|---|---|---|---|---|
+| LLM tham gia | ✅ | ✅ | ✅ | ✅ | ✅ | — | ✅ (agentic + judge) |
+| MCP transport | ❌ | ❌ | ❌ | ✅ | ❌ | — | ✅ |
+| Static analysis | ✅ | ✅ | 🟡 | ✅ | ✅ | — | ✅ (tree-sitter + Clang SA + call graph + interprocedural) |
+| Dynamic analysis (Valgrind/ASan/LSan) | ❌ | ❌ | ❌ | ✅ | ❌ | — | ✅ (Docker) |
+| Lõi phân tích tất định (không LLM trong đường quyết định) | ✅ (Cooddy) | ✅ (Z3) | ✅ (SAT) | 🟡 (sanitizer) | ✅ (SAT) | — | ✅ (parser/CFG/pairing/judge thuần) |
+| Tái lập bit-for-bit (gate kiểm chứng) | ❌ (không pin Cooddy) | ❌ (LLM-label) | ❌ (agentic) | ❌ (LLM) | ❌ (LLM-label) | — | ✅ (determinism-gate: 2 lần no_llm y hệt) |
+| Chuyên memory-leak C/C++ | ✅ | ✅ | 🟡 | 🔶 | 🔶 | ❌ | ✅ (CWE-401 trọng tâm) |
+| Agentic orchestration | ❌ | ❌ | ✅ | ✅ | ❌ | — | ✅ |
+| Judge / validator layer | 🟡 | ✅ | ✅ | 🟡 | ✅ | — | ✅ (heuristic + LLM + consensus) |
+| Sinh bản vá / repair diff | ❌ | ❌ | ❌ | ❌ | ❌ | — | ✅ (repair_suggestion) |
+| Peer-review | ✅ (EASE 2025) | ❌ (arXiv) | 🟡 (poster) | ❌ (arXiv) | ❌ (tech report) | ❌ (rút ICLR'26) | — (luận văn) |
+
+> Ghi chú cột **Tất định**: dòng 1 chỉ *lõi phân tích thuần thuật toán* (cùng đầu vào → cùng
+> kết quả về mặt thuật toán); dòng 2 chỉ *tái lập bit-for-bit* — hai lần chạy cho chấm điểm y
+> hệt, kiểm chứng bằng gate. LAMeD có lõi Cooddy tất định nhưng **không pin version** → không
+> bit-exact; MemHint/POM có lõi symbolic (Z3/SAT) tất định nhưng bước gán nhãn LLM phía trước
+> không tất định; RepoAudit/FuzzingBrain V2 là pipeline agentic LLM → không tái lập. cleak có
+> **tầng no-llm Tier-1 bit-for-bit** (determinism-gate: hai lần chạy `no_llm` chấm điểm y hệt,
+> xem §6b) + recipe động tất định (`buildTarget → lsanRun`, không LLM) — hệ duy nhất đạt cả
+> hai dòng.
+
+> **Mục đích của tầng tất định:** (1) con số chỉ phòng vệ được khi tái lập được — người chạy lại
+> phải có con số đã báo; (2) cách ly nguyên nhân — vì cell `no_llm + dynamic` tất định, mọi thay
+> đổi hiệu năng khi bật LLM judge là do LLM gây ra, không phải bởi nhiễu; (3) baseline công bằng
+> trên cùng scorer + cùng corpus version. Vì LLM judge không bit-tất định kể cả `temperature=0`,
+> `llm_assisted` được báo theo distribution + consensus (k=3 cắt lật verdict 26.7% → 6.7%, xem
+> EVALUATION.md §7).
+
+## 6b. So sánh kết quả thực nghiệm theo dataset
+
+**Juliet CWE-401 (30 ca, function-mode, analyzer qua MCP Docker)** — nguồn `paper/de-cuong.md`
+L271-288; là đánh giá **30 ca con**, không phải toàn bộ 1984 ca của NIST Juliet.
+
+| Hệ / cấu hình | sites | TP | FP | FN | TN | Precision | Recall | **F1** | FP/KLOC |
+|---|--:|--:|--:|--:|--:|--:|--:|--:|--:|
+| **cleak — no_llm (heuristic)** | 77 | 29 | 7 | 3 | 38 | 0.806 | 0.906 | **0.853** | **0.741** |
+| **cleak — consensus (×3/weighted)** | 77 | 30 | 10 | 2 | 35 | 0.750 | 0.938 | **0.833** | 1.058 |
+| Clang Static Analyzer (cùng corpus + scorer) | 44 | 27 | 12 | 5 | 0 | 0.692 | 0.844 | **0.761** | 1.270 |
+
+> **Ablation judge:** single-LLM (n=1) case-stability 73.3%, lật verdict **26.7%** (8/30);
+> consensus (n=3) 93.3% / **6.7%** (2/30) → bỏ phiếu k=3 cắt lật verdict ~4×. **Tier-1:** hai
+> lần chạy `no_llm` cho chấm điểm y hệt (TP29/FP7/FN3/TN38).
+
+**LAMeD (positive-only, 41 ca / 44 site, 7 dự án)** — manifest
+`demo/lamed/memleak_benchmark.json` (Zenodo 15089703).
+
+| Hệ / cấu hình | sites | TP | FP | FN | TN | Precision | Recall | **F1** | Notes |
+|---|--:|--:|--:|--:|--:|--:|--:|--:|---|
+| **cleak — no_llm (heuristic, `--enrich`)** | 44 | 13 | 0 | 31 | 0 | 100% | 29.5% | **0.456** | baseline (`docs/DATASETS.md`) |
+| **cleak — llm_assisted (oc/deepseek-v4-flash-free)** | 44 | 7 | 0 | 37 | 0 | 100% | 15.9% | **0.2745** | temp 0, consensus n=1, dynamic selective |
+| clang-analyzer (`unix.Malloc`) | 43 | 0 | 0 | 43 | 0 | — | 0.0% | — | không mô hình hoá factory-allocator (`results/baseline-lamed/baseline-compare.md`) |
+
+> ⚠️ **Quy ước đọc LAMeD:** corpus **positive-only** (TN=0) → **chỉ recall + FP count có nghĩa**;
+> precision/F1 chỉ mang tính thông tin (specificity/MCC: N/A). Cả hai cấu hình cleak đều
+> **FP = 0** (không false positive nào trên 41 ca) — ngược hẳn với hướng recall↑/FP↑ của
+> baseline. clang-analyzer bắt **0/43**.
+>
+> **FN triage (35 FN ca):** 33 ca = corpus-hardness (**94.3%**: function manifest không được
+> build-nền exercise, hoặc `target_function` rỗng) + 2 ca = lỗi judge có thật (**đã fix**:
+> guard judge-hardening cho bằng chứng tĩnh alloc→free UNPAIRED trong `llmJudge.ts`) + 0 ca
+> unknown. Leak tồn tại ở function manifestation với static alloc-free UNPAIRED trước đây bị
+> dismiss, nay được **demote thành uncertain**.
+>
+> **So với LAMeD paper (EASE 2025, cùng memleak_benchmark 42 flaw / 7 repo):** có annotation
+> CodeQL **5→10**, Cooddy **5→10** nhưng warnings CodeQL **139→653**, Cooddy **86→391**; paper
+> **không báo F1** (chỉ thể hiện recall↑/FP↑). **RepoAudit** P=78.4% (40 TP/11 FP) là **đa
+> defect (ML+UAF+NPD)**, không leak-only → không so trực tiếp được.
+
 ## 7. Research gap & định vị
 
 1. **Baseline leak C/C++ trực tiếp** đều **static-only** (MemHint, LAMeD) → `leak-investigator`
@@ -114,6 +194,12 @@ nên ta chọn theo ba trục bù nhau:
    memory-LEAK** trong C/C++ — vị trí định vị mạnh của luận văn.
 4. **Baseline peer-reviewed rất mỏng:** chỉ **LAMeD** (EASE 2025) đầy đủ phản biện; RepoAudit
    là poster; còn lại preprint/tech-report → cân nhắc khi luận văn yêu cầu baseline đã phản biện.
+5. **Định vị duy nhất (số liệu đã kiểm chứng):** `leak-investigator` là hệ **duy nhất** kết hợp
+   **static + dynamic chuyên memory-leak** với **tầng tất định Tier-1** (`no_llm` bit-for-bit,
+   hai lần chạy chấm điểm y hệt) + **LLM judge + consensus**, cắt **FP về 0 trên LAMeD**
+   (FP/C = 0 trên 41 ca, precision 100%) trong khi vẫn giữ **FP/KLOC 0.741 trên Juliet**
+   (CWE-401, 30 ca, `no_llm`) — không baseline nào trong §6a-6b hội đủ bốn thuộc tính này
+   (static + dynamic + tất định + judge chuyên leak).
 
 > Cách **chạy** so sánh thực nghiệm với baseline cài-được (clang-analyzer/infer) trên cùng
 > corpus + cùng scorer: [BASELINE-COMPARISON.md](BASELINE-COMPARISON.md).

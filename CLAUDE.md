@@ -115,10 +115,10 @@ Thesis/
 ├── package.json                    ← Root workspace config + turbo scripts
 ├── turbo.json                      ← Task pipeline (build/dev/lint/test)
 ├── tsconfig.base.json              ← Shared TypeScript config for NestJS apps
-├── demo/memory_leak_corpus/        ← Test corpus (sources committed; binaries/results git-ignored)
+├── demo/                            ← Eval corpora (git-ignored, rebuilt via docs/DATASETS.md): Juliet CWE-401, LAMeD
 └── scripts/                        ← 21 eval/test scripts, 2 shell scripts, 5 data subdirs
 ```
-(`tools/leak_guard_tool/`, `proto/`, `mcp-dynamic-analysis-server/`, `mcp-memory-common/`, `mcp-memory-static-analysis-server/`, and `results/` are gone / git-ignored — see the notes above. `.gitmodules` retains stale entries for the three old MCP submodules.)
+(`tools/leak_guard_tool/`, `proto/`, `mcp-dynamic-analysis-server/`, `mcp-memory-common/`, `mcp-memory-static-analysis-server/`, and `results/` are gone / git-ignored — see the notes above. `.gitmodules` retains stale entries for the three old MCP submodules. `demo/real_projects/` and `demo/memory_leak_corpus/` — hand-generated toy corpora, not credible for evaluation — were removed; the smoke-test fixture that lived at `demo/memory_leak_corpus/simple_leak` moved to `apps/leak-inspector-tui/tests/fixtures/simple-leak/` since it's dev/CI plumbing, not an evaluation dataset.)
 
 ## Common Commands
 

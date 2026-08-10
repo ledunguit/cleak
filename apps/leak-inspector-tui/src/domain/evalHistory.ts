@@ -70,7 +70,7 @@ export function listEvalRuns(resultsDir: string, limit = 15): EvalRunSummary[] {
 
 /** Resolve a user-typed token (`/eval <token>`) to a past run's output
  * directory — accepts the full path, or just the directory's basename, so
- * `/eval eval-memory_leak_corpus-llm_assisted-2026-07-30T07-00-54` works
+ * `/eval eval-lamed-llm_assisted-2026-07-30T07-00-54` works
  * without the operator having to type `results/` too. Returns undefined if it
  * doesn't look like a historical run (caller then tries "new eval on this
  * corpus path" instead — the two are unambiguous since one lives under

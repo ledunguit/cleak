@@ -29,7 +29,7 @@ function writeRun(
   writeFileSync(
     join(dir, 'metrics.json'),
     JSON.stringify({
-      corpus: '/demo/memory_leak_corpus',
+      corpus: '/demo/lamed',
       mode: 'llm_assisted',
       dynamic: 'off',
       generatedAtMs: opts.generatedAtMs,
@@ -113,7 +113,7 @@ describe('loadEvalRun', () => {
     const state = loadEvalRun(join(resultsDir, 'eval-newer'))!;
     expect(state).not.toBeNull();
     expect(state.running).toBe(false);
-    expect(state.corpus).toBe('/demo/memory_leak_corpus');
+    expect(state.corpus).toBe('/demo/lamed');
     expect(state.total).toBe(2);
     expect(state.cases).toHaveLength(2);
     expect(state.sampling).toEqual({ mode: 'random', randomSeed: 42 });

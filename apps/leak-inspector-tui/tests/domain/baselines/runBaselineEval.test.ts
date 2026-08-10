@@ -192,7 +192,7 @@ describe('countSourceLoc', () => {
 
   test('returns positive count for valid C source directory', () => {
     const loc = countSourceLoc(
-      join(repoRoot, 'demo/memory_leak_corpus/simple_leak'),
+      join(repoRoot, 'apps/leak-inspector-tui/tests/fixtures/simple-leak'),
     );
     // simple_leak has main.c with ~30 non-blank lines.
     expect(loc).toBeGreaterThan(0);

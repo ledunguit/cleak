@@ -24,6 +24,7 @@ __pycache__/
 /*.docx
 /*.ppt
 /*.pptx
+!De cuong LVThS - *
 
 # Logs and temp artifacts
 *.log
@@ -75,6 +76,7 @@ dist/
 /demo/**/build/
 /demo/**/simple_leak
 /demo/**/simple_leak_asan
+/demo/memhint
 
 .antigravitycli
 

@@ -78,7 +78,7 @@ cleak/
 ├── scripts/                       ← Eval/test scripts
 ├── docs/                          ← Tài liệu
 ├── paper/references/              ← Bibliography
-├── demo/memory_leak_corpus/       ← Corpus kiểm thử
+├── demo/                          ← Corpus (git-ignored, xem docs/DATASETS.md)
 ├── results/                       ← Artifact (git-ignored)
 ├── researchs/                     ← Ghi chép khảo sát
 ├── docker-compose.yml
@@ -106,11 +106,12 @@ Xem [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) cho thành phần, giao thức,
 > Đường điều phối web cũ (`control-plane` + React SPA `leak-inspector-ui`) đã được gỡ khỏi
 > `master`, bảo tồn ở nhánh `web-implementation`.
 
-## Corpus demo
+## Corpus đánh giá
 
-- `demo/memory_leak_corpus/` gồm các ca kiểm thử cho đánh giá (`simple_leak`, `early_return_leak`,
-  `ownership_maze`, ...), mỗi ca biên dịch bằng `make CC=clang`.
-- Nguồn corpus (Juliet, LAMeD) không commit, xem [docs/DATASETS.md](docs/DATASETS.md).
+Corpus dùng cho đánh giá là Juliet CWE-401 (NIST SARD, tổng hợp) và LAMeD (EASE 2025,
+peer-reviewed, 41 ca từ 7 dự án C thật) — không commit, dựng lại theo
+[docs/DATASETS.md](docs/DATASETS.md). Không dùng corpus tự sinh (hand-labeled) làm
+căn cứ đánh giá.
 
 ## Bắt đầu nhanh
 

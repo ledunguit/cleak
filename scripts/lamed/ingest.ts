@@ -151,6 +151,31 @@ export const PROJECT_DEALLOCATORS: Record<string, string[]> = {
   'rabbitmq-c': ['empty_amqp_pool', 'recycle_amqp_pool'],
 };
 
+/**
+ * Per-project build recipe — CMake configure+build with optional external deps
+ * (SSL/zlib/lzma/jpeg/...) switched OFF so the build succeeds without network
+ * access, EXCEPT libssh2 which mandates one crypto backend (OpenSSL, present via
+ * Homebrew on the eval host). Verified by actually building all 7 projects
+ * (native, no sanitizer) — see the audit in the 2026-08-06 session. This plain
+ * command is what `compile-commands.service.ts` wraps as `bear -- sh -c '<cmd>'`
+ * to capture `compile_commands.json` for Stage B2 targeted-harness synthesis; it
+ * intentionally carries NO `-fsanitize=` flags (those are added by the harness's
+ * own compile step, not this base build).
+ *
+ * libtiff needs `tiff-tools=ON` (unlike a minimal library-only build) because the
+ * LAMeD bug for this project lives in `tools/tiffmedian.c`, which the tools
+ * target excludes when off.
+ */
+export const PROJECT_BUILD_COMMANDS: Record<string, string> = {
+  cjson: 'cmake -S . -B build -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DENABLE_CJSON_TEST=OFF -DBUILD_SHARED_AND_STATIC_LIBS=ON && cmake --build build -j4',
+  curl: 'cmake -S . -B build -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DCURL_USE_OPENSSL=OFF -DCURL_USE_LIBSSH2=OFF -DBUILD_TESTING=OFF -DBUILD_CURL_EXE=ON -DCURL_DISABLE_LDAP=ON -DUSE_LIBIDN2=OFF -DCURL_ZLIB=OFF -DCURL_BROTLI=OFF -DCURL_ZSTD=OFF && cmake --build build -j4',
+  libtiff: 'cmake -S . -B build -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -Dtiff-tools=ON -Dtiff-tests=OFF -Dtiff-contrib=OFF -Dtiff-docs=OFF -Dzlib=OFF -Djpeg=OFF -Dold-jpeg=OFF -Djbig=OFF -Dlerc=OFF -Dlzma=OFF -Dzstd=OFF -Dwebp=OFF -Dlibdeflate=OFF && cmake --build build -j4',
+  libsolv: 'cmake -S . -B build -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DENABLE_STATIC=OFF -DWITHOUT_COOKIEOPEN=1 && cmake --build build -j4',
+  libxml2: 'cmake -S . -B build -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DLIBXML2_WITH_ZLIB=OFF -DLIBXML2_WITH_LZMA=OFF -DLIBXML2_WITH_ICONV=OFF -DLIBXML2_WITH_PYTHON=OFF -DLIBXML2_WITH_TESTS=OFF -DLIBXML2_WITH_HTTP=OFF && cmake --build build -j4',
+  libssh2: 'cmake -S . -B build -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DCRYPTO_BACKEND=OpenSSL -DBUILD_TESTING=OFF -DBUILD_EXAMPLES=OFF -DENABLE_ZLIB_COMPRESSION=OFF && cmake --build build -j4',
+  'rabbitmq-c': 'cmake -S . -B build -DBUILD_TESTING=OFF -DBUILD_EXAMPLES=OFF -DBUILD_TOOLS=OFF -DENABLE_SSL_SUPPORT=OFF && cmake --build build -j4',
+};
+
 // ── Side-effecting helpers (materialization) ────────────────────────────────
 
 function git(repoDir: string, args: string[]): string {
@@ -219,6 +244,7 @@ function main(): void {
       id: e.id,
       // RELATIVE to the corpus dir — the eval harness does join(corpusDir, repo_path).
       repo_path: join('cases', e.id),
+      build_command: PROJECT_BUILD_COMMANDS[e.project],
       flaws,
       clean: [],
       cwe: 'CWE-401',

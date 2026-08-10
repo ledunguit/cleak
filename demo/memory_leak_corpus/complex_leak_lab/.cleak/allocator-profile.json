@@ -1,8 +1,0 @@
-{
-  "allocators": [],
-  "deallocators": [],
-  "reallocators": [],
-  "ownershipNotes": [],
-  "confidence": 1,
-  "explanation": "No custom allocators or deallocators found; all allocations use standard malloc/free."
-}

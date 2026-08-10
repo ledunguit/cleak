@@ -142,8 +142,9 @@ FN3 TN38. Gate `determinism-gate.sh` chứng nhận; đồng thời từ chối 
   cho một thay đổi code.
 - **Baseline mỏng & preprint:** chỉ LAMeD (EASE 2025) là peer-review đầy đủ cho leak C/C++;
   phần còn lại là preprint/tech-report (xem caveat ở [RELATED-WORK.md](RELATED-WORK.md)).
-- **Quy mô:** corpus chính là Juliet tổng hợp; real_projects mới 4 ca (2 cặp cJSON) → kết
-  luận trên dự án thực cần mở rộng corpus.
+- **Quy mô:** corpus chính là Juliet (tổng hợp, 1984 ca) + LAMeD (41 ca thật, 7 dự án,
+  positive-only) — không còn corpus tự sinh (`memory_leak_corpus`/`real_projects` đã bị xoá,
+  không đủ uy tín để làm căn cứ đánh giá).
 - **PHÁT HIỆN QUAN TRỌNG trên LAMeD thật (cjson 6 ca, materialize + chạy live cả 4 cấu hình).**
   **recall = 0% ở MỌI cấu hình**: `no_llm` và `llm_assisted`, *trước* và *sau* khi sửa discovery.
   Đây là kết quả phân-tầng, trung thực:
