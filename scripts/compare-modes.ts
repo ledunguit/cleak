@@ -1,11 +1,16 @@
 #!/usr/bin/env -S tsx
 /**
  * Compare the deterministic heuristic mode (no_llm) against the agentic mode
- * (llm_assisted) on the labeled corpus. Surfaces where the agent adds detections
+ * (llm_assisted) on a labeled corpus. Surfaces where the agent adds detections
  * or — just as important for the thesis — correctly dismisses false positives.
  *
- *   tsx scripts/compare-modes.ts          # all cases
- *   tsx scripts/compare-modes.ts 3        # first 3 cases
+ * Requires CORPUS_DIR pointing at a materialized corpus with a `corpus_manifest.json`
+ * whose case entries carry `expected_leak_count` (count-only ground truth) — e.g. a
+ * corpus ingested via `scripts/juliet/ingest.ts` or `scripts/lamed/ingest.ts` (see
+ * docs/DATASETS.md). There is no bundled default corpus.
+ *
+ *   CORPUS_DIR=demo/juliet_cwe401 tsx scripts/compare-modes.ts        # all cases
+ *   CORPUS_DIR=demo/juliet_cwe401 tsx scripts/compare-modes.ts 3      # first 3 cases
  */
 
 import { readFileSync, mkdirSync, writeFileSync } from 'node:fs';
@@ -16,7 +21,11 @@ import { loadConfig } from '@cleak/config';
 const cfg = loadConfig();
 
 const limit = process.argv[2] ? parseInt(process.argv[2], 10) : Infinity;
-const corpusDir = process.env.CORPUS_DIR ?? 'demo/memory_leak_corpus';
+const corpusDir = process.env.CORPUS_DIR;
+if (!corpusDir) {
+  console.error('✗ set CORPUS_DIR to a materialized corpus dir (see docs/DATASETS.md) — no bundled default corpus');
+  process.exit(1);
+}
 const staticUrl = cfg.staticUrl;
 
 const manifest = JSON.parse(readFileSync(join(corpusDir, 'corpus_manifest.json'), 'utf-8')) as {

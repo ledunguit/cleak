@@ -1,0 +1,228 @@
+{
+  "_meta": {
+    "name": "memhint-independent-reconstruction",
+    "purpose": "Independently-sourced real-project CWE-401 leak-fix commit oracle, covering the same 8-project target set as the MemHint paper (arXiv:2603.27224, github.com/jiekeshi/MemHint). NOT a reproduction of MemHint's own 54 confirmed bugs — that list is not published anywhere (repo ships only the detection tool + verified build commands, no ground-truth bug list; the paper only has aggregate per-project counts, no per-bug table). Every entry below was found independently via git log archaeology on each project's real upstream history (commit message pattern matching for genuine leak-fix commits, each diff manually read to confirm a real missing-free/CWE-401 fix, not a refactor or a different bug class like double-free/UAF) and is verifiable by anyone via the github_url field.",
+    "scope": "6 of 8 MemHint projects (Vim, tmux, Redis, curl, OpenSSL, FreeRDP) — FFmpeg and linux/staging skipped as stretch/optional per plan (large codebase, high build/audit cost, low ROI for the case-count target).",
+    "pinned_base_tags": {
+      "vim": "v9.2.0015",
+      "tmux": "3.6a",
+      "redis": "8.6-rc1",
+      "curl": "curl-8_19_0 (MemHint pinned curl-8_19_0-rc3; that exact RC tag no longer exists upstream, final release tag used instead)",
+      "openssl": "openssl-3.6.1",
+      "freerdp": "3.23.0"
+    },
+    "case_count": 19,
+    "labeling": "function-level (like LAMeD), CWE-401 only, positive-only (no clean/negative labels — same scoring convention as LAMeD: report recall + FP count, not precision/specificity/MCC)"
+  },
+  "cases": [
+    {
+      "id": "tmux_e6035495",
+      "project": "tmux",
+      "repo_url": "https://github.com/tmux/tmux.git",
+      "file": "format.c",
+      "function": "format_loop_sessions",
+      "fix_commit": "e603549563b585966431c9dac324639113e3a30a",
+      "parent_commit": "e80e0c761a82fe36a1452ad40ed54a0c09887412",
+      "github_url": "https://github.com/tmux/tmux/commit/e603549563b585966431c9dac324639113e3a30a",
+      "notes": "free(active)/free(all) missing at function's return path."
+    },
+    {
+      "id": "tmux_6c2dd193",
+      "project": "tmux",
+      "repo_url": "https://github.com/tmux/tmux.git",
+      "file": "image-sixel.c",
+      "function": "sixel_parse",
+      "fix_commit": "6c2dd193cf852a7a7ddca9dccff51b0f7908f9e3",
+      "parent_commit": "d0caf0a322b469a4582294d302b818a8d2590e0f",
+      "github_url": "https://github.com/tmux/tmux/commit/6c2dd193cf852a7a7ddca9dccff51b0f7908f9e3",
+      "notes": "error path used a shallow free() instead of the deep sixel_free(), leaking internal buffers."
+    },
+    {
+      "id": "tmux_d8370864",
+      "project": "tmux",
+      "repo_url": "https://github.com/tmux/tmux.git",
+      "file": "window-customize.c",
+      "function": "window_customize_draw_option",
+      "fix_commit": "d8370864f3b1e1d233d5f7bf7ccc93605d613aa4",
+      "parent_commit": "49dff83a0079476d70b589f9e2257f34041e0429",
+      "github_url": "https://github.com/tmux/tmux/commit/d8370864f3b1e1d233d5f7bf7ccc93605d613aa4",
+      "notes": "early goto-out on write failure skipped free(expanded)."
+    },
+    {
+      "id": "tmux_314f0ae9",
+      "project": "tmux",
+      "repo_url": "https://github.com/tmux/tmux.git",
+      "file": "window-copy.c",
+      "function": "window_copy_init",
+      "fix_commit": "314f0ae9649134ad508306199c75b2f4a7e4a2bb",
+      "parent_commit": "0835980ef16d09483d80ab286c82fb39edd9fc32",
+      "github_url": "https://github.com/tmux/tmux/commit/314f0ae9649134ad508306199c75b2f4a7e4a2bb",
+      "notes": "hyperlinks_copy() overwrote data->screen.hyperlinks without freeing the previous allocation."
+    },
+    {
+      "id": "curl_eca309c2",
+      "project": "curl",
+      "repo_url": "https://github.com/curl/curl.git",
+      "file": "lib/ldap.c",
+      "function": "ldap_do",
+      "fix_commit": "eca309c2a1fd60b8bf6b1ca19008ac601e99d40e",
+      "parent_commit": "54d5de53051c0580ea9dcd8fd1c7029b942e23fe",
+      "github_url": "https://github.com/curl/curl/commit/eca309c2a1fd60b8bf6b1ca19008ac601e99d40e",
+      "notes": "attribute not freed on an OOM path (WinLDAP)."
+    },
+    {
+      "id": "curl_1098e104",
+      "project": "curl",
+      "repo_url": "https://github.com/curl/curl.git",
+      "file": "src/tool_urlglob.c",
+      "function": "glob_set",
+      "fix_commit": "1098e1044e6aadb471999c88bd184132c3ebc3d8",
+      "parent_commit": "91b422d356a52d32708c02514d8ede66363e8847",
+      "github_url": "https://github.com/curl/curl/commit/1098e1044e6aadb471999c88bd184132c3ebc3d8",
+      "notes": "early return on range overflow skipped freeing the partially-built glob pattern."
+    },
+    {
+      "id": "curl_90b9f514",
+      "project": "curl",
+      "repo_url": "https://github.com/curl/curl.git",
+      "file": "src/tool_operate.c",
+      "function": "operate",
+      "fix_commit": "90b9f514581d671afcf66a59d4041e76f0a82cce",
+      "parent_commit": "b881bc0021f8237c0476238ae6c7ac57d94ae2b5",
+      "github_url": "https://github.com/curl/curl/commit/90b9f514581d671afcf66a59d4041e76f0a82cce",
+      "notes": "curlrc_path only freed on one branch; leaked when the tool exits before parse_args()."
+    },
+    {
+      "id": "openssl_64f09bd8",
+      "project": "openssl",
+      "repo_url": "https://github.com/openssl/openssl.git",
+      "file": "crypto/x509/x509_lu.c",
+      "function": "obj_ht_foreach_object",
+      "fix_commit": "64f09bd826e8fdefae67aea68ec1bfacefa1d5f4",
+      "parent_commit": "a89400969d49d42eb8699c6afaf2f613f917fc5b",
+      "github_url": "https://github.com/openssl/openssl/commit/64f09bd826e8fdefae67aea68ec1bfacefa1d5f4",
+      "notes": "memory leak in hashtable object iteration callback."
+    },
+    {
+      "id": "openssl_8be7309f",
+      "project": "openssl",
+      "repo_url": "https://github.com/openssl/openssl.git",
+      "file": "crypto/x509/v3_ncons.c",
+      "function": "nc_uri",
+      "fix_commit": "8be7309f34eecac16b23edfa2ea8de7c52a33b3d",
+      "parent_commit": "1f5a44a66df44751d999fc90751ce098975f18a6",
+      "github_url": "https://github.com/openssl/openssl/commit/8be7309f34eecac16b23edfa2ea8de7c52a33b3d",
+      "notes": "scheme buffer leak for schemeless URIs in name-constraints checking."
+    },
+    {
+      "id": "openssl_1f5a44a6",
+      "project": "openssl",
+      "repo_url": "https://github.com/openssl/openssl.git",
+      "file": "crypto/x509/pcy_cache.c",
+      "function": "policy_cache_new",
+      "fix_commit": "1f5a44a66df44751d999fc90751ce098975f18a6",
+      "parent_commit": "1f1ce7cad32746f2dbbba8bbc5e82492241cb94b",
+      "github_url": "https://github.com/openssl/openssl/commit/1f5a44a66df44751d999fc90751ce098975f18a6",
+      "notes": "ext_pcons leak in X.509 policy cache construction."
+    },
+    {
+      "id": "redis_2ba0194f",
+      "project": "redis",
+      "repo_url": "https://github.com/redis/redis.git",
+      "file": "src/t_zset.c",
+      "function": "zdiffAlgorithm2",
+      "fix_commit": "2ba0194fbe5820cab8602bfa633a7d27e97cabdd",
+      "parent_commit": "8e89e0b89f6a64016c99ed135b5fdff1e2102277",
+      "github_url": "https://github.com/redis/redis/commit/2ba0194fbe5820cab8602bfa633a7d27e97cabdd",
+      "notes": "leak on early exit in ZDIFF's algorithm 2."
+    },
+    {
+      "id": "redis_50f14699",
+      "project": "redis",
+      "repo_url": "https://github.com/redis/redis.git",
+      "file": "src/tracking.c",
+      "function": "trackingRememberKeys",
+      "fix_commit": "50f1469961c203f7280487eda28765e926f4f025",
+      "parent_commit": "9152df61dac3296227c3d5c01872c2f78bbb67fe",
+      "github_url": "https://github.com/redis/redis/commit/50f1469961c203f7280487eda28765e926f4f025",
+      "notes": "leak in client-side caching key tracking for PUBSUB commands."
+    },
+    {
+      "id": "redis_fe3ae0cc",
+      "project": "redis",
+      "repo_url": "https://github.com/redis/redis.git",
+      "file": "src/redis-cli.c",
+      "function": "clusterManagerFixSlotsCoverage",
+      "fix_commit": "fe3ae0ccacc5c9473fb2e98902ac8f673c11e7ee",
+      "parent_commit": "5aa6440cbc044f65c9bef8a69526b095333e8ccd",
+      "github_url": "https://github.com/redis/redis/commit/fe3ae0ccacc5c9473fb2e98902ac8f673c11e7ee",
+      "notes": "slot_nodes_str/slot sds buffers not freed on an error goto-cleanup path."
+    },
+    {
+      "id": "vim_67304a7e",
+      "project": "vim",
+      "repo_url": "https://github.com/vim/vim.git",
+      "file": "src/quickfix.c",
+      "function": "get_qfline_items",
+      "fix_commit": "67304a7e10a007b84654129fb4640f03c4d9ac7d",
+      "parent_commit": "8cddbfe468299fc7fe8bf669f43ca3a4a40b40b2",
+      "github_url": "https://github.com/vim/vim/commit/67304a7e10a007b84654129fb4640f03c4d9ac7d",
+      "notes": "leak on an allocation-failure path in quickfix line item building."
+    },
+    {
+      "id": "vim_8e54a347",
+      "project": "vim",
+      "repo_url": "https://github.com/vim/vim.git",
+      "file": "src/evalfunc.c",
+      "function": "f_getreginfo",
+      "fix_commit": "8e54a347396fad8137afcf3a27e4f5e187d8513d",
+      "parent_commit": "59271381f3a12e988aa1603eb3013f171db1594c",
+      "github_url": "https://github.com/vim/vim/commit/8e54a347396fad8137afcf3a27e4f5e187d8513d",
+      "notes": "leak on an allocation-failure path in getreginfo()'s implementation."
+    },
+    {
+      "id": "vim_fa3680c6",
+      "project": "vim",
+      "repo_url": "https://github.com/vim/vim.git",
+      "file": "src/insexpand.c",
+      "function": "ins_compl_infercase_gettext",
+      "fix_commit": "fa3680c6fa93b6bb2c96ae536f56c56750477cfc",
+      "parent_commit": "7908164c9d6a5ac7bda34d45681d6f298e32419d",
+      "github_url": "https://github.com/vim/vim/commit/fa3680c6fa93b6bb2c96ae536f56c56750477cfc",
+      "notes": "leak in an error case of insert-mode completion case inference."
+    },
+    {
+      "id": "freerdp_9fc23ad2",
+      "project": "freerdp",
+      "repo_url": "https://github.com/FreeRDP/FreeRDP.git",
+      "file": "libfreerdp/gdi/graphics.c",
+      "function": "gdi_create_bitmap",
+      "fix_commit": "9fc23ad2c2bcc361951556c49b5b018473bf9f3b",
+      "parent_commit": "00f53a716fca161b4794f73d0af73285afbde4e3",
+      "github_url": "https://github.com/FreeRDP/FreeRDP/commit/9fc23ad2c2bcc361951556c49b5b018473bf9f3b",
+      "notes": "memory leak in GDI bitmap creation."
+    },
+    {
+      "id": "freerdp_ce0301d8",
+      "project": "freerdp",
+      "repo_url": "https://github.com/FreeRDP/FreeRDP.git",
+      "file": "libfreerdp/core/connection.c",
+      "function": "rdp_client_establish_keys",
+      "fix_commit": "ce0301d8b540df574c920ad66b00131dcd2146f2",
+      "parent_commit": "2ee682de407117cb850c59d70bf0444ec0d6fd1f",
+      "github_url": "https://github.com/FreeRDP/FreeRDP/commit/ce0301d8b540df574c920ad66b00131dcd2146f2",
+      "notes": "memory leak in RDP key establishment during connection setup."
+    },
+    {
+      "id": "freerdp_43029225",
+      "project": "freerdp",
+      "repo_url": "https://github.com/FreeRDP/FreeRDP.git",
+      "file": "libfreerdp/core/settings.c",
+      "function": "freerdp_settings_int_buffer_copy",
+      "fix_commit": "4302922584b2d3db5ce638642d1e6cef281691f4",
+      "parent_commit": "16b850ac467c619c2a3a22684d39d3bc14bdf810",
+      "github_url": "https://github.com/FreeRDP/FreeRDP/commit/4302922584b2d3db5ce638642d1e6cef281691f4",
+      "notes": "memory leak in internal settings buffer copy helper."
+    }
+  ]
+}

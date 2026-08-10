@@ -1,0 +1,20 @@
+{
+  "schema": "corpus-lock/v1",
+  "corpus": "memhint",
+  "source": {
+    "name": "Independently-reconstructed real leak-fix commits, same 8-project target set as MemHint (arXiv:2603.27224) — see demo/memhint/memhint_bugs.json for methodology and per-case github_url verification links."
+  },
+  "ingestCommit": "639e840",
+  "toolVersions": {
+    "clang": "Apple clang version 21.0.0 (clang-2100.1.1.101)"
+  },
+  "contentHash": "67d4c98aa5d0e988922eef69e014b57e",
+  "validatedAt": "2026-08-09T16:28:28.253Z",
+  "validated": true,
+  "summary": {
+    "total": 19,
+    "clean": 19,
+    "warned": 0,
+    "quarantined": 0
+  }
+}

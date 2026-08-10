@@ -47,23 +47,21 @@ dist/
 *.zip
 /demo/juliet_cwe401/
 
-# Real-project corpus: materialized cases + cloned repos are regenerable via
-# scripts/real-projects/ingest.ts; only ground-truth.json is committed (the source).
-/demo/real_projects/cases/
-/demo/real_projects/.clones/
-/demo/real_projects/corpus_manifest.json
-
 # LAMeD benchmark corpus: regenerable via scripts/lamed/ingest.ts; only the
 # committed source (memleak_benchmark.json + cJSON-annotated.csv) is tracked.
 /demo/lamed/cases/
 /demo/lamed/.clones/
 /demo/lamed/corpus_manifest.json
 
-# Compiled demo-corpus binaries (rebuild from source via each case's Makefile)
-/demo/memory_leak_corpus/*/array_leak
-/demo/memory_leak_corpus/*/array_leak_*
-/demo/memory_leak_corpus/*/ownership_maze
-/demo/memory_leak_corpus/*/use_after_free
+# MemHint-derived corpus: regenerable via scripts/memhint/ingest.ts; only the
+# committed source (memhint_bugs.json — the independently-reconstructed
+# ground truth) is tracked.
+/demo/memhint/cases/
+/demo/memhint/.clones/
+/demo/memhint/corpus_manifest.json
+/demo/memhint/corpus_validation_report.json
+/demo/memhint/corpus_validation_report.md
+
 /demo/**/a.out
 
 # User-provided scan targets
@@ -76,7 +74,6 @@ dist/
 /demo/**/build/
 /demo/**/simple_leak
 /demo/**/simple_leak_asan
-/demo/memhint
 
 .antigravitycli
 
