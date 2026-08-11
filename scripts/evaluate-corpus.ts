@@ -44,6 +44,9 @@ Options:
   --dynamic <off|selective|aggressive>  Dynamic analysis mode
   --stratify [key]        Stratify sample evenly across case key
   --resume                Resume previous eval (per-case cache)
+  --out-dir <path>        Explicit output dir — REQUIRED for --resume to find
+                           the prior run's cache (otherwise a fresh timestamped
+                           dir is created and there is nothing to resume from)
   --concurrency <n>       Parallel case concurrency
   --static-tools <list>   Comma-separated static evidence tools
   --enrich / --no-enrich  Static enrichment stage
@@ -153,8 +156,11 @@ function parseCorpusArgs(): CorpusEvalOptions {
     toolSelect, staticDiscovery, dryRun, verbose,
   });
 
+  // --resume only has anything to resume FROM if pointed back at the exact
+  // prior run's directory — without --out-dir, a fresh timestamped dir is
+  // always empty, so --resume silently resumed nothing.
   const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-  const outDir = join(cfg.resultsDir, `eval-${parsed.mode}-${stamp}`);
+  const outDir = flag('out-dir') ?? join(cfg.resultsDir, `eval-${parsed.mode}-${stamp}`);
   mkdirSync(outDir, { recursive: true });
 
   return { ...parsed, outDir };
