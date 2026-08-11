@@ -122,8 +122,21 @@ export function extractLocalVariables(node: TreeSitterNode, lines: string[]): { 
   return result;
 }
 
-export function extractFunctionCalls(body: TreeSitterNode, lines: string[]): { name: string; line: number }[] {
-  const calls: { name: string; line: number }[] = [];
+/** Positional argument identifiers of a call, e.g. `badSink(data)` → `['data']`,
+ * `f(p->x, 1)` → `[null, null]`. Only bare identifiers are resolved. */
+export function extractCallArgs(expr: TreeSitterNode, lines: string[]): (string | null)[] {
+  const argList = findChild(expr, 'argument_list');
+  if (!argList) return [];
+  return (argList.children || [])
+    .filter((c: TreeSitterNode) => c.type !== '(' && c.type !== ')' && c.type !== ',')
+    .map((c: TreeSitterNode) => (c.type === 'identifier' ? nodeText(c, lines) : null));
+}
+
+export function extractFunctionCalls(
+  body: TreeSitterNode,
+  lines: string[],
+): { name: string; line: number; args: (string | null)[] }[] {
+  const calls: { name: string; line: number; args: (string | null)[] }[] = [];
   const callExprs = findAllNodes(body, 'call_expression');
   const visited = new Set<string>();
 
@@ -137,7 +150,7 @@ export function extractFunctionCalls(body: TreeSitterNode, lines: string[]): { n
     if (visited.has(key)) continue;
     visited.add(key);
 
-    calls.push({ name, line: (expr.startPosition?.row ?? 0) + 1 });
+    calls.push({ name, line: (expr.startPosition?.row ?? 0) + 1, args: extractCallArgs(expr, lines) });
   }
 
   return calls;

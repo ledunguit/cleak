@@ -54,6 +54,11 @@ export interface HeuristicAnalysis {
    * single-iteration `while(1){…;break;}` loops that free in a sibling block.
    */
   freedAnywhereInFunction: boolean;
+  /** The candidate's resolved variable name, when one could be determined (a
+   * real allocation call was found, or the candidate is `parameter_ownership`/
+   * `return_ownership`-anchored). Undefined when no source/candidate-site
+   * variable could be resolved at all. */
+  variable?: string;
 }
 
 const ALLOC_FNS = ALLOCATION_FN_PATTERN;
@@ -272,13 +277,14 @@ function findFunctionDefBounds(lines: string[], name: string): FunctionBounds | 
   return null;
 }
 
-/** Pointer parameter names from a signature line, e.g. `void f(char * data)` → [data]. */
+/** Pointer/reference parameter names from a signature line, e.g. `void f(char * data)`
+ * or C++ `void f(char &data)` → [data]. */
 function pointerParams(sigLine: string): string[] {
   const inner = (sigLine.match(/\(([^)]*)\)/) || [])[1] || '';
   return inner
     .split(',')
     .map((p) => {
-      const m = p.match(/\*\s*([A-Za-z_]\w*)\s*$/);
+      const m = p.match(/[*&]\s*([A-Za-z_]\w*)\s*$/);
       return m ? m[1] : null;
     })
     .filter((x): x is string => !!x);
@@ -317,6 +323,21 @@ export function isFreedViaCallee(
     }
   }
   return null;
+}
+
+/**
+ * Cross-file 1-hop interprocedural free: like `isFreedViaCallee`, but sourced
+ * from `bundle.staticEvidence.crossFileFreedVia` — evidence the orchestrator
+ * attaches at discovery time via `CallGraphService`'s project-wide ownership
+ * correlation, for the case where the freeing callee is defined in a DIFFERENT
+ * file than the candidate (`isFreedViaCallee`'s single-file regex scan can never
+ * find it there — see Juliet flow-variant ≥21, "sink functions are in a separate
+ * file from sources"). Purely additive: can only ever SUPPRESS a false leak claim
+ * when concrete cross-file free evidence exists, never fabricate one.
+ */
+function crossFileFreedViaCallee(bundle: LeakBundle, varName: string): { callee: string } | null {
+  const hit = bundle.staticEvidence?.crossFileFreedVia?.find((e) => e.variable === varName);
+  return hit ? { callee: hit.calleeFunction } : null;
 }
 
 /** Locate a caller of `fnName` elsewhere in the file (for interprocedural leaks). */
@@ -367,6 +388,44 @@ function describePattern(p: LeakPatternType): string {
 }
 
 /**
+ * A `parameter_ownership`/`return_ownership` candidate (F3, and the sink/
+ * dispatcher candidates synthesized from `callGraph`'s ownership correlation)
+ * has no allocation call to find — the variable of interest is a function
+ * PARAMETER (`:parameter:<name>`), a local extracted from a container
+ * (`:container:<name>` — same `parameter_ownership` allocation_type, but
+ * already anchored to a real line INSIDE the function body, not the
+ * signature), or a caller-side local assigned from a callee's return value
+ * (`:return_ownership:<name>`, also body-anchored) — encoded as a suffix on
+ * `allocation_site` (see `candidate-scan.service.ts` and `staticContext.ts`'s
+ * `applyOwnershipCorrelations`). `findAllocVar` searches for a malloc/calloc/…
+ * call near the candidate line and finds nothing for these — without this,
+ * `varName` stays null and every pattern branch below (which all gate on
+ * `varName`) is skipped, so the candidate never rises above 'low'.
+ */
+function siteVariableName(candidate: LeakCandidate): { name: string; anchoredAtSignature: boolean } | null {
+  const m = /:(parameter|container|return_ownership):([A-Za-z_]\w*)$/.exec(candidate.allocation_site || '');
+  if (!m) return null;
+  return { name: m[2], anchoredAtSignature: m[1] === 'parameter' };
+}
+
+/**
+ * `findEnclosingFunction` walks BACKWARD from its index counting brace depth —
+ * it requires that index to be INSIDE the function body (after the opening
+ * brace), or the backward walk never finds an unmatched `{` and returns null. A
+ * parameter_ownership candidate is anchored at the function's SIGNATURE line
+ * (before the brace), so advance to the brace first. Without this, the caller
+ * falls back to an arbitrary +20-line window that can bleed into the NEXT
+ * function's body — e.g. matching a `free()` call that belongs to a sibling
+ * function, not this one.
+ */
+function firstBraceLineFrom(lines: string[], fromIdx: number, maxLookahead = 5): number {
+  for (let i = fromIdx; i < Math.min(fromIdx + maxLookahead, lines.length); i++) {
+    if (lines[i].includes('{')) return i;
+  }
+  return fromIdx;
+}
+
+/**
  * Run the heuristic analysis. `fileContent` is the full source of
  * candidate.file_path (or null if unreadable).
  */
@@ -397,15 +456,27 @@ export function analyzeLeakHeuristically(
       structuralLikelihood:
         Number(ctx?.loopsWithAllocations || 0) > 0 || Number(ctx?.earlyReturnCount || 0) > 0 ? 'medium' : 'low',
       freedAnywhereInFunction: false,
+      variable: siteVariableName(candidate)?.name,
     };
   }
 
   const lines = fileContent.split('\n');
   const candIdx = Math.min(Math.max(allocLine - 1, 0), lines.length - 1);
-  const { varName, allocFn, lineIdx: allocLineIdx } = findAllocVar(lines, candIdx, candidate.allocation_type);
+  const found = findAllocVar(lines, candIdx, candidate.allocation_type);
+  const isOwnershipCandidate =
+    candidate.allocation_type === 'parameter_ownership' || candidate.allocation_type === 'return_ownership';
+  const siteVar = isOwnershipCandidate ? siteVariableName(candidate) : null;
+  const varName = found.varName ?? siteVar?.name ?? null;
+  const allocFn = found.allocFn;
   // Anchor all structural reasoning on the REAL allocation line (the candidate
-  // line can point a few lines off, e.g. at the function signature).
-  const allocIdx = varName ? allocLineIdx : candIdx;
+  // line can point a few lines off, e.g. at the function signature). A
+  // signature-anchored `:parameter:` candidate has no allocation line to
+  // find — it's anchored at the function SIGNATURE line, so advance to the
+  // opening brace (see `firstBraceLineFrom`'s doc comment for why
+  // `findEnclosingFunction` needs that). `:container:`/`:return_ownership:`
+  // candidates are already anchored to a real line INSIDE the function body
+  // (an extraction/assignment statement), so `candIdx` is used directly.
+  const allocIdx = found.varName ? found.lineIdx : siteVar?.anchoredAtSignature ? firstBraceLineFrom(lines, candIdx) : candIdx;
   const realAllocLine = allocIdx + 1;
   const fn = findEnclosingFunction(lines, allocIdx);
   const v = varName || 'ptr';
@@ -413,7 +484,7 @@ export function analyzeLeakHeuristically(
   const fnBounds: FunctionBounds = fn || { startIdx: allocIdx, endIdx: Math.min(allocIdx + 20, lines.length - 1) };
   const returned = varName ? returnsVar(lines, fnBounds, v) : false;
   // 1-hop interprocedural free: the pointer is handed to a sink that frees it.
-  const freedViaCalleeHit = varName ? isFreedViaCallee(lines, fnBounds, v) : null;
+  const freedViaCalleeHit = varName ? (isFreedViaCallee(lines, fnBounds, v) ?? crossFileFreedViaCallee(bundle, v)) : null;
   const loopHeader = loopEnclosingAlloc(lines, allocIdx, fnBounds);
   const inLoop = loopHeader >= 0;
   const earlyExitIdx = varName ? findEarlyLeakingExit(lines, allocIdx, fnBounds, v) : -1;
@@ -466,16 +537,26 @@ export function analyzeLeakHeuristically(
     if (caller) {
       const callerFn = findEnclosingFunction(lines, caller.callIdx);
       const cb = callerFn || { startIdx: caller.callIdx, endIdx: Math.min(caller.callIdx + 20, lines.length - 1) };
-      let anchor = findEarlyLeakingExit(lines, caller.callIdx, cb, caller.callerVar);
-      if (anchor < 0) anchor = findFinalExit(lines, cb);
-      repairDiff = insertFreeBefore(lines, anchor, caller.callerVar, allocFile);
-      missingFreeLine = anchor + 1;
       missingFreeFunction = functionNameAt(lines, cb.startIdx) || 'the caller';
       codeFlow.push(`${allocFnName}() returns \`${v}\`, transferring ownership to the caller`);
-      codeFlow.push(`caller assigns it to \`${caller.callerVar}\` at ${allocFile}:${caller.callIdx + 1} but never frees it`);
-      rootCauseDescription = `\`${allocFnName}()\` returns the allocation; the caller (\`${missingFreeFunction}\`) drops \`${caller.callerVar}\` without calling free().`;
-      // Confirmed only if the caller does not itself free the returned pointer.
-      structuralLikelihood = hasFreeOfVar(lines, caller.callIdx, cb.endIdx, caller.callerVar) ? 'low' : 'high';
+      // Confirmed only if the caller does not itself free the returned pointer —
+      // check this FIRST so the text below never claims "never frees it" when it
+      // demonstrably does (a real leak here, not just cosmetic: the repair diff
+      // below must not be generated for a caller that already frees correctly).
+      const callerFrees = hasFreeOfVar(lines, caller.callIdx, cb.endIdx, caller.callerVar);
+      structuralLikelihood = callerFrees ? 'low' : 'high';
+      if (callerFrees) {
+        codeFlow.push(`caller assigns it to \`${caller.callerVar}\` at ${allocFile}:${caller.callIdx + 1} and frees it there`);
+        rootCauseDescription = `\`${allocFnName}()\` returns the allocation; the caller (\`${missingFreeFunction}\`) frees \`${caller.callerVar}\` — ownership is consumed correctly, not leaked.`;
+        missingFreeLine = caller.callIdx + 1;
+      } else {
+        let anchor = findEarlyLeakingExit(lines, caller.callIdx, cb, caller.callerVar);
+        if (anchor < 0) anchor = findFinalExit(lines, cb);
+        repairDiff = insertFreeBefore(lines, anchor, caller.callerVar, allocFile);
+        missingFreeLine = anchor + 1;
+        codeFlow.push(`caller assigns it to \`${caller.callerVar}\` at ${allocFile}:${caller.callIdx + 1} but never frees it`);
+        rootCauseDescription = `\`${allocFnName}()\` returns the allocation; the caller (\`${missingFreeFunction}\`) drops \`${caller.callerVar}\` without calling free().`;
+      }
     } else {
       // Caller not in this file: anchor a best-effort free at the function's exit
       // is wrong (it returns the value), so emit guidance without a misleading diff.
@@ -537,11 +618,17 @@ export function analyzeLeakHeuristically(
     rootCauseDescription,
   };
 
-  const explanation =
-    freedViaCalleeHit && structuralLikelihood === 'low'
-      ? rootCauseDescription
-      : `${capitalize(pattern.replace(/_/g, ' '))}: ${rootCauseDescription} ` +
-        `The allocation at ${allocFile}:${realAllocLine}${varName ? ` (\`${v}\`)` : ''} has no matching free on the leaking path.`;
+  // Both "freed via callee" (parameter/sink direction) and "caller frees the
+  // returned value" (return-ownership direction, pattern === INTERPROCEDURAL_LEAK)
+  // already produce a self-sufficient, exonerating rootCauseDescription above —
+  // appending "has no matching free on the leaking path" to either would
+  // directly contradict it.
+  const exonerated =
+    (!!freedViaCalleeHit || pattern === LeakPatternType.INTERPROCEDURAL_LEAK) && structuralLikelihood === 'low';
+  const explanation = exonerated
+    ? rootCauseDescription
+    : `${capitalize(pattern.replace(/_/g, ' '))}: ${rootCauseDescription} ` +
+      `The allocation at ${allocFile}:${realAllocLine}${varName ? ` (\`${v}\`)` : ''} has no matching free on the leaking path.`;
 
   return {
     patternType: pattern,
@@ -551,6 +638,7 @@ export function analyzeLeakHeuristically(
     codeFlow,
     structuralLikelihood,
     freedAnywhereInFunction,
+    variable: varName ? v : undefined,
     ...(freedViaCalleeHit && structuralLikelihood === 'low'
       ? { freedViaCallee: { callee: freedViaCalleeHit.callee, variable: v } }
       : {}),

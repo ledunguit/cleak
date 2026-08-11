@@ -10,6 +10,7 @@
 
 import { basename } from 'node:path';
 import { coerceToObject } from './mcpResult';
+import { CandidateManager, normalizeCandidate } from './candidateState';
 import type {
   LeakBundle,
   AllocFreePair,
@@ -248,6 +249,181 @@ export function appendFeasibleLeakPaths(bundle: LeakBundle, paths: FeasibleLeakP
     leakyExitPaths: 0,
   };
   bundle.staticEvidence = { ...cur, feasibleLeakPaths: [...(cur.feasibleLeakPaths || []), ...paths] };
+}
+
+interface FreedCrossFileEntry {
+  callerFunction: string;
+  callerFile: string;
+  callerVariable: string;
+  callerAllocLine: number;
+  calleeFunction: string;
+  calleeFile: string;
+  calleeParam: string;
+  kind?: 'parameter' | 'container';
+}
+
+interface UnfreedSinkParamEntry {
+  calleeFunction: string;
+  calleeFile: string;
+  calleeParam: string;
+  calleeSigLine: number;
+  callerFunction: string;
+  callerFile: string;
+  callerVariable: string;
+  kind?: 'parameter' | 'container';
+}
+
+interface FreedViaCallerEntry {
+  calleeFunction: string;
+  calleeFile: string;
+  variable: string;
+  callerFunction: string;
+  callerFile: string;
+}
+
+interface UnfreedReturnOwnershipEntry {
+  callerFunction: string;
+  callerFile: string;
+  callerVariable: string;
+  callerAssignLine: number;
+  calleeFunction: string;
+  calleeFile: string;
+}
+
+/**
+ * Apply `callGraph`'s project-wide ownership correlation (the Juliet flow-variant
+ * ≥21 fix — "sink functions are in a separate file from sources" — plus its
+ * multi-hop and container-transport extensions, and its return-value mirror):
+ *
+ *  1. `freedCrossFile`: a caller's heap allocation is passed to a callee (`kind:
+ *     'parameter'`, possibly several hops away — see `walkOwnershipChain` in
+ *     `CallGraphService`) or into a container that a callee later extracts from
+ *     (`kind: 'container'`) that frees it. Attaches `crossFileFreedVia` to the
+ *     caller's bundle so the heuristic judge's `isFreedViaCallee` (same-file-only
+ *     regex scan) can be exonerated by this cross-file evidence too. Purely
+ *     additive — can only ever SUPPRESS a false leak claim, never fabricate one.
+ *  2. `unfreedSinkParams`: a caller's heap allocation reaches a callee parameter
+ *     (or a container-extracted local, `kind: 'container'`) never freed on ANY
+ *     path. Synthesizes a new candidate at the callee's own signature line
+ *     (parameter case) or extraction line (container case — already inside the
+ *     function body, see `parameter_ownership`'s `:container:` site suffix
+ *     handling in `heuristic-leak-analysis.ts`), so the existing single-file
+ *     judge — which already correctly concludes "never freed anywhere in this
+ *     function" once a candidate exists there — gets a chance to run on it.
+ *     Narrow by design: only fires when a call site demonstrably passes a REAL
+ *     heap allocation, never for an ordinary borrow-only parameter.
+ *  3. `freedViaCaller` / `unfreedReturnOwnership`: the MIRROR of 1/2 for the
+ *     opposite data-flow direction (Juliet flow-variant 42-45/61-68) — a
+ *     function ALLOCATES and RETURNS a pointer instead of receiving one as a
+ *     parameter. `freedViaCaller` attaches `staticEvidence.freedViaCaller` to
+ *     the ALLOCATING callee's own bundle (exonerating it when the caller
+ *     correctly frees the returned value); `unfreedReturnOwnership` synthesizes
+ *     a candidate at the DISPATCHER's assignment line (`data =
+ *     someAllocatingFn();`) — a shape that previously got no candidate at all,
+ *     since it neither allocates directly nor has a pointer parameter.
+ *
+ * Unconditional at discovery time — runs in `no_llm` and `llm_assisted` alike, no
+ * `--enrich`/`--static-tools` gate, so both modes see the same corrected candidate
+ * set and static evidence.
+ */
+export function applyOwnershipCorrelations(
+  candidates: CandidateManager,
+  callGraphResult: unknown,
+  toHostPath: (p: string) => string,
+): void {
+  const cg = coerceToObject<{
+    ownershipCorrelations?: {
+      freedCrossFile?: FreedCrossFileEntry[];
+      unfreedSinkParams?: UnfreedSinkParamEntry[];
+      freedViaCaller?: FreedViaCallerEntry[];
+      unfreedReturnOwnership?: UnfreedReturnOwnershipEntry[];
+    };
+  }>(callGraphResult);
+  const oc = cg.ownershipCorrelations;
+  if (!oc) return;
+
+  const bundles = candidates.getAllBundles();
+  for (const e of oc.freedCrossFile ?? []) {
+    const hostFile = toHostPath(e.callerFile);
+    const b = bundles.find(
+      (bd) =>
+        bd.candidate.function_name === e.callerFunction &&
+        sameFile(bd.candidate.file_path, hostFile) &&
+        Math.abs(bd.candidate.line_number - e.callerAllocLine) <= 2,
+    );
+    if (!b) continue;
+    const cur: StaticLeakEvidence = b.staticEvidence ?? {
+      allocFreePairs: [],
+      feasibleLeakPaths: [],
+      earlyReturnCount: 0,
+      leakyExitPaths: 0,
+    };
+    mergeStaticEvidence(b, {
+      crossFileFreedVia: [
+        ...(cur.crossFileFreedVia ?? []),
+        { calleeFunction: e.calleeFunction, calleeFile: toHostPath(e.calleeFile), variable: e.callerVariable },
+      ],
+    });
+  }
+
+  for (const e of oc.unfreedSinkParams ?? []) {
+    const hostFile = toHostPath(e.calleeFile);
+    const isContainer = e.kind === 'container';
+    candidates.ingest(
+      normalizeCandidate(
+        {
+          functionName: e.calleeFunction,
+          filePath: hostFile,
+          lineNumber: e.calleeSigLine,
+          allocationSite: `${hostFile}:${e.calleeSigLine}:${isContainer ? 'container' : 'parameter'}:${e.calleeParam}`,
+          allocationType: 'parameter_ownership',
+          confidence: 'medium',
+          context: isContainer
+            ? `container element '${e.calleeParam}' extracted from a container carrying a heap allocation from ${e.callerFunction}() is never freed on any path`
+            : `parameter '${e.calleeParam}' receives a heap allocation from ${e.callerFunction}() and is never freed on any path`,
+        },
+        (p) => p,
+      ),
+    );
+  }
+
+  for (const e of oc.freedViaCaller ?? []) {
+    const hostFile = toHostPath(e.calleeFile);
+    const b = bundles.find(
+      (bd) => bd.candidate.function_name === e.calleeFunction && sameFile(bd.candidate.file_path, hostFile),
+    );
+    if (!b) continue;
+    const cur: StaticLeakEvidence = b.staticEvidence ?? {
+      allocFreePairs: [],
+      feasibleLeakPaths: [],
+      earlyReturnCount: 0,
+      leakyExitPaths: 0,
+    };
+    mergeStaticEvidence(b, {
+      freedViaCaller: [
+        ...(cur.freedViaCaller ?? []),
+        { calleeFunction: e.calleeFunction, calleeFile: hostFile, variable: e.variable },
+      ],
+    });
+  }
+
+  for (const e of oc.unfreedReturnOwnership ?? []) {
+    const hostFile = toHostPath(e.callerFile);
+    candidates.ingest(
+      normalizeCandidate(
+        {
+          functionName: e.callerFunction,
+          filePath: hostFile,
+          lineNumber: e.callerAssignLine,
+          allocationSite: `${hostFile}:${e.callerAssignLine}:return_ownership:${e.callerVariable}`,
+          allocationType: 'return_ownership',
+          confidence: 'medium',
+          context: `'${e.callerVariable}' is assigned from ${e.calleeFunction}()'s return value (a known allocate-and-return function) and is never freed on any path`,
+        },
+        (p) => p,
+      ),
+    );
+  }
 }
 
 /**

@@ -118,12 +118,26 @@ export const FeasibleLeakPathSchema = z.object({
   feasibilityChecked: z.enum(['heuristic', 'none']),
 });
 
+export const CrossFileFreedViaSchema = z.object({
+  calleeFunction: z.string(),
+  calleeFile: z.string(),
+  variable: z.string(),
+});
+
+export const FreedViaCallerSchema = z.object({
+  calleeFunction: z.string(),
+  calleeFile: z.string(),
+  variable: z.string(),
+});
+
 export const StaticLeakEvidenceSchema = z.object({
   ownership: OwnershipSummarySchema.optional(),
   allocFreePairs: z.array(AllocFreePairSchema),
   feasibleLeakPaths: z.array(FeasibleLeakPathSchema),
   earlyReturnCount: z.number().int(),
   leakyExitPaths: z.number().int(),
+  crossFileFreedVia: z.array(CrossFileFreedViaSchema).optional(),
+  freedViaCaller: z.array(FreedViaCallerSchema).optional(),
 });
 
 export const LeakRootCauseSchema = z.object({

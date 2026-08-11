@@ -131,6 +131,31 @@ export interface ScanBuildDiagnostic {
   confidence: 'high' | 'medium' | 'low';
 }
 
+/** A callee (possibly in another file) provably frees the pointer this variable
+ * was allocated to, via a call-argument correlation — see `CallGraphService`'s
+ * `ownershipCorrelations.freedCrossFile`. Fixes the false-positive class where a
+ * candidate's own file only prototypes the sink function that actually frees it
+ * (Juliet flow-variant ≥21: "sink functions are in a separate file from sources"). */
+export interface CrossFileFreedVia {
+  calleeFunction: string;
+  calleeFile: string;
+  variable: string;
+}
+
+/** The MIRROR of `CrossFileFreedVia` for the opposite data-flow direction: this
+ * candidate's own function ALLOCATES and RETURNS a pointer, and a caller
+ * (possibly in another file) provably frees the returned value — see
+ * `CallGraphService`'s `ownershipCorrelations.freedViaCaller`. Fixes the
+ * false-positive class where a function's own return-ownership transfer is
+ * misjudged as a leak by static evidence that only ever looks inside that one
+ * function (Juliet flow-variant 42-45/61-68: "data returned from one function
+ * to another"). */
+export interface FreedViaCaller {
+  calleeFunction: string;
+  calleeFile: string;
+  variable: string;
+}
+
 export interface StaticLeakEvidence {
   ownership?: OwnershipSummary;
   allocFreePairs: AllocFreePair[];
@@ -141,6 +166,8 @@ export interface StaticLeakEvidence {
    * `--static-tools scanBuild`). A diagnostic near the candidate corroborates the
    * heuristic — a deterministic second static opinion. Absent unless scanBuild ran. */
   scanBuildDiagnostics?: ScanBuildDiagnostic[];
+  crossFileFreedVia?: CrossFileFreedVia[];
+  freedViaCaller?: FreedViaCaller[];
 }
 
 // ── Control-flow evidence ──

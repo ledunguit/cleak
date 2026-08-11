@@ -103,8 +103,22 @@ export EVAL_STATIC_URL=http://127.0.0.1:50061/mcp EVAL_DYNAMIC_URL=http://127.0.
 **Tier-1 — `no_llm` tất định bit-for-bit:**
 ```bash
 bash scripts/determinism-gate.sh         # 2 lần chạy no_llm vào 2 thư mục TÁCH BIỆT → assert
-# Kỳ vọng: ✓ DETERMINISTIC · overall {tp:29,fp:7,fn:3,tn:38}
+# Kỳ vọng (Docker mặc định, CHƯA set eval.staticPathMap): ✓ DETERMINISTIC ·
+# overall {tp:29,fp:7,fn:9,tn:81}
 ```
+> ⚠️ **`callGraph`'s cross-function/cross-file ownership-correlation fix (2026-08-11,
+> xem CURRENT_STATUS.md) cần `eval.staticPathMap` để hoạt động khi analyzer chạy
+> Docker** — `callGraph` đọc file THẲNG TỪ ĐĨA phía server (`readFileSync`), không
+> nhận content inline như `candidateScan`. Không set path map ⇒ correlation pass
+> lặng lẽ không tìm thấy gì (file host path không tồn tại trong container) và bỏ
+> qua — KHÔNG lỗi, chỉ mất phần cải thiện P/R từ fix đó. Để bật đầy đủ với stack
+> Docker của repo này (mount `./demo:/workspace/demo`):
+> ```bash
+> cleak config set eval.staticPathMap "$(pwd)/demo=/workspace/demo"
+> ```
+> Với path map trên, `determinism-gate.sh` (LIMIT=30) cho
+> `{tp:33,fp:4,fn:5,tn:84}` thay vì số ở trên — vẫn tất định bit-for-bit, chỉ khác
+> vì correlation pass giờ tìm được đúng cross-file evidence.
 
 **Tier-2 — verdict-stability (dao động LLM):**
 ```bash

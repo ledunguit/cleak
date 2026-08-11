@@ -68,7 +68,7 @@ export function createStaticMcpServer(svc: StaticToolServices): McpServer {
 
   server.registerTool(
     'callGraph',
-    { description: 'Extract call graph edges and nodes. Optionally supply per-project allocators/deallocators so the alloc→free reachability chains track factory allocators.', inputSchema: { rootPath: z.string(), files: z.array(z.string()), extraAllocators: z.array(z.string()).optional(), extraDeallocators: z.array(z.string()).optional() } },
+    { description: 'Extract call graph edges and nodes, plus cross-function/cross-file ownership correlations (a caller\'s heap allocation passed into a callee parameter — freed there, or never freed on any path). Optionally supply per-project allocators/deallocators so the alloc→free reachability chains track factory allocators.', inputSchema: { rootPath: z.string(), files: z.array(z.string()), extraAllocators: z.array(z.string()).optional(), extraDeallocators: z.array(z.string()).optional() } },
     async (a) => ok(await svc.callGraph.extract(a.rootPath, a.files, a.extraAllocators, a.extraDeallocators)),
   );
 

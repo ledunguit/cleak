@@ -41,6 +41,19 @@ export function nodeText(node: TreeSitterNode | null | undefined, lines: string[
   return text.trim();
 }
 
+/** The receiver object of a method call, e.g. `dataVector` in `dataVector.insert(...)`
+ * or `dataVector->insert(...)` — both parse to the same `field_expression` shape in
+ * tree-sitter-cpp, differing only in the `.`/`->` token. `getCallFunctionNameNode`
+ * resolves the METHOD name from this same node but never the receiver; this is the
+ * missing half, needed to track a value carried through a container by tying an
+ * insert-into-`container` call at the caller to an extract-from-`container` at the
+ * callee. Null for a plain function call (`first.type === 'identifier'`). */
+export function getCallReceiverNode(expr: TreeSitterNode): TreeSitterNode | null {
+  const first = (expr.children || [])[0];
+  if (!first || first.type !== 'field_expression') return null;
+  return findChild(first, 'identifier') ?? null;
+}
+
 export function getCallFunctionNameNode(expr: TreeSitterNode): TreeSitterNode | null {
   const children = expr.children || [];
   const first = children[0];

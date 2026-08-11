@@ -101,6 +101,7 @@ export async function runTuiScan(store: TuiStore, req: TuiScanRequest): Promise<
         onAgentEvent: (ev, agent) => store.applyAgentEvent(ev, agent),
         onModelActivity: (dir) => store.setIo(dir === 'send' ? 'up' : 'down'),
         requestPermission: (r) => store.requestPermission(r),
+        evalStaticPathMap: cfg.evalStaticPathMap,
       },
     );
     writeReports(

@@ -1,11 +1,90 @@
 import type { TreeSitterNode } from '../../types/tree-sitter';
 import type { FunctionInfo } from './c-parser.types';
-import { findAllNodes, findChild, nodeText, getCallFunctionNameNode, extractDeclaratorName } from './ast-utils';
+import {
+  findAllNodes, findChild, nodeText, getCallFunctionNameNode, getCallReceiverNode, extractDeclaratorName,
+} from './ast-utils';
 import {
   extractFunctionName, extractParameters, extractLocalVariables,
   extractFunctionCalls, isAllocationCall, extractReturnStatements, extractConditions,
-  extractStorageClass, extractReturnType,
+  extractStorageClass, extractReturnType, extractCallArgs,
 } from './extraction-helpers';
+
+// Deliberately closed, STL-specific method sets — narrow by design, same
+// "evidence-gated, no whole-program alias analysis" philosophy as the rest of
+// this file. `emplace_*` omitted: not observed anywhere in the corpus this
+// was built against; add if a real case needs it.
+const CONTAINER_INSERT_METHODS = new Set(['insert', 'push_back', 'push_front']);
+const CONTAINER_EXTRACT_METHODS = new Set(['front', 'back', 'at']);
+
+/** A heap-allocated variable inserted into a container: `dataVector.insert(...,
+ * data)`, `dataList.push_back(data)` (call-shaped), or `dataMap[0] = data`
+ * (subscript-assignment-shaped, map style). The container's identity — not the
+ * original variable's — is what survives into a cross-function call argument. */
+function extractContainerCarriers(
+  node: TreeSitterNode,
+  lines: string[],
+): { container: string; variable: string; line: number }[] {
+  const body = findChild(node, 'compound_statement');
+  if (!body) return [];
+  const result: { container: string; variable: string; line: number }[] = [];
+
+  for (const expr of findAllNodes(body, 'call_expression')) {
+    const fnNode = getCallFunctionNameNode(expr);
+    const name = fnNode ? nodeText(fnNode, lines) : '';
+    if (!CONTAINER_INSERT_METHODS.has(name)) continue;
+    const receiver = getCallReceiverNode(expr);
+    if (!receiver) continue;
+    const container = nodeText(receiver, lines);
+    for (const arg of extractCallArgs(expr, lines)) {
+      if (arg) result.push({ container, variable: arg, line: (expr.startPosition?.row ?? 0) + 1 });
+    }
+  }
+
+  for (const expr of findAllNodes(body, 'assignment_expression')) {
+    const left = expr.children?.[0];
+    const right = expr.children?.[expr.children.length - 1];
+    if (!left || !right || left.type !== 'subscript_expression' || right.type !== 'identifier') continue;
+    const base = left.children?.[0];
+    if (!base || base.type !== 'identifier') continue;
+    result.push({ container: nodeText(base, lines), variable: nodeText(right, lines), line: (left.startPosition?.row ?? 0) + 1 });
+  }
+
+  return result;
+}
+
+/** A local variable pulled back OUT of a container: `char *data = dataVector[2];`
+ * (subscript-shaped) or `char *data = dataList.front()/.back()/.at(i);`
+ * (call-shaped). Ties a container-typed parameter to the local pointer variable
+ * that then needs the usual leak check. */
+function extractContainerExtractions(
+  node: TreeSitterNode,
+  lines: string[],
+): { variable: string; container: string; line: number }[] {
+  const body = findChild(node, 'compound_statement');
+  if (!body) return [];
+  const result: { variable: string; container: string; line: number }[] = [];
+
+  for (const decl of findAllNodes(body, 'init_declarator')) {
+    const value = decl.children?.[decl.children.length - 1];
+    if (!value) continue;
+    if (value.type === 'subscript_expression') {
+      const base = value.children?.[0];
+      if (base?.type !== 'identifier') continue;
+      const varName = extractDeclaratorName(decl, lines);
+      if (varName) result.push({ variable: varName, container: nodeText(base, lines), line: (decl.startPosition?.row ?? 0) + 1 });
+    } else if (value.type === 'call_expression') {
+      const fnNode = getCallFunctionNameNode(value);
+      const name = fnNode ? nodeText(fnNode, lines) : '';
+      if (!CONTAINER_EXTRACT_METHODS.has(name)) continue;
+      const receiver = getCallReceiverNode(value);
+      if (!receiver) continue;
+      const varName = extractDeclaratorName(decl, lines);
+      if (varName) result.push({ variable: varName, container: nodeText(receiver, lines), line: (decl.startPosition?.row ?? 0) + 1 });
+    }
+  }
+
+  return result;
+}
 
 function extractAllocationVariables(
   node: TreeSitterNode,
@@ -185,6 +264,8 @@ export function buildFunctionInfo(
     const allocationVariables = extractAllocationVariables(funcNode, lines, allocationCalls, allocSet);
     const freedVariables = extractFreedVariables(funcNode, lines, deallocationCalls, freeSet);
     const assignedCalls = extractAssignedCalls(funcNode, lines, allocSet);
+    const containerCarriers = extractContainerCarriers(funcNode, lines);
+    const containerExtractions = extractContainerExtractions(funcNode, lines);
 
     const fn: FunctionInfo = {
       functionName,
@@ -200,6 +281,8 @@ export function buildFunctionInfo(
       allocationVariables,
       freedVariables,
       assignedCalls,
+      containerCarriers,
+      containerExtractions,
       lineNumber: (funcNode.startPosition?.row ?? 0) + 1,
       endLine: (funcNode.endPosition?.row ?? 0) + 1,
       controlFlow: { nodes: [], edges: [], entryNodeId: 0, exitNodeId: 0 },

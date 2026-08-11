@@ -359,7 +359,15 @@ async function runScanAndReport(
       staticDiscovery: opts.staticDiscovery,
       staticTools: opts.staticTools,
     },
-    { staticClient, dynamicClient, emitter, pathResolver, investigation, abortSignal: opts.signal },
+    {
+      staticClient,
+      dynamicClient,
+      emitter,
+      pathResolver,
+      investigation,
+      abortSignal: opts.signal,
+      evalStaticPathMap: cfg.evalStaticPathMap,
+    },
   );
 
   // Sum logical MCP calls across both analyzer clients (the investigation phase

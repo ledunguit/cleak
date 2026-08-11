@@ -9,7 +9,9 @@ export interface FunctionInfo {
   /** `static` = internal linkage — a harness in a separate translation unit can't
    * link this function; it must #include the defining source file instead. */
   storageClass: 'static' | 'extern' | 'none';
-  functionCalls: { name: string; line: number }[];
+  /** `args[i]` is the identifier name when argument i is a bare identifier, else
+   * `null` (complex expression/literal/field access — not resolved, kept simple). */
+  functionCalls: { name: string; line: number; args: (string | null)[] }[];
   allocationCalls: { name: string; line: number }[];
   deallocationCalls: { name: string; line: number }[];
   returnStatements: { line: number; text: string }[];
@@ -17,6 +19,14 @@ export interface FunctionInfo {
   allocationVariables: { variable: string; line: number; callName: string }[];
   freedVariables: { variable: string; line: number }[];
   assignedCalls: { variable: string; line: number; callName: string }[];
+  /** A heap-allocated variable inserted into a container: `dataVector.insert(...,
+   * data)`, `dataList.push_back(data)`, `dataMap[0] = data` — the value's identity
+   * survives cross-function only as `container`, not `variable`, once passed on. */
+  containerCarriers: { container: string; variable: string; line: number }[];
+  /** A local variable pulled back OUT of a container parameter: `char *data =
+   * dataVector[2];`, `dataList.front()`/`.back()`/`.at(i)`. Ties a container-typed
+   * parameter back to the local pointer variable that then needs a leak check. */
+  containerExtractions: { variable: string; container: string; line: number }[];
   lineNumber: number;
   /** 1-based line of the function's closing brace (tree-sitter endPosition). Enables
    * accurate line→enclosing-function attribution (candidate-scan) instead of the old

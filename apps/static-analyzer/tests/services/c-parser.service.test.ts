@@ -64,6 +64,32 @@ void leaky(const char *name) {
   });
 });
 
+describe('CParserService — call-argument capture (functionCalls.args)', () => {
+  test('a bare-identifier argument is captured by name; complex expressions are null', async () => {
+    const svc = new CParserService();
+    const content = `
+void badSink(char *data) {
+    ;
+}
+void caller(void) {
+    char *buf = malloc(10);
+    badSink(buf);
+    badSink(buf->field);
+    badSink(get_ptr());
+    badSink(1);
+}
+`;
+    const { functions } = await svc.parse(content, 'a.c');
+    const caller = functions.find((f) => f.functionName === 'caller')!;
+    expect(caller.functionCalls.filter((c) => c.name === 'badSink').map((c) => c.args)).toEqual([
+      ['buf'],
+      [null],
+      [null],
+      [null],
+    ]);
+  });
+});
+
 // Requires a built `dist/apps/static-analyzer/workers/parse.worker.js` (`pnpm run build`
 // or `nest build static-analyzer`) — skipped otherwise so a stale/missing dist doesn't
 // break a plain `pnpm test` run. This is the actual regression test for the bug the

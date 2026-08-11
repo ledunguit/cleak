@@ -11,6 +11,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import {
   InvestigationVerdict,
   ToolKind,
+  LeakPatternType,
   type LeakBundle,
   type VerdictResult,
   type RepairDiff,
@@ -239,6 +240,38 @@ export function judgeHeuristically(
       explanation: `\`${analysis.freedViaCallee.variable}\` is freed in callee \`${analysis.freedViaCallee.callee}()\` — ownership is consumed by the sink, not leaked.`,
       evidence: bundle.evidence.map((e) => `${e.tool}: ${e.function_name}`),
       tool: ToolKind.HEURISTIC,
+    };
+  }
+
+  // Return-value ownership: the MIRROR of the freedViaCallee short-circuit
+  // above, for the opposite data-flow direction (Juliet flow-variant
+  // 42-45/61-68 — a function ALLOCATES and RETURNS a pointer, rather than
+  // receiving one as a parameter). Two ways this gets confirmed:
+  //   - `se?.freedViaCaller` — project-wide correlation (same-file OR
+  //     cross-file) already found a caller that frees the returned value
+  //     (see CallGraphService's correlateReturnOwnership()).
+  //   - `analysis.structuralLikelihood === 'low'` on an INTERPROCEDURAL_LEAK
+  //     pattern — analyzeLeakHeuristically's OWN same-file caller lookup
+  //     (findCallerAssignment/hasFreeOfVar) already reached this conclusion.
+  // Without this, `se.allocFreePairs`/`se.feasibleLeakPaths` below (both
+  // function-scoped, blind to the caller freeing the return value) sum to a
+  // confident false CONFIRMED_LEAK regardless of what `analysis` already
+  // correctly determined — verified against a real transcript replay
+  // (char_calloc_42's goodB2GSource, score 0.85, structuralLikelihood 'low').
+  const freedViaCallerVar =
+    !!analysis.variable && se?.freedViaCaller?.some((e) => e.variable === analysis.variable);
+  if (
+    (freedViaCallerVar ||
+      (analysis.patternType === LeakPatternType.INTERPROCEDURAL_LEAK && analysis.structuralLikelihood === 'low')) &&
+    !correlatedRuntimeLeak
+  ) {
+    return {
+      verdict: InvestigationVerdict.LIKELY_FALSE_POSITIVE,
+      confidence: 0.8,
+      explanation: analysis.explanation,
+      evidence: bundle.evidence.map((e) => `${e.tool}: ${e.function_name}`),
+      tool: ToolKind.HEURISTIC,
+      rootCause: analysis.rootCause,
     };
   }
 

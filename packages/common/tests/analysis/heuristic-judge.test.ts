@@ -68,9 +68,60 @@ const GOOD_DEADCODE = `static void goodB2G1()
 
 const CALLOC_LINE = 7; // calloc sits on line 7 in every fixture above
 
+// Flow-variant 22: the freeing sink is only PROTOTYPED here — defined in a
+// sibling file `judge-test-*/case_22b.c`, invisible to `isFreedViaCallee`'s
+// same-file scan. Real cross-file evidence comes from `staticEvidence.crossFileFreedVia`.
+const CROSS_FILE_CALLER = `void goodB2G1Sink(char * data);
+
+static void goodB2G1()
+{
+    char * data;
+    data = NULL;
+    data = (char *)calloc(100, sizeof(char));
+    goodB2G1Sink(data);
+}
+`; // calloc sits on line 7, matching CALLOC_LINE
+
+// Flow-variant 42: `goodB2GSource()` allocates and RETURNS `data`; the caller
+// `goodB2G()` frees it right after the call. Both in the SAME file — exercises
+// analyzeLeakHeuristically's own findCallerAssignment path (structuralLikelihood
+// 'low'), not the crossFileFreedVia-style project-wide correlation.
+const RETURN_OWNERSHIP_SAME_FILE = `static char * goodB2GSource(void)
+{
+    char *data = (char *)calloc(100, sizeof(char));
+    return data;
+}
+
+static void goodB2G(void)
+{
+    char *data;
+    data = goodB2GSource();
+    free(data);
+}
+`; // goodB2GSource's calloc sits on line 3
+
+// Flow-variant 61: the Source is defined in a file that has NO dispatcher at
+// all (the real freeing dispatcher lives in a sibling file this fixture
+// deliberately does not include) — same-file findCallerAssignment can't see
+// any caller here (there simply isn't one in this file), so it degrades to
+// 'medium'; only project-wide `staticEvidence.freedViaCaller` can exonerate it.
+const RETURN_OWNERSHIP_CROSS_FILE = `static char * goodB2GSource(void)
+{
+    char *data = (char *)calloc(100, sizeof(char));
+    return data;
+}
+`; // goodB2GSource's calloc sits on line 3
+
 beforeAll(() => {
   dir = mkdtempSync(join(tmpdir(), 'judge-test-'));
-  for (const [name, src] of Object.entries({ GOOD_LOOP, BAD_LOOP, GOOD_DEADCODE })) {
+  for (const [name, src] of Object.entries({
+    GOOD_LOOP,
+    BAD_LOOP,
+    GOOD_DEADCODE,
+    CROSS_FILE_CALLER,
+    RETURN_OWNERSHIP_SAME_FILE,
+    RETURN_OWNERSHIP_CROSS_FILE,
+  })) {
     const p = join(dir, `${name}.c`);
     writeFileSync(p, src);
     files[name] = p;
@@ -78,7 +129,12 @@ beforeAll(() => {
 });
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
 
-function bundle(fileKey: string, fn: string, evidence: Partial<LeakEvidence>[] = []): LeakBundle {
+function bundle(
+  fileKey: string,
+  fn: string,
+  evidence: Partial<LeakEvidence>[] = [],
+  crossFileFreedVia?: { calleeFunction: string; calleeFile: string; variable: string }[],
+): LeakBundle {
   const file = files[fileKey];
   return {
     bundleId: 'b',
@@ -93,6 +149,57 @@ function bundle(fileKey: string, fn: string, evidence: Partial<LeakEvidence>[] =
       context: '',
     },
     evidence: evidence as LeakEvidence[],
+    ...(crossFileFreedVia
+      ? { staticEvidence: { allocFreePairs: [], feasibleLeakPaths: [], earlyReturnCount: 0, leakyExitPaths: 0, crossFileFreedVia } }
+      : {}),
+    status: 'pending',
+    createdAt: '',
+    updatedAt: '',
+  } as unknown as LeakBundle;
+}
+
+/**
+ * Mirrors the REAL `llm_assisted`-mode scenario (verified via a transcript
+ * replay of char_calloc_42's `goodB2GSource` FP, score 0.85): `functionSummary`/
+ * `pathConstraints` are function-scoped and blind to interprocedural
+ * return-ownership — they see "allocated, no local free, returns" and mark it
+ * `status: 'unpaired'`/`leakRisk: 'high'` regardless of whether the caller
+ * frees it. Without those, a `structuralLikelihood: 'medium'` candidate alone
+ * never crosses the `likely` threshold — the additive scoring from this BLIND
+ * static evidence is what actually produces the false positive, which is why
+ * this helper always populates it (`freedViaCaller`, when passed, is the ONLY
+ * thing that should be able to override it).
+ */
+function returnOwnershipBundle(
+  fileKey: string,
+  fn: string,
+  lineNumber: number,
+  variable: string,
+  freedViaCaller?: { calleeFunction: string; calleeFile: string; variable: string }[],
+): LeakBundle {
+  const file = files[fileKey];
+  return {
+    bundleId: 'b',
+    candidate: {
+      id: 'c',
+      function_name: fn,
+      file_path: file,
+      line_number: lineNumber,
+      allocation_site: `${file}:${lineNumber}`,
+      allocation_type: 'calloc',
+      confidence: 'high',
+      context: '',
+    },
+    evidence: [],
+    staticEvidence: {
+      allocFreePairs: [{ variable, allocLine: lineNumber, allocCall: 'calloc', allocFile: file, freeLine: null, freeFunction: null, bindsToNewVariable: true, status: 'unpaired' }],
+      feasibleLeakPaths: [
+        { kind: 'return', exitLine: lineNumber + 1, reachable: true, conditions: [], unreconciledAllocations: [variable], leakRisk: 'high', narrative: '', feasibilityChecked: 'heuristic' },
+      ],
+      earlyReturnCount: 0,
+      leakyExitPaths: 0,
+      ...(freedViaCaller ? { freedViaCaller } : {}),
+    },
     status: 'pending',
     createdAt: '',
     updatedAt: '',
@@ -142,6 +249,42 @@ describe('judgeHeuristically — precision fixes', () => {
   test('bad loop with no free IS flagged (recall preserved)', () => {
     const v = judgeHeuristically(bundle('BAD_LOOP', 'bad'));
     expect(flagged(v.verdict)).toBe(true);
+  });
+
+  test('without crossFileFreedVia evidence, a cross-file sink is confidently mis-flagged (regression guard for the bug)', () => {
+    const v = judgeHeuristically(bundle('CROSS_FILE_CALLER', 'goodB2G1'));
+    expect(flagged(v.verdict)).toBe(true);
+  });
+
+  test('crossFileFreedVia evidence (Juliet flow-variant 22: sink defined in a sibling file) exonerates', () => {
+    const v = judgeHeuristically(
+      bundle('CROSS_FILE_CALLER', 'goodB2G1', [], [
+        { calleeFunction: 'goodB2G1Sink', calleeFile: '/virtual/case_22b.c', variable: 'data' },
+      ]),
+    );
+    expect(v.verdict).toBe('likely_false_positive');
+    expect(flagged(v.verdict)).toBe(false);
+  });
+
+  test('return-value ownership, same file (Juliet flow-variant 42): a Source whose dispatcher frees it is NOT flagged', () => {
+    const v = judgeHeuristically(returnOwnershipBundle('RETURN_OWNERSHIP_SAME_FILE', 'goodB2GSource', 3, 'data'));
+    expect(v.verdict).toBe('likely_false_positive');
+    expect(flagged(v.verdict)).toBe(false);
+  });
+
+  test('without freedViaCaller evidence, a cross-file return-ownership Source is confidently mis-flagged by blind function-scoped static evidence (regression guard for the bug)', () => {
+    const v = judgeHeuristically(returnOwnershipBundle('RETURN_OWNERSHIP_CROSS_FILE', 'goodB2GSource', 3, 'data'));
+    expect(flagged(v.verdict)).toBe(true);
+  });
+
+  test('freedViaCaller evidence (Juliet flow-variant 61: dispatcher defined in a sibling file) exonerates', () => {
+    const v = judgeHeuristically(
+      returnOwnershipBundle('RETURN_OWNERSHIP_CROSS_FILE', 'goodB2GSource', 3, 'data', [
+        { calleeFunction: 'goodB2GSource', calleeFile: files.RETURN_OWNERSHIP_CROSS_FILE, variable: 'data' },
+      ]),
+    );
+    expect(v.verdict).toBe('likely_false_positive');
+    expect(flagged(v.verdict)).toBe(false);
   });
 
   test('exercised_clean coverage on a dead-code good variant → likely_false_positive (exonerated)', () => {

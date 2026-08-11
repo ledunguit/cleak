@@ -36,6 +36,7 @@ import {
   attachScanBuildDiagnostics,
   interproceduralLeakPaths,
   appendFeasibleLeakPaths,
+  applyOwnershipCorrelations,
   type StaticContextStore,
 } from '../domain/staticContext';
 import { coerceToObject } from '../domain/mcpResult';
@@ -129,6 +130,20 @@ function analyzerPath(hostPath: string, pathMap?: string): string {
   const from = pathMap.slice(0, eq);
   const to = pathMap.slice(eq + 1);
   return abs.startsWith(from) ? to + abs.slice(from.length) : abs;
+}
+
+/** Inverse of `analyzerPath` — maps a path the analyzer returned (e.g. a `callGraph`
+ * callee's file) back to the host filesystem. Identity when `pathMap` is unset (the
+ * host-run analyzer default). With `pathMap` set (Docker), this is a literal-prefix
+ * inverse of the `from=to` substitution above — not yet verified against a real
+ * path-mapped Docker run, unlike the unset-pathMap default used by Juliet/local runs. */
+function hostPath(analyzerP: string, pathMap?: string): string {
+  if (!pathMap) return analyzerP;
+  const eq = pathMap.indexOf('=');
+  if (eq < 0) return analyzerP;
+  const from = pathMap.slice(0, eq);
+  const to = pathMap.slice(eq + 1);
+  return analyzerP.startsWith(to) ? from + analyzerP.slice(to.length) : analyzerP;
 }
 
 async function enrichStaticEvidence(
@@ -367,6 +382,32 @@ async function runDiscovery(
         `${filesScanFailed} scan-failed · ${filesZeroCandidates} zero-candidate · ` +
         `${rawCandidatesSeen} raw candidates seen · ${candidates.getAllBundles().length} candidates ingested`,
     );
+
+    // Cross-function/cross-file ownership correlation (Juliet flow-variant ≥21 fix):
+    // exonerate a candidate whose allocation is freed via a callee in a DIFFERENT
+    // file, and synthesize a candidate at a sink parameter that's never freed on
+    // ANY path — neither is reachable from the per-file candidateScan/F3 mechanism
+    // above. Unconditional (no --enrich/--static-tools gate) so no_llm and
+    // llm_assisted see the same corrected candidate set. Best-effort: a correlation
+    // failure must never abort discovery, same as every other tool call here.
+    if (cFiles.length > 0) {
+      try {
+        const cgResult = await deps.staticClient.callTool(
+          'callGraph',
+          {
+            rootPath: analyzerPath(input.repoPath, deps.evalStaticPathMap),
+            files: cFiles.map((f) => analyzerPath(f, deps.evalStaticPathMap)),
+            ...(input.extraAllocators?.length ? { extraAllocators: input.extraAllocators } : {}),
+            ...(input.extraDeallocators?.length ? { extraDeallocators: input.extraDeallocators } : {}),
+          },
+          { timeoutMs: 180_000 },
+        );
+        applyOwnershipCorrelations(candidates, cgResult, (p) => hostPath(p, deps.evalStaticPathMap));
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error(`ownership correlation (callGraph) failed: ${msg}`);
+      }
+    }
     if (candidates.getAllBundles().length === 0) {
       warning =
         cFiles.length === 0
