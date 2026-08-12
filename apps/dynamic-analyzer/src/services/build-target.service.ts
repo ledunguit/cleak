@@ -1,8 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { execSync, execFileSync } from 'child_process';
 import { existsSync, readdirSync, statSync, writeFileSync, realpathSync } from 'fs';
-import { join } from 'path';
+import { join, resolve } from 'path';
 import type { BuildTargetResponse } from '../types/mcp-responses';
+import { assertInsideWorkspace, isPathInside } from './path-guard';
 
 @Injectable()
 export class BuildTargetService {
@@ -16,17 +17,27 @@ export class BuildTargetService {
     const timeout = timeoutSec || 300;
     const errors: string[] = [];
 
-    if (!existsSync(projectPath)) {
+    // WORKSPACE_ROOT containment (SECURITY.md): a caller-supplied project path
+    // must resolve inside the sandbox — never build/run an arbitrary host path.
+    let canonicalProject: string;
+    try {
+      canonicalProject = assertInsideWorkspace(projectPath);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return { success: false, binaryPath: '', buildLog: '', errors: [msg] };
+    }
+
+    if (!existsSync(canonicalProject)) {
       return {
         success: false,
         binaryPath: '',
         buildLog: '',
-        errors: [`Project path does not exist: ${projectPath}`],
+        errors: [`Project path does not exist: ${canonicalProject}`],
       };
     }
 
     // Create a wrapper build script to capture output and binary path
-    const buildScriptPath = join(projectPath, '.mcpvul_build.sh');
+    const buildScriptPath = join(canonicalProject, '.mcpvul_build.sh');
 
     // Adapt sanitizer flags for the host platform
     const adaptedCommand = this.adaptSanitizerFlags(buildCommand);
@@ -38,19 +49,27 @@ export class BuildTargetService {
     const useDocker = this.shouldUseDockerBuild(adaptedCommand);
 
     if (useDocker) {
-      return this.buildWithDocker(projectPath, adaptedCommand, timeout);
+      return this.buildWithDocker(canonicalProject, adaptedCommand, timeout);
     }
 
     // Native build
     try {
+      // RESIDUAL RISK (documented, per docs/SECURITY.md): `buildCommand` is an
+      // operator-supplied shell command executed as-is via execSync — this is
+      // INHERENT to "build the scanned project" (Make/CMake/autotools all need
+      // a shell). We never interpolate untrusted content into it ourselves, and
+      // the WORKSPACE_ROOT check above pins its cwd to the scanned project dir.
+      // The untrusted repo's own build scripts can run arbitrary commands —
+      // that is the trust model's accepted risk (mitigated by --network none
+      // / ulimits / container confinement), not an injection by this code.
       const buildLog = execSync(adaptedCommand, {
-        cwd: projectPath,
+        cwd: canonicalProject,
         timeout: timeout * 1000,
         encoding: 'utf-8',
         maxBuffer: 10 * 1024 * 1024,
       });
 
-      const binaryPath = this.findBinary(projectPath, buildLog);
+      const binaryPath = this.findBinary(canonicalProject, buildLog);
 
       return {
         success: true,
@@ -84,6 +103,10 @@ export class BuildTargetService {
     const containerWorkDir = '/workspace';
 
     // Write build command to a script
+    // RESIDUAL RISK: `buildCommand` is operator-supplied and shell-executed
+    // inside the build container (an /bin/sh script body) — inherent to running
+    // the scanned project's own build. WORKSPACE_ROOT containment on
+    // `projectPath` (enforced in build()) bounds where this script can operate.
     const scriptContent = `#!/bin/sh
 set -e
 cd ${containerWorkDir}
@@ -162,11 +185,14 @@ echo "---BUILD_COMPLETE---"
   }
 
   private findBinary(projectPath: string, buildLog: string): string {
-    // Extract binary name from build log (after -o flag)
+    // The `-o <file>` value comes from the UNTRUSTED build script's own output —
+    // `path.resolve` collapses any `..`/absolute segments and the containment
+    // check keeps the candidate inside the scanned project (a malicious build
+    // log can't point the returned binary path at an arbitrary host location).
     const oMatch = buildLog.match(/-o\s+(\S+)/);
     if (oMatch) {
-      const candidate = join(projectPath, oMatch[1]);
-      if (existsSync(candidate) && isExecutable(candidate)) return candidate;
+      const candidate = resolve(projectPath, oMatch[1]);
+      if (isPathInside(candidate, projectPath) && existsSync(candidate) && isExecutable(candidate)) return candidate;
     }
 
     // Try common output names

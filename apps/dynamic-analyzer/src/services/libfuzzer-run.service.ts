@@ -12,6 +12,7 @@ import { Injectable } from '@nestjs/common';
 import { RunManagerService } from './run-manager.service';
 import { ResultParserService } from './result-parser.service';
 import { runConfined, sanitizeRunId } from './safe-exec';
+import { assertExecutablePath } from './path-guard';
 
 @Injectable()
 export class LibfuzzerRunService {
@@ -25,8 +26,18 @@ export class LibfuzzerRunService {
     const budget = Math.max(1, Math.floor(maxTotalTimeSec || 15));
     const timeout = timeoutSec || budget + 30;
 
+    // WORKSPACE_ROOT / RUNS_DIR containment (SECURITY.md): a caller-supplied
+    // binaryPath must not point at an arbitrary host executable.
+    let canonicalBinary: string;
+    try {
+      canonicalBinary = assertExecutablePath(binaryPath);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return { success: false, runId, findings: [], rawOutput: msg };
+    }
+
     const args = [`-max_total_time=${budget}`, '-runs=-1', '-close_fd_mask=3'];
-    const result = await runConfined(binaryPath, args, {
+    const result = await runConfined(canonicalBinary, args, {
       timeoutSec: timeout,
       env: { ...process.env, LSAN_OPTIONS: 'verbosity=1:log_threads=1', ASAN_OPTIONS: 'detect_leaks=1' },
       unlimitedAddressSpace: true,
@@ -34,7 +45,7 @@ export class LibfuzzerRunService {
     const output = result.stderr || result.stdout;
     const findings = this.resultParser.parseLsanOutput(output);
 
-    this.runManager.saveRun(runId, { tool: 'libfuzzer', binaryPath, output, findings, success: true });
+    this.runManager.saveRun(runId, { tool: 'libfuzzer', binaryPath: canonicalBinary, output, findings, success: true });
 
     return { success: true, runId, findings, rawOutput: output };
   }

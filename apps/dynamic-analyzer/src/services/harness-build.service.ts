@@ -21,11 +21,12 @@
  */
 
 import { Injectable, Logger } from '@nestjs/common';
-import { existsSync, mkdirSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from 'fs';
+import { existsSync, mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from 'fs';
 import * as fs from 'fs';
-import { basename, join, resolve, sep } from 'path';
+import { basename, join, sep } from 'path';
 import { CompileCommandsService, extractReusableFlags, resolveCompileEntry } from './compile-commands.service';
 import { runConfined, sanitizeRunId, intEnv } from './safe-exec';
+import { assertInsideWorkspace, isPathInside } from './path-guard';
 
 const MAX_CLOSURE_FILES = 8;
 /** Cap on retained `harness_*` run directories under RUNS_DIR — each one carries
@@ -70,16 +71,32 @@ export class HarnessBuildService {
     const runDir = join(runsDir, runId);
     mkdirSync(runDir, { recursive: true });
 
-    if (!existsSync(input.projectPath)) {
+    // WORKSPACE_ROOT containment (SECURITY.md): the scanned project must live
+    // inside the sandbox; projectReal is the canonical root for file checks.
+    let projectReal: string;
+    try {
+      projectReal = assertInsideWorkspace(input.projectPath);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return this.fail(runId, [msg]);
+    }
+    if (!existsSync(projectReal)) {
       return this.fail(runId, [`Project path does not exist: ${input.projectPath}`]);
     }
 
-    // Containment: harness/closure file paths must resolve inside projectPath — an
-    // LLM-authored `targetFile`/`closureFiles` value must not escape the scanned repo.
-    const projectReal = realpathSync(input.projectPath);
+    // Containment: harness/closure file paths must resolve inside projectPath —
+    // an LLM-authored `targetFile`/`closureFiles` value must not escape the
+    // scanned repo. assertInsideWorkspace realpaths the deepest existing
+    // ancestor, so a symlink inside the project that points OUTSIDE is rejected.
     for (const f of [input.targetFile, ...closureFiles]) {
-      const resolved = resolve(f);
-      if (resolved !== projectReal && !resolved.startsWith(projectReal + sep)) {
+      let canonical: string;
+      try {
+        canonical = assertInsideWorkspace(f);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return this.fail(runId, [`Path outside workspace: ${f} (${msg})`]);
+      }
+      if (!isPathInside(canonical, projectReal)) {
         return this.fail(runId, [`Path outside project: ${f}`]);
       }
     }

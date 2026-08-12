@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { writeFileSync, readFileSync, existsSync, mkdirSync, readdirSync } from 'fs';
 import { join } from 'path';
+import { sanitizeRunId } from './safe-exec';
 
 export interface RunRecord {
   runId: string;
@@ -23,8 +24,11 @@ export class RunManagerService {
   }
 
   saveRun(runId: string, data: Partial<RunRecord>): void {
+    // runId reaches the filesystem as a filename — sanitize to [A-Za-z0-9_] so
+    // a crafted id can never traverse out of RUNS_DIR (SECURITY.md).
+    const id = sanitizeRunId(runId, 'run');
     const record: RunRecord = {
-      runId,
+      runId: id,
       tool: data.tool || 'unknown',
       binaryPath: data.binaryPath || '',
       output: data.output || '',
@@ -32,11 +36,16 @@ export class RunManagerService {
       success: data.success || false,
       createdAt: new Date().toISOString(),
     };
-    writeFileSync(join(this.runsDir, `${runId}.json`), JSON.stringify(record, null, 2));
+    writeFileSync(join(this.runsDir, `${id}.json`), JSON.stringify(record, null, 2));
   }
 
   async getRun(runId: string): Promise<RunRecord | null> {
-    const filePath = join(this.runsDir, `${runId}.json`);
+    // Same sanitization on READ: valgrindGetReport/valgrindListFindings/
+    // valgrindCompareRuns pass a caller-supplied runId that previously reached
+    // join(runsDir, `${runId}.json`) unsanitized — a `../..` id could read an
+    // arbitrary *.json file outside RUNS_DIR.
+    const id = sanitizeRunId(runId, 'run');
+    const filePath = join(this.runsDir, `${id}.json`);
     if (!existsSync(filePath)) return null;
     return JSON.parse(readFileSync(filePath, 'utf-8'));
   }

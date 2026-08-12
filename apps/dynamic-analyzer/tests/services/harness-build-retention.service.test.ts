@@ -1,4 +1,4 @@
-import { describe, expect, test, vi } from 'vitest';
+import { describe, expect, test, vi, afterAll } from 'vitest';
 import { mkdirSync, mkdtempSync, readdirSync, realpathSync, rmSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
@@ -34,10 +34,24 @@ vi.mock('../../src/services/safe-exec', () => ({
 import { HarnessBuildService } from '../../src/services/harness-build.service';
 import { CompileCommandsService } from '../../src/services/compile-commands.service';
 
+// HarnessBuildService now enforces WORKSPACE_ROOT containment (path-guard.ts) —
+// project/runs dirs must live inside a sandbox root. getWorkspaceRoot() caches
+// on first call, so the env is set ONCE at module top and every dir is created
+// under the same (canonical) root.
+const sandboxRoot = realpathSync(mkdtempSync(join(tmpdir(), 'cleak-ws-')));
+const prevWorkspaceRoot = process.env.WORKSPACE_ROOT;
+process.env.WORKSPACE_ROOT = sandboxRoot;
+
+afterAll(() => {
+  if (prevWorkspaceRoot === undefined) delete process.env.WORKSPACE_ROOT;
+  else process.env.WORKSPACE_ROOT = prevWorkspaceRoot;
+  rmSync(sandboxRoot, { recursive: true, force: true });
+});
+
 describe('HarnessBuildService — run-dir retention', () => {
   test('keeps only DYNAMIC_HARNESS_MAX_RUN_DIRS most recent harness_* directories', async () => {
-    const runsDir = realpathSync(mkdtempSync(join(tmpdir(), 'cleak-runs-')));
-    const projectDir = realpathSync(mkdtempSync(join(tmpdir(), 'cleak-proj-')));
+    const runsDir = mkdtempSync(join(sandboxRoot, 'runs-'));
+    const projectDir = mkdtempSync(join(sandboxRoot, 'proj-'));
     writeFileSync(join(projectDir, 'util.c'), 'char *f(void){return 0;}');
     const prevRunsDir = process.env.RUNS_DIR;
     const prevMax = process.env.DYNAMIC_HARNESS_MAX_RUN_DIRS;

@@ -16,9 +16,10 @@
  */
 
 import { Injectable, Logger } from '@nestjs/common';
-import { existsSync, readFileSync, realpathSync, unlinkSync } from 'fs';
+import { existsSync, readFileSync, unlinkSync } from 'fs';
 import { isAbsolute, join, relative, resolve, sep } from 'path';
 import { runConfined } from './safe-exec';
+import { assertInsideWorkspace } from './path-guard';
 
 export interface CompileEntry {
   directory: string;
@@ -136,10 +137,19 @@ export class CompileCommandsService {
   /** Ensure `compile_commands.json` exists at `projectPath` (capturing it via `bear`
    * if absent) and return it parsed into a `relative-path → flags` index. */
   async capture(projectPath: string, buildCommand: string, timeoutSec = 300): Promise<CompileCommandsResult> {
-    const key = existsSync(projectPath) ? realpathSync(projectPath) : projectPath;
+    // WORKSPACE_ROOT containment (SECURITY.md): never run `bear` over a project
+    // path outside the sandbox.
+    let canonical: string;
+    try {
+      canonical = assertInsideWorkspace(projectPath);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return { index: new Map(), error: msg };
+    }
+    const key = existsSync(canonical) ? canonical : projectPath;
     const existing = this.inFlight.get(key);
     if (existing) return existing;
-    const p = this.doCapture(projectPath, buildCommand, timeoutSec).finally(() => this.inFlight.delete(key));
+    const p = this.doCapture(canonical, buildCommand, timeoutSec).finally(() => this.inFlight.delete(key));
     this.inFlight.set(key, p);
     return p;
   }
@@ -147,6 +157,10 @@ export class CompileCommandsService {
   private async doCapture(projectPath: string, buildCommand: string, timeoutSec: number): Promise<CompileCommandsResult> {
     const cdbPath = join(projectPath, 'compile_commands.json');
     if (!existsSync(cdbPath)) {
+      // RESIDUAL RISK (per docs/SECURITY.md): `buildCommand` is an
+      // operator-supplied shell command — `sh -c` interprets its own syntax,
+      // exactly as BuildTargetService's execSync does. Nothing untrusted is
+      // interpolated by this code; the outer call is argv-array, no shell.
       const result = await runConfined('bear', ['--', 'sh', '-c', buildCommand], {
         cwd: projectPath,
         timeoutSec,

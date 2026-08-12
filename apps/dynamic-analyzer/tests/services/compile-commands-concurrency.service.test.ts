@@ -1,4 +1,4 @@
-import { describe, expect, test, vi } from 'vitest';
+import { describe, expect, test, vi, afterAll } from 'vitest';
 import { mkdtempSync, rmSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
@@ -31,9 +31,23 @@ vi.mock('../../src/services/safe-exec', () => ({
 
 import { CompileCommandsService } from '../../src/services/compile-commands.service';
 
+// capture() now enforces WORKSPACE_ROOT containment (path-guard.ts) — the
+// per-test temp projects must live inside a sandbox root. getWorkspaceRoot()
+// caches on first call, so the env is set ONCE at module top (before any
+// capture()) and every project dir is created under the same root.
+const sandboxRoot = mkdtempSync(join(tmpdir(), 'cleak-ws-'));
+const prevWorkspaceRoot = process.env.WORKSPACE_ROOT;
+process.env.WORKSPACE_ROOT = sandboxRoot;
+
+afterAll(() => {
+  if (prevWorkspaceRoot === undefined) delete process.env.WORKSPACE_ROOT;
+  else process.env.WORKSPACE_ROOT = prevWorkspaceRoot;
+  rmSync(sandboxRoot, { recursive: true, force: true });
+});
+
 describe('CompileCommandsService.capture — concurrency', () => {
   test('two concurrent capture() calls for the same project run bear only ONCE', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'cleak-cdb-'));
+    const dir = mkdtempSync(join(sandboxRoot, 'case-'));
     try {
       mockRunConfined.mockClear();
       const svc = new CompileCommandsService();
@@ -48,7 +62,7 @@ describe('CompileCommandsService.capture — concurrency', () => {
   });
 
   test('a later capture() after the first resolves does NOT re-invoke bear (file already cached)', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'cleak-cdb-'));
+    const dir = mkdtempSync(join(sandboxRoot, 'case-'));
     try {
       mockRunConfined.mockClear();
       const svc = new CompileCommandsService();

@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { RunManagerService } from './run-manager.service';
 import { ResultParserService } from './result-parser.service';
 import { runConfined, sanitizeRunId } from './safe-exec';
+import { assertExecutablePath } from './path-guard';
 
 @Injectable()
 export class ValgrindService {
@@ -22,8 +23,11 @@ export class ValgrindService {
     const xmlPath = `/tmp/${id}.xml`;
 
     try {
+      // WORKSPACE_ROOT / RUNS_DIR containment: never run a caller-supplied
+      // binary from an arbitrary host path (SECURITY.md).
+      const canonicalBinary = assertExecutablePath(binaryPath);
       // No shell: valgrind + the untrusted binary + its args go through an argv array.
-      const vgArgs = ['--tool=memcheck', '--leak-check=full', '--xml=yes', `--xml-file=${xmlPath}`, binaryPath, ...(args || [])];
+      const vgArgs = ['--tool=memcheck', '--leak-check=full', '--xml=yes', `--xml-file=${xmlPath}`, canonicalBinary, ...(args || [])];
       console.error(`[Valgrind] Running: valgrind ${vgArgs.join(' ')}`);
       const result = await runConfined('valgrind', vgArgs, { timeoutSec: timeout, unlimitedAddressSpace: true });
       const output = result.stdout || result.stderr;
