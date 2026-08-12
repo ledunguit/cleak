@@ -87,6 +87,20 @@ a high-level index into it, not a duplicate.
   real, understood precision/ground-truth-matching trade-off, not a defect.
   Groups NOT in this fix's scope (43-45, 62-68, 81-84) stayed unchanged as
   expected — see "Known limitations" below.
+- **Juliet full 1658-case `llm_assisted` run, post return-value-ownership +
+  multi-hop + container-transport fix (2026-08-12):** 1658/1658 scored, 0
+  errors, 0 skipped — resumed cleanly across an unplanned mid-run machine
+  reboot (verified via case-cache mtime/dedup cross-checks: zero
+  recomputation, zero orphaned/duplicate cache entries). Overall
+  **P 77.9% / R 77.3% / F1 0.776 / MCC 0.610** (TP 1992, FP 566, FN 586,
+  TN 2895, accuracy 80.9%) — well above the same-day `no_llm` baseline
+  directly above on every headline metric (P +13.6pp, R +23.2pp, F1 +0.189,
+  MCC +0.283). Confirms the LLM judge materially recovers recall on the
+  borderline band the heuristic layer alone leaves at `uncertain`, without
+  giving back precision. Provider: `oc/deepseek-v4-flash-free`,
+  temperature 0, consensus n=1. This is the current best full-corpus result
+  for the system end-to-end (static fan-out + heuristic + LLM judge, no
+  dynamic stage).
 - A single-case proof (historical, libtiff) confirmed the full HYBRID
   pipeline (Stages A→B→B2→C→D) finds a real leak end-to-end through the
   LLM-orchestrated path, not just the static-only path.
