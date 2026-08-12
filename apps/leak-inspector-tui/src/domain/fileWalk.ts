@@ -31,6 +31,16 @@ const SKIP_DIRS = new Set([
   'examples',
   'benchmark',
   'benchmarks',
+  // Same rationale: archived/legacy tool snapshots, vendored contrib code, and
+  // documentation dirs never hold the labeled flaw on real projects (verified on
+  // LAMeD's libtiff case: archive/tools/bmp2tiff.c and contrib/dbs/xtiff/xtiff.c
+  // got scanned and MCP-timed-out on functionSummary/pathConstraints, while the
+  // real flaw lives in tools/tiffmedian.c) — pure noise, wasted MCP/LLM calls.
+  'archive',
+  'contrib',
+  'doc',
+  'docs',
+  'man',
 ]);
 
 /**

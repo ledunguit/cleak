@@ -113,6 +113,10 @@ export interface RunConfig {
   baselines: BaselinesConfig;
   /** Eval-time host→container path remapping (format: "from=to"). */
   evalStaticPathMap?: string;
+  /** Wall-clock deadline per eval case, ms. 0/undefined = disabled (no cap). */
+  evalMaxCaseMs: number;
+  /** Soft $ cap per eval case (checked at turn granularity). 0/undefined = disabled. */
+  evalMaxCaseCostUsd: number;
   /** User-supplied $/1M-token price table, keyed by exact model ID string
    * (must match `llm.model`). No baked-in defaults — filled in by the user via
    * `cleak config set pricing.<modelId>.inputPerMillion <price>`. */

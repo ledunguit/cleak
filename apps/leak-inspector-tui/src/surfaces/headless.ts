@@ -84,6 +84,10 @@ export interface HeadlessOptions {
   onEvent?: (ev: ScanEvent) => void;
   /** Interrupt discovery + the agentic loop (e.g. eval cancel). */
   signal?: AbortSignal;
+  /** Fired on every token-usage increment (allocator profiling, strategist, Stage
+   * A/D) — lets a caller track live spend without waiting for the scan to finish
+   * (e.g. the eval harness's per-case cost cap). Purely observational. */
+  onUsageDelta?: (d: { inputTokens: number; outputTokens: number }) => void;
 }
 
 export interface HeadlessResult extends ScanResult {
@@ -165,6 +169,7 @@ export async function runHeadless(opts: HeadlessOptions): Promise<HeadlessResult
   const addPreUsage = (u: { inputTokens: number; outputTokens: number }) => {
     preUsage.inputTokens += u.inputTokens;
     preUsage.outputTokens += u.outputTokens;
+    opts.onUsageDelta?.(u);
   };
 
   const { extraAllocators, extraDeallocators, ownershipNotes } = await runAllocatorProfile(
@@ -185,6 +190,15 @@ export async function runHeadless(opts: HeadlessOptions): Promise<HeadlessResult
   const startedAt = Date.now();
   try {
     return await runScanAndReport(cfg, dir, opts, startedAt, staticClient, dynamicClient, analysisMode, scanId, repoPath, dynamicMode, extraAllocators, extraDeallocators, ownershipNotes, emitter, pathResolver, investigation, preUsage);
+  } catch (err) {
+    // Live counters (already in scope regardless of throw site) — lets a caller
+    // that aborted mid-scan (e.g. a per-case budget cap) report what was actually
+    // spent instead of a misleading 0, without needing usage tracked all the way
+    // up through the throw itself.
+    if (err instanceof Error) {
+      (err as Error & { partialMcpCalls?: number }).partialMcpCalls = staticClient.callCount + (dynamicClient?.callCount ?? 0);
+    }
+    throw err;
   } finally {
     await staticClient.close();
     await dynamicClient?.close();
@@ -367,6 +381,7 @@ async function runScanAndReport(
       investigation,
       abortSignal: opts.signal,
       evalStaticPathMap: cfg.evalStaticPathMap,
+      onUsageDelta: opts.onUsageDelta,
     },
   );
 

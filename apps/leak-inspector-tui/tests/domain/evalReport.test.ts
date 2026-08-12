@@ -179,6 +179,24 @@ describe('reportMarkdown', () => {
     expect(report_md).toContain('| Precision | 0.800 (80.0%) |');
   });
 
+  test('omits the Extra findings section when there are none', () => {
+    const { report_md } = writeAndRead(makeEvalResult());
+    expect(report_md).not.toContain('## Extra findings');
+  });
+
+  test('renders the Extra findings section when present, never inside the confusion matrix', () => {
+    const { report_md } = writeAndRead(
+      makeEvalResult({ extraFindings: [{ caseId: 'libtiff_x', function: 'unrelated_helper', file: 'tools/y.c', line: 42, confidence: 0.7, verdict: 'confirmed_leak' }] }),
+    );
+    expect(report_md).toContain('## Extra findings');
+    expect(report_md).toContain('libtiff_x');
+    expect(report_md).toContain('unrelated_helper');
+    expect(report_md).toContain('NOT scored');
+    // TP/FP/FN/TN in the confusion matrix must be untouched by an extra finding.
+    expect(report_md).toContain('TP = 4');
+    expect(report_md).toContain('FP = 1');
+  });
+
   test('contains Breakdowns section', () => {
     const { report_md } = writeAndRead(makeEvalResult());
     expect(report_md).toContain('## Breakdowns');
@@ -363,7 +381,7 @@ describe('rowsCsv', () => {
   test('has CSV header with expected columns', () => {
     const { rows_csv } = writeAndRead(makeEvalResult());
     const header = rows_csv.trim().split('\n')[0];
-    expect(header).toBe('id,status,cwe,flowVariant,functionalVariant,tp,fp,fn,tn,candidates,flagged,durationMs,inputTokens,outputTokens,scanId,error');
+    expect(header).toBe('id,status,cwe,flowVariant,functionalVariant,tp,fp,fn,tn,candidates,flagged,extraFindings,durationMs,inputTokens,outputTokens,scanId,error');
   });
 
   test('contains case data row', () => {

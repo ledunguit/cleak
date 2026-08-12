@@ -55,6 +55,11 @@ export interface LabeledManifest {
   /** Corpus-level default allocators/deallocators (a case's own list overrides). */
   allocators?: string[];
   deallocators?: string[];
+  /** True for benchmarks (LAMeD, MemHint) that label exactly the ONE known flaw per
+   * case inside an otherwise-unlabeled real codebase — everything else is unverified,
+   * not verified-clean. `scoreCase` uses this to decide whether a flagged-but-unlabeled
+   * finding counts as a (presumed) false positive; see `scoreCase`'s doc comment. */
+  positive_only?: boolean;
 }
 
 /** A snapshot finding (subset of fields we score on; read from snapshot.json). */
@@ -203,7 +208,16 @@ interface SiteAgg {
  * one per finding): findings are grouped by enclosing function (function mode)
  * or allocation line (line mode), so duplicate/multi-tool findings on the same
  * site count once. Any labeled flaw that produced NO finding (discovery missed
- * it entirely) is added as a false negative so recall isn't inflated.
+ * it entirely) is added as a false negative so recall isn't inflated. A finding
+ * that matches NEITHER a labeled flaw NOR a labeled clean site (`unknown`) is
+ * excluded — never scored as a false positive. This matters most for
+ * positive-only corpora (LAMeD/MemHint, `manifest.positive_only`): only the ONE
+ * known bug per case is labeled inside an otherwise-unlabeled real codebase, so
+ * a flag elsewhere is NOT proof of a false positive — it may be a real,
+ * undocumented leak the benchmark's authors never catalogued. Penalizing that
+ * as wrong would reward the tool for staying quiet about real bugs, the
+ * opposite of the actual goal. See `extraFindings` for where those flags go
+ * instead (tracked, reported, never scored against the paper's ground truth).
  */
 export function scoreCase(findings: SnapshotFinding[], c: LabeledCase): Sample[] {
   const lineMode = isLineMode(c);
@@ -239,4 +253,39 @@ export function scoreCase(findings: SnapshotFinding[], c: LabeledCase): Sample[]
     }
   }
   return samples;
+}
+
+/** A finding flagged by the tool that matches no labeled ground-truth site. */
+export interface ExtraFinding {
+  function?: string;
+  file?: string;
+  line?: number;
+  confidence?: number;
+  verdict?: string;
+}
+
+/**
+ * Findings flagged by the tool but matching no labeled ground-truth site —
+ * companion to `scoreCase`, which excludes these from P/R/F1/MCC entirely (see
+ * its doc comment for why). Call this ONLY for `positive_only` corpora: on a
+ * fully dual-labeled corpus (Juliet — every function is `bad` or `good*`) an
+ * `unknown` finding would just mean a helper function with no leak-relevant
+ * label, not a plausible undocumented leak, so surfacing it here would be
+ * noise, not signal. One entry per ground-truth site (same dedup as
+ * `scoreCase`), for manual/dynamic triage and a separate report section —
+ * never folded into the confusion matrix.
+ */
+export function extraFindings(findings: SnapshotFinding[], c: LabeledCase): ExtraFinding[] {
+  const lineMode = isLineMode(c);
+  const seen = new Set<string>();
+  const out: ExtraFinding[] = [];
+  for (const f of findings) {
+    if (!isFlagged(f.verdict)) continue;
+    if (classifyFinding(f, c) !== 'unknown') continue;
+    const key = siteKey(f, lineMode);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ function: f.function, file: f.file, line: f.line, confidence: f.confidence, verdict: f.verdict });
+  }
+  return out;
 }

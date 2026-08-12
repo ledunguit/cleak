@@ -30,6 +30,10 @@ export interface OrchestratorCommonDeps {
   requestPermission?: (req: { id: string; name: string; input: unknown }) => Promise<'allow' | 'deny'>;
   getSteering?: () => string[];
   awaitResume?: (reason: string) => Promise<'resume' | 'abort'>;
+  /** Fired on every token-usage increment (sub-agent turns, Stage D judge calls) —
+   * lets a caller (e.g. the eval harness) track live spend for a per-case cost cap
+   * without waiting for the scan to finish. Purely additive/observational. */
+  onUsageDelta?: (d: { inputTokens: number; outputTokens: number }) => void;
 }
 
 export type InvestigationContext = {

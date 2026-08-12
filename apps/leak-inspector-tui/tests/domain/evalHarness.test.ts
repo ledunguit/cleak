@@ -461,6 +461,92 @@ describe('runEval', () => {
   });
 });
 
+// ── runEval — per-case budget cap (maxCaseMs) ───────────────────────────
+
+describe('runEval — per-case budget cap (maxCaseMs)', () => {
+  function setupCorpus(): string {
+    const tmp = mkdtempSync(join(tmpdir(), 'runEval-budget-'));
+    writeFileSync(
+      join(tmp, 'corpus_manifest.json'),
+      JSON.stringify({
+        meta: { name: 'test-corpus', version: '1' },
+        cases: [{ id: 'slow-case', repo_path: '.', build_command: 'make', cwe: 'CWE-401', flaws: [{ function: 'leaky' }], clean: [] }],
+        allocators: [],
+        deallocators: [],
+      }),
+    );
+    writeFileSync(join(tmp, 'main.c'), 'int leaky() { return 0; }\n');
+    return tmp;
+  }
+
+  test('a case exceeding maxCaseMs is cut off quickly, marked budget_exceeded, not cached', async () => {
+    const tmp = setupCorpus();
+    // A "scan" that never resolves on its own — only the merged AbortSignal firing
+    // ends it. If maxCaseMs works, this rejects at ~maxCaseMs, not after 5s.
+    mockRunHeadless.mockImplementation(
+      (opts: { signal?: AbortSignal; onUsageDelta?: (d: { inputTokens: number; outputTokens: number }) => void }) =>
+        new Promise((_resolve, reject) => {
+          opts.onUsageDelta?.({ inputTokens: 123, outputTokens: 45 }); // partial spend before the cut
+          const t = setTimeout(() => reject(new Error('test scan should have been aborted before this fired')), 5000);
+          opts.signal?.addEventListener('abort', () => {
+            clearTimeout(t);
+            const err = new Error('aborted') as Error & { name: string; partialMcpCalls?: number };
+            err.name = 'AbortError';
+            err.partialMcpCalls = 7;
+            reject(err);
+          });
+        }),
+    );
+
+    const { runEval } = await import('../../src/domain/evalHarness');
+    const started = Date.now();
+    try {
+      const result = await runEval({
+        corpusDir: tmp,
+        mode: 'no_llm',
+        dynamic: 'off',
+        outDir: join(tmp, 'out'),
+        allowUnvalidated: true,
+        limit: 1,
+        maxCaseMs: 80,
+      });
+      const elapsed = Date.now() - started;
+      expect(elapsed).toBeLessThan(2000); // nowhere near the 5s the mock would otherwise take
+      expect(result.rows).toHaveLength(1);
+      const row = result.rows[0];
+      expect(row.status).toBe('budget_exceeded');
+      expect(row.inputTokens).toBe(123); // partial spend preserved, not zeroed
+      expect(row.outputTokens).toBe(45);
+      expect(row.mcpCalls).toBe(7);
+      expect(row.error).toMatch(/budget exceeded/);
+      expect(existsSync(join(tmp, 'out', 'cases', 'slow-case.json'))).toBe(false); // not cached
+    } finally {
+      rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
+  test('maxCaseMs=0 (default) does not cap — an ok case completes normally', async () => {
+    const tmp = setupCorpus();
+    const scanOut = mkdtempSync(join(tmpdir(), 'scanOut-budget-'));
+    writeFileSync(join(scanOut, 'snapshot.json'), JSON.stringify({ findings: [] }));
+    mockRunHeadless.mockImplementation(() => ({
+      dir: scanOut,
+      scanId: 'mock-scan-id',
+      investigation: { usage: { inputTokens: 10, outputTokens: 5 } },
+      mcpCalls: 1,
+      usage: { inputTokens: 10, outputTokens: 5 },
+    }));
+    const { runEval } = await import('../../src/domain/evalHarness');
+    try {
+      const result = await runEval({ corpusDir: tmp, mode: 'no_llm', dynamic: 'off', outDir: join(tmp, 'out'), allowUnvalidated: true, limit: 1 });
+      expect(result.rows[0].status).toBe('ok');
+    } finally {
+      rmSync(tmp, { recursive: true, force: true });
+      rmSync(scanOut, { recursive: true, force: true });
+    }
+  });
+});
+
 // ── runEvalRepeated (mocked aggregation) ───────────────────────────────
 
 describe('runEvalRepeated', () => {

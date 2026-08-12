@@ -218,6 +218,8 @@ export function loadConfig(
       inferBin: pickStr(file.baselines?.inferBin, "infer"),
     },
     evalStaticPathMap: pickOpt(file.eval?.staticPathMap),
+    evalMaxCaseMs: pickNum(file.eval?.maxCaseMs, 0),
+    evalMaxCaseCostUsd: pickNum(file.eval?.maxCaseCostUsd, 0),
     pricing: file.pricing ?? {},
   };
 
@@ -309,6 +311,9 @@ export function clampConfig(cfg: RunConfig): RunConfig {
   cfg.consensus.n = Math.round(clamp("consensus.n", cfg.consensus.n, 1, 9, 1));
   cfg.consensus.temperature = clamp("consensus.temperature", cfg.consensus.temperature, 0, 2, 0.7);
   cfg.consensus.concurrency = Math.round(clamp("consensus.concurrency", cfg.consensus.concurrency, 1, 16, 3));
+  // 0 = disabled (no cap) is a valid value for both — min bound is 0, not 1.
+  cfg.evalMaxCaseMs = Math.round(clamp("eval.maxCaseMs", cfg.evalMaxCaseMs, 0, 4 * 3600_000, 0));
+  cfg.evalMaxCaseCostUsd = clamp("eval.maxCaseCostUsd", cfg.evalMaxCaseCostUsd, 0, 50, 0);
   if (warnings.length) {
     process.stderr.write(`\u26a0 config out of range, clamped:\n${warnings.map((w) => `  - ${w}`).join("\n")}\n`);
   }

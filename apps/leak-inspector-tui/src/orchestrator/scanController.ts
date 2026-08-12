@@ -146,6 +146,26 @@ function hostPath(analyzerP: string, pathMap?: string): string {
   return analyzerP.startsWith(to) ? from + analyzerP.slice(to.length) : analyzerP;
 }
 
+/**
+ * MCP transport-level retry (`isTransientError` in `agent-core`) deliberately
+ * EXCLUDES tool-level errors — a tool rejecting bad input shouldn't be retried
+ * blindly. A request TIMEOUT (`-32001`) is different: it surfaces as a
+ * tool-level error but is much more like a transient fault (the server was
+ * momentarily overloaded), especially on a real project where hundreds of
+ * candidates fire concurrent `functionSummary`/`pathConstraints` calls. One
+ * bounded retry here — never for other tool errors, which stay a real signal.
+ */
+const TOOL_TIMEOUT_RE = /-32001|timed out/i;
+export async function callToolRetryTimeout<T>(label: string, call: () => Promise<T>): Promise<T> {
+  try {
+    return await call();
+  } catch (err) {
+    if (!TOOL_TIMEOUT_RE.test(err instanceof Error ? err.message : String(err))) throw err;
+    console.debug(`${label} timed out — retrying once`);
+    return call();
+  }
+}
+
 async function enrichStaticEvidence(
   bundles: LeakBundle[],
   staticClient: McpClient,
@@ -202,7 +222,7 @@ async function enrichStaticEvidence(
     const line = b.candidate.line_number;
     if (tools.has('functionSummary')) {
       try {
-        const fs = await staticClient.callTool('functionSummary', { filePath: file, content, functionName: fn, ...allocArgs });
+        const fs = await callToolRetryTimeout('functionSummary', () => staticClient.callTool('functionSummary', { filePath: file, content, functionName: fn, ...allocArgs }));
         foldStaticResult(store, 'functionSummary', { filePath: file, functionName: fn }, fs, [b]);
       } catch {
         console.debug(`functionSummary failed for ${file}:${fn}`);
@@ -210,7 +230,7 @@ async function enrichStaticEvidence(
     }
     if (tools.has('pathConstraints')) {
       try {
-        const pc = await staticClient.callTool('pathConstraints', { filePath: file, content, lineNumber: line, ...allocArgs });
+        const pc = await callToolRetryTimeout('pathConstraints', () => staticClient.callTool('pathConstraints', { filePath: file, content, lineNumber: line, ...allocArgs }));
         foldStaticResult(store, 'pathConstraints', { filePath: file, lineNumber: line }, pc, [b]);
       } catch {
         console.debug(`pathConstraints failed for ${file}:${line}`);
@@ -501,6 +521,7 @@ async function runInvestigation(
       onAgentEvent: deps.onAgentEvent,
       onModelActivity: deps.onModelActivity,
       requestPermission: deps.requestPermission,
+      onUsageDelta: deps.onUsageDelta,
       // static=false: the dynamic stage already ran during discovery — the
       // investigation must not build+run a second time (and must keep that coverage).
       dynamicAlreadyRan: dynamicRanInDiscovery,

@@ -176,6 +176,7 @@ async function runSubAgent(
   }
   state.usage.inputTokens += res.usage.inputTokens;
   state.usage.outputTokens += res.usage.outputTokens;
+  ctx.onUsageDelta?.(res.usage);
   state.totalTurns += res.turns;
   state.transcripts.push(...res.messages);
 }
@@ -480,6 +481,7 @@ async function stageHybridJudge(
   const addUsage = (u: { inputTokens: number; outputTokens: number }) => {
     state.usage.inputTokens += u.inputTokens;
     state.usage.outputTokens += u.outputTokens;
+    ctx.onUsageDelta?.(u);
   };
   await mapWithLimit(borderline, cfg.workflow.judgeConcurrency, async (b) => {
     if (ctx.abortSignal?.aborted) return;

@@ -36,11 +36,13 @@ import { checkCorpusGate, type CorpusGateResult } from './corpusLock';
 import {
   scoreCase,
   isFlagged,
+  extraFindings,
   type LabeledCase,
   type LabeledManifest,
   type SnapshotFinding,
   type LabeledFlaw,
   type CleanSite,
+  type ExtraFinding,
 } from './evalScoring';
 
 /** Per-case detail streamed to the UI so it can show findings vs ground truth. */
@@ -105,6 +107,18 @@ export interface EvalOptions {
   /** LLM provider override (eval-scoped) — bypasses the cleak config file's provider
    * so a sweep can target a known-good gateway without editing global config. */
   provider?: Provider;
+  /** Wall-clock deadline per case, ms. Cuts ONLY the offending case (its own
+   * AbortController), not the whole run — a runaway real-project case (hundreds of
+   * candidates, e.g. LAMeD) no longer blocks the batch indefinitely. Overrides
+   * `cleak config`'s `eval.maxCaseMs`; 0/undefined = no cap (default — existing
+   * scripts/determinism-gate.sh stay byte-identical unless this is explicitly set). */
+  maxCaseMs?: number;
+  /** Soft $ cap per case, checked at turn granularity (not instant — mirrors how
+   * LiteLLM-style budget enforcement in industrial systems like Atlantis isn't
+   * instant either). Overrides `cleak config`'s `eval.maxCaseCostUsd`; 0/undefined =
+   * no cap. Only enforceable when pricing is configured for the model (see
+   * `computeCostUsd`) — silently a no-op otherwise, same as cost reporting today. */
+  maxCaseCostUsd?: number;
   /** Cancel the run: in-flight cases are aborted, not-yet-started ones are skipped. */
   signal?: AbortSignal;
   onProgress?: (done: number, total: number, id: string) => void;
@@ -139,6 +153,8 @@ const EvalOptionsSchema = z.object({
   staticDiscovery: z.boolean().optional(),
   staticTools: z.array(z.string()).optional(),
   provider: z.any().optional(),
+  maxCaseMs: z.number().nonnegative().optional(),
+  maxCaseCostUsd: z.number().nonnegative().optional(),
   signal: z.any().optional(),
   onProgress: z.function().optional(),
   onCaseStart: z.function().optional(),
@@ -155,13 +171,20 @@ export interface CaseRow {
   cwe?: string;
   flowVariant?: string;
   functionalVariant?: string;
-  status: 'ok' | 'error' | 'skipped';
+  /** `budget_exceeded`: the case's own `maxCaseMs`/`maxCaseCostUsd` cap fired — distinct
+   * from `error` (a real failure) and `skipped` (run-level cancel) since real cost was
+   * spent and partial evidence may exist; see `error` for how much/what cap. */
+  status: 'ok' | 'error' | 'skipped' | 'budget_exceeded';
   tp: number;
   fp: number;
   fn: number;
   tn: number;
   candidates: number;
   flagged: number;
+  /** Count of `extraFindings` — flagged sites matching no labeled ground truth
+   * (positive_only corpora only; 0 elsewhere). NOT part of tp/fp/fn/tn — see
+   * `evalScoring.ts`'s `extraFindings` doc comment for why. */
+  extraFindings: number;
   /** Non-blank source lines in the case (for FP-rate-per-KLOC). */
   loc: number;
   /** Per-case judge-path tally (`llm` / `heuristic` / `consensus`) from verdict_tool. */
@@ -224,6 +247,12 @@ export interface EvalResult {
    * corpus can be aligned site-by-site for a PAIRED McNemar test (`mcnemar-compare`).
    * This is the data the aggregate confusion matrix is built from. */
   samples: Sample[];
+  /** Flagged sites outside the labeled ground truth, across all cases (positive_only
+   * corpora only — always [] otherwise). NOT scored anywhere above: a real,
+   * undocumented leak the tool finds shouldn't be penalized as wrong just because
+   * the benchmark's authors didn't catalogue it. For manual/dynamic triage and a
+   * separate report section. See `evalScoring.ts`'s `extraFindings` doc comment. */
+  extraFindings: (ExtraFinding & { caseId: string })[];
 }
 
 interface CachedCase {
@@ -232,6 +261,8 @@ interface CachedCase {
   row: CaseRow;
   /** Snapshot findings retained so --resume can replay the per-case detail view. */
   findings?: SnapshotFinding[];
+  /** See `CaseRow.extraFindings` / `EvalResult.extraFindings`. */
+  extra?: ExtraFinding[];
 }
 
 function metricsByKey(groups: Map<string, Sample[]>): Record<string, Metrics> {
@@ -433,6 +464,23 @@ export function prepareCaseCache(outDir: string, concurrencyOverride?: number, m
 }
 
 /**
+ * Combine a run-level cancel signal with a case-scoped one: aborted if EITHER
+ * fires. Ctrl-C (`opts.signal`) still cancels the whole run; a case's own
+ * `maxCaseMs`/`maxCaseCostUsd` timer cuts only that case. Avoids depending on
+ * `AbortSignal.any` (newer Node/browser-only API).
+ */
+function mergeSignals(a?: AbortSignal, b?: AbortSignal): AbortSignal {
+  const c = new AbortController();
+  const abort = () => c.abort();
+  if (a?.aborted || b?.aborted) c.abort();
+  else {
+    a?.addEventListener('abort', abort);
+    b?.addEventListener('abort', abort);
+  }
+  return c.signal;
+}
+
+/**
  * Phase 6: Score every case in a concurrency-limited pool. Handles cache replay,
  * cancellation (aborted signal → skipped), per-case progress callbacks, and
  * per-case cache persistence to disk so `--resume` can skip completed cases.
@@ -449,6 +497,13 @@ export async function scoreCases(
   onCaseResult?: (detail: EvalCaseDetail) => void,
 ): Promise<CachedCase[]> {
   let done = 0;
+  // Resolved once per run: CLI/API override > cleak config > 0 (disabled).
+  const evalCfg = loadConfig({ provider: opts.provider });
+  const maxCaseMs = opts.maxCaseMs ?? evalCfg.evalMaxCaseMs;
+  const maxCaseCostUsd = opts.maxCaseCostUsd ?? evalCfg.evalMaxCaseCostUsd;
+  // Only needed (and only loaded) for a real-time cost cap; report-time cost in
+  // aggregateResults() loads pricing separately and is unaffected either way.
+  const pricing = maxCaseCostUsd > 0 && opts.mode === 'llm_assisted' ? evalCfg.pricing : undefined;
 
   const emitResult = (c: LabeledCase, cached: CachedCase) => {
     onCaseResult?.({
@@ -473,6 +528,7 @@ export async function scoreCases(
     tn: 0,
     candidates: 0,
     flagged: 0,
+    extraFindings: 0,
     loc: 0,
     judgePathCounts: {},
     durationMs: 0,
@@ -508,6 +564,25 @@ export async function scoreCases(
     const repo = join(opts.corpusDir, c.repo_path);
     const started = Date.now();
     onCaseStart?.(c.id);
+    // Case-scoped budget: a timer aborts ONLY this case's controller (never
+    // opts.signal, the run-level one), so a runaway real-project case (hundreds
+    // of candidates — e.g. LAMeD) can't block the whole batch. `caseUsage`
+    // mirrors the running token total live (via onUsageDelta) so the cost cap
+    // can fire mid-scan instead of only after the fact, and so the
+    // 'budget_exceeded' row below can report real partial spend, not 0.
+    const caseController = new AbortController();
+    const caseTimer = maxCaseMs > 0 ? setTimeout(() => caseController.abort(), maxCaseMs) : undefined;
+    const caseUsage = { inputTokens: 0, outputTokens: 0 };
+    const onUsageDelta = (d: { inputTokens: number; outputTokens: number }) => {
+      caseUsage.inputTokens += d.inputTokens;
+      caseUsage.outputTokens += d.outputTokens;
+      if (maxCaseCostUsd > 0 && !caseController.signal.aborted) {
+        // costUsd is undefined when unpriced for this model — a silent no-op cap,
+        // same as report-time cost (see computeCostUsd's own contract).
+        const { costUsd } = computeCostUsd(caseUsage.inputTokens, caseUsage.outputTokens, evalCfg.llm.model, pricing);
+        if (costUsd != null && costUsd > maxCaseCostUsd) caseController.abort();
+      }
+    };
     try {
       const r = await runHeadless({
         repo,
@@ -521,7 +596,8 @@ export async function scoreCases(
         staticUrl: opts.staticUrl,
         dynamicUrl: opts.dynamicUrl,
         quiet: true,
-        signal: opts.signal,
+        signal: mergeSignals(opts.signal, caseController.signal),
+        onUsageDelta,
         ...(opts.strategy ? { strategy: opts.strategy } : {}),
         ...(opts.enrich !== undefined ? { enrich: opts.enrich } : {}),
         ...(opts.toolSelect !== undefined ? { toolSelect: opts.toolSelect } : {}),
@@ -551,6 +627,7 @@ export async function scoreCases(
       }
       const findings = snapshot.findings;
       const samples = scoreCase(findings, c);
+      const extra = manifest.positive_only ? extraFindings(findings, c) : [];
       const cm = accumulate(samples);
       const inputTokens = r.usage.inputTokens;
       const outputTokens = r.usage.outputTokens;
@@ -572,6 +649,7 @@ export async function scoreCases(
         tn: cm.tn,
         candidates: findings.length,
         flagged: findings.filter((f) => isFlagged(f.verdict)).length,
+        extraFindings: extra.length,
         loc: countSourceLoc(repo),
         judgePathCounts,
         durationMs,
@@ -580,40 +658,59 @@ export async function scoreCases(
         mcpCalls: r.mcpCalls,
         scanId: r.scanId,
       };
-      const result: CachedCase = { id: c.id, samples, row, findings };
+      const result: CachedCase = { id: c.id, samples, row, findings, extra };
       writeFileSync(cachePath, JSON.stringify(result));
       emitResult(c, result);
       onProgress?.(++done, cases.length, c.id);
       return result;
     } catch (err: unknown) {
-      // A case interrupted by cancel counts as skipped (not a real error), and is
-      // NOT cached so a later --resume re-runs it.
+      // A case interrupted by cancel counts as skipped (not a real error); a case
+      // cut off by its OWN budget cap (not a run-level cancel) is distinct — real
+      // cost was spent, so report it instead of a misleading 0. Neither is cached,
+      // so a later --resume re-runs the case.
+      const budgetExceeded = caseController.signal.aborted && !opts.signal?.aborted;
       const msg = err instanceof Error ? err.message : String(err);
-      const aborted = opts.signal?.aborted || (err instanceof Error && err.name === 'AbortError');
+      const aborted = !budgetExceeded && (opts.signal?.aborted || (err instanceof Error && err.name === 'AbortError'));
+      const partialMcpCalls = err instanceof Error ? (err as Error & { partialMcpCalls?: number }).partialMcpCalls ?? 0 : 0;
+      const spentMs = Date.now() - started;
+      const spentCostUsd = budgetExceeded ? computeCostUsd(caseUsage.inputTokens, caseUsage.outputTokens, evalCfg.llm.model, pricing).costUsd : undefined;
       const row: CaseRow = {
         id: c.id,
         cwe: c.cwe,
         flowVariant: c.flowVariant,
         functionalVariant: c.functionalVariant,
-        status: aborted ? 'skipped' : 'error',
+        status: budgetExceeded ? 'budget_exceeded' : aborted ? 'skipped' : 'error',
         tp: 0,
         fp: 0,
         fn: 0,
         tn: 0,
         candidates: 0,
         flagged: 0,
+        extraFindings: 0,
         loc: 0,
         judgePathCounts: {},
-        durationMs: Date.now() - started,
-        inputTokens: 0,
-        outputTokens: 0,
-        mcpCalls: 0,
-        ...(aborted ? {} : { error: msg }),
+        durationMs: spentMs,
+        inputTokens: budgetExceeded ? caseUsage.inputTokens : 0,
+        outputTokens: budgetExceeded ? caseUsage.outputTokens : 0,
+        mcpCalls: budgetExceeded ? partialMcpCalls : 0,
+        ...(budgetExceeded
+          ? {
+              error:
+                `budget exceeded: spent ${spentMs}ms` +
+                (spentCostUsd != null ? `/$${spentCostUsd.toFixed(2)}` : '') +
+                ` vs cap ${maxCaseMs}ms` +
+                (maxCaseCostUsd > 0 ? `/$${maxCaseCostUsd}` : ''),
+            }
+          : aborted
+            ? {}
+            : { error: msg }),
       };
       const result: CachedCase = { id: c.id, samples: [], row, findings: [] };
       emitResult(c, result);
-      onProgress?.(++done, cases.length, `${c.id} (${aborted ? 'skipped' : 'error'})`);
+      onProgress?.(++done, cases.length, `${c.id} (${budgetExceeded ? 'budget exceeded' : aborted ? 'skipped' : 'error'})`);
       return result;
+    } finally {
+      clearTimeout(caseTimer);
     }
   };
 
@@ -717,6 +814,7 @@ export function aggregateResults(cached: CachedCase[], cases: LabeledCase[], opt
     },
     rows,
     samples: allSamples,
+    extraFindings: cached.flatMap((c) => (c.extra ?? []).map((e) => ({ ...e, caseId: c.id }))),
   };
 }
 

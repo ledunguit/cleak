@@ -67,7 +67,7 @@ function metricsCsv(r: EvalResult): string {
 }
 
 function rowsCsv(rows: CaseRow[]): string {
-  const cols = ['id', 'status', 'cwe', 'flowVariant', 'functionalVariant', 'tp', 'fp', 'fn', 'tn', 'candidates', 'flagged', 'durationMs', 'inputTokens', 'outputTokens', 'scanId', 'error'];
+  const cols = ['id', 'status', 'cwe', 'flowVariant', 'functionalVariant', 'tp', 'fp', 'fn', 'tn', 'candidates', 'flagged', 'extraFindings', 'durationMs', 'inputTokens', 'outputTokens', 'scanId', 'error'];
   const esc = (v: unknown) => {
     const s = v == null ? '' : String(v);
     return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
@@ -161,6 +161,7 @@ function reportMarkdown(r: EvalResult): string {
     `| **actual leak** | TP = ${m.tp} | FN = ${m.fn} |`,
     `| **actual clean** | FP = ${m.fp} | TN = ${m.tn} |`,
     '',
+    ...extraFindingsSection(r),
     '## Breakdowns',
     '',
     mdMetricTable('By flow variant', Object.entries(r.byFlowVariant)),
@@ -176,6 +177,32 @@ function reportMarkdown(r: EvalResult): string {
       .map((b) => `| [${b.lo.toFixed(1)}, ${b.hi.toFixed(1)}) | ${b.count} | ${f3(b.meanConfidence)} | ${f3(b.empiricalAccuracy)} |`),
   ];
   return lines.join('\n') + '\n';
+}
+
+/**
+ * Findings flagged outside the labeled ground truth (positive_only corpora
+ * only — see `evalScoring.ts`'s `extraFindings` doc comment). Deliberately NOT
+ * folded into the confusion matrix above: listed here for manual/dynamic
+ * triage, since a real, undocumented leak the tool finds shouldn't score as a
+ * false positive just because the benchmark's authors didn't catalogue it.
+ */
+function extraFindingsSection(r: EvalResult): string[] {
+  const extra = r.extraFindings ?? []; // absent on pre-this-fix cached/synthetic EvalResult objects
+  if (extra.length === 0) return [];
+  return [
+    `## Extra findings (outside ground truth — NOT scored, for manual/dynamic triage)`,
+    '',
+    `${extra.length} finding(s) flagged a site the corpus does not label as either the known bug or clean. ` +
+      `Positive-only benchmarks (LAMeD/MemHint) label exactly one bug per case in an otherwise-unverified real ` +
+      `codebase, so these may be real, undocumented leaks — or false positives. Neither is assumed; verify before citing.`,
+    '',
+    '| case | function | file | line | confidence | verdict |',
+    '|---|---|---|--:|--:|---|',
+    ...extra.map(
+      (e) => `| ${e.caseId} | ${e.function ?? '—'} | ${e.file ?? '—'} | ${e.line ?? '—'} | ${e.confidence != null ? f3(e.confidence) : '—'} | ${e.verdict ?? '—'} |`,
+    ),
+    '',
+  ];
 }
 
 const texEsc = (s: string) => s.replace(/[_&%#$]/g, (c) => `\\${c}`);

@@ -6,6 +6,7 @@ import {
   hasGroundTruth,
   isFlagged,
   scoreCase,
+  extraFindings,
   type LabeledCase,
   type SnapshotFinding,
 } from '../../src/domain/evalScoring';
@@ -105,6 +106,68 @@ describe('scoreCase — one sample per ground-truth site', () => {
     const cm = accumulate(scoreCase(findings, julietCase));
     expect(cm.tp).toBe(1);
     expect(cm.fn).toBe(0);
+  });
+});
+
+// LAMeD/MemHint-style: exactly one labeled flaw in an otherwise-unlabeled real
+// project (no `clean` entries, real function names never contain 'good'/'bad').
+const lamedCase: LabeledCase = {
+  id: 'libtiff_04118f8a',
+  repo_path: 'cases/x',
+  cwe: 'CWE-401',
+  flaws: [{ function: 'map_colortable' }],
+  clean: [],
+};
+
+describe('scoreCase — real-project (LAMeD/MemHint) findings outside ground truth are NEVER scored', () => {
+  test('a flag on an unlabeled function does not affect tp/fp/fn/tn either way', () => {
+    const findings = [finding({ function: 'unrelated_helper', verdict: 'confirmed_leak' })];
+    const cm = accumulate(scoreCase(findings, lamedCase));
+    expect(cm.fp).toBe(0);
+    expect(cm.tn).toBe(0);
+    expect(cm.tp).toBe(0);
+    expect(cm.fn).toBe(1); // the labeled flaw was never found either
+  });
+
+  test('the labeled flaw itself still scores as TP/FN normally', () => {
+    const hit = accumulate(scoreCase([finding({ function: 'map_colortable', verdict: 'confirmed_leak' })], lamedCase));
+    expect(hit.tp).toBe(1);
+    expect(hit.fp).toBe(0);
+    const miss = accumulate(scoreCase([], lamedCase));
+    expect(miss.fn).toBe(1);
+    expect(miss.fp).toBe(0);
+  });
+});
+
+describe('extraFindings — flagged sites outside ground truth, tracked separately (never scored)', () => {
+  test('a flagged finding on an unlabeled function is reported as an extra finding', () => {
+    const findings = [finding({ function: 'unrelated_helper', verdict: 'confirmed_leak' })];
+    const extra = extraFindings(findings, lamedCase);
+    expect(extra).toHaveLength(1);
+    expect(extra[0].function).toBe('unrelated_helper');
+  });
+
+  test('an UNFLAGGED unlabeled function produces no extra finding (silence is not reported either)', () => {
+    const findings = [finding({ function: 'unrelated_helper', verdict: 'false_positive' })];
+    expect(extraFindings(findings, lamedCase)).toHaveLength(0);
+  });
+
+  test('the labeled flaw itself is never reported as an extra finding', () => {
+    const findings = [finding({ function: 'map_colortable', verdict: 'confirmed_leak' })];
+    expect(extraFindings(findings, lamedCase)).toHaveLength(0);
+  });
+
+  test('multiple flagged findings on the same unlabeled function collapse to ONE extra finding', () => {
+    const findings = [
+      finding({ function: 'unrelated_helper', line: 5, verdict: 'confirmed_leak' }),
+      finding({ function: 'unrelated_helper', line: 9, verdict: 'likely_leak' }),
+    ];
+    expect(extraFindings(findings, lamedCase)).toHaveLength(1);
+  });
+
+  test('on a fully dual-labeled corpus (Juliet), a good*/bad* finding is never an extra finding', () => {
+    const findings = [finding({ function: 'goodG2B', verdict: 'confirmed_leak' })];
+    expect(extraFindings(findings, julietCase)).toHaveLength(0);
   });
 });
 

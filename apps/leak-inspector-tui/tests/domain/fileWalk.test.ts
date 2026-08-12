@@ -12,14 +12,14 @@ describe('walkCFiles — excludes non-library dirs (F2 scan hygiene)', () => {
     mkdirSync(join(root, 'src'));
     writeFileSync(join(root, 'src', 'core.c'), 'int z;'); // kept
     // Noise dirs whose .c files must be skipped.
-    for (const d of ['tests', 'fuzzing', 'examples', 'benchmark', 'build', 'node_modules']) {
+    for (const d of ['tests', 'fuzzing', 'examples', 'benchmark', 'build', 'node_modules', 'archive', 'contrib', 'doc', 'docs', 'man']) {
       mkdirSync(join(root, d));
       writeFileSync(join(root, d, 'noise.c'), 'int y;');
     }
   });
   afterAll(() => rmSync(root, { recursive: true, force: true }));
 
-  test('keeps library source, skips test/fuzz/example/benchmark/build/node_modules', () => {
+  test('keeps library source, skips test/fuzz/example/benchmark/build/node_modules/archive/contrib/doc(s)/man', () => {
     const rel = walkCFiles(root)
       .map((f) => f.slice(root.length + 1))
       .sort();

@@ -106,8 +106,16 @@ export const CleakConfigSchema = z
       .partial(),
     // External tool paths (previously env-only).
     baselines: z.object({ clangBin: z.string(), inferBin: z.string() }).partial(),
-    // Eval-time path remapping (previously env-only).
-    eval: z.object({ staticPathMap: z.string() }).partial(),
+    // Eval-time path remapping (previously env-only) + per-case budget caps.
+    eval: z
+      .object({
+        staticPathMap: z.string(),
+        /** Wall-clock deadline per case, ms. 0 = disabled (no cap). */
+        maxCaseMs: zNum,
+        /** Soft $ cap per case (checked at turn granularity, not instant). 0 = disabled. */
+        maxCaseCostUsd: zNum,
+      })
+      .partial(),
     // User-supplied $/1M-token price table, keyed by exact model ID — no
     // baked-in defaults, the user fills this in themselves.
     pricing: z.record(z.string(), z.object({ inputPerMillion: zNum, outputPerMillion: zNum }).partial()),
