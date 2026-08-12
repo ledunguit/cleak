@@ -20,7 +20,18 @@ const DEFAULT_SRC_EXT = new Set(['.c', '.cc', '.cpp', '.cxx', '.h', '.hh', '.hpp
  * content-hash (spurious "corpus drifted from lock" gate failures on rerun)
  * and the FP/KLOC denominator (silently inflating it with non-source LOC).
  */
-const SKIP_DIRS = new Set(['build', '_build', 'cmake-build-debug', 'node_modules', '.git', 'dist', 'out', '.cache']);
+const SKIP_DIRS = new Set(['node_modules', '.git', 'dist', 'out', '.cache']);
+
+/**
+ * `build`/`_build`/`cmake-build-debug` were an exact-match set — missed any
+ * project-/sanitizer-specific build dir name (e.g. `build-lsan`, `build-asan`,
+ * `builddir`), letting CMake-generated `.c`/`.h` (compiler-id probes, config
+ * headers) leak into the corpus content-hash. Prefix match instead.
+ */
+function isBuildDir(name: string): boolean {
+  const lower = name.toLowerCase();
+  return lower.startsWith('build') || lower.startsWith('_build') || lower.startsWith('cmake-build');
+}
 
 /**
  * Non-blank lines of a case's IMPLEMENTATION files — the FP/KLOC denominator.
@@ -46,7 +57,7 @@ export function countSourceLoc(repoDir: string): number {
       return;
     }
     for (const entry of entries) {
-      if (entry.startsWith('.') || SKIP_DIRS.has(entry)) continue;
+      if (entry.startsWith('.') || SKIP_DIRS.has(entry) || isBuildDir(entry)) continue;
       const fullPath = join(dir, entry);
       let st;
       try {
@@ -91,7 +102,7 @@ export function listSourceFiles(dir: string, exts?: Set<string>): string[] {
     return out;
   }
   for (const e of entries) {
-    if (e.startsWith('.') || SKIP_DIRS.has(e)) continue;
+    if (e.startsWith('.') || SKIP_DIRS.has(e) || isBuildDir(e)) continue;
     const full = join(dir, e);
     let st;
     try {

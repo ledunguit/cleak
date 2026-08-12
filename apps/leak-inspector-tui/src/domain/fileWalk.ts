@@ -12,12 +12,10 @@ import { join } from 'node:path';
 const SKIP_DIRS = new Set([
   '.git',
   'node_modules',
-  'build',
   'dist',
   '.cache',
   '.svn',
   '__pycache__',
-  'cmake-build-debug',
   'out',
   'vendor',
   'third_party',
@@ -34,6 +32,19 @@ const SKIP_DIRS = new Set([
   'benchmark',
   'benchmarks',
 ]);
+
+/**
+ * `build`/`cmake-build-debug` were an exact-match set — missed project-/
+ * sanitizer-specific build dir names (`build-lsan`, `build-asan`, `builddir`),
+ * letting CMake-generated compiler-id probe `.c`/config `.h` files get scanned
+ * as real project source (noise candidates on any real project whose build dir
+ * isn't literally named `build`). Prefix match instead — mirrors the same fix
+ * in `packages/common/src/analysis/harness-utils.ts`.
+ */
+function isBuildDir(name: string): boolean {
+  const lower = name.toLowerCase();
+  return lower.startsWith('build') || lower.startsWith('_build') || lower.startsWith('cmake-build');
+}
 
 const C_EXTS = new Set(['.c', '.cc', '.cpp', '.cxx', '.h', '.hpp', '.hxx', '.hh']);
 
@@ -59,7 +70,7 @@ export function walkCFiles(root: string, limit = 2000): string[] {
         continue;
       }
       if (st.isDirectory()) {
-        if (!SKIP_DIRS.has(entry)) visit(full);
+        if (!SKIP_DIRS.has(entry) && !isBuildDir(entry)) visit(full);
       } else if (st.isFile()) {
         const dot = entry.lastIndexOf('.');
         if (dot >= 0 && C_EXTS.has(entry.slice(dot).toLowerCase())) out.push(full);

@@ -4,12 +4,12 @@
   "source": {
     "name": "LAMeD (EASE 2025) — Zenodo 10.5281/zenodo.15089703, BSD-3"
   },
-  "ingestCommit": "639e840",
+  "ingestCommit": "9db30f0",
   "toolVersions": {
     "clang": "Apple clang version 21.0.0 (clang-2100.1.1.101)"
   },
-  "contentHash": "e07e3d925cff2820cea49327e51be6d2",
-  "validatedAt": "2026-08-07T16:27:46.139Z",
+  "contentHash": "bf728e94c821b34b7c6b76dd8b2532ca",
+  "validatedAt": "2026-08-12T04:53:24.730Z",
   "validated": true,
   "summary": {
     "total": 41,
