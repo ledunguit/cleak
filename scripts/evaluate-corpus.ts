@@ -55,6 +55,8 @@ Options:
   --static-discovery / --no-static-discovery  Static candidate discovery
   --consensus-n <n>       Consensus samples (default: 1 = single LLM)
   --consensus-rule <rule>  Consensus voting rule
+  --max-case-ms <n>       Wall-clock deadline per case, ms (default: 0 = off)
+  --max-case-cost-usd <n>  Soft $ cap per case (default: 0 = off)
   --static-url <url>       MCP static analyzer URL
   --dynamic-url <url>      MCP dynamic analyzer URL
   --allow-unvalidated     Bypass corpus integrity gate
@@ -90,6 +92,8 @@ const CorpusEvalOptionsSchema = z.object({
   staticDiscovery: z.boolean().optional(),
   dryRun: z.boolean().default(false),
   verbose: z.boolean().optional(),
+  maxCaseMs: z.number().nonnegative().optional(),
+  maxCaseCostUsd: z.number().nonnegative().optional(),
 }).passthrough();
 
 type CorpusEvalOptions = z.infer<typeof CorpusEvalOptionsSchema> & { outDir: string };
@@ -149,11 +153,15 @@ function parseCorpusArgs(): CorpusEvalOptions {
   const dryRun = process.argv.includes('--dry-run');
   const verbose = process.argv.includes('--verbose') || process.argv.includes('-v');
 
+  const maxCaseMs = flag('max-case-ms') ? Math.max(0, parseInt(flag('max-case-ms')!, 10)) : undefined;
+  const maxCaseCostUsd = flag('max-case-cost-usd') ? Math.max(0, parseFloat(flag('max-case-cost-usd')!)) : undefined;
+
   const parsed = CorpusEvalOptionsSchema.parse({
     mode, limit, runs, dynamic, corpusDir, staticUrl, dynamicUrl,
     consensusN, consensusRule, allowUnvalidated, stratify,
     resume, concurrency, staticTools, enrich, strategy,
     toolSelect, staticDiscovery, dryRun, verbose,
+    maxCaseMs, maxCaseCostUsd,
   });
 
   // --resume only has anything to resume FROM if pointed back at the exact
@@ -183,6 +191,8 @@ export async function main(): Promise<void> {
     console.log(`  staticUrl: ${opts.staticUrl}`);
     console.log(`  dynamicUrl: ${opts.dynamicUrl}`);
     console.log(`  consensusN: ${opts.consensusN ?? 'default'}`);
+    console.log(`  maxCaseMs: ${opts.maxCaseMs ?? 'off (config default)'}`);
+    console.log(`  maxCaseCostUsd: ${opts.maxCaseCostUsd ?? 'off (config default)'}`);
     console.log(`  consensusRule: ${opts.consensusRule ?? 'default'}`);
     console.log(`  staticTools: ${opts.staticTools ?? 'default'}`);
     console.log(`  enrich: ${opts.enrich ?? 'default'}`);
@@ -195,7 +205,7 @@ export async function main(): Promise<void> {
     process.exit(0);
   }
 
-  const baseOpts = { corpusDir: opts.corpusDir, mode: opts.mode, dynamic: opts.dynamic, limit: opts.limit, concurrency: opts.concurrency, resume: opts.resume, stratify: opts.stratify, staticUrl: opts.staticUrl, dynamicUrl: opts.dynamicUrl, consensusN: opts.consensusN, consensusRule: opts.consensusRule, allowUnvalidated: opts.allowUnvalidated, staticTools: opts.staticTools, enrich: opts.enrich, strategy: opts.strategy, toolSelect: opts.toolSelect, staticDiscovery: opts.staticDiscovery };
+  const baseOpts = { corpusDir: opts.corpusDir, mode: opts.mode, dynamic: opts.dynamic, limit: opts.limit, concurrency: opts.concurrency, resume: opts.resume, stratify: opts.stratify, staticUrl: opts.staticUrl, dynamicUrl: opts.dynamicUrl, consensusN: opts.consensusN, consensusRule: opts.consensusRule, allowUnvalidated: opts.allowUnvalidated, staticTools: opts.staticTools, enrich: opts.enrich, strategy: opts.strategy, toolSelect: opts.toolSelect, staticDiscovery: opts.staticDiscovery, maxCaseMs: opts.maxCaseMs, maxCaseCostUsd: opts.maxCaseCostUsd };
   const pct = (x: number) => `${(x * 100).toFixed(1)}%`;
 
   let runningTP = 0, runningFP = 0, runningFN = 0, runningTN = 0;
