@@ -132,14 +132,28 @@ export function saveConfigFile(cfg: Record<string, unknown>, opts?: { fillDefaul
     : cfg;
   const clean = lenientParse(target);
   const path = configFilePath();
-  // Backup the existing file before overwriting
+  const dir = dirname(path);
+  // The config may hold an apiKey, so BOTH the cleak config dir and the file are
+  // created 0700/0600 (umask-independent). Tighten a pre-existing permissive
+  // dir/file too: a config.json written by an older version may still be 0644.
+  // (The chmods are best-effort so an unsupported FS can't brick a save.)
+  mkdirSync(dir, { recursive: true, mode: 0o700 });
+  // Backup the existing file before overwriting. copyFileSync preserves the
+  // SOURCE mode, so force 0600 on the .bak too — a pre-existing 0644 config
+  // would otherwise leak its apiKey through the backup copy.
   if (existsSync(path)) {
-    try { copyFileSync(path, path + CONFIG_BACKUP_SUFFIX); } catch { /* best-effort */ }
+    try {
+      copyFileSync(path, path + CONFIG_BACKUP_SUFFIX);
+      chmodSync(path + CONFIG_BACKUP_SUFFIX, 0o600);
+    } catch { /* best-effort */ }
   }
-  mkdirSync(dirname(path), { recursive: true });
-  writeFileSync(path, JSON.stringify(clean, null, 2) + '\n', 'utf-8');
+  // mode: 0o600 at creation closes the window between open() and the chmod below
+  // (writeFileSync ignores `mode` for an existing file, so the chmod still runs
+  // and cannot be widened by umask).
+  writeFileSync(path, JSON.stringify(clean, null, 2) + '\n', { encoding: 'utf-8', mode: 0o600 });
   try {
     chmodSync(path, 0o600);
+    chmodSync(dir, 0o700);
   } catch {
     /* best-effort (e.g. unsupported FS) — content is still written */
   }
@@ -166,6 +180,7 @@ export function configTemplate(): CleakConfig {
     },
     staticUrl: 'http://localhost:50061/mcp',
     dynamicUrl: 'http://localhost:50062/mcp',
+    buildCommand: '',
     resultsDir: 'results',
     maxTurns: 15,
     llm: {

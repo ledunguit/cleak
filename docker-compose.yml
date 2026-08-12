@@ -8,6 +8,24 @@
 # every var is optional). Copy apps/<svc>/.env.example → apps/<svc>/.env to override.
 # NOTE: `env_file` requires Docker Compose v2.24+ for the `required:` field; on
 # older Compose either upgrade or `cp` the .env files before `up`.
+#
+# ── SECURITY MODEL (see docs/SECURITY.md) ─────────────────────────────────────
+# These are UNAUTHENTICATED MCP/HTTP services that execute untrusted C/C++ build
+# code. They are published on 127.0.0.1 ONLY (never 0.0.0.0) so the LAN cannot
+# reach them. There is deliberately NO auth layer on the MCP transport itself
+# (out of scope — MCP has no standard auth here); if these ports must ever be
+# reachable beyond localhost, front them with a reverse proxy that adds
+# mutual-TLS / bearer auth and restrict by source IP. Hardening applied:
+#   - no `privileged: true`, no docker.sock mounts (scan-build and the analyzers
+#     run DIRECTLY inside their own container)
+#   - `pids_limit` + `deploy.resources.limits` pin each service against
+#     pid/fork-bombs and runaway memory (caps are runaway bounds calibrated to
+#     this host's ~8GB Docker VM — raise per-host if large-corpus runs OOM; a
+#     cap that is TOO LOW crash-loops the container, see static-analyzer comment)
+#   - `security_opt: no-new-privileges` blocks setuid escalation inside the app
+#   - `init: true` reaps zombies so pids_limit is not exhausted by leaked children
+#   - static-analyzer gets its project mounts READ-ONLY (it only reads sources;
+#     scan-build writes reports under RUNS_DIR, not into the scanned tree)
 services:
   static-analyzer:
     build:
@@ -39,11 +57,26 @@ services:
       # likely afford more threads.
       STATIC_PARSER_WORKERS: 2
     volumes:
-      - ./demo:/workspace/demo
-      - ./targets:/workspace/targets
+      # Static analysis only READS the scanned sources (indexing, AST, scan-build
+      # writes its report under RUNS_DIR). Mount read-only so a compromised
+      # static-analyzer cannot tamper with the corpus on the host.
+      - ./demo:/workspace/demo:ro
+      - ./targets:/workspace/targets:ro
     networks:
       - mcpvul-net
     restart: unless-stopped
+    init: true
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          # Runaway cap, not a tight budget: this host's whole Docker VM is ~8GB
+          # and the 2-worker pool (see STATIC_PARSER_WORKERS) held up under the
+          # load test — 4g only trips when something is actually out of control.
+          memory: 4g
+          pids: 256
 
   dynamic-analyzer:
     build:
@@ -61,11 +94,13 @@ services:
       # fact (must differ from the host ./runs default in the app .env), so it
       # stays here and intentionally overrides RUNS_DIR from env_file.
       RUNS_DIR: /runs
-      # See static-analyzer's comment above — no `deploy.resources.limits`
-      # here either, for the same reason (an untested guess caused an OOM
-      # crash-loop when tried).
+      # See static-analyzer's comment above — the earlier OOM crash-loop was a
+      # cap set TOO LOW, so these are runaway bounds, not tight budgets.
       DYNAMIC_MAX_CONCURRENT_RUNS: 3
     volumes:
+      # Dynamic analysis BUILDS the scanned project (writes object files into
+      # the tree) and runs the result, so these mounts must stay read-write —
+      # unlike static-analyzer's read-only mounts above.
       - runs:/runs
       - ./demo:/workspace/demo
       - ./targets:/workspace/targets
@@ -77,6 +112,17 @@ services:
     networks:
       - mcpvul-net
     restart: unless-stopped
+    init: true
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          cpus: "4"
+          # Builds + up to 3 concurrent sanitizer runs are the heavy consumers;
+          # valgrind of a large binary can balloon, so keep this generous.
+          memory: 4g
+          pids: 512
 
 volumes:
   runs:
