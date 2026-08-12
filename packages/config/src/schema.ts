@@ -57,7 +57,6 @@ export const CleakConfigSchema = z
         staticConcurrency: zNum,
         staticGroupSize: zNum,
         judgeConcurrency: zNum,
-        discoveryConcurrency: zNum,
         targetedHarness: z
           .object({
             enabled: zBool,
@@ -97,13 +96,7 @@ export const CleakConfigSchema = z
       .partial(),
     // UI / runtime flags (previously env-only).
     fullscreen: zBool,
-    inContainer: zBool,
-    staticEnrich: zBool,
     sidebarPosition: z.enum(['left', 'right']),
-    // Judge thresholds (previously env-only).
-    thresholds: z
-      .object({ borderlineLow: zNum, borderlineHigh: zNum })
-      .partial(),
     // External tool paths (previously env-only).
     baselines: z.object({ clangBin: z.string(), inferBin: z.string() }).partial(),
     // Eval-time path remapping (previously env-only) + per-case budget caps.

@@ -6,7 +6,10 @@
  * Defaults are unchanged from the previous inline values, so behaviour (and the
  * Tier-1 determinism baseline) is identical unless an override is set.
  *
- * Values are sourced from the config file via RunConfig.thresholds / RunConfig.workflow.
+ * NOTE: these are STATIC defaults — the config-file keys that once fed them
+ * (thresholds.borderlineLow/High, workflow.discoveryConcurrency) were removed as
+ * dead (nothing read RunConfig.thresholds / RunConfig.workflow.discoveryConcurrency
+ * at runtime; the module-level THRESHOLDS constant always used these defaults).
  */
 
 export interface ThresholdsInput {

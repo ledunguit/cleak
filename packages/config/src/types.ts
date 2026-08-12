@@ -34,11 +34,6 @@ export interface ProviderConfig {
   maxTokens: number;
 }
 
-export interface ThresholdsConfig {
-  borderlineLow: number;
-  borderlineHigh: number;
-}
-
 export interface BaselinesConfig {
   clangBin: string;
   inferBin: string;
@@ -94,7 +89,6 @@ export interface RunConfig {
     staticConcurrency: number;
     staticGroupSize: number;
     judgeConcurrency: number;
-    discoveryConcurrency: number;
     /** Stage B2 — targeted per-candidate harness synthesis (opt-in, off by default:
      * compiles/runs LLM-authored C source, new attack surface + extra cost). */
     targetedHarness: TargetedHarnessConfig;
@@ -107,8 +101,6 @@ export interface RunConfig {
   };
   /** Consensus judge (self-consistency) configuration for the borderline judge stage. */
   consensus: ConsensusJudgeConfig;
-  /** Judge confidence thresholds. */
-  thresholds: ThresholdsConfig;
   /** External baseline tool paths. */
   baselines: BaselinesConfig;
   /** Eval-time host→container path remapping (format: "from=to"). */

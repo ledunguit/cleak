@@ -112,8 +112,8 @@ provider bạn chọn. Bảng rút gọn (đầy đủ trong `.env.example`):
 | `CONSENSUS_N` / `CONSENSUS_RULE` | judge consensus (n=1 ⇒ judge đơn) | `1` / `weighted` |
 
 Key LLM đọc tự động từ `<repo-root>/.env` hoặc `apps/leak-inspector-tui/.env` khi khởi động.
-Chạy trên host sẽ rewrite `host.docker.internal` → `localhost`; đặt `IN_CONTAINER=1` để giữ
-hostname container.
+Khi analyzer chạy trong container (workspace mount), path mapping host↔analyzer cấu hình qua
+`hostRoot` / `analyzerRoot` (config file hoặc `--host-root` / `--analyzer-root`).
 
 ## Cấu hình qua config file (`cleak config`)
 
