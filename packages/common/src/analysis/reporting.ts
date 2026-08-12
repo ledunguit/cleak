@@ -1,9 +1,9 @@
 /**
- * LeakReporting — pure ScanReport → string|Buffer renderers (JSON, Markdown,
- * HTML, Snapshot, CSV, PDF). No framework dependencies, so both the control
- * plane (via a thin @Injectable wrapper) and the TUI/headless runner share the
- * exact same output. `toSnapshot` is the canonical machine-comparable format
- * used for experiment evaluation.
+ * LeakReporting — pure ScanReport → string renderers (JSON, Markdown, HTML,
+ * Snapshot, CSV). No framework dependencies, so both the control plane (via a
+ * thin @Injectable wrapper) and the TUI/headless runner share the exact same
+ * output. `toSnapshot` is the canonical machine-comparable format used for
+ * experiment evaluation.
  *
  * Each renderer lives in its own file under ./reporting/.
  */
@@ -20,7 +20,6 @@ import { toMarkdown } from './reporting/report-markdown';
 import { toHtml } from './reporting/report-html';
 import { toSnapshot } from './reporting/report-snapshot';
 import { toCsv } from './reporting/report-csv';
-import { toPdf } from './reporting/report-pdf';
 
 export class LeakReporting {
   buildReport(
@@ -85,9 +84,5 @@ export class LeakReporting {
 
   toCsv(report: ScanReport): string {
     return toCsv(report);
-  }
-
-  toPdf(report: ScanReport & Record<string, any>): Buffer {
-    return toPdf(report);
   }
 }

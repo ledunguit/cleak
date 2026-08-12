@@ -22,7 +22,6 @@ export default defineConfig({
     'uuid',
     'zod',
     '@modelcontextprotocol/sdk',
-    'pdfkit',
   ],
   // Inject a React import so React.createElement calls resolve at runtime
   // when react is external (not bundled). The shim re-exports React from 'react'.

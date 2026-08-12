@@ -2,8 +2,8 @@ import { defineConfig } from 'tsup';
 
 // @cleak/common ships the subpaths its consumers import: the barrel, `./types`,
 // `./flow/scan-flow-contract`, and every `./analysis/*` module. Code shared
-// across these entries is split into chunks so it is not duplicated. `zod` and
-// the optional `pdfkit` (PDF report renderer) stay external.
+// across these entries is split into chunks so it is not duplicated. `zod` stays
+// external.
 export default defineConfig({
   entry: [
     'src/index.ts',
@@ -20,7 +20,7 @@ export default defineConfig({
   platform: 'node',
   bundle: true,
   splitting: true,
-  external: ['zod', 'pdfkit'],
+  external: ['zod'],
   outDir: 'dist',
   clean: true,
   dts: true,

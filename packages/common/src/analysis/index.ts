@@ -2,7 +2,7 @@
  * Shared, framework-free analysis logic (report renderers + heuristic
  * root-cause/repair synthesis). Imported via the sub-path
  * `@cleak/common/analysis/...` — deliberately NOT re-exported from the
- * top-level barrel so the Vite UI never pulls in pdfkit.
+ * top-level barrel so the Vite UI never pulls in the renderer stack.
  */
 export * from './reporting';
 export * from './heuristic-leak-analysis';

@@ -64,7 +64,6 @@ export enum ReportFormat {
   JSON = 'json',
   MARKDOWN = 'markdown',
   HTML = 'html',
-  PDF = 'pdf',
   SNAPSHOT = 'snapshot',
 }
 
