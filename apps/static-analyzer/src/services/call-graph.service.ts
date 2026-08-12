@@ -17,6 +17,33 @@ const MAX_OWNERSHIP_HOPS = 8;
 export class CallGraphService {
   constructor(private readonly cParser: CParserService) {}
 
+  // Resolves a call site to the RIGHT implementation when the receiver's
+  // constructed class is known (Juliet virtual-dispatch shape, flow-variant
+  // 81-82: `Base* obj = new Derived; obj->action();` — `obj`'s DECLARED type is
+  // `Base`, but `action()` must resolve to `Derived::action`). Falls back to the
+  // existing bare-name `fnIndex` lookup when there's no receiver, no tracked
+  // construction, or no qualified match — same behavior as before this fix for
+  // every non-method call and every method call whose class can't be resolved.
+  private resolveCallee(
+    enclosing: FunctionInfo,
+    call: { name: string; receiver?: string },
+    fnIndex: Map<string, { fn: FunctionInfo; file: string }>,
+    qualifiedFnIndex: Map<string, { fn: FunctionInfo; file: string }>,
+  ): { fn: FunctionInfo; file: string } | undefined {
+    if (call.receiver) {
+      // Last construction of this variable before falling back — Juliet's shape
+      // constructs once, immediately before the call, so source-order "last
+      // assignment of this name" already matches "the one live at this call site"
+      // without needing real line-ordering/control-flow analysis.
+      const constructed = [...enclosing.constructedTypes].reverse().find((c) => c.variable === call.receiver);
+      if (constructed) {
+        const qualified = qualifiedFnIndex.get(`${constructed.className}::${call.name}`);
+        if (qualified) return qualified;
+      }
+    }
+    return fnIndex.get(call.name);
+  }
+
   // Parses each file concurrently (spread across the worker pool) but always
   // applies the per-file results back in the ORIGINAL `files` order — a
   // duplicate function name across files must still resolve to the same file
@@ -46,12 +73,20 @@ export class CallGraphService {
     // not just the name→file map the rest of extract() uses.
     const functionToFile = new Map<string, string>();
     const fnIndex = new Map<string, { fn: FunctionInfo; file: string }>();
+    // Qualified index (`ClassName::method`) — resolves same-named methods across
+    // DIFFERENT classes (virtual dispatch, Juliet 81-82) that would otherwise
+    // collide in `fnIndex` on the bare name (first-definition-wins). See
+    // `extractClassMembership`'s doc comment in extraction-helpers.ts.
+    const qualifiedFnIndex = new Map<string, { fn: FunctionInfo; file: string }>();
     const firstPass = await this.parseAll(files);
     for (const { file, functions } of firstPass) {
       for (const fn of functions) {
         allFunctions.set(fn.functionName, file);
         functionToFile.set(fn.functionName, file);
         if (!fnIndex.has(fn.functionName)) fnIndex.set(fn.functionName, { fn, file });
+        if (fn.className && !qualifiedFnIndex.has(`${fn.className}::${fn.functionName}`)) {
+          qualifiedFnIndex.set(`${fn.className}::${fn.functionName}`, { fn, file });
+        }
       }
     }
 
@@ -82,13 +117,21 @@ export class CallGraphService {
       }
     }
 
-    const paramOwnership = this.correlateOwnership(secondPass, fnIndex);
+    const paramOwnership = this.correlateOwnership(secondPass, fnIndex, qualifiedFnIndex);
     const returnOwnership = this.correlateReturnOwnership(secondPass, fnIndex);
+    // Out-param ownership (Juliet 43/62: `badSource(char *&data)` — callee
+    // allocates, writes back through a reference parameter instead of `return`)
+    // and RAII ownership (Juliet 83-84: ctor allocates a field, dtor frees it)
+    // reuse the SAME freedViaCaller/unfreedReturnOwnership shape as return-value
+    // ownership above — three different data-flow directions, one candidate
+    // representation, so staticContext.ts needs no changes to consume them.
+    const outParamOwnership = this.correlateOutParamOwnership(secondPass, fnIndex, qualifiedFnIndex);
+    const raiiOwnership = this.correlateRaiiOwnership(secondPass);
     const ownershipCorrelations = {
       freedCrossFile: paramOwnership.freedCrossFile,
       unfreedSinkParams: paramOwnership.unfreedSinkParams,
-      freedViaCaller: returnOwnership.freedViaCaller,
-      unfreedReturnOwnership: returnOwnership.unfreedReturnOwnership,
+      freedViaCaller: [...returnOwnership.freedViaCaller, ...outParamOwnership.freedViaCaller, ...raiiOwnership.freedViaCaller],
+      unfreedReturnOwnership: [...returnOwnership.unfreedReturnOwnership, ...outParamOwnership.unfreedReturnOwnership],
     };
 
     // Third pass: detect recursion cycles (direct + indirect)
@@ -169,6 +212,7 @@ export class CallGraphService {
   private correlateOwnership(
     parsed: { file: string; functions: FunctionInfo[] }[],
     fnIndex: Map<string, { fn: FunctionInfo; file: string }>,
+    qualifiedFnIndex: Map<string, { fn: FunctionInfo; file: string }>,
   ): { freedCrossFile: FreedCrossFileEntry[]; unfreedSinkParams: UnfreedSinkParamEntry[] } {
     const freedCrossFile: FreedCrossFileEntry[] = [];
     const unfreedRaw: UnfreedSinkParamEntry[] = [];
@@ -187,7 +231,7 @@ export class CallGraphService {
         }
 
         for (const call of caller.functionCalls) {
-          const callee = fnIndex.get(call.name);
+          const callee = this.resolveCallee(caller, call, fnIndex, qualifiedFnIndex);
           if (!callee || callee.fn === caller) continue; // unresolved or self-recursive - skip
           const args = call.args ?? [];
           for (let i = 0; i < args.length; i++) {
@@ -202,6 +246,7 @@ export class CallGraphService {
                 callee.file,
                 param.name,
                 fnIndex,
+                qualifiedFnIndex,
                 new Set([caller.functionName, callee.fn.functionName]),
                 MAX_OWNERSHIP_HOPS,
               );
@@ -289,6 +334,7 @@ export class CallGraphService {
     file: string,
     paramName: string,
     fnIndex: Map<string, { fn: FunctionInfo; file: string }>,
+    qualifiedFnIndex: Map<string, { fn: FunctionInfo; file: string }>,
     visited: Set<string>,
     hopsLeft: number,
   ):
@@ -301,14 +347,14 @@ export class CallGraphService {
     for (const call of fn.functionCalls) {
       const idx = (call.args ?? []).indexOf(paramName);
       if (idx === -1) continue;
-      const next = fnIndex.get(call.name);
+      const next = this.resolveCallee(fn, call, fnIndex, qualifiedFnIndex);
       if (!next || visited.has(next.fn.functionName)) continue; // unresolved callee or cycle
       const nextParam = next.fn.parameters[idx];
       if (!nextParam?.isPointer) continue;
       if (hopsLeft <= 0) return null;
       const nextVisited = new Set(visited);
       nextVisited.add(next.fn.functionName);
-      return this.walkOwnershipChain(next.fn, next.file, nextParam.name, fnIndex, nextVisited, hopsLeft - 1);
+      return this.walkOwnershipChain(next.fn, next.file, nextParam.name, fnIndex, qualifiedFnIndex, nextVisited, hopsLeft - 1);
     }
     // No forwarding call found and not freed here -> this function IS the sink.
     return { freed: false, sink: { fn: fn.functionName, file, param: paramName, sigLine: fn.lineNumber } };
@@ -379,6 +425,125 @@ export class CallGraphService {
     });
 
     return { freedViaCaller, unfreedReturnOwnership };
+  }
+
+  // A THIRD data-flow direction, distinct from both correlateOwnership()
+  // (caller allocates, passes an ALREADY-allocated pointer INTO the callee) and
+  // correlateReturnOwnership() (callee allocates and hands it back via
+  // `return`): Juliet flow-variant 43/62 — `badSource(char *&data)` — the
+  // callee allocates and writes back through a REFERENCE-OUTPUT parameter; the
+  // caller passes an uninitialized/don't-care variable IN and receives the
+  // allocation OUT through the same argument. Verified against the real case
+  // (`char_calloc_43`): `isPointer` is already correctly `true` for `char *
+  // &data` (tree-sitter's `pointer_declarator` wraps `reference_declarator`),
+  // so the gap isn't extraction — it's that correlateOwnership()'s gate
+  // (`callerAllocs.has(arg)`, i.e. "caller already allocated this") can never
+  // fire here, since the caller has NOT allocated anything before the call.
+  // Confirmed root cause: with no correlation at all, `goodB2GSource`'s
+  // allocation got the exact same generic same-function verdict as
+  // `badSource`'s, from `heuristic-leak-analysis.ts`'s same-function-only free
+  // check — both looked identical from that vantage point.
+  private correlateOutParamOwnership(
+    parsed: { file: string; functions: FunctionInfo[] }[],
+    fnIndex: Map<string, { fn: FunctionInfo; file: string }>,
+    qualifiedFnIndex: Map<string, { fn: FunctionInfo; file: string }>,
+  ): { freedViaCaller: FreedViaCallerEntry[]; unfreedReturnOwnership: UnfreedReturnOwnershipEntry[] } {
+    const freedViaCaller: FreedViaCallerEntry[] = [];
+    const unfreedRaw: UnfreedReturnOwnershipEntry[] = [];
+
+    for (const { file, functions } of parsed) {
+      for (const caller of functions) {
+        const callerAllocs = new Set(caller.allocationVariables.map((a) => a.variable));
+        for (const call of caller.functionCalls) {
+          const callee = this.resolveCallee(caller, call, fnIndex, qualifiedFnIndex);
+          if (!callee || callee.fn === caller) continue;
+          const args = call.args ?? [];
+          for (let i = 0; i < args.length; i++) {
+            const arg = args[i];
+            // Bare identifier, and NOT already the caller's own allocation —
+            // that direction is correlateOwnership()'s, not this one.
+            if (!arg || callerAllocs.has(arg)) continue;
+            const param = callee.fn.parameters[i];
+            if (!param?.isPointer) continue;
+            const outAlloc = callee.fn.allocationVariables.find(
+              (a) => a.variable === param.name && !callee.fn.freedVariables.some((f) => f.variable === param.name),
+            );
+            if (!outAlloc) continue; // callee doesn't allocate-and-leave-unfreed through this param
+            const freedByCaller = caller.freedVariables.some((f) => f.variable === arg);
+            if (freedByCaller) {
+              freedViaCaller.push({
+                calleeFunction: callee.fn.functionName,
+                calleeFile: callee.file,
+                variable: outAlloc.variable,
+                callerFunction: caller.functionName,
+                callerFile: file,
+              });
+            } else {
+              unfreedRaw.push({
+                callerFunction: caller.functionName,
+                callerFile: file,
+                callerVariable: arg,
+                callerAssignLine: call.line,
+                calleeFunction: callee.fn.functionName,
+                calleeFile: callee.file,
+              });
+            }
+          }
+        }
+      }
+    }
+
+    const seen = new Set<string>();
+    const unfreedReturnOwnership = unfreedRaw.filter((e) => {
+      const key = `${e.callerFile} ${e.callerFunction} ${e.callerVariable} ${e.callerAssignLine}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
+    return { freedViaCaller, unfreedReturnOwnership };
+  }
+
+  // RAII (Juliet flow-variant 83-84): a class's CONSTRUCTOR allocates a field,
+  // its DESTRUCTOR frees it — two different functions entirely, so the existing
+  // same-function-only free check (heuristic-leak-analysis.ts's
+  // `hasFreeOfVar`/`findEnclosingFunction`) can never see the destructor's free
+  // as satisfying the constructor's allocation, misjudging every correctly-
+  // cleaned-up case as a leak. Only handles the exoneration direction
+  // (freedViaCaller) — when NO destructor free is found, the constructor's own
+  // allocation-site candidate (already produced by ordinary candidateScan,
+  // unlike return-ownership's dispatcher which needs a synthesized candidate)
+  // is left exactly as-is: no new candidate to synthesize, so no change to FN
+  // behavior, only to the false-positive rate.
+  private correlateRaiiOwnership(
+    parsed: { file: string; functions: FunctionInfo[] }[],
+  ): { freedViaCaller: FreedViaCallerEntry[] } {
+    const freedViaCaller: FreedViaCallerEntry[] = [];
+    const ctors = parsed.flatMap(({ file, functions }) =>
+      functions.filter((fn) => fn.memberKind === 'ctor').map((fn) => ({ fn, file })),
+    );
+    const dtors = parsed.flatMap(({ file, functions }) =>
+      functions.filter((fn) => fn.memberKind === 'dtor').map((fn) => ({ fn, file })),
+    );
+
+    for (const { fn: ctor, file } of ctors) {
+      const dtor = dtors.find((d) => d.fn.className && d.fn.className === ctor.className);
+      if (!dtor) continue;
+      for (const alloc of ctor.allocationVariables) {
+        if (ctor.freedVariables.some((f) => f.variable === alloc.variable)) continue; // freed within the ctor itself
+        if (dtor.fn.freedVariables.some((f) => f.variable === alloc.variable)) {
+          freedViaCaller.push({
+            calleeFunction: ctor.functionName,
+            calleeFile: file,
+            variable: alloc.variable,
+            callerFunction: dtor.fn.functionName,
+            callerFile: dtor.file,
+          });
+        }
+      }
+    }
+
+    return { freedViaCaller };
   }
 
   private detectIndirectRecursion(

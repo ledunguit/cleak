@@ -10,8 +10,10 @@ export interface FunctionInfo {
    * link this function; it must #include the defining source file instead. */
   storageClass: 'static' | 'extern' | 'none';
   /** `args[i]` is the identifier name when argument i is a bare identifier, else
-   * `null` (complex expression/literal/field access — not resolved, kept simple). */
-  functionCalls: { name: string; line: number; args: (string | null)[] }[];
+   * `null` (complex expression/literal/field access — not resolved, kept simple).
+   * `receiver` is the object before `.`/`->` for a method call (`obj.action()`) —
+   * unset for a plain function call. */
+  functionCalls: { name: string; line: number; args: (string | null)[]; receiver?: string }[];
   allocationCalls: { name: string; line: number }[];
   deallocationCalls: { name: string; line: number }[];
   returnStatements: { line: number; text: string }[];
@@ -27,6 +29,20 @@ export interface FunctionInfo {
    * dataVector[2];`, `dataList.front()`/`.back()`/`.at(i)`. Ties a container-typed
    * parameter back to the local pointer variable that then needs a leak check. */
   containerExtractions: { variable: string; container: string; line: number }[];
+  /** Class name for an out-of-class method definition (`ClassName::method(){}`) —
+   * unset for a free function or an inline-in-class-body method (not resolved, see
+   * `extractClassMembership`'s doc comment). Lets `fnIndex` disambiguate same-named
+   * methods across different classes (virtual dispatch) and pair a constructor with
+   * its class's destructor (RAII). */
+  className?: string;
+  /** `'ctor'` when `functionName === className` (out-of-class constructor
+   * definition); `'dtor'` when the qualified name is `~ClassName`. Unset otherwise. */
+  memberKind?: 'ctor' | 'dtor';
+  /** `Base* obj = new Derived;` / `obj = new Derived(...)` — the ACTUALLY
+   * constructed class, which may differ from `obj`'s declared/static type
+   * (Juliet's virtual-dispatch shape constructs the derived class through a
+   * base-typed pointer on purpose). See `extractConstructedTypes`'s doc comment. */
+  constructedTypes: { variable: string; className: string; line: number }[];
   lineNumber: number;
   /** 1-based line of the function's closing brace (tree-sitter endPosition). Enables
    * accurate line→enclosing-function attribution (candidate-scan) instead of the old

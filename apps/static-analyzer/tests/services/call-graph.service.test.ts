@@ -502,3 +502,237 @@ void sink(std::vector<char*> v) {
     expect(result.ownershipCorrelations.unfreedSinkParams).toEqual([]);
   });
 });
+
+describe('CallGraphService — reference-output-param ownership (Juliet flow-variant 43/62 shapes)', () => {
+  test('freedViaCaller: dispatcher frees the value the Source wrote back through a reference param', async () => {
+    const a = write(
+      'case_43.cpp',
+      `
+#include <cstdlib>
+static void badSource(char * &data) {
+    data = (char *)calloc(100, sizeof(char));
+}
+static void bad(void) {
+    char *data;
+    data = NULL;
+    badSource(data);
+    ;
+}
+static void goodB2GSource(char * &data) {
+    data = (char *)calloc(100, sizeof(char));
+}
+static void goodB2G(void) {
+    char *data;
+    data = NULL;
+    goodB2GSource(data);
+    free(data);
+}
+`,
+    );
+
+    const svc = new CallGraphService(new CParserService());
+    const result = await svc.extract(dir, [a]);
+
+    expect(result.ownershipCorrelations.freedViaCaller).toEqual([
+      expect.objectContaining({ calleeFunction: 'goodB2GSource', callerFunction: 'goodB2G', variable: 'data' }),
+    ]);
+    expect(result.ownershipCorrelations.unfreedReturnOwnership).toEqual([
+      expect.objectContaining({ callerFunction: 'bad', calleeFunction: 'badSource', callerVariable: 'data' }),
+    ]);
+  });
+
+  test('cross-file: dispatcher and Source in different files still correlate', async () => {
+    const a = write(
+      'case_62a.cpp',
+      `
+void badSource(char * &data);
+void goodB2GSource(char * &data);
+static void bad(void) {
+    char *data;
+    data = NULL;
+    badSource(data);
+    ;
+}
+static void goodB2G(void) {
+    char *data;
+    data = NULL;
+    goodB2GSource(data);
+    free(data);
+}
+`,
+    );
+    const b = write(
+      'case_62b.cpp',
+      `
+#include <cstdlib>
+void badSource(char * &data) {
+    data = (char *)calloc(100, sizeof(char));
+}
+void goodB2GSource(char * &data) {
+    data = (char *)calloc(100, sizeof(char));
+}
+`,
+    );
+
+    const svc = new CallGraphService(new CParserService());
+    const result = await svc.extract(dir, [a, b]);
+
+    expect(result.ownershipCorrelations.freedViaCaller).toEqual([
+      expect.objectContaining({ calleeFunction: 'goodB2GSource', calleeFile: b, callerFunction: 'goodB2G' }),
+    ]);
+    expect(result.ownershipCorrelations.unfreedReturnOwnership).toEqual([
+      expect.objectContaining({ callerFunction: 'bad', calleeFunction: 'badSource', calleeFile: b }),
+    ]);
+  });
+
+  test("a callee whose out-param the CALLER already allocated is correlateOwnership()'s direction, not this one", async () => {
+    const a = write(
+      'already_allocated.cpp',
+      `
+#include <cstdlib>
+void sink(char *data) {
+    ;
+}
+void caller(void) {
+    char *data = (char *)malloc(100);
+    sink(data);
+}
+`,
+    );
+
+    const svc = new CallGraphService(new CParserService());
+    const result = await svc.extract(dir, [a]);
+
+    // Already covered by unfreedSinkParams (correlateOwnership) — must NOT
+    // also show up as a synthesized return-ownership candidate.
+    expect(result.ownershipCorrelations.unfreedReturnOwnership).toEqual([]);
+    expect(result.ownershipCorrelations.unfreedSinkParams).toEqual([
+      expect.objectContaining({ calleeFunction: 'sink', callerFunction: 'caller', callerVariable: 'data' }),
+    ]);
+  });
+});
+
+describe('CallGraphService — virtual dispatch (Juliet flow-variant 81-82 shapes)', () => {
+  test('fnIndex resolves the RECEIVER-CONSTRUCTED class, not just the first same-named method seen', async () => {
+    const a = write(
+      'case_82.cpp',
+      `
+class Base {
+public:
+    virtual void action(char *data) = 0;
+};
+void Bad::action(char *data) {
+    ;
+}
+void GoodB2G::action(char *data) {
+    free(data);
+}
+void bad(void) {
+    char *data = (char *)malloc(100);
+    Base *baseObject = new Bad;
+    baseObject->action(data);
+}
+void goodB2G(void) {
+    char *data = (char *)malloc(100);
+    Base *baseObject = new GoodB2G;
+    baseObject->action(data);
+}
+`,
+    );
+
+    const svc = new CallGraphService(new CParserService());
+    const result = await svc.extract(dir, [a]);
+
+    // Each dispatcher must resolve to ITS OWN constructed class's action() —
+    // NOT collapse onto whichever definition parseAll happened to see first.
+    expect(result.ownershipCorrelations.unfreedSinkParams).toEqual([
+      expect.objectContaining({ calleeFunction: 'action', callerFunction: 'bad', callerVariable: 'data' }),
+    ]);
+    expect(result.ownershipCorrelations.freedCrossFile).toEqual([
+      expect.objectContaining({ calleeFunction: 'action', callerFunction: 'goodB2G', callerVariable: 'data' }),
+    ]);
+  });
+});
+
+describe('CallGraphService — RAII constructor/destructor pairing (Juliet flow-variant 83-84 shapes)', () => {
+  test("freedViaCaller: a destructor that frees the field exonerates the constructor's allocation", async () => {
+    const a = write(
+      'case_83.cpp',
+      `
+#include <cstdlib>
+class GoodB2G {
+public:
+    GoodB2G(char *dataCopy);
+    ~GoodB2G();
+private:
+    char *data;
+};
+GoodB2G::GoodB2G(char *dataCopy) {
+    data = dataCopy;
+    data = (char *)malloc(100 * sizeof(char));
+}
+GoodB2G::~GoodB2G() {
+    free(data);
+}
+`,
+    );
+
+    const svc = new CallGraphService(new CParserService());
+    const result = await svc.extract(dir, [a]);
+
+    expect(result.ownershipCorrelations.freedViaCaller).toEqual([
+      expect.objectContaining({ calleeFunction: 'GoodB2G', callerFunction: '~GoodB2G', variable: 'data' }),
+    ]);
+  });
+
+  test("no matching destructor free: no correlation is added (the ctor's own candidate stays as-is)", async () => {
+    const a = write(
+      'case_84.cpp',
+      `
+#include <cstdlib>
+class Bad {
+public:
+    Bad(char *dataCopy);
+    ~Bad();
+private:
+    char *data;
+};
+Bad::Bad(char *dataCopy) {
+    data = dataCopy;
+    data = (char *)malloc(100 * sizeof(char));
+}
+Bad::~Bad() {
+    ;
+}
+`,
+    );
+
+    const svc = new CallGraphService(new CParserService());
+    const result = await svc.extract(dir, [a]);
+
+    expect(result.ownershipCorrelations.freedViaCaller).toEqual([]);
+  });
+
+  test('a constructor with no matching destructor in the parsed file set is left alone', async () => {
+    const a = write(
+      'no_dtor.cpp',
+      `
+#include <cstdlib>
+class Lonely {
+public:
+    Lonely();
+private:
+    char *data;
+};
+Lonely::Lonely() {
+    data = (char *)malloc(100);
+}
+`,
+    );
+
+    const svc = new CallGraphService(new CParserService());
+    const result = await svc.extract(dir, [a]);
+
+    expect(result.ownershipCorrelations.freedViaCaller).toEqual([]);
+  });
+});

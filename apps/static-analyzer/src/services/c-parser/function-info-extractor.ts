@@ -6,7 +6,7 @@ import {
 import {
   extractFunctionName, extractParameters, extractLocalVariables,
   extractFunctionCalls, isAllocationCall, extractReturnStatements, extractConditions,
-  extractStorageClass, extractReturnType, extractCallArgs,
+  extractStorageClass, extractReturnType, extractCallArgs, extractClassMembership,
 } from './extraction-helpers';
 
 // Deliberately closed, STL-specific method sets — narrow by design, same
@@ -240,6 +240,45 @@ function extractAssignedCalls(
   return result;
 }
 
+/**
+ * `Base* obj = new Derived;` / `obj = new Derived(args);` — the DECLARED type
+ * (`Base`, from `localVariables`) is NOT what should resolve a later
+ * `obj->method()` call: Juliet's virtual-dispatch shape (flow-variant 81-82)
+ * constructs the DERIVED class through a base-class-typed pointer specifically
+ * to exercise dispatch. `new_expression`'s own `type_identifier` child names
+ * the class actually constructed — that's what `call-graph.service.ts` needs to
+ * resolve `obj->action()` to the right class's `Class::action` in `fnIndex`,
+ * instead of colliding on the bare method name across every class that defines
+ * one (see `extractClassMembership`'s doc comment for the fnIndex side).
+ */
+function extractConstructedTypes(node: TreeSitterNode, lines: string[]): { variable: string; className: string; line: number }[] {
+  const body = findChild(node, 'compound_statement');
+  if (!body) return [];
+  const result: { variable: string; className: string; line: number }[] = [];
+
+  for (const decl of findAllNodes(body, 'init_declarator')) {
+    const newExpr = findChild(decl, 'new_expression');
+    if (!newExpr) continue;
+    const typeId = findChild(newExpr, 'type_identifier');
+    const varName = extractDeclaratorName(decl, lines);
+    if (typeId && varName) result.push({ variable: varName, className: nodeText(typeId, lines), line: (decl.startPosition?.row ?? 0) + 1 });
+  }
+
+  for (const expr of findAllNodes(body, 'assignment_expression')) {
+    const left = expr.children?.[0];
+    const right = expr.children?.[expr.children.length - 1];
+    if (!left || !right) continue;
+    const newExpr = right.type === 'new_expression' ? right : findChild(right, 'new_expression');
+    if (!newExpr) continue;
+    const typeId = findChild(newExpr, 'type_identifier');
+    if (typeId && left.type === 'identifier') {
+      result.push({ variable: nodeText(left, lines), className: nodeText(typeId, lines), line: (left.startPosition?.row ?? 0) + 1 });
+    }
+  }
+
+  return result;
+}
+
 export function buildFunctionInfo(
   funcNode: TreeSitterNode,
   lines: string[],
@@ -266,9 +305,14 @@ export function buildFunctionInfo(
     const assignedCalls = extractAssignedCalls(funcNode, lines, allocSet);
     const containerCarriers = extractContainerCarriers(funcNode, lines);
     const containerExtractions = extractContainerExtractions(funcNode, lines);
+    const { className, memberKind } = extractClassMembership(funcNode, lines);
+    const constructedTypes = extractConstructedTypes(funcNode, lines);
 
     const fn: FunctionInfo = {
       functionName,
+      className,
+      memberKind,
+      constructedTypes,
       parameters,
       localVariables,
       returnType: extractReturnType(funcNode, lines),
