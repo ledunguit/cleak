@@ -68,8 +68,30 @@ export class CParserService implements OnModuleInit, OnModuleDestroy {
       return;
     }
     const workers = Math.max(1, Number(process.env.STATIC_PARSER_WORKERS) || Math.max(1, os.cpus().length - 1));
-    this.pool = new Piscina({ filename: workerPath, minThreads: workers, maxThreads: workers });
-    this.logger.log(`parse worker pool started: ${workers} thread(s) (${workerPath})`);
+    // Each worker keeps a long-lived tree-sitter parser singleton across every
+    // task it ever runs (see parse.worker.ts) — memory growth is CUMULATIVE
+    // over the worker's lifetime, not per-task, and nothing here previously
+    // bounded it. That's the actual reason 5 workers OOM-killed the container
+    // on a real load test even though 5 threads alone shouldn't: the container
+    // died from unbounded accumulation, not raw thread count. `resourceLimits`
+    // gives V8 a real ceiling PER WORKER — Piscina auto-respawns a worker that
+    // hits it (a controlled, cheap restart) instead of the whole container
+    // dying uncontrolled. `maxOldGenerationSizeMb` default here is a
+    // conservative starting point, NOT a profiled number — raise/lower it
+    // after measuring real per-worker RSS under load (`docker stats` during
+    // the MemHint 19-case load test already used for STATIC_PARSER_WORKERS).
+    const maxOldGenerationMb = Math.max(64, Number(process.env.STATIC_PARSER_MAX_OLD_GEN_MB) || 512);
+    this.pool = new Piscina({
+      filename: workerPath,
+      minThreads: workers,
+      maxThreads: workers,
+      resourceLimits: { maxOldGenerationSizeMb: maxOldGenerationMb },
+      // A worker sitting idle this long is recycled too — bounds worst-case
+      // heap fragmentation even for a worker that never quite hits the hard
+      // ceiling above.
+      idleTimeout: 5 * 60_000,
+    });
+    this.logger.log(`parse worker pool started: ${workers} thread(s), ${maxOldGenerationMb}MB/worker heap cap (${workerPath})`);
   }
 
   async onModuleDestroy(): Promise<void> {
