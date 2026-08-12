@@ -94,6 +94,8 @@ program
   .option('--verify-ownership', 'dynamically verify static ownership-transfer claims via harness before scoring (opt-in, experimental)', false)
   .option('--allocators-from <mode>', 'allocator API discovery: auto | llm | none', 'auto')
   .option('--strategy <mode>', 'adaptive strategist (LLM picks the plan per project): auto | off', 'off')
+  .option('--enrich', 'deterministic static enrichment: alloc→free pairing + feasible leak paths for every candidate (opt-in)', false)
+  .option('--static-tools <csv>', 'static evidence tools for enrichment (comma-separated): functionSummary,pathConstraints,scanBuild,interproceduralFlow (default when --enrich: functionSummary,pathConstraints; add scanBuild to also run the Clang Static Analyzer — needs --build)', csv)
   .option('--allocators <csv>', 'custom allocator names (comma-separated; overrides discovery)')
   .option('--deallocators <csv>', 'custom deallocator names (comma-separated)')
   .option('--file-limit <n>', 'cap on indexed files', (v) => parseInt(v, 10))
@@ -120,6 +122,8 @@ program
         verifyOwnership: opts.verifyOwnership,
         allocatorsFrom: opts.allocatorsFrom,
         strategy: opts.strategy,
+        enrich: opts.enrich,
+        staticTools: opts.staticTools,
         extraAllocators: csv(opts.allocators),
         extraDeallocators: csv(opts.deallocators),
         fileLimit: opts.fileLimit,
