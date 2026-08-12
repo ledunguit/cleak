@@ -6,7 +6,7 @@
  * a local container or on a remote host.
  */
 
-import { readdirSync, statSync, readFileSync } from 'node:fs';
+import { readdirSync, lstatSync, statSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const SKIP_DIRS = new Set([
@@ -75,10 +75,13 @@ export function walkCFiles(root: string, limit = 2000): string[] {
       const full = join(dir, entry);
       let st: ReturnType<typeof statSync>;
       try {
-        st = statSync(full);
+        // lstat: skip symlinks so a link inside the repo cannot drag host files
+        // (outside the scanned root) into the walk.
+        st = lstatSync(full);
       } catch {
         continue;
       }
+      if (st.isSymbolicLink()) continue;
       if (st.isDirectory()) {
         if (!SKIP_DIRS.has(entry) && !isBuildDir(entry)) visit(full);
       } else if (st.isFile()) {

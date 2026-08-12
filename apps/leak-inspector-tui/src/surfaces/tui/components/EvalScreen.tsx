@@ -13,6 +13,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Box, Text, useInput } from 'ink';
 import { useTerminalSize } from '../hooks/useTerminalSize';
+import { useViewportRows } from '../hooks/useViewportRows';
 import { color, glyph } from '../theme';
 import { VerdictCard } from './VerdictCard';
 import { snapshotFindingToView } from '../findings/findingView';
@@ -76,7 +77,6 @@ export function EvalScreen({
    * browsing past runs doesn't dead-end at the main screen. */
   onBackToHistory?: () => void;
 }) {
-  const { rows: termRows } = useTerminalSize();
   // Tick so elapsed timers + running phases stay live between store updates.
   const [, force] = useState(0);
   useEffect(() => {
@@ -101,7 +101,7 @@ export function EvalScreen({
     }
   }, [evalState.tab, selected?.scanId, selected?.status, resultsDir]);
 
-  const logRows = Math.max(6, termRows - 20);
+  const logRows = useViewportRows(6);
   const maxScroll = Math.max(0, logLines.length - logRows);
   const [logScroll, setLogScroll] = useState(0);
   // Reset the log scroll to the latest (tail) when the case changes.

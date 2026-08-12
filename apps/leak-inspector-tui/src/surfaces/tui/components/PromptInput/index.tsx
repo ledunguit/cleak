@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { Box, Text, useInput } from 'ink';
 import { color, glyph } from '../../theme';
 import { keyToIntent, reduce } from './keybindings';
+import { usePasteSupport } from './usePasteSupport';
+import { handlePaste } from './pasteHandler';
 
 /**
  * Prompt input with terminal-grade line editing. Replaces `ink-text-input` so we
@@ -44,6 +46,7 @@ export function PromptInput({
   // an external value change (history recall / command completion), which should
   // snap the cursor to the end.
   const lastEmitted = useRef(value);
+  const { consumePaste } = usePasteSupport();
 
   useEffect(() => {
     if (value !== lastEmitted.current) {
@@ -63,6 +66,19 @@ export function PromptInput({
     (input, key) => {
       if (key.return) {
         onSubmit(value);
+        return;
+      }
+      // Bracketed paste: a full paste arrives as one chunk delimited by
+      // [200~ … \x1b[201~; route it through handlePaste so multi-line pastes
+      // produce a single (normalised) buffer insert instead of raw keystrokes.
+      const pasted = consumePaste(input);
+      if (pasted !== null) {
+        if (pasted) {
+          const next = handlePaste(pasted, value, cursor);
+          lastEmitted.current = next.value;
+          setCursor(next.cursor);
+          onChange(next.value);
+        }
         return;
       }
       const intent = keyToIntent(input, key);

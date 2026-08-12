@@ -7,7 +7,7 @@
 import { useRef } from 'react';
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
-import { findCommand } from '../commands';
+import { findCommand, COMMANDS } from '../commands';
 import { glyph, color, formatDuration } from '../theme';
 import { runTuiScan } from '../runner';
 import { runTuiEval, type TuiEvalRequest } from '../evalRunner';
@@ -196,6 +196,15 @@ export function useCommands(
 
       case '/preflight':
         void doPreflight(store, staticUrl, dynamicUrl);
+        return;
+
+      case '/help':
+        store.addSystemMessage('── commands ──');
+        for (const c of COMMANDS) {
+          store.addSystemMessage(
+            `  ${c.name} — ${c.summary}${c.usage ? ` (${c.usage})` : ''}`,
+          );
+        }
         return;
 
       case '/scans':

@@ -24,7 +24,13 @@ export interface MainLayoutProps {
  * The sidebar is rendered on the left or right based on `sidebarPosition`.
  * The content area fills remaining space with overflow hidden (scroll clipping).
  * Sidebar width is responsive: 30% of terminal width, clamped to [24, 36].
+ * Below SIDEBAR_MIN_COLS the sidebar is hidden entirely so narrow terminals
+ * get the full content width.
  */
+
+/** Below this many terminal columns the sidebar is dropped (content goes full width). */
+export const SIDEBAR_MIN_COLS = 100;
+
 export function MainLayout({
   header,
   sidebar,
@@ -35,6 +41,7 @@ export function MainLayout({
   termRows = 24,
 }: MainLayoutProps) {
   const sidebarWidth = Math.max(24, Math.min(36, Math.floor(termCols * 0.3)));
+  const showSidebar = termCols >= SIDEBAR_MIN_COLS;
 
   const sidebarBox = (
     <Box width={sidebarWidth} flexShrink={0} flexDirection="column" overflow="hidden">
@@ -51,11 +58,11 @@ export function MainLayout({
 
       {/* Body: sidebar + content */}
       <Box flexGrow={1} flexDirection="row" overflow="hidden">
-        {sidebarPosition === 'left' && sidebarBox}
+        {sidebarPosition === 'left' && showSidebar && sidebarBox}
         <Box flexGrow={1} flexDirection="column" overflow="hidden">
           {content}
         </Box>
-        {sidebarPosition === 'right' && sidebarBox}
+        {sidebarPosition === 'right' && showSidebar && sidebarBox}
       </Box>
 
       {/* Sticky bottom */}

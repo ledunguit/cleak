@@ -39,6 +39,7 @@ export function FindingsScreen({ store, state, resultsDir }: { store: TuiStore; 
   const fs = state.findings;
   const visible = visibleFindings(state);
   const tableRows = Math.max(5, termRows - 13);
+  const page = Math.max(1, Math.floor(tableRows / 2));
 
   useInput((input, key) => {
     if (!fs) return;
@@ -49,6 +50,8 @@ export function FindingsScreen({ store, state, resultsDir }: { store: TuiStore; 
     if (fs.tab === 'table') {
       if (key.upArrow) return store.findingsMove(-1);
       if (key.downArrow) return store.findingsMove(1);
+      if (key.pageUp) return store.findingsMove(-page);
+      if (key.pageDown) return store.findingsMove(page);
       if (key.return || key.rightArrow) return store.findingsOpenDetail();
       if (input === 's') return store.findingsCycleSort(1);
       if (input === 'f') return store.findingsCycleFilter('verdict', 1);
@@ -110,6 +113,8 @@ export function FindingsScreen({ store, state, resultsDir }: { store: TuiStore; 
             <Hint keys="f" label="verdict" />
             <Text color={color.subtle}> {glyph.bullet} </Text>
             <Hint keys="c" label="coverage" />
+            <Text color={color.subtle}> {glyph.bullet} </Text>
+            <Hint keys="pg↑/pg↓" label="page" />
             <Text color={color.subtle}> {glyph.bullet} </Text>
             <Hint keys="esc" label="exit" />
           </Text>

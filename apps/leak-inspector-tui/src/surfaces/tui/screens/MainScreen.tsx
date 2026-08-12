@@ -21,7 +21,7 @@ import { PromptInput } from '../components/PromptInput/index';
 import { SuggestionList, type SuggestionListHandle } from '../components/SuggestionList';
 import { AgentList } from '../components/AgentList';
 import { Footer } from '../components/Footer';
-import { MainLayout } from '../layout/MainLayout';
+import { MainLayout, SIDEBAR_MIN_COLS } from '../layout/MainLayout';
 import { useTerminalSize } from '../hooks/useTerminalSize';
 import { color, glyph } from '../theme';
 import { type TuiStore, type UiState } from '../../../stores';
@@ -113,12 +113,19 @@ export const MainScreen = memo(function MainScreen({
     </>
   );
 
-  // ── Sidebar: tips + recent scans ──
-  const sidebar = <WelcomeSidebar recentScans={recentScans} />;
+  // ── Sidebar: tips + recent scans (hidden on narrow terminals) ──
+  const sidebar = termCols >= SIDEBAR_MIN_COLS ? <WelcomeSidebar recentScans={recentScans} /> : null;
 
   // ── Scrollable content: messages ──
   const content = (
     <Box flexDirection="column" marginTop={1}>
+      {status === 'idle' && visible.length === 0 ? (
+        <Text dimColor>
+          no scan yet {glyph.bullet} <Text color={color.accent}>/scan</Text> &lt;repo&gt; to investigate{' '}
+          {glyph.bullet} <Text color={color.accent}>/eval</Text> benchmark {glyph.bullet}{' '}
+          <Text color={color.accent}>/help</Text> commands
+        </Text>
+      ) : null}
       <MessageList
         messages={visible}
         scrollOffset={scrollOffset}
@@ -139,6 +146,15 @@ export const MainScreen = memo(function MainScreen({
       {status === 'paused' ? (
         <Box marginTop={1}>
           <Text color={color.warning} bold>⏸ {statusText}</Text>
+        </Box>
+      ) : null}
+
+      {status === 'error' ? (
+        <Box marginTop={1}>
+          <Text color={color.error} bold>
+            {glyph.cross} {statusText && statusText !== 'error' ? statusText : 'scan failed'}
+            <Text dimColor> — see the message above, or /scan to retry</Text>
+          </Text>
         </Box>
       ) : null}
 

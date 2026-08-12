@@ -15,6 +15,8 @@ import { visibleMessages, type TuiStore } from '../../stores';
 import { scanStore } from '../../stores/scan-store';
 import { configStore } from '../../stores/config-store';
 import { useTerminalSize } from './hooks/useTerminalSize';
+import { useViewportRows } from './hooks/useViewportRows';
+import { totalMessageLines } from './components/messageLines';
 
 export interface AppProps {
   store: TuiStore; staticUrl?: string; dynamicUrl?: string;
@@ -27,7 +29,8 @@ export function App({ store, staticUrl, dynamicUrl, cwd, resultsDir, recentScans
   const scrollOffset = useStore(store, (s) => s.scrollOffset);
   const fullState = useStore(store, (s) => s);
   const { exit } = useApp();
-  const { rows: termRows } = useTerminalSize();
+  const { columns: termCols } = useTerminalSize();
+  const viewportRows = useViewportRows();
 
   // Use alternate screen buffer for ALL views to keep header/footer sticky.
   // Without this, the terminal scrolls naturally when content exceeds rows,
@@ -67,12 +70,12 @@ export function App({ store, staticUrl, dynamicUrl, cwd, resultsDir, recentScans
   });
 
   // Reactive terminal dimensions via useTerminalSize() — updates on resize.
-  // Overhead: header(9: border2+logo6+provider1) + bottom(9: spinner2+timeline2+prompt1+footer1+agent1+margins2) + spacing(2) = 20.
   // MainLayout clips content via flexGrow+overflow:hidden, so this is only
-  // used for scroll offset math, not for actual rendering.
-  const viewportRows = Math.max(8, termRows - 20);
+  // used for scroll offset math, not for actual rendering. The offset is
+  // measured in LINES (windowMessages does the same), so multi-line messages
+  // scroll correctly.
   const visible = visibleMessages(fullState);
-  const maxOffset = Math.max(0, visible.length - viewportRows);
+  const maxOffset = Math.max(0, totalMessageLines(visible, termCols) - viewportRows);
   const page = Math.max(1, Math.floor(viewportRows / 2));
   useInput((_ch, key) => {
     if (key.pageUp) store.scrollBy(page, maxOffset);

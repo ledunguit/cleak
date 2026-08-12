@@ -2,18 +2,23 @@ import { Box, Text } from 'ink';
 import { memo } from 'react';
 import { useStore } from 'zustand';
 import { useTerminalSize } from '../hooks/useTerminalSize';
+import { useViewportRows } from '../hooks/useViewportRows';
 import { color, glyph } from '../theme';
 import type { ToolCardData, UiMessage } from '../../../stores';
 import type { TuiStore } from '../../../stores';
+import { windowMessages, MAX_TOOL_OUTPUT_LINES } from './messageLines';
 
 const THINKING_PREVIEW = 80;
 
 /**
- * A scrollable viewport over the (already agent-filtered) message log. `scrollOffset`
- * counts messages up from the live bottom (0 = pinned). `focusMsgId` highlights the
- * line under the focus cursor (used to expand/collapse thinking & tool output).
+ * A scrollable viewport over the (already agent-filtered) message log.
+ * `scrollOffset` counts LINES up from the live bottom (0 = pinned).
+ * `focusMsgId` highlights the line under the focus cursor (used to
+ * expand/collapse thinking & tool output).
  *
- * Viewport height is derived from terminal rows via useStdout() (reactive).
+ * The window is computed in terminal LINES (windowMessages) so multi-line
+ * messages — expanded tool output, long replies — never get clipped by a
+ * message-count slice. Viewport rows come from the shared useViewportRows.
  */
 export const MessageList = memo(function MessageList({
   messages,
@@ -24,20 +29,15 @@ export const MessageList = memo(function MessageList({
   scrollOffset?: number;
   focusMsgId?: string;
 }) {
-  const { rows: termRows } = useTerminalSize();
-  // Overhead: header(9: border2+logo6+provider1) + bottom(9: spinner2+timeline2+prompt1+footer1+agent1+margins2) + spacing(2) = 20.
-  const rows = Math.max(4, termRows - 20);
-  const end = Math.max(0, messages.length - scrollOffset);
-  const start = Math.max(0, end - rows);
-  const visible = messages.slice(start, end);
-  const hiddenAbove = start;
-  const hiddenBelow = messages.length - end;
+  const { columns: termCols } = useTerminalSize();
+  const rows = useViewportRows(4);
+  const { visible, above, below } = windowMessages(messages, scrollOffset, rows, termCols);
 
   return (
     <Box flexDirection="column">
-      {hiddenAbove > 0 ? (
+      {above > 0 ? (
         <Text color={color.subtle} dimColor>
-          {glyph.bullet} {hiddenAbove} more above {glyph.bullet} PageUp/PageDown to scroll
+          {glyph.bullet} {above} more line{above === 1 ? '' : 's'} above {glyph.bullet} PageUp/PageDown to scroll
         </Text>
       ) : null}
       {visible.map((m) => (
@@ -45,9 +45,9 @@ export const MessageList = memo(function MessageList({
           <MessageRow message={m} focused={m.id === focusMsgId} />
         </Box>
       ))}
-      {hiddenBelow > 0 ? (
+      {below > 0 ? (
         <Text color={color.warning} dimColor>
-          {glyph.arrowDown} {hiddenBelow} below {glyph.bullet} PageDown / End for live
+          {glyph.arrowDown} {below} more line{below === 1 ? '' : 's'} below {glyph.bullet} PageDown / End for live
         </Text>
       ) : null}
     </Box>
@@ -166,6 +166,12 @@ function ToolCard({ tool, collapsed, focused }: { tool: ToolCardData; collapsed:
   const dur = tool.durationMs != null ? ` ${glyph.bullet} ${formatMs(tool.durationMs)}` : '';
   const badgeColor = tool.source === 'local' ? color.subtle : color.system;
   const hasMore = !!tool.output && (tool.output.length > (tool.preview?.length ?? 0));
+  // Expanded output is capped by LINES (in addition to the store's char cap) so
+  // a huge JSON result can't blow up the viewport height.
+  const output = tool.output ?? '';
+  const outLines = output.split('\n');
+  const clippedLines = outLines.length > MAX_TOOL_OUTPUT_LINES;
+  const shownOutput = clippedLines ? outLines.slice(0, MAX_TOOL_OUTPUT_LINES).join('\n') : output;
   return (
     <Box flexDirection="column">
       <Text>
@@ -186,7 +192,8 @@ function ToolCard({ tool, collapsed, focused }: { tool: ToolCardData; collapsed:
       ) : (
         <Text>
           <Text color={color.subtle}>{'  '}{glyph.tree} </Text>
-          <Text dimColor>{tool.output}</Text>
+          <Text dimColor>{shownOutput}</Text>
+          {clippedLines ? <Text dimColor>{` … +${outLines.length - MAX_TOOL_OUTPUT_LINES} lines`}</Text> : null}
         </Text>
       )}
     </Box>

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Box, Text, useInput } from 'ink';
+import { useTerminalSize } from '../hooks/useTerminalSize';
 import { color, glyph } from '../theme';
 
 export interface SelectOption {
@@ -13,7 +14,9 @@ export interface SelectOption {
 /**
  * Overlay single/multi-select. Arrow keys move the highlight (wrapping), space
  * toggles (multi), Enter confirms, Esc cancels, and 1–9 jump to a row. Rendered
- * in place of the prompt while active so it owns keyboard focus.
+ * in place of the prompt while active so it owns keyboard focus. The option
+ * list is windowed to the terminal height (centered on the cursor) so a long
+ * option list — e.g. /eval history — never overflows a small terminal.
  */
 export function Select({
   title,
@@ -30,8 +33,14 @@ export function Select({
   onSubmit: (values: string[]) => void;
   onCancel: () => void;
 }) {
+  const { rows: termRows } = useTerminalSize();
   const [index, setIndex] = useState(0);
   const [selected, setSelected] = useState<Set<string>>(new Set(initial ?? []));
+
+  const windowRows = Math.max(5, termRows - 12);
+  const n = options.length;
+  const start = Math.max(0, Math.min(Math.max(0, n - windowRows), index - Math.floor(windowRows / 2)));
+  const win = options.slice(start, start + windowRows);
 
   const toggle = (value: string) =>
     setSelected((s) => {
@@ -63,7 +72,8 @@ export function Select({
       <Text bold color={color.accent}>
         {title}
       </Text>
-      {options.map((o, i) => {
+      {win.map((o, j) => {
+        const i = start + j;
         const hot = i === index;
         const mark = multi ? (selected.has(o.value) ? '[x] ' : '[ ] ') : '';
         return (
@@ -77,6 +87,11 @@ export function Select({
           </Text>
         );
       })}
+      {n > windowRows ? (
+        <Text dimColor>
+          showing {start + 1}–{Math.min(n, start + windowRows)} of {n} {glyph.bullet} ↑/↓ to move
+        </Text>
+      ) : null}
       <Text dimColor>
         ↑/↓ move{multi ? ' · space toggle' : ''} · enter select · esc cancel
       </Text>

@@ -5,16 +5,18 @@
 import { color } from '../theme';
 import type { FindingEvidenceView } from './findingView';
 
+// Width-1 glyphs (not emoji) so the icon column aligns across verdicts —
+// emoji render at 2 cells and misalign VerdictCard rows.
 const VERDICT_STYLE: Record<string, { icon: string; color: string }> = {
-  confirmed_leak: { icon: '🔴', color: color.error },
-  likely_leak: { icon: '🟠', color: color.warning },
-  uncertain: { icon: '🟡', color: color.warning },
-  likely_false_positive: { icon: '🟢', color: color.success },
-  false_positive: { icon: '🟢', color: color.success },
+  confirmed_leak: { icon: '●', color: color.error },
+  likely_leak: { icon: '◐', color: color.warning },
+  uncertain: { icon: '○', color: color.warning },
+  likely_false_positive: { icon: '◌', color: color.success },
+  false_positive: { icon: '◌', color: color.success },
 };
 
 export function verdictStyle(verdict: string): { icon: string; color: string } {
-  return VERDICT_STYLE[verdict] ?? { icon: '⚪', color: color.subtle };
+  return VERDICT_STYLE[verdict] ?? { icon: '○', color: color.subtle };
 }
 
 /** A short chip for the dynamic coverage status (table cell + card badge). */

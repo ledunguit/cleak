@@ -6,16 +6,32 @@
  * `record_verdict` / `record_evidence` / `list_candidates` / `finalize` are gone.)
  */
 
-import { resolve, isAbsolute } from 'node:path';
-import { readFileSync, existsSync, statSync } from 'node:fs';
+import { resolve, isAbsolute, join, dirname, basename, sep } from 'node:path';
+import { readFileSync, existsSync, statSync, realpathSync } from 'node:fs';
 import { z } from 'zod';
 import { buildTool, type Tool } from '@cleak/agent-core';
 
 const MAX_FILE_CHARS = 16_000;
 
+/** Canonicalize `p` — realpath the deepest existing ancestor so a symlink
+ * inside the repo cannot smuggle reads to a path outside it. */
+function canonicalize(p: string): string {
+  let cur = p;
+  const tail: string[] = [];
+  while (!existsSync(cur)) {
+    const parent = dirname(cur);
+    if (parent === cur) break;
+    tail.unshift(basename(cur));
+    cur = parent;
+  }
+  const real = realpathSync(cur);
+  return tail.length ? join(real, ...tail) : real;
+}
+
 /** A sandboxed source reader rooted at `repoPath` (relative or in-repo absolute paths). */
 export function buildReadFileTool(repoPath: string): Tool {
   const root = resolve(repoPath);
+  const rootReal = canonicalize(root);
   return buildTool({
     name: 'read_file',
     description:
@@ -25,8 +41,10 @@ export function buildReadFileTool(repoPath: string): Tool {
     isConcurrencySafe: () => true,
     renderTitle: (input) => `read_file ${input?.path ?? ''}`,
     call: async (input: { path: string }) => {
-      const target = isAbsolute(input.path) ? resolve(input.path) : resolve(root, input.path);
-      if (!target.startsWith(root)) {
+      // Canonicalize + separator-aware containment: rejects `..` escapes,
+      // sibling prefixes (/repo2), and symlinks that resolve outside the repo.
+      const target = canonicalize(isAbsolute(input.path) ? resolve(input.path) : resolve(root, input.path));
+      if (target !== rootReal && !target.startsWith(rootReal + sep)) {
         return { error: 'Path is outside the repository root.' };
       }
       if (!existsSync(target) || !statSync(target).isFile()) {

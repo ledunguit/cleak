@@ -87,12 +87,6 @@ const FIELDS: FieldDef[] = [
   { section: 'UI', path: 'fullscreen', label: 'Fullscreen mode', type: 'cycle', scope: 'config', options: ONOFF },
   { section: 'UI', path: 'sidebarPosition', label: 'Sidebar position', type: 'cycle', scope: 'config', options: SIDEBAR_POS },
 
-  { section: 'Advanced', path: 'inContainer', label: 'Running inside container', type: 'cycle', scope: 'config', options: ONOFF },
-  { section: 'Advanced', path: 'staticEnrich', label: 'Static enrichment (no_llm)', type: 'cycle', scope: 'config', options: ONOFF },
-  { section: 'Advanced', path: 'workflow.discoveryConcurrency', label: 'Discovery concurrency', type: 'number', scope: 'config', placeholder: '8' },
-  { section: 'Advanced', path: 'thresholds.borderlineLow', label: 'Borderline low threshold', type: 'number', scope: 'config', placeholder: '0.35' },
-  { section: 'Advanced', path: 'thresholds.borderlineHigh', label: 'Borderline high threshold', type: 'number', scope: 'config', placeholder: '0.7' },
-
   { section: 'Baselines', path: 'baselines.clangBin', label: 'clang binary path', type: 'text', scope: 'config', placeholder: 'clang' },
   { section: 'Baselines', path: 'baselines.inferBin', label: 'infer binary path', type: 'text', scope: 'config', placeholder: 'infer' },
   { section: 'Baselines', path: 'eval.staticPathMap', label: 'Eval path map (from=to)', type: 'text', scope: 'config', placeholder: '(unset)' },

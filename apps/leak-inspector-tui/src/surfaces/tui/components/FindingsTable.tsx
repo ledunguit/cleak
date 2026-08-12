@@ -58,11 +58,15 @@ export function FindingsTable({
   const rows = Math.max(3, viewportRows);
   const start = Math.max(0, Math.min(Math.max(0, n - rows), cursor - Math.floor(rows / 2)));
   const win = findings.slice(start, start + rows);
-  const ruleWidth = Math.min(HEADER.length, columns - 2);
+  // Rule spans the header's actual content width — NOT the full terminal — so
+  // it stays a clean single line even when the content column is narrower.
+  const ruleWidth = Math.min(HEADER.length, Math.max(20, columns - 2));
   return (
     <Box flexDirection="column">
-      <Text dimColor>{HEADER}</Text>
-      <Text color={color.subtle}>{'─'.repeat(ruleWidth)}</Text>
+      <Box flexDirection="column" width={ruleWidth}>
+        <Text dimColor wrap="truncate-end">{HEADER}</Text>
+        <Text color={color.subtle}>{'─'.repeat(ruleWidth)}</Text>
+      </Box>
       {n === 0 ? (
         <Text dimColor>{'  '}(no findings match the current filter)</Text>
       ) : (

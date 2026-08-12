@@ -1,29 +1,29 @@
 /**
- * React hook that detects terminal bracketed-paste-mode support and enables it.
+ * Bracketed-paste support for the prompt input.
  *
- * Bracketed paste mode (`\x1b[?2004h` / `\x1b[?2004l`) lets terminals wrap pasted
- * text in `\x1b[200~` … `\x1b[201~` delimiters so the application can distinguish
- * pasted input from typed keystrokes.  This hook:
+ * Bracketed paste mode (`\x1b[?2004h` / `\x1b[?2004l`) lets terminals wrap
+ * pasted text in `\x1b[200~` … `\x1b[201~` delimiters so the application can
+ * distinguish pasted input from typed keystrokes. This hook:
  *
  *   1. Checks whether the terminal is likely to support it (TERM, isTTY).
  *   2. Writes the enable sequence to stdout on mount.
  *   3. Writes the disable sequence on unmount (clean-up).
+ *   4. Exposes `consumePaste(input)` — feeds each useInput chunk through the
+ *      paste buffer and returns the completed pasted text when a full
+ *      bracketed paste (`[200~` … `\x1b[201~`) has arrived.
  *
- * Returns `{ pasteSupported }` — a static boolean the component can use to
- * conditionally show paste hints or enable alternative paste paths.
- *
- * > **Note:** Ink's `useInput` processes raw bytes through Node.js readline's
- * > `emitKeypressEvents`, so the `\x1b[200~` / `\x1b[201~` delimiters do NOT
- * > arrive as-is at the handler.  This hook only *enables* the mode so the
- * > terminal marks pasted text — actual paste handling must be done through a
- * > lower-level `data` listener or by inspecting the raw `input` parameter in
- * > `useInput` (the delimiters may appear as unrecognised key sequences).
+ * Ink delivers a multi-character paste as a single `useInput` chunk with the
+ * delimiters intact (its keypress parser strips the leading `\x1b`), so a
+ * paste is normally completed in one call. The buffered path also covers
+ * terminals that split the paste across several data chunks.
  */
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 const BRACKETED_PASTE_ENABLE = '\x1b[?2004h';
 const BRACKETED_PASTE_DISABLE = '\x1b[?2004l';
+const PASTE_START = '[200~';
+const PASTE_END = '\x1b[201~';
 
 /** Known terminal type prefixes that support bracketed paste. */
 const SUPPORTED_TERM_PATTERN = /^(xterm|kitty|alacritty|tmux|iterm|vscode)/i;
@@ -44,16 +44,23 @@ function detectPasteCapability(): boolean {
 }
 
 /**
- * Subscribe to paste-support lifecycle.
+ * Subscribe to paste-support lifecycle + chunk buffering.
  *
  * On mount: writes the bracketed-paste enable sequence to stdout.
  * On unmount: writes the disable sequence.
  *
- * The detection runs once (lazy initial state); no re-renders from the
- * stdout writes themselves.
+ * `consumePaste(input)` returns:
+ *   - `null` when `input` is not part of a bracketed paste (normal typing),
+ *   - `''` when it was consumed but a paste is still buffering,
+ *   - the completed pasted text when a full paste has arrived.
  */
-export function usePasteSupport(): { pasteSupported: boolean } {
+export function usePasteSupport(): {
+  pasteSupported: boolean;
+  consumePaste: (input: string) => string | null;
+} {
   const [pasteSupported] = useState(detectPasteCapability);
+  const buffer = useRef('');
+  const pasting = useRef(false);
 
   useEffect(() => {
     if (!pasteSupported) return;
@@ -68,5 +75,28 @@ export function usePasteSupport(): { pasteSupported: boolean } {
     };
   }, [pasteSupported]);
 
-  return { pasteSupported };
+  const consumePaste = useCallback((input: string): string | null => {
+    if (pasting.current) {
+      const close = input.indexOf(PASTE_END);
+      if (close >= 0) {
+        buffer.current += input.slice(0, close);
+        const done = buffer.current;
+        buffer.current = '';
+        pasting.current = false;
+        return done;
+      }
+      buffer.current += input;
+      return '';
+    }
+    const start = input.indexOf(PASTE_START);
+    if (start < 0) return null;
+    let rest = input.slice(start + PASTE_START.length);
+    const close = rest.indexOf(PASTE_END);
+    if (close >= 0) return rest.slice(0, close);
+    pasting.current = true;
+    buffer.current = rest;
+    return '';
+  }, []);
+
+  return { pasteSupported, consumePaste };
 }

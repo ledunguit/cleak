@@ -50,6 +50,7 @@ export const COMMANDS: CommandSpec[] = [
   { name: '/config', summary: 'settings — defaults & auto-show report', kind: 'action' },
   { name: '/preflight', summary: 'check analyzer connectivity', kind: 'action' },
   { name: '/tools', summary: 'list available MCP tools', kind: 'action' },
+  { name: '/help', summary: 'show this command list', kind: 'action' },
   { name: '/quit', summary: 'exit', kind: 'action' },
 ];
 
