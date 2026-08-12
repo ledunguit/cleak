@@ -652,6 +652,44 @@ void goodB2G(void) {
       expect.objectContaining({ calleeFunction: 'action', callerFunction: 'goodB2G', callerVariable: 'data' }),
     ]);
   });
+
+  test('flow-variant 81 shape: a REFERENCE bound to a constructor-call temporary (no `new`) also resolves', async () => {
+    const a = write(
+      'case_81.cpp',
+      `
+class Base {
+public:
+    virtual void action(char *data) const = 0;
+};
+void Bad::action(char *data) const {
+    ;
+}
+void GoodB2G::action(char *data) const {
+    free(data);
+}
+void bad(void) {
+    char *data = (char *)malloc(100);
+    const Base &baseObject = Bad();
+    baseObject.action(data);
+}
+void goodB2G(void) {
+    char *data = (char *)malloc(100);
+    const Base &baseObject = GoodB2G();
+    baseObject.action(data);
+}
+`,
+    );
+
+    const svc = new CallGraphService(new CParserService());
+    const result = await svc.extract(dir, [a]);
+
+    expect(result.ownershipCorrelations.unfreedSinkParams).toEqual([
+      expect.objectContaining({ calleeFunction: 'action', callerFunction: 'bad', callerVariable: 'data' }),
+    ]);
+    expect(result.ownershipCorrelations.freedCrossFile).toEqual([
+      expect.objectContaining({ calleeFunction: 'action', callerFunction: 'goodB2G', callerVariable: 'data' }),
+    ]);
+  });
 });
 
 describe('CallGraphService — RAII constructor/destructor pairing (Juliet flow-variant 83-84 shapes)', () => {

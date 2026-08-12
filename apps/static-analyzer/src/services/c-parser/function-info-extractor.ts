@@ -250,6 +250,15 @@ function extractAssignedCalls(
  * resolve `obj->action()` to the right class's `Class::action` in `fnIndex`,
  * instead of colliding on the bare method name across every class that defines
  * one (see `extractClassMembership`'s doc comment for the fnIndex side).
+ *
+ * A SECOND Juliet shape (flow-variant 81, "via a reference" — as opposed to
+ * 82's "via a pointer"): `const Base &obj = Derived();` — a reference bound to
+ * a constructor-call-shaped temporary, no `new` at all. The RHS is a bare
+ * `call_expression` whose callee identifier happens to be a class name; this
+ * is locally indistinguishable from an ordinary function call returning a
+ * reference, but that's fine — `resolveCallee` only ever TRIES the qualified
+ * lookup and falls back to the existing bare-name resolution when it misses,
+ * so a wrong guess here costs nothing beyond a wasted map lookup.
  */
 function extractConstructedTypes(node: TreeSitterNode, lines: string[]): { variable: string; className: string; line: number }[] {
   const body = findChild(node, 'compound_statement');
@@ -258,10 +267,21 @@ function extractConstructedTypes(node: TreeSitterNode, lines: string[]): { varia
 
   for (const decl of findAllNodes(body, 'init_declarator')) {
     const newExpr = findChild(decl, 'new_expression');
-    if (!newExpr) continue;
-    const typeId = findChild(newExpr, 'type_identifier');
-    const varName = extractDeclaratorName(decl, lines);
-    if (typeId && varName) result.push({ variable: varName, className: nodeText(typeId, lines), line: (decl.startPosition?.row ?? 0) + 1 });
+    if (newExpr) {
+      const typeId = findChild(newExpr, 'type_identifier');
+      const varName = extractDeclaratorName(decl, lines);
+      if (typeId && varName) result.push({ variable: varName, className: nodeText(typeId, lines), line: (decl.startPosition?.row ?? 0) + 1 });
+      continue;
+    }
+    const refDecl = findChild(decl, 'reference_declarator');
+    const callExpr = findChild(decl, 'call_expression');
+    if (refDecl && callExpr) {
+      const varId = findChild(refDecl, 'identifier');
+      const fnNode = getCallFunctionNameNode(callExpr);
+      if (varId && fnNode) {
+        result.push({ variable: nodeText(varId, lines), className: nodeText(fnNode, lines), line: (decl.startPosition?.row ?? 0) + 1 });
+      }
+    }
   }
 
   for (const expr of findAllNodes(body, 'assignment_expression')) {
