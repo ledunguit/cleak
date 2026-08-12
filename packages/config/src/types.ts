@@ -80,6 +80,9 @@ export interface RunConfig {
   /** Path translation between host paths and analyzer-visible paths. */
   hostRoot?: string;
   analyzerRoot?: string;
+  /** Default build command for the deterministic dynamic recipe; empty/absent keeps
+   * dynamic staging off unless the per-run CLI flag provides one. */
+  buildCommand?: string;
   resultsDir: string;
   maxTurns: number;
   /** Auto-compaction thresholds for the agent transcript. */

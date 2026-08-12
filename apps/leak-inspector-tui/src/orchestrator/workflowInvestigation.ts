@@ -37,7 +37,7 @@ import { heuristicVerdict } from '../domain/judge';
 import { StepLog } from '../domain/stepLog';
 import { ScanEventName } from './events';
 import { type AgentEventBridge, makeAgentEventHandler } from './toAgentEvents';
-import { withHostContent, withHostPathMapping } from './toolWrappers';
+import { withHostContent, withHostPathMapping, withToolResultDedup } from './toolWrappers';
 import { type StaticContextStore, withStaticContextCapture } from '../domain/staticContext';
 import {
   createDynamicRunStore,
@@ -196,8 +196,20 @@ async function stageStaticEvidence(
   if (ctx.abortSignal?.aborted) return;
   await mapWithLimit(groups, cfg.workflow.staticConcurrency, async (group, gi) => {
     if (ctx.abortSignal?.aborted) return;
+    // P0-2: dedup identical evidence tool calls within the scan. The dedup sits
+    // INSIDE the capture (host → capture → dedup → MCP) so the capture still folds
+    // the (possibly cached) result into this group's static store — a cache hit
+    // never leaves a bundle without its static evidence. The cache instance is the
+    // scan-level one shared with deterministic enrichment, so a result the
+    // orchestrator already holds is reused instead of re-invoked.
+    const contentTool = (t: Tool): Tool =>
+      withHostContent(
+        withStaticContextCapture(ctx.caches ? withToolResultDedup(t, ctx.caches.tools) : t, state.staticStore, group),
+        ctx.repoPath,
+        ctx.caches?.files,
+      );
     const tools: Tool[] = [
-      ...contentStatic.map((t) => withHostContent(withStaticContextCapture(t, state.staticStore, group), ctx.repoPath)),
+      ...contentStatic.map(contentTool),
       readFileTool,
       buildDoneTool(DONE_STATIC, 'Finish static evidence gathering for this group of candidates.'),
     ];
@@ -493,11 +505,11 @@ async function stageHybridJudge(
       verdict = await judgeByConsensus(
         b,
         sctx,
-        () => judgeBundleWithLlm(b, sctx, callModel, ctx.abortSignal, cfg.consensus.temperature, onNotice, ctx.projectOwnershipNotes, addUsage),
+        () => judgeBundleWithLlm(b, sctx, callModel, ctx.abortSignal, cfg.consensus.temperature, onNotice, ctx.projectOwnershipNotes, addUsage, ctx.caches?.files),
         cfg.consensus,
       );
     } else {
-      verdict = await judgeBundleWithLlm(b, sctx, callModel, ctx.abortSignal, cfg.llm.judgeTemperature, onNotice, ctx.projectOwnershipNotes, addUsage);
+      verdict = await judgeBundleWithLlm(b, sctx, callModel, ctx.abortSignal, cfg.llm.judgeTemperature, onNotice, ctx.projectOwnershipNotes, addUsage, ctx.caches?.files);
     }
     if (!verdict) return;
     b.verdict = verdict;
@@ -555,7 +567,7 @@ export function buildWorkflowInvestigationPhase(
         wantDynamic ? loadMcpTools(ctx.dynamicClient!, mcpToolFlags) : Promise.resolve([] as Tool[]),
       ]);
       const contentStatic = staticRaw.filter((t) => CONTENT_CAPABLE_TOOLS.has(t.name));
-      const readFileTool = buildReadFileTool(ctx.repoPath);
+      const readFileTool = buildReadFileTool(ctx.repoPath, ctx.caches?.files);
 
       ctx.emitter.emit(ScanEventName.INVESTIGATION_STARTED, {
         candidates: allBundles.length,

@@ -41,6 +41,7 @@ import {
 } from '../domain/staticContext';
 import { coerceToObject } from '../domain/mcpResult';
 import type { PathResolver } from '../domain/pathResolver';
+import { createScanCaches, type ScanCaches } from '../domain/scanCaches';
 import type { InvestigationPhase, InvestigationOutcome, OrchestratorCommonDeps } from './investigation';
 
 const reporter = new LeakReporting();
@@ -172,6 +173,7 @@ async function enrichStaticEvidence(
   input: ScanInput,
   abortSignal?: AbortSignal,
   evalStaticPathMap?: string,
+  caches?: ScanCaches,
 ): Promise<void> {
   const allocArgs = {
     ...(input.extraAllocators?.length ? { extraAllocators: input.extraAllocators } : {}),
@@ -209,29 +211,37 @@ async function enrichStaticEvidence(
         attachScanBuildDiagnostics(bundles, findings);
       }
     } catch (err) {
-      console.debug(`scan-build enrichment failed: ${err?.message}`);
+      console.debug(`scan-build enrichment failed: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 
   await mapWithLimit(bundles, THRESHOLDS.discoveryConcurrency, async (b) => {
     if (abortSignal?.aborted) return;
     const file = b.candidate.file_path;
-    const content = readFileSafe(file);
+    // P0-1: the per-scan file-content cache — the same candidate files were already
+    // read during discovery, so enrichment must not re-read them from disk.
+    const content = caches ? caches.files.read(file) : readFileSafe(file);
     if (content === null) return;
     const fn = b.candidate.function_name;
     const line = b.candidate.line_number;
     if (tools.has('functionSummary')) {
       try {
-        const fs = await callToolRetryTimeout('functionSummary', () => staticClient.callTool('functionSummary', { filePath: file, content, functionName: fn, ...allocArgs }));
+        const fsArgs = { filePath: file, content, functionName: fn, ...allocArgs };
+        const fs = await callToolRetryTimeout('functionSummary', () => staticClient.callTool('functionSummary', fsArgs));
         foldStaticResult(store, 'functionSummary', { filePath: file, functionName: fn }, fs, [b]);
+        // P0-2: cache the successful result keyed by (tool + args minus content) so a
+        // Stage-A sub-agent asking the same question reuses it instead of re-invoking.
+        caches?.tools.set('functionSummary', fsArgs, fs);
       } catch {
         console.debug(`functionSummary failed for ${file}:${fn}`);
       }
     }
     if (tools.has('pathConstraints')) {
       try {
-        const pc = await callToolRetryTimeout('pathConstraints', () => staticClient.callTool('pathConstraints', { filePath: file, content, lineNumber: line, ...allocArgs }));
+        const pcArgs = { filePath: file, content, lineNumber: line, ...allocArgs };
+        const pc = await callToolRetryTimeout('pathConstraints', () => staticClient.callTool('pathConstraints', pcArgs));
         foldStaticResult(store, 'pathConstraints', { filePath: file, lineNumber: line }, pc, [b]);
+        caches?.tools.set('pathConstraints', pcArgs, pc);
       } catch {
         console.debug(`pathConstraints failed for ${file}:${line}`);
       }
@@ -272,6 +282,7 @@ async function runDiscovery(
   candidates: CandidateManager,
   emitter: ScanEmitter,
   pathResolver: PathResolver,
+  caches?: ScanCaches,
 ): Promise<{
   totalFiles: number;
   warning?: string;
@@ -337,7 +348,9 @@ async function runDiscovery(
         if (idx >= cFiles.length) return;
         if (deps.abortSignal?.aborted) return;
         const file = cFiles[idx];
-        const content = readFileSafe(file);
+        // P0-1: first read of each file lands in the per-scan cache; later readers
+        // (enrichment, sub-agents, judge) get the memoized content.
+        const content = caches ? caches.files.read(file) : readFileSafe(file);
         if (content === null) {
           readFailedCount++;
           continue;
@@ -491,10 +504,11 @@ async function runEnrichment(
   abortSignal?: AbortSignal,
   configStaticEnrich?: boolean,
   evalStaticPathMap?: string,
+  caches?: ScanCaches,
 ): Promise<void> {
   const enrichOn = staticDiscovery && (input.enrich ?? configStaticEnrich === true);
   if (discovered > 0 && enrichOn) {
-    await enrichStaticEvidence(bundles, staticClient, input, abortSignal, evalStaticPathMap);
+    await enrichStaticEvidence(bundles, staticClient, input, abortSignal, evalStaticPathMap, caches);
   }
 }
 
@@ -504,6 +518,7 @@ async function runInvestigation(
   input: ScanInput,
   candidates: CandidateManager,
   dynamicRanInDiscovery: boolean,
+  caches?: ScanCaches,
 ): Promise<InvestigationOutcome | undefined> {
   let investigationOutcome: InvestigationOutcome | undefined;
   if (deps.investigation && input.analysisMode === AnalysisMode.LLM_ASSISTED) {
@@ -525,6 +540,9 @@ async function runInvestigation(
       // static=false: the dynamic stage already ran during discovery — the
       // investigation must not build+run a second time (and must keep that coverage).
       dynamicAlreadyRan: dynamicRanInDiscovery,
+      // P0-1/P0-2: share the scan's memo caches so the agentic phase reuses evidence
+      // the deterministic phases already gathered (and reads files once per scan).
+      caches,
     });
   }
   return investigationOutcome;
@@ -630,6 +648,10 @@ export async function runScan(input: ScanInput, deps: ScanDeps): Promise<ScanRes
   const now = deps.now ?? (() => new Date().toISOString());
   const startedAt = now();
   const candidates = new CandidateManager(now);
+  // Per-scan memoization (P0-1 file content + P0-2 tool results). Created HERE, per
+  // scan, and dropped when runScan returns — nothing module-level persists, so no
+  // cached file content or tool result can ever leak into a later scan.
+  const caches = createScanCaches();
 
   emitter.emit(ScanEventName.SCAN_CREATED, { scanId: input.scanId, repoPath: input.repoPath, mode: input.analysisMode });
 
@@ -640,14 +662,22 @@ export async function runScan(input: ScanInput, deps: ScanDeps): Promise<ScanRes
   if (input.buildCommand) emitter.emit(ScanEventName.BUILD_PLAN_SELECTED, { buildCommand: input.buildCommand });
   emitter.emit(ScanEventName.WORKSPACE_FINISHED, {});
 
-  const { totalFiles, warning, dynamicRanInDiscovery } = await runDiscovery(input, deps, candidates, emitter, pathResolver);
+  const { totalFiles, warning, dynamicRanInDiscovery } = await runDiscovery(input, deps, candidates, emitter, pathResolver, caches);
 
   const discovered = candidates.getAllBundles().length;
   const staticDiscovery = input.staticDiscovery !== false;
-  await runEnrichment(discovered, staticDiscovery, candidates.getAllBundles(), staticClient, input, deps.abortSignal, deps.configStaticEnrich, deps.evalStaticPathMap);
+  // P0-3: the deterministic dynamic stage (no_llm recipe: buildTarget → lsanRun) and
+  // the deterministic static enrichment are INDEPENDENT (they fold evidence into
+  // different bundle fields: staticEvidence vs evidence/dynamicCoverage) — start them
+  // concurrently instead of serially. Each is a no-op when its gate is off (dynamic
+  // needs buildCommand + no_llm; enrichment needs the enrich flag), so the default
+  // sequential-equivalent paths are unchanged. Investigation (llm_assisted) still
+  // runs AFTER both, exactly as before.
+  const enrichmentPromise = runEnrichment(discovered, staticDiscovery, candidates.getAllBundles(), staticClient, input, deps.abortSignal, deps.configStaticEnrich, deps.evalStaticPathMap, caches);
+  const dynamicPromise = runDynamicStage(input, deps, candidates, pathResolver, dynamicRanInDiscovery, emitter);
+  await Promise.all([enrichmentPromise, dynamicPromise]);
 
-  const investigationOutcome = await runInvestigation(deps, input, candidates, dynamicRanInDiscovery);
-  await runDynamicStage(input, deps, candidates, pathResolver, dynamicRanInDiscovery, emitter);
+  const investigationOutcome = await runInvestigation(deps, input, candidates, dynamicRanInDiscovery, caches);
   await runJudging(emitter, candidates.getAllBundles(), investigationOutcome);
   const { report, bundles, investigation } = await runReporting(emitter, candidates, investigationOutcome, input, startedAt, now);
 

@@ -8,6 +8,7 @@
 
 import { z } from 'zod';
 import { readFileSafe } from './fileWalk';
+import type { FileContentCache } from './fileContentCache';
 import { THRESHOLDS } from './thresholds';
 import { enrichLeakVerdict } from '@cleak/common/analysis/heuristic-judge';
 import { deriveFusion } from '@cleak/common/analysis/consensus-judge';
@@ -37,8 +38,8 @@ const SYSTEM_PROMPT = [
  * with the control-plane judge via @cleak/common; this path keeps its historical
  * ±(6,5)-line fallback window and omits line-number prefixes.
  */
-function sourceSnippet(bundle: LeakBundle): string {
-  const src = readFileSafe(bundle.candidate.file_path);
+function sourceSnippet(bundle: LeakBundle, fileCache?: FileContentCache): string {
+  const src = fileCache ? fileCache.read(bundle.candidate.file_path) : readFileSafe(bundle.candidate.file_path);
   if (!src) return '(source unavailable)';
   return enclosingFunctionSnippet(src, bundle.candidate.line_number || 1, {
     fallbackBefore: THRESHOLDS.snippetFallbackBefore,
@@ -192,6 +193,9 @@ export async function judgeBundleWithLlm(
    * parseable or not) so the harness can count judge cost — it was previously dropped
    * (only the agentic Stage A/B loops accumulated usage). */
   onUsage?: (u: { inputTokens: number; outputTokens: number }) => void,
+  /** Per-scan file-content memo cache (perf P0-1): the judge's source snippet read
+   * shares the scan's single-read cache instead of hitting the disk again. */
+  fileCache?: FileContentCache,
 ): Promise<VerdictResult | null> {
   const c = bundle.candidate;
   const notes = (projectNotes ?? []).filter(Boolean);
@@ -200,7 +204,7 @@ export async function judgeBundleWithLlm(
     ``,
     'CODE (context around the allocation):',
     '```c',
-    sourceSnippet(bundle),
+    sourceSnippet(bundle, fileCache),
     '```',
     ``,
     'STATIC ANALYSIS CONTEXT:',

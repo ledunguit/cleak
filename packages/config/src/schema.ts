@@ -32,6 +32,10 @@ export const CleakConfigSchema = z
     // Analyzer MCP endpoints (the headline reason this file exists).
     staticUrl: z.string(),
     dynamicUrl: z.string(),
+    // Default build command for the deterministic dynamic recipe (buildTarget →
+    // lsanRun). Empty/absent ⇒ dynamic staging stays off unless a --build flag is
+    // passed per run (CLI flag > config file > default).
+    buildCommand: z.string(),
     // Host↔analyzer path mapping (Docker analyzers).
     hostRoot: z.string(),
     analyzerRoot: z.string(),

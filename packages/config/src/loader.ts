@@ -158,6 +158,7 @@ export function loadConfig(
     llm: resolveProvider(provider, fileWithEnv),
     hostRoot: pickOpt(file.hostRoot),
     analyzerRoot: pickOpt(file.analyzerRoot),
+    buildCommand: pickOpt(file.buildCommand),
     resultsDir: pickStr(env.resultsDir ?? file.resultsDir, "results"),
     maxTurns: pickNum(file.maxTurns, 15),
     compaction: {

@@ -87,7 +87,7 @@ program
   .option('--model <name>', 'LLM model override')
   .option('--api-key <key>', 'LLM API key override')
   .option('--format <list>', 'comma list: json,markdown,html,snapshot,csv', 'json,markdown,snapshot')
-  .option('--build <cmd>', 'build command for dynamic analysis')
+  .option('-b, --build <cmd>', 'build command for dynamic analysis')
   .option('--harness', 'enable Stage B2 targeted per-candidate harness synthesis (opt-in, experimental)', false)
   .option('--verify-allocators', 'dynamically verify the LLM-discovered allocator/deallocator profile via harness (opt-in, experimental)', false)
   .option('--verify-confirmed', 'widen Stage B2 targeted harness to also double-check CONFIRMED_LEAK verdicts, not just borderline ones (opt-in, experimental)', false)

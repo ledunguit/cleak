@@ -10,6 +10,7 @@ import type { AgentDecision } from '@cleak/common/types';
 import type { ScanEmitter } from './events';
 import type { PathResolver } from '../domain/pathResolver';
 import type { CandidateManager } from '../domain/candidateState';
+import type { ScanCaches } from '../domain/scanCaches';
 
 /** Identifies which (sub-)agent an event belongs to, for per-agent log separation. */
 export interface AgentMeta {
@@ -51,6 +52,11 @@ export type InvestigationContext = {
    * coverage during discovery. When true the investigation skips Stage B (no second
    * build/run) and preserves the coverage already attached to each bundle. */
   dynamicAlreadyRan?: boolean;
+  /** Per-scan memoization (file-content + tool-result caches) shared with discovery /
+   * enrichment so the agentic phase reuses — never re-reads / re-invokes — evidence
+   * the orchestrator already holds. Optional: when absent, the investigation falls
+   * back to uncached reads/calls (unchanged behavior). */
+  caches?: ScanCaches;
 } & OrchestratorCommonDeps;
 
 export interface InvestigationOutcome {
