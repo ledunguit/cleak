@@ -1,16 +1,16 @@
 /**
  * Scan-flow contract — the SINGLE source of truth for the scan pipeline's
- * display phases and the stable event-name stream, shared by the control-plane
- * (emitter) and the leak-inspector-ui (realtime workflow nodes).
+ * display phases and the stable event-name stream, shared by the orchestrator
+ * (emitter) and the TUI's scan timeline.
  *
- * MUST stay pure TypeScript: no NestJS / TypeORM / Node imports, so the Vite UI
- * can bundle it via the @cleak/common alias.
+ * MUST stay pure TypeScript: no NestJS / TypeORM / Node imports, so @cleak/common
+ * stays bundleable by any consumer.
  *
- * The NestJS backend runs a DYNAMIC agentic loop (discovery → investigation loop
- * → judging/reporting), not the original Python linear 10-phase pipeline. We map
- * that loop onto stable DISPLAY phases below: INVESTIGATION is the hub that hosts
- * per-turn agent activity; SCAN_BUILD / DYNAMIC / JUDGING are optional phases that
- * light up when their `*_started` event arrives (they happen inside the loop).
+ * The orchestrator runs a DYNAMIC agentic loop (discovery → investigation loop
+ * → judging/reporting), not a linear 10-phase pipeline. We map that loop onto
+ * stable DISPLAY phases below: INVESTIGATION is the hub that hosts per-turn
+ * agent activity; SCAN_BUILD / DYNAMIC / JUDGING are optional phases that light
+ * up when their `*_started` event arrives (they happen inside the loop).
  */
 
 // ── Canonical display phases (render + edge order) ──
@@ -168,24 +168,7 @@ export const EVENT_KIND: Record<ScanEventName, ScanEventKind> = {
   [ScanEventName.FAILED]: 'terminal',
 };
 
-// ── MCP tool name → phase (for tool sub-events that carry a `tool` field) ──
-export const TOOL_PHASE: Record<string, ScanPhase> = {
-  'repo.index_files': ScanPhase.DISCOVERY,
-  'memory.candidate_scan': ScanPhase.DISCOVERY,
-  'memory.ast_scan': ScanPhase.INVESTIGATION,
-  'memory.call_graph': ScanPhase.INVESTIGATION,
-  'memory.function_summary': ScanPhase.INVESTIGATION,
-  'memory.path_constraints': ScanPhase.INVESTIGATION,
-  'memory.interprocedural_flow': ScanPhase.INVESTIGATION,
-  'memory.ownership_summary': ScanPhase.INVESTIGATION,
-  'memory.ownership_conventions': ScanPhase.INVESTIGATION,
-  'memory.scan_build_run': ScanPhase.SCAN_BUILD,
-  'memory.scan_build_get_report': ScanPhase.SCAN_BUILD,
-  'asan.run': ScanPhase.DYNAMIC,
-  'lsan.run': ScanPhase.DYNAMIC,
-  'valgrind.analyze_memcheck': ScanPhase.DYNAMIC,
-};
-
+// ── Phase metadata ──
 export interface PhaseMeta {
   title: string;
   subtitle: string;
@@ -209,9 +192,4 @@ export const PHASE_META: Record<ScanPhase, PhaseMeta> = {
 /** Resolve the phase for an emitted event name (used by the backend envelope). */
 export function phaseForEvent(name: string): ScanPhase | undefined {
   return EVENT_PHASE[name as ScanEventName];
-}
-
-/** Resolve the kind for an emitted event name. */
-export function kindForEvent(name: string): ScanEventKind | undefined {
-  return EVENT_KIND[name as ScanEventName];
 }

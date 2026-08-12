@@ -1,12 +1,12 @@
 /**
- * Shared judge primitives used by BOTH judge paths (control-plane
- * judge.service.ts and leak-inspector-tui llmJudge.ts) so the verdict taxonomy,
- * the benchmark-fairness comment stripping, and the enclosing-function snippet
- * extraction have a single source of truth instead of drifting copy-paste. The
- * system prompts themselves intentionally differ (the control-plane prompt asks
- * for an inline structured rootCause/repairDiff; the TUI prompt asks for a
- * compact verdict and synthesizes those afterward via enrichLeakVerdict), so
- * only the genuinely shared, behavior-defining helpers live here.
+ * Shared judge primitives used by BOTH judge paths (the TUI's LLM judge and the
+ * heuristic judge) so the verdict taxonomy, the benchmark-fairness comment
+ * stripping, and the enclosing-function snippet extraction have a single source
+ * of truth instead of drifting copy-paste. The system prompts themselves
+ * intentionally differ (the LLM judge asks for an inline structured
+ * rootCause/repairDiff; the heuristic path synthesizes those afterward via
+ * enrichLeakVerdict), so only the genuinely shared, behavior-defining helpers
+ * live here.
  */
 
 import { findEnclosingFunction } from './heuristic-leak-analysis';

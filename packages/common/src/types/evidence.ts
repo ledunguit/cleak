@@ -169,29 +169,3 @@ export interface StaticLeakEvidence {
   crossFileFreedVia?: CrossFileFreedVia[];
   freedViaCaller?: FreedViaCaller[];
 }
-
-// ── Control-flow evidence ──
-
-export interface ControlFlowInfo {
-  functionName: string;
-  filePath: string;
-  lineNumber: number;
-  hasAllocation: boolean;
-  allocationLines: number[];
-  freeLines: number[];
-  exitPaths: ExitPathInfo[];
-  earlyReturnLines: number[];
-  conditionalBranches: { line: number; text: string }[];
-  loops: { line: number; text: string }[];
-  hasMallocInLoop: boolean;
-  matchedFreeRatio: number;
-}
-
-export interface ExitPathInfo {
-  kind: 'return' | 'goto' | 'exit' | 'longjmp' | 'fallthrough';
-  line: number;
-  hasFreeBeforeExit: boolean;
-  conditions: string[];
-  freeLinesBeforeExit: number[];
-  leakRisk: 'high' | 'medium' | 'low' | 'none';
-}

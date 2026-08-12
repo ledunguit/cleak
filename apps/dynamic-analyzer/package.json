@@ -7,6 +7,7 @@
     "dev": "cd ../.. && nest start dynamic-analyzer --watch",
     "start": "cd ../.. && nest start dynamic-analyzer",
     "start:prod": "node dist/main",
+    "typecheck": "tsc --noEmit -p tsconfig.app.json",
     "lint": "echo 'lint ok'",
     "test": "vitest run"
   },

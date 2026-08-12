@@ -10,8 +10,13 @@ import { resolve, isAbsolute, join, dirname, basename, sep } from 'node:path';
 import { readFileSync, existsSync, statSync, realpathSync } from 'node:fs';
 import { z } from 'zod';
 import { buildTool, type Tool } from '@cleak/agent-core';
+import type { FileContentCache } from './fileContentCache';
 
 const MAX_FILE_CHARS = 16_000;
+
+type ReadFileResult =
+  | { error: string }
+  | { path: string; truncated: boolean; content: string };
 
 /** Canonicalize `p` — realpath the deepest existing ancestor so a symlink
  * inside the repo cannot smuggle reads to a path outside it. */
@@ -28,8 +33,10 @@ function canonicalize(p: string): string {
   return tail.length ? join(real, ...tail) : real;
 }
 
-/** A sandboxed source reader rooted at `repoPath` (relative or in-repo absolute paths). */
-export function buildReadFileTool(repoPath: string): Tool {
+/** A sandboxed source reader rooted at `repoPath` (relative or in-repo absolute paths).
+ * When `fileCache` is provided (per-scan memoization), reads go through it so the same
+ * file is read off disk once per scan instead of once per read_file call. */
+export function buildReadFileTool(repoPath: string, fileCache?: FileContentCache): Tool {
   const root = resolve(repoPath);
   const rootReal = canonicalize(root);
   return buildTool({
@@ -50,7 +57,7 @@ export function buildReadFileTool(repoPath: string): Tool {
       if (!existsSync(target) || !statSync(target).isFile()) {
         return { error: `File not found: ${input.path}` };
       }
-      const content = readFileSync(target, 'utf-8');
+      const content = fileCache ? (fileCache.read(target) ?? '') : readFileSync(target, 'utf-8');
       return {
         path: input.path,
         truncated: content.length > MAX_FILE_CHARS,

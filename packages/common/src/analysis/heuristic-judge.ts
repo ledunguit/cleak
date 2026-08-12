@@ -117,7 +117,7 @@ export function judgeHeuristically(
   // Exoneration is driven by the EXPLICIT, deterministic coverage status — a clean
   // run that genuinely exercised this candidate — NOT inferred from `evidence.length`
   // (which conflates "ran clean" with "never ran"). Fall back to evidence inference
-  // only for bundles that predate the field (e.g. the control-plane web path).
+  // only for bundles that predate the field.
   const dynamicallyCleared =
     bundle.dynamicCoverage === 'exercised_clean' ||
     (bundle.dynamicCoverage === undefined &&

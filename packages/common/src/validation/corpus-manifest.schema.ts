@@ -61,8 +61,6 @@ export const LabeledManifestSchema = z
   })
   .passthrough();
 
-export type LabeledFlawZ = z.infer<typeof LabeledFlawSchema>;
-export type LabeledCaseZ = z.infer<typeof LabeledCaseSchema>;
 export type LabeledManifestZ = z.infer<typeof LabeledManifestSchema>;
 
 /** Parse + validate a manifest object; throws ZodError with a precise path on failure. */

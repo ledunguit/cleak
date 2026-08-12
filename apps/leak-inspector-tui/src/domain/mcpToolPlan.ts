@@ -57,7 +57,7 @@ export function mcpToolFlags(toolName: string): McpToolFlags {
   return { readOnly: true, concurrencySafe: false, maxResultChars: MAX_RESULT_CHARS, timeoutMs: 30_000 };
 }
 
-/** camelCase MCP tool name → ScanPhase (companion to scan-flow-contract's TOOL_PHASE). */
+/** camelCase MCP tool name → ScanPhase (the TUI's own phase map for tool sub-events). */
 export const MCP_TOOL_PHASE: Record<string, ScanPhase> = {
   indexFiles: ScanPhase.DISCOVERY,
   candidateScan: ScanPhase.DISCOVERY,

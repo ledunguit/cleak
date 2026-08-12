@@ -7,8 +7,8 @@
  * arbiter. Sampling the judge N times and requiring agreement — weighted by the
  * static/dynamic evidence — cuts false positives while preserving recall.
  *
- * Layering: this module lives in `@cleak/common` so BOTH judge paths (the TUI's
- * native tool-calling loop and the control-plane JSON orchestrator) share ONE
+ * Layering: this module lives in `@cleak/common` so both judge paths (the TUI's
+ * native tool-calling loop and the eval harness's LLM judge) share ONE
  * consensus implementation, which is what makes the ablation
  * (heuristic | single-LLM | N-consensus) a clean, like-for-like comparison. The
  * per-sample LLM call itself is INJECTED (`sampleJudge`) because issuing it is an

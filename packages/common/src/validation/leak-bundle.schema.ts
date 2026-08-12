@@ -13,7 +13,6 @@ export const InvestigationVerdictSchema = z.enum([
 export const ToolKindSchema = z.enum(['valgrind', 'asan', 'lsan', 'scan_build', 'heuristic', 'llm', 'consensus']);
 export const AnalysisModeSchema = z.enum(['no_llm', 'llm_assisted']);
 export const DynamicModeSchema = z.enum(['off', 'selective', 'aggressive']);
-export const DynamicToolPreferenceSchema = z.enum(['auto', 'valgrind', 'lsan', 'asan']);
 export const ScanStatusSchema = z.enum(['pending', 'running', 'completed', 'failed', 'cancelled']);
 
 // ── Objects ──
@@ -217,28 +216,3 @@ export const ScanReportSchema = z.object({
   bundles: z.array(LeakBundleSchema),
   summary: ReportSummarySchema,
 });
-
-// ── Runtime validation helpers ──
-// The schemas above are only worth defining if they actually run at ingestion
-// boundaries. These wrappers turn a parsed `unknown` into a typed value, throwing
-// a descriptive error instead of letting malformed data flow on as a silent `as` cast.
-
-export type LeakBundleParsed = z.infer<typeof LeakBundleSchema>;
-
-/** Validate one leak bundle; throws with the zod issue list on mismatch. */
-export function validateLeakBundle(data: unknown): LeakBundleParsed {
-  const r = LeakBundleSchema.safeParse(data);
-  if (!r.success) {
-    throw new Error(`Invalid LeakBundle: ${r.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ')}`);
-  }
-  return r.data;
-}
-
-/** Validate a whole scan report (bundles + metadata + summary). */
-export function validateScanReport(data: unknown): z.infer<typeof ScanReportSchema> {
-  const r = ScanReportSchema.safeParse(data);
-  if (!r.success) {
-    throw new Error(`Invalid ScanReport: ${r.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ')}`);
-  }
-  return r.data;
-}

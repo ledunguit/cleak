@@ -37,13 +37,13 @@ export interface Tool<I = any, O = unknown> {
   inputSchema?: z.ZodType<I>;
   /** MCP tools: JSON Schema passed straight through (no zod conversion). */
   inputJSONSchema?: Record<string, unknown>;
-  isReadOnly: (input: I) => boolean;
-  isConcurrencySafe: (input: I) => boolean;
-  checkPermissions: (input: I, ctx: ToolCtx) => Promise<PermissionResult>;
-  call: (input: I, ctx: ToolCtx) => Promise<O>;
-  mapResultToBlock: (output: O, toolUseId: string) => ContentBlock;
+  isReadOnly(input: I): boolean;
+  isConcurrencySafe(input: I): boolean;
+  checkPermissions(input: I, ctx: ToolCtx): Promise<PermissionResult>;
+  call(input: I, ctx: ToolCtx): Promise<O>;
+  mapResultToBlock(output: O, toolUseId: string): ContentBlock;
   /** Short present-tense label for the ToolUseCard, e.g. "functionSummary make_buf @ main.c:12". */
-  renderTitle?: (input: Partial<I>) => string;
+  renderTitle?(input: Partial<I>): string;
   maxResultSizeChars: number;
 }
 

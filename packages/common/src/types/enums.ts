@@ -53,20 +53,6 @@ export enum DynamicMode {
   AGGRESSIVE = 'aggressive',
 }
 
-export enum DynamicToolPreference {
-  AUTO = 'auto',
-  VALGRIND = 'valgrind',
-  LSAN = 'lsan',
-  ASAN = 'asan',
-}
-
-export enum ReportFormat {
-  JSON = 'json',
-  MARKDOWN = 'markdown',
-  HTML = 'html',
-  SNAPSHOT = 'snapshot',
-}
-
 export enum FindingStatus {
   PENDING = 'pending',
   INVESTIGATING = 'investigating',

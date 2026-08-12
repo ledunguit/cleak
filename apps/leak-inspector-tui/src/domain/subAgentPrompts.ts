@@ -15,7 +15,7 @@ export const DONE_DYNAMIC = 'done_dynamic';
 export const DONE_HARNESS = 'done_harness';
 
 /** A no-op terminal tool that ends a sub-agent loop (registered in `terminalTools`). */
-export function buildDoneTool(name: string, description: string): Tool {
+export function buildDoneTool(name: string, description: string): Tool<{ note?: string }, { done: boolean; note: string }> {
   return buildTool({
     name,
     description,
