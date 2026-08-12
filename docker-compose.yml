@@ -69,12 +69,18 @@ services:
       - runs:/runs
       - ./demo:/workspace/demo
       - ./targets:/workspace/targets
+      # ccache's object cache — persists across container recreates (`docker
+      # compose up` doesn't wipe named volumes), so a rebuild of the SAME
+      # project/commit (common on a corpus like LAMeD: 41 cases, 7 distinct
+      # repos) hits the cache even after `docker compose build`.
+      - ccache-data:/ccache
     networks:
       - mcpvul-net
     restart: unless-stopped
 
 volumes:
   runs:
+  ccache-data:
 
 networks:
   mcpvul-net:

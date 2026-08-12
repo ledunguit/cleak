@@ -101,6 +101,47 @@ a high-level index into it, not a duplicate.
   temperature 0, consensus n=1. This is the current best full-corpus result
   for the system end-to-end (static fan-out + heuristic + LLM judge, no
   dynamic stage).
+- **Juliet full 1658-case `no_llm` run, post reference-out-param + virtual-
+  dispatch + RAII fix (2026-08-12):** 1658/1658 scored, 0 errors. Overall
+  **P 68.0% / R 55.6% / F1 0.612 / MCC 0.375** (TP 1433, FP 674, FN 1145,
+  TN 2785) — up from the postfix2 baseline directly above on every metric
+  (P +3.7pp, R +1.5pp, F1 +0.025, MCC +0.048). Root-caused via real-corpus
+  data (the `llm_assisted` run above): 90.4% of all FN and 52.5% of all FP
+  concentrated in 4 known-gap flow-variant groups. Fixed 3 of them:
+  - **43/62** ("C++ reference-param" — turned out NOT to be an extraction gap;
+    `isPointer` was already correct for `char * &data`. Real root cause: a
+    THIRD ownership-transfer direction, distinct from both existing ones —
+    the callee allocates and writes back through a reference-OUTPUT
+    parameter, so `correlateOwnership()`'s "caller already allocated this"
+    gate can never fire. New `correlateOutParamOwnership()`.) 43: fp 19→0,
+    fn 21→2. 62: fp 38→19, fn 21→2.
+  - **81/82** (virtual dispatch — confirmed root cause from the prior
+    session's investigation: `fnIndex` collided same-named methods across
+    classes on the bare name. Fixed via a qualified `ClassName::method`
+    index + tracking which class a receiver was actually CONSTRUCTED as —
+    TWO distinct Juliet shapes needed handling: `Base* obj = new Derived;`
+    (82, "via a pointer") and `const Base& obj = Derived();` (81, "via a
+    reference" — a reference bound to a constructor-call-shaped temporary,
+    no `new` at all; found only after the first fix showed zero effect on
+    81's aggregate numbers). 81: fp 19→6. 82: fp 37→24.) FN unchanged for
+    both (81/82's FN comes from a separate, not-yet-investigated source).
+  - **83/84** (RAII ctor/dtor — confirmed root cause: alloc in constructor,
+    free in destructor, two different functions, so the same-function-only
+    free check could never see it. New `correlateRaiiOwnership()`, pairs a
+    constructor with its class's destructor via the same `className`
+    tracking as the virtual-dispatch fix. Exoneration-only by design — a
+    case with NO destructor free is left exactly as before, so FN is
+    unchanged.) 83: fp 19→0. 84: fp 19→0.
+  Also fixed a bug found while testing: `extractFunctionName()` extracted a
+  destructor's bare name identically to its constructor's (`Foo::Foo()` and
+  `Foo::~Foo()` both → `"Foo"`), an independent `fnIndex` collision source.
+  Verified with 21 new/updated unit tests AND direct verification against
+  the REAL Juliet source for cases 43/62/81/82/83 (not just synthetic
+  fixtures). `determinism-gate.sh` still passes bit-for-bit. Remaining gap:
+  44/45/63-68 (function-pointer/static-global/`char**`/`void*`/array/struct
+  shapes, previously miscategorized as part of the same "reference-param"
+  group) — each is a separate, not-yet-investigated mechanism; see "Known
+  limitations" below.
 - A single-case proof (historical, libtiff) confirmed the full HYBRID
   pipeline (Stages A→B→B2→C→D) finds a real leak end-to-end through the
   LLM-orchestrated path, not just the static-only path.

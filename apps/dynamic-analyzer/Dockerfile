@@ -39,7 +39,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     make \
     cmake \
     bear \
+    ccache \
     && rm -rf /var/lib/apt/lists/*
+
+# Debian's ccache package installs compiler-name symlinks (gcc/g++/cc/c++/
+# clang/clang++ -> ccache) under /usr/lib/ccache — ccache reads argv[0] to
+# figure out which real compiler to invoke. Prepending that dir to PATH makes
+# EVERY build path (build-target.service.ts's plain `execSync(buildCommand)`,
+# harness-build.service.ts's direct `clang` invocations via runConfined) hit
+# the cache transparently — no buildCommand string rewriting, no CC/CXX env
+# juggling. Real payoff on a corpus like LAMeD (41 cases, only 7 distinct
+# project/commit trees) where many cases rebuild near-identical source.
+ENV PATH="/usr/lib/ccache:${PATH}"
+ENV CCACHE_DIR=/ccache
 
 # libFuzzer's runtime archive (libclang_rt.fuzzer-*.a, needed by
 # buildHarness(entryStyle="fuzzer")) ships in `libclang-common-14-dev`, which
