@@ -1,5 +1,6 @@
 import { Box, Text } from 'ink';
 import { memo } from 'react';
+import ThemedText from '../theme/ThemedText';
 import { color, glyph } from '../theme';
 import type { AgentInfo, UiState } from '../../../stores';
 
@@ -25,10 +26,10 @@ export const AgentList = memo(function AgentList({ state }: { state: UiState }) 
   const active = state.navMode === 'agentlist';
   return (
     <Box flexDirection="column" marginTop={1}>
-      <Text color={color.subtle} dimColor>
+      <ThemedText dimColor>
         {glyph.bullet} agents ({state.agents.length}) {glyph.bullet}{' '}
         {active ? '↑/↓ choose · enter open · ← back' : '↓ to browse agents'}
-      </Text>
+      </ThemedText>
       {state.agents.map((a, i) => {
         const hot = active && i === state.navIndex;
         return (

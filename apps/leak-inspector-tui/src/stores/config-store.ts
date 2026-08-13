@@ -12,6 +12,7 @@ import { createStore } from 'zustand/vanilla';
 import { devtools, subscribeWithSelector } from 'zustand/middleware';
 import type { PendingPermission } from './types';
 import type { RunConfig } from '@cleak/config';
+import { color } from '../surfaces/tui/theme/palette';
 
 // ─── State & Actions interfaces ──────────────────────────────────────────────
 
@@ -93,7 +94,7 @@ export const configStore = createStore<ConfigState & ConfigActions>()(
         next === 'auto'
           ? '⏵ auto-accept ON — tools run without asking · shift+tab to turn off'
           : 'auto-accept OFF — tools will ask before running',
-        next === 'auto' ? '#C084FC' : undefined,
+        next === 'auto' ? color.violet : undefined,
       );
       return next;
     },

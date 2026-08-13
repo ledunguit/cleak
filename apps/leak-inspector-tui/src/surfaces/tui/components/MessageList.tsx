@@ -3,6 +3,7 @@ import { memo } from 'react';
 import { useStore } from 'zustand';
 import { useTerminalSize } from '../hooks/useTerminalSize';
 import { useViewportRows } from '../hooks/useViewportRows';
+import ThemedText from '../theme/ThemedText';
 import { color, glyph } from '../theme';
 import type { ToolCardData, UiMessage } from '../../../stores';
 import type { TuiStore } from '../../../stores';
@@ -36,9 +37,9 @@ export const MessageList = memo(function MessageList({
   return (
     <Box flexDirection="column">
       {above > 0 ? (
-        <Text color={color.subtle} dimColor>
+        <ThemedText dimColor>
           {glyph.bullet} {above} more line{above === 1 ? '' : 's'} above {glyph.bullet} PageUp/PageDown to scroll
-        </Text>
+        </ThemedText>
       ) : null}
       {visible.map((m) => (
         <Box key={m.id}>
@@ -46,9 +47,9 @@ export const MessageList = memo(function MessageList({
         </Box>
       ))}
       {below > 0 ? (
-        <Text color={color.warning} dimColor>
+        <ThemedText color="warning">
           {glyph.arrowDown} {below} more line{below === 1 ? '' : 's'} below {glyph.bullet} PageDown / End for live
-        </Text>
+        </ThemedText>
       ) : null}
     </Box>
   );
