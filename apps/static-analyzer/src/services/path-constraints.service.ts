@@ -8,12 +8,29 @@ export class PathConstraintsService {
 
   async analyze(filePath: string, content: string, lineNumber: number, extraAllocators?: string[], extraDeallocators?: string[]) {
     const result = await this.cParser.parse(content, filePath, extraAllocators, extraDeallocators);
+    const functions = result.functions;
+
+    // Precompute each function's effective end line in ONE O(F) pass — the old
+    // filter/sort re-ran functionEndLine() per comparison, and its indexOf fallback
+    // re-scanned the whole function list per call (O(F²) worst case).
+    const endLines = this.computeEndLines(functions);
 
     // Innermost enclosing function by the ACCURATE tree-sitter range (fn.endLine),
     // not the old "next function − 1" heuristic — picks the smallest range on nesting.
-    const containingFunction = result.functions
-      .filter((fn) => fn.lineNumber <= lineNumber && this.functionEndLine(fn, result.functions) >= lineNumber)
-      .sort((a, b) => this.functionEndLine(a, result.functions) - a.lineNumber - (this.functionEndLine(b, result.functions) - b.lineNumber))[0];
+    // Single O(F) pass over the precomputed spans; first-in-order wins on equal span
+    // (the old version sorted by span ascending with a stable sort).
+    let containingFunction: FunctionInfo | undefined;
+    let bestSpan = Infinity;
+    for (let i = 0; i < functions.length; i++) {
+      const fn = functions[i];
+      if (fn.lineNumber <= lineNumber && endLines[i] >= lineNumber) {
+        const span = endLines[i] - fn.lineNumber;
+        if (span < bestSpan) {
+          bestSpan = span;
+          containingFunction = fn;
+        }
+      }
+    }
 
     if (!containingFunction) {
       return { constraints: [], feasiblePaths: [], exitPaths: [] };
@@ -108,24 +125,38 @@ export class PathConstraintsService {
     return `allocation of ${allocDescr} reaches the ${p.kind} at line ${p.exitLine}${condClause} without an intervening free`;
   }
 
-  private functionEndLine(fn: FunctionInfo, allFunctions: FunctionInfo[]): number {
-    // Prefer the real closing-brace line from tree-sitter; fall back to the old
-    // "next function − 1 / +100" estimate only when endLine is absent (defensive).
-    if (fn.endLine && fn.endLine >= fn.lineNumber) return fn.endLine;
-    const idx = allFunctions.indexOf(fn);
-    if (idx < allFunctions.length - 1) {
-      return allFunctions[idx + 1].lineNumber - 1;
+  /**
+   * Effective closing line per function, in `functions` order: the real tree-sitter
+   * endLine when present, else "next function − 1", else (line + 100) — the exact
+   * rule functionEndLine() used to apply via indexOf, now computed in one O(F) pass.
+   */
+  private computeEndLines(functions: FunctionInfo[]): number[] {
+    const endLines: number[] = new Array(functions.length);
+    for (let i = 0; i < functions.length; i++) {
+      const fn = functions[i];
+      if (fn.endLine && fn.endLine >= fn.lineNumber) {
+        endLines[i] = fn.endLine;
+      } else if (i < functions.length - 1) {
+        endLines[i] = functions[i + 1].lineNumber - 1;
+      } else {
+        endLines[i] = fn.lineNumber + 100;
+      }
     }
-    return fn.lineNumber + 100;
+    return endLines;
   }
 
   private computePathsToLine(fn: FunctionInfo, targetLine: number): string[] {
     const paths: string[] = [];
-    for (const cond of fn.conditions) {
+    const conditions = fn.conditions;
+    // Index-based single pass — the old loop called conditions.indexOf(cond) on the
+    // array it was iterating, O(C²). indexOf returned the element's own index (each
+    // condition appears once), so `i + 1` reproduces the same path label.
+    for (let i = 0; i < conditions.length; i++) {
+      const cond = conditions[i];
       const condLineMatch = cond.text.match(/line (\d+)/);
       const condLine = condLineMatch ? parseInt(condLineMatch[1]) : cond.line;
       if (condLine < targetLine) {
-        paths.push(`path through line ${fn.conditions.indexOf(cond) + 1}: ${cond.text.slice(0, 80)}`);
+        paths.push(`path through line ${i + 1}: ${cond.text.slice(0, 80)}`);
       }
     }
     if (paths.length === 0) {

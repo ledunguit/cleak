@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { readFileSync } from 'fs';
-import { CParserService, ControlFlowGraph, FunctionInfo } from './c-parser.service';
+import { CParserService, type FunctionInfo } from './c-parser.service';
 import type {
   FreedCrossFileEntry, UnfreedSinkParamEntry, FreedViaCallerEntry, UnfreedReturnOwnershipEntry,
 } from '../types/mcp-responses';
@@ -134,22 +134,31 @@ export class CallGraphService {
       unfreedReturnOwnership: [...returnOwnership.unfreedReturnOwnership, ...outParamOwnership.unfreedReturnOwnership],
     };
 
-    // Third pass: detect recursion cycles (direct + indirect)
+    // Third pass: detect recursion cycles (direct + indirect). Build a caller→callees
+    // adjacency list ONCE in O(E) (callEdges order preserved) so the DFS below walks
+    // each node's own adjacency instead of re-filtering the entire edge array per
+    // expansion — the old `edges.filter(e => e.caller === currentFn)` inside the DFS
+    // made the traversal O(N·E) over all start nodes.
+    const callerToCallees = new Map<string, string[]>();
+    for (const e of callEdges) {
+      let callees = callerToCallees.get(e.caller);
+      if (!callees) {
+        callees = [];
+        callerToCallees.set(e.caller, callees);
+      }
+      callees.push(e.callee);
+    }
+
     for (const [fnName] of allFunctions) {
-      const directRecursion = callEdges.filter(
-        (e) => e.caller === fnName && e.callee === fnName,
-      );
-      if (directRecursion.length > 0) {
+      const callees = callerToCallees.get(fnName);
+      if (callees && callees.includes(fnName)) {
         recursionCycles.push([fnName]); // direct recursion
       }
     }
 
-    // Indirect recursion: simple DFS limited to depth 5
+    // Indirect recursion: iterative DFS over the adjacency list, depth-capped at 5.
     for (const [fnName] of allFunctions) {
-      const visited = new Set<string>();
-      const path: string[] = [fnName];
-      visited.add(fnName);
-      this.detectIndirectRecursion(fnName, fnName, callEdges, visited, path, recursionCycles, 5);
+      this.detectIndirectRecursion(fnName, callerToCallees, recursionCycles, 5);
     }
 
     // Deduplicate cycles
@@ -546,32 +555,53 @@ export class CallGraphService {
     return { freedViaCaller };
   }
 
+  /**
+   * Indirect-recursion detector: finds, for each start function, cycles reachable
+   * within `maxDepth` hops and pushes each as `[...path, startFn]`. Iterative DFS
+   * over the prebuilt adjacency list — the old version re-scanned the whole edge
+   * array (`edges.filter(e => e.caller === currentFn)`) at every expansion, i.e.
+   * O(N·E) across all starts; this walks only each node's own adjacency, O(V+E)
+   * across all starts (bounded by maxDepth). Cycle set, order and shape are
+   * byte-identical: the adjacency preserves callEdges order and the explicit stack
+   * mirrors the previous recursive backtracking (path/visited unwind on pop).
+   */
   private detectIndirectRecursion(
     startFn: string,
-    currentFn: string,
-    edges: { caller: string; callee: string }[],
-    visited: Set<string>,
-    path: string[],
+    adjacency: Map<string, string[]>,
     cycles: string[][],
     maxDepth: number,
   ) {
-    if (path.length >= maxDepth) return;
-
-    const outgoing = edges.filter((e) => e.caller === currentFn && e.callee !== currentFn);
-
-    for (const edge of outgoing) {
-      if (edge.callee === startFn && path.length > 1) {
+    const visited = new Set<string>([startFn]);
+    const path: string[] = [startFn];
+    // Frames carry the node and the next adjacency index to expand; a frame is
+    // popped once its out-degree is exhausted, unwinding path/visited like the
+    // recursion's post-order `path.pop(); visited.delete(callee)`.
+    const stack: { node: string; next: number }[] = [{ node: startFn, next: 0 }];
+    while (stack.length > 0) {
+      const frame = stack[stack.length - 1];
+      const callees = adjacency.get(frame.node);
+      if (!callees || frame.next >= callees.length) {
+        stack.pop();
+        if (stack.length > 0) {
+          path.pop();
+          visited.delete(frame.node);
+        }
+        continue;
+      }
+      const callee = callees[frame.next++];
+      if (callee === frame.node) continue; // self-edge — the old filter dropped e.callee === currentFn
+      if (callee === startFn && path.length > 1) {
         cycles.push([...path, startFn]);
         continue;
       }
-
-      if (!visited.has(edge.callee)) {
-        visited.add(edge.callee);
-        path.push(edge.callee);
-        this.detectIndirectRecursion(startFn, edge.callee, edges, visited, path, cycles, maxDepth);
-        path.pop();
-        visited.delete(edge.callee);
-      }
+      if (visited.has(callee)) continue;
+      // Recursion returned at entry once path.length reached maxDepth; a child
+      // explored only when it would still be within the bound. Skipping the push
+      // is equivalent (add-then-immediately-return left no lasting state).
+      if (path.length + 1 >= maxDepth) continue;
+      visited.add(callee);
+      path.push(callee);
+      stack.push({ node: callee, next: 0 });
     }
   }
 
@@ -586,15 +616,23 @@ export class CallGraphService {
     const allocFuncs = ['malloc', 'calloc', 'realloc', 'strdup', ...safe(extraAllocators)];
     const freeFuncs = ['free', 'xfree', ...safe(extraDeallocators)];
 
+    // callee → callers built ONCE in O(E); the old version re-filtered the full
+    // edge array per (allocFn, freeFn) pair — O(A·F·E). Insertion order preserved
+    // so each Set's caller order (and the resulting chains) is unchanged.
+    const callersByCallee = new Map<string, string[]>();
+    for (const e of edges) {
+      let callers = callersByCallee.get(e.callee);
+      if (!callers) {
+        callers = [];
+        callersByCallee.set(e.callee, callers);
+      }
+      callers.push(e.caller);
+    }
+
     for (const allocFn of allocFuncs) {
       for (const freeFn of freeFuncs) {
-        // Find functions that call allocFn AND freeFn (potential balanced alloc/free)
-        const allocCallers = new Set(
-          edges.filter((e) => e.callee === allocFn).map((e) => e.caller),
-        );
-        const freeCallers = new Set(
-          edges.filter((e) => e.callee === freeFn).map((e) => e.caller),
-        );
+        const allocCallers = new Set(callersByCallee.get(allocFn) ?? []);
+        const freeCallers = new Set(callersByCallee.get(freeFn) ?? []);
         const commonCallers = [...allocCallers].filter((c) => freeCallers.has(c));
 
         if (commonCallers.length > 0) {

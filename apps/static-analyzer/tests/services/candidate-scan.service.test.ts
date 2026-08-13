@@ -114,6 +114,38 @@ describe('CandidateScanService — allocator-aware discovery', () => {
     expect(withParam.candidates[0].observedDeallocationCount).toBe(1);
     expect(without.candidates[0].observedDeallocationCount).toBe(0);
   });
+
+  test('combined free matcher preserves the exact case-insensitive `\\w*free(` group: FREE( counts as a dealloc', async () => {
+    // Guard for the precompiled-union refactor: `FREE(` was ALREADY a free before the
+    // change (the case-insensitive `\w*free\s*\(` group subsumes it) — the combined
+    // matcher must not lose that group.
+    const r = await svc.scan('t.c', 'p = malloc(8);\nFREE(p);');
+    expect(r.candidates[0].observedDeallocationCount).toBe(1);
+  });
+
+  test('combined free matcher keeps exact-name deallocators case-sensitive (my_release vs MY_RELEASE)', async () => {
+    // namePatterns() builds `\bNAME\s*\(` WITHOUT the i flag; the union splitter keeps
+    // those in the case-sensitive group, so an all-caps call is not a free.
+    const lower = await svc.scan('t.c', 'p = malloc(8);\nmy_release(p);', undefined, ['my_release']);
+    const upper = await svc.scan('t.c', 'p = malloc(8);\nMY_RELEASE(p);', undefined, ['my_release']);
+    expect(lower.candidates[0].observedDeallocationCount).toBe(1);
+    expect(upper.candidates[0].observedDeallocationCount).toBe(0);
+  });
+
+  test('combined free matcher still counts custom *_free / *_delete deallocators (case-insensitive group)', async () => {
+    const r = await svc.scan('t.c', 'p = malloc(8);\ncJSON_free(p);\ncJSON_Delete(p);');
+    expect(r.candidates[0].observedDeallocationCount).toBe(2);
+  });
+
+  test('alloc fast-reject preserves first-pattern-in-order winning semantics on multi-allocator lines', async () => {
+    // A built-in allocator pattern (calloc) appears LATER in the line than a project
+    // factory allocator; the OLD per-pattern scan reported the pattern-order winner
+    // (calloc), and the fast-reject refactor must not switch to leftmost-position.
+    const r = await svc.scan('t.c', 'p = cJSON_Duplicate(x); q = calloc(1, 8);', ['cJSON_Duplicate']);
+    expect(r.candidates).toHaveLength(1);
+    expect(r.candidates[0].lineNumber).toBe(1);
+    expect(r.candidates[0].allocationType).toBe('calloc');
+  });
 });
 
 // Function attribution range-picker (the engine of F1). Tree-sitter only loads in the

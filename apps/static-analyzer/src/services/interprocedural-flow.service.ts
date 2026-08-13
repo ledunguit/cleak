@@ -11,6 +11,14 @@ type FlowPath = {
   hasAllocWithoutFree: boolean;
 };
 
+/** Result of one full reachability walk from a start function. */
+type TraceResult = {
+  paths: FlowPath[];
+  freeParams: string[];
+  reachableFrees: string[];
+  freedVars: Set<string>;
+};
+
 @Injectable()
 export class InterproceduralFlowService {
   constructor(private readonly cParser: CParserService) {}
@@ -25,13 +33,24 @@ export class InterproceduralFlowService {
   // in-flight parse instead of racing to populate the cache separately.
   private parseCache = new Map<string, Promise<FunctionInfo[]>>();
 
-  private parseFile(file: string, extraAllocators?: string[], extraDeallocators?: string[]): Promise<FunctionInfo[]> {
-    let mtime = 0;
-    try {
-      mtime = statSync(file).mtimeMs;
-    } catch {
-      return Promise.resolve([]);
-    }
+  /**
+   * Cross-candidate reachability memo. analyze() is invoked once PER CANDIDATE, and
+   * every candidate for the same case re-walks the same call graph from its start
+   * function — without a cache the walk dominates wall-clock once parsing is cached
+   * (a function with k allocation sites triggers k identical walks). Keyed on the
+   * parse fingerprint (file::mtime + allocator sets) + start function — the SAME
+   * inputs that drive the parse cache — so a changed file or a different per-project
+   * profile correctly misses and the cached walk is never served for stale input
+   * (mtime flips the key). Results are shared across calls and must be treated as
+   * read-only (MCP serializes, never mutates). Bounded: cleared once it outgrows a
+   * fixed cap so long-running scans over many distinct (start, file-set) combos
+   * can't grow it without limit.
+   */
+  private reachabilityCache = new Map<string, TraceResult>();
+  private static readonly MAX_REACHABILITY_CACHE = 256;
+
+  private parseFile(file: string, mtime: number, extraAllocators?: string[], extraDeallocators?: string[]): Promise<FunctionInfo[]> {
+    if (mtime < 0) return Promise.resolve([]); // stat failed — same empty fallback as before
     const key = `${file}::${mtime}::${(extraAllocators || []).join(',')}::${(extraDeallocators || []).join(',')}`;
     const hit = this.parseCache.get(key);
     if (hit) return hit;
@@ -66,6 +85,17 @@ export class InterproceduralFlowService {
     extraAllocators?: string[],
     extraDeallocators?: string[],
   ) {
+    // Stat every file ONCE per call: the parse cache key and the reachability
+    // fingerprint share the same mtime view, so a changed file flips BOTH keys and
+    // neither cache can serve stale data.
+    const mtimes: number[] = files.map((file) => {
+      try {
+        return statSync(file).mtimeMs;
+      } catch {
+        return -1;
+      }
+    });
+
     // Parse-once index: functionName → {fn, file}. First definition wins (matches CallGraph).
     // Files are parsed through `parseFile` (cached across candidates of the same case),
     // concurrently across the worker pool — but the index is built by walking the
@@ -73,7 +103,7 @@ export class InterproceduralFlowService {
     // deterministic regardless of which file's parse finishes first.
     const index = new Map<string, { fn: FunctionInfo; file: string }>();
     const parsed = await Promise.all(
-      files.map(async (file) => ({ file, functions: await this.parseFile(file, extraAllocators, extraDeallocators) })),
+      files.map(async (file, i) => ({ file, functions: await this.parseFile(file, mtimes[i], extraAllocators, extraDeallocators) })),
     );
     for (const { file, functions } of parsed) {
       for (const fn of functions) {
@@ -81,15 +111,32 @@ export class InterproceduralFlowService {
       }
     }
 
-    const paths: FlowPath[] = [];
-    const visited = new Set<string>();
-    const allFreeParams: string[] = [];
-    const allReachableFrees: string[] = [];
-    const freedVarsAcrossTrace = new Set<string>();
+    // Reachability walk — memoized per (start function, file fingerprint). Several
+    // candidates of one function share the same key, so the walk runs once and the
+    // rest reuse it (see reachabilityCache). The walk result depends ONLY on the
+    // index + start function; the fingerprint covers both inputs deterministically.
+    const fingerprint = [
+      functionName,
+      ...files.map((file, i) => `${file}::${mtimes[i]}`),
+      (extraAllocators || []).join(','),
+      (extraDeallocators || []).join(','),
+    ].join('\u0000');
+    let trace = this.reachabilityCache.get(fingerprint);
+    if (!trace) {
+      const paths: FlowPath[] = [];
+      const allFreeParams: string[] = [];
+      const allReachableFrees: string[] = [];
+      const freedVarsAcrossTrace = new Set<string>();
+      const visited = new Set<string>();
+      this.traceCalls(functionName, index, visited, paths, allFreeParams, allReachableFrees, freedVarsAcrossTrace, 0);
+      trace = { paths, freeParams: allFreeParams, reachableFrees: allReachableFrees, freedVars: freedVarsAcrossTrace };
+      this.reachabilityCache.set(fingerprint, trace);
+      if (this.reachabilityCache.size > InterproceduralFlowService.MAX_REACHABILITY_CACHE) {
+        this.reachabilityCache.clear();
+      }
+    }
 
-    this.traceCalls(functionName, index, visited, paths, allFreeParams, allReachableFrees, freedVarsAcrossTrace, 0);
-
-    const ownershipChains = this.buildOwnershipChains(paths);
+    const ownershipChains = this.buildOwnershipChains(trace.paths);
 
     // Variable-level cross-frame reconciliation: allocations made IN the start function
     // whose variable is freed NOWHERE reachable (not locally, not in any callee). This is
@@ -99,16 +146,16 @@ export class InterproceduralFlowService {
     // recall-additive: a false match only ADDS a (possibly wrong) leak signal, never hides one.
     const start = index.get(functionName)?.fn;
     const unreconciledAllocVars = start
-      ? [...new Set(start.allocationVariables.map((a) => a.variable))].filter((v) => !freedVarsAcrossTrace.has(v))
+      ? [...new Set(start.allocationVariables.map((a) => a.variable))].filter((v) => !trace.freedVars.has(v))
       : [];
 
     return {
-      paths,
-      freeParameters: [...new Set(allFreeParams)],
-      reachableFrees: [...new Set(allReachableFrees)],
+      paths: trace.paths,
+      freeParameters: [...new Set(trace.freeParams)],
+      reachableFrees: [...new Set(trace.reachableFrees)],
       ownershipChains,
-      depth: paths.length,
-      hasLeak: paths.some((p) => p.hasAllocWithoutFree),
+      depth: trace.paths.length,
+      hasLeak: trace.paths.some((p) => p.hasAllocWithoutFree),
       startFunction: functionName,
       unreconciledAllocVars,
     };

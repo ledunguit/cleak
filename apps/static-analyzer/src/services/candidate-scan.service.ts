@@ -82,19 +82,58 @@ function namePatterns(names: string[] | undefined, envVar: string): RegExp[] {
     .map((n) => new RegExp(`\\b${n}\\s*\\(`, 'g'));
 }
 
+/**
+ * Case-insensitive union of every allocator pattern, used as a per-line fast REJECT:
+ * a line some pattern could match is guaranteed to match this union (the `i` flag is
+ * a SUPERSET of case-sensitive matching), so it never causes a miss. Lines that match
+ * ONLY case-insensitively (e.g. `MALLOC(`) simply fall through to the exact per-pattern
+ * scan and correctly produce no candidate — harmless false positives, zero false
+ * negatives. This turns the per-line alloc loop from O(P) pattern tests into one test
+ * for the common no-allocator line.
+ */
+function buildAllocFastReject(patterns: RegExp[]): RegExp {
+  return new RegExp(`(?:${patterns.map((p) => p.source).join('|')})`, 'i');
+}
+
+/**
+ * Exact union of the free patterns split by case-insensitivity. Free-line detection is
+ * presence-only (which lines contain ANY deallocator), so two unions — one for the
+ * case-sensitive patterns, one for the case-insensitive ones — reproduce the original
+ * per-pattern OR exactly. NOTE the groups OVERLAP by design: `FREE(` is already caught
+ * by the case-insensitive `\w*free\s*\(` group (it always was, in both old and new
+ * code), while exact-name deallocators built by namePatterns() (no `i` flag) stay
+ * case-sensitive. One regex test per group replaces one per pattern.
+ */
+function buildFreeMatchers(patterns: RegExp[]): RegExp[] {
+  const caseSensitive: string[] = [];
+  const caseInsensitive: string[] = [];
+  for (const p of patterns) {
+    (p.flags.includes('i') ? caseInsensitive : caseSensitive).push(p.source);
+  }
+  const matchers: RegExp[] = [];
+  if (caseSensitive.length > 0) matchers.push(new RegExp(`(?:${caseSensitive.join('|')})`));
+  if (caseInsensitive.length > 0) matchers.push(new RegExp(`(?:${caseInsensitive.join('|')})`, 'i'));
+  return matchers;
+}
+
 @Injectable()
 export class CandidateScanService {
   private readonly logger = new Logger(CandidateScanService.name);
   constructor(private readonly cParser: CParserService) {}
 
   async scan(filePath: string, content?: string, extraAllocators?: string[], extraDeallocators?: string[]) {
+    // Precompile ALL matchers ONCE per request: the per-line loops used to re-test
+    // every pattern on every line (O(L·P)); the combined matchers below bring that
+    // down to a constant number of regex tests per line for the common cases.
     const allocPatterns = [...ALLOC_PATTERNS, ...namePatterns(extraAllocators, 'EXTRA_ALLOCATOR_NAMES')];
     const freePatterns = [...FREE_PATTERNS, ...namePatterns(extraDeallocators, 'EXTRA_DEALLOCATOR_NAMES')];
+    const allocFastReject = buildAllocFastReject(allocPatterns);
+    const freeMatchers = buildFreeMatchers(freePatterns);
     const source = content || readFileSync(filePath, 'utf-8');
     // Parse once (cached by content+allocators → the enrichment stage reuses it) to get
     // ACCURATE function boundaries for attributing each candidate to its enclosing
     // function. LAMeD scores function-level, so a wrong attribution = a missed flaw.
-    let functions: FunctionInfo[] = [];
+    let functions: FunctionInfo[];
     try {
       functions = (await this.cParser.parse(source, filePath, extraAllocators, extraDeallocators)).functions;
     } catch {
@@ -109,12 +148,8 @@ export class CandidateScanService {
 
     const allFreeLines: number[] = [];
     for (let i = 0; i < sanitizedLines.length; i++) {
-      for (const pattern of freePatterns) {
-        pattern.lastIndex = 0;
-        if (pattern.test(sanitizedLines[i])) {
-          allFreeLines.push(i + 1);
-          break;
-        }
+      if (freeMatchers.some((m) => m.test(sanitizedLines[i]))) {
+        allFreeLines.push(i + 1);
       }
     }
 
@@ -129,6 +164,12 @@ export class CandidateScanService {
     for (let i = 0; i < sanitizedLines.length; i++) {
       const line = sanitizedLines[i];
       const lineNumber = i + 1;
+
+      // Fast reject: skip lines with no allocator with ONE regex test; only lines the
+      // union flags run the exact ordered per-pattern scan (which decides the WINNING
+      // pattern — allocationType must keep the old first-pattern-in-order semantics).
+      allocFastReject.lastIndex = 0;
+      if (!allocFastReject.test(line)) continue;
 
       for (const pattern of allocPatterns) {
         pattern.lastIndex = 0;

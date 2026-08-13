@@ -21,6 +21,100 @@ function write(name: string, content: string): string {
   return p;
 }
 
+describe('CallGraphService — recursion-cycle detection (adjacency-list DFS)', () => {
+  test('direct recursion is reported as a single-function cycle', async () => {
+    const a = write(
+      'direct_rec.c',
+      `
+void f(void) { f(); }
+void g(void) { g(); }
+`,
+    );
+
+    const svc = new CallGraphService(new CParserService());
+    const result = await svc.extract(dir, [a]);
+
+    expect(result.recursionCycles).toEqual([['f'], ['g']]);
+    expect(result.stats.recursionCycles).toBe(2);
+  });
+
+  test('indirect (mutual) recursion is found from BOTH cycle members, each as [...path, start]', async () => {
+    const a = write(
+      'mutual_rec.c',
+      `
+void a(void) { b(); }
+void b(void) { a(); }
+`,
+    );
+
+    const svc = new CallGraphService(new CParserService());
+    const result = await svc.extract(dir, [a]);
+
+    expect(result.recursionCycles).toEqual([
+      ['a', 'b', 'a'],
+      ['b', 'a', 'b'],
+    ]);
+  });
+
+  test('a 3-cycle emits one cycle per member and a non-cycle function is not implicated', async () => {
+    const a = write(
+      'tri_rec.c',
+      `
+void x(void) { y(); }
+void y(void) { z(); }
+void z(void) { x(); }
+void plain(void) { ; }
+`,
+    );
+
+    const svc = new CallGraphService(new CParserService());
+    const result = await svc.extract(dir, [a]);
+
+    expect(result.recursionCycles).toEqual([
+      ['x', 'y', 'z', 'x'],
+      ['y', 'z', 'x', 'y'],
+      ['z', 'x', 'y', 'z'],
+    ]);
+  });
+
+  test('acyclic call graph produces no recursion cycles', async () => {
+    const a = write(
+      'acyclic.c',
+      `
+void p(void) { q(); }
+void q(void) { ; }
+`,
+    );
+
+    const svc = new CallGraphService(new CParserService());
+    const result = await svc.extract(dir, [a]);
+
+    expect(result.recursionCycles).toEqual([]);
+  });
+
+  test('allocFreeChains: a function calling both an allocator and a deallocator appears in the chain', async () => {
+    const a = write(
+      'balanced.c',
+      `
+void balanced(void) {
+    char *x = malloc(8);
+    free(x);
+}
+void allocOnly(void) { char *y = malloc(8); }
+`,
+    );
+
+    const svc = new CallGraphService(new CParserService());
+    const result = await svc.extract(dir, [a]);
+
+    const mallocFree = result.allocFreeChains.find(
+      (c) => c.allocFunction === 'malloc' && c.freeFunction === 'free',
+    );
+    expect(mallocFree?.callers).toContain('balanced');
+    expect(mallocFree?.callers).not.toContain('allocOnly');
+  });
+});
+
 describe('CallGraphService — ownership correlation (Juliet flow-variant ≥21 shapes)', () => {
   test('freedCrossFile: caller allocation freed via a callee defined in a DIFFERENT file', async () => {
     const a = write(
