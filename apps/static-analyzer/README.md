@@ -22,7 +22,7 @@ src/
     call-graph.service.ts         cạnh/đỉnh call graph, chuỗi reachability alloc→free
     function-summary.service.ts   cân bằng alloc/free, biến cục bộ, lời gọi trong 1 hàm
     interprocedural-flow.service.ts  truy vết dataflow liên thủ tục
-    path-constraints.service.ts   phân tích đường đi khả thi quanh site cấp phát (Z3, node-only)
+    path-constraints.service.ts   phân tích đường đi khả thi quanh site cấp phát (heuristic CFG — không SMT solver)
     ownership-analysis.service.ts quy ước chuyển quyền sở hữu (ownership transfer)
     c-parser.service.ts           CFG path-sensitive, reachability dead-code (engine E1–E3)
     scan-build-adapter.service.ts bọc Clang `scan-build` (slot "scan-build" tự chứa)
@@ -43,7 +43,7 @@ src/
 | `callGraph` | `rootPath`, `files`, `extraAllocators?`, `extraDeallocators?` | đỉnh/cạnh call graph + chuỗi alloc→free |
 | `functionSummary` | `filePath`, `content?`, `functionName`, `extraAllocators?`, `extraDeallocators?` | cân bằng alloc/free, biến cục bộ, lời gọi |
 | `interproceduralFlow` | `rootPath`, `functionName`, `files` | dataflow liên thủ tục |
-| `pathConstraints` | `filePath`, `content?`, `lineNumber`, `extraAllocators?`, `extraDeallocators?` | đường đi khả thi quanh dòng cấp phát (Z3) |
+| `pathConstraints` | `filePath`, `content?`, `lineNumber`, `extraAllocators?`, `extraDeallocators?` | đường đi khả thi quanh dòng cấp phát (heuristic — không SMT solver) |
 | `ownershipSummary` | `files`, `rootPath` | tổng hợp quy ước sở hữu nhiều file |
 | `ownershipConventions` | `filePath`, `content?` | quy ước chuyển quyền sở hữu trong 1 file |
 | `scanBuildRun` | `projectPath`, `buildCommand`, `timeoutSec?` | chạy Clang `scan-build` trên bản build dự án |

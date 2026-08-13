@@ -71,7 +71,6 @@ export class ValgrindService {
 
   private toLeakFinding(f: any, runId: string, index: number) {
     const leakBytes = Number(f.aux?.leak?.bytes ?? f.aux?.size ?? 0);
-    const leakBlocks = f.aux?.leak?.blocks || 0;
     const severity = this.mapSeverity(f.kind, f.message);
 
     // Find the first stack frame with real source file info (skip allocator internals)

@@ -92,8 +92,6 @@ function walkStatements(
       case 'for_statement':
       case 'while_statement':
       case 'do_statement': {
-        const loopKind = stmt.type === 'for_statement' ? 'for'
-          : stmt.type === 'while_statement' ? 'while' : 'do_while';
         const loopText = nodeText(stmt, lines).slice(0, 80);
 
         // Loop header node
@@ -121,7 +119,7 @@ function walkStatements(
         }
 
         // Exit edge from loop header
-        const afterLoopId = id++;
+        const afterLoopId = id;
         nodes.push({
           id: afterLoopId, type: 'basic_block', line: (stmt.endPosition?.row ?? 0) + 1,
           text: '(after loop)', hasFree: false,
@@ -134,7 +132,7 @@ function walkStatements(
 
       case 'return_statement': {
         const retText = nodeText(stmt, lines).slice(0, 60);
-        const retId = id++;
+        const retId = id;
         // (CFG return node is informational; path-sensitive free reconciliation lives in
         // analyzeExitPaths. Don't fake hasFree with a ±3-line proximity guess.)
         nodes.push({
@@ -148,7 +146,7 @@ function walkStatements(
       }
 
       case 'goto_statement': {
-        const gotoId = id++;
+        const gotoId = id;
         const label = extractGotoLabel(stmt, lines);
         nodes.push({
           id: gotoId, type: 'goto', line: (stmt.startPosition?.row ?? 0) + 1,
@@ -204,7 +202,7 @@ function walkStatements(
           if (lhs) allocVars.push(lhs);
         }
 
-        const blockId = id++;
+        const blockId = id;
         nodes.push({
           id: blockId, type: 'basic_block', line: (stmt.startPosition?.row ?? 0) + 1,
           text: stmtText, hasFree, hasAllocation: hasAlloc,
@@ -253,8 +251,7 @@ export function buildControlFlowGraph(
     hasAllocation: false, allocationVars: [],
   });
 
-  const lastBlockId = walkStatements(body, nodes, edges, lines, nodeId, exitId, allocVarNames, freeVarNames, fn, allocSet, freeSet);
-  nodeId = Math.max(lastBlockId, exitId + 1);
+  walkStatements(body, nodes, edges, lines, nodeId, exitId, allocVarNames, freeVarNames, fn, allocSet, freeSet);
 
   // Connect entry to first block or exit
   const firstRealNode = nodes.find(

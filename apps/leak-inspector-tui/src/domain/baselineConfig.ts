@@ -89,7 +89,7 @@ export function loadBaselineConfig(path: string): BaselineConfig {
   try {
     raw = parseYaml(readFileSync(path, 'utf-8'));
   } catch (e) {
-    throw new Error(`baseline config ${path} is not valid YAML: ${(e as Error).message}`);
+    throw new Error(`baseline config ${path} is not valid YAML: ${(e as Error).message}`, { cause: e });
   }
   const parsed = BaselineConfigSchema.safeParse(raw);
   if (!parsed.success) {

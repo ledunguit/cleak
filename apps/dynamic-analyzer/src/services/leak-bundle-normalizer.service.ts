@@ -42,8 +42,8 @@ export class LeakBundleNormalizerService {
   normalizeMemcheck(
     runId: string,
     rawErrors: Finding[],
-    xmlPath?: string,
-    logPath?: string,
+    _xmlPath?: string,
+    _logPath?: string,
   ): NormalizedReport {
     const findings: NormalizedFinding[] = [];
     let high = 0, medium = 0, low = 0;
@@ -90,7 +90,7 @@ export class LeakBundleNormalizerService {
   normalizeAsan(
     runId: string,
     rawErrors: Finding[],
-    logPath?: string,
+    _logPath?: string,
   ): NormalizedReport {
     const findings: NormalizedFinding[] = [];
     let high = 0, medium = 0, low = 0;

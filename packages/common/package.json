@@ -64,7 +64,7 @@
   "scripts": {
     "build": "tsup",
     "typecheck": "tsc --noEmit -p tsconfig.lib.json",
-    "lint": "echo 'lint ok'",
+    "lint": "eslint . --max-warnings=0",
     "test": "vitest run"
   },
   "dependencies": {

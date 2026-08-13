@@ -107,7 +107,7 @@ export class ScanBuildAdapterService {
     // the argv straight through; a command that actually needs shell features keeps the one
     // controlled `/bin/sh -c` layer. Splitting a metachar-free string is injection-safe (no
     // shell interpretation). --keep-going: don't abort the whole pass on a single TU failure.
-    const simple = !/[|&;<>$`(){}\[\]*?~\n]/.test(buildCommand);
+    const simple = !/[|&;<>$`(){}[\]*?~\n]/.test(buildCommand);
     const buildArgv = simple ? buildCommand.trim().split(/\s+/) : ['/bin/sh', '-c', buildCommand];
     const result = spawnSync(
       this.scanBuildBin,

@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { execSync, execFileSync } from 'child_process';
-import { existsSync, readdirSync, statSync, writeFileSync, realpathSync } from 'fs';
+import { existsSync, readdirSync, statSync, writeFileSync, realpathSync, unlinkSync } from 'fs';
 import { join, resolve } from 'path';
 import type { BuildTargetResponse } from '../types/mcp-responses';
 import { assertInsideWorkspace, isPathInside } from './path-guard';
@@ -35,9 +35,6 @@ export class BuildTargetService {
         errors: [`Project path does not exist: ${canonicalProject}`],
       };
     }
-
-    // Create a wrapper build script to capture output and binary path
-    const buildScriptPath = join(canonicalProject, '.mcpvul_build.sh');
 
     // Adapt sanitizer flags for the host platform
     const adaptedCommand = this.adaptSanitizerFlags(buildCommand);
@@ -99,7 +96,6 @@ export class BuildTargetService {
     timeoutSec: number,
   ) {
     const errors: string[] = [];
-    const buildId = `build_${Date.now()}`;
     const containerWorkDir = '/workspace';
 
     // Write build command to a script
@@ -167,7 +163,7 @@ echo "---BUILD_COMPLETE---"
       // Cleanup build script
       try {
         const scriptFile = join(projectPath, '.mcpvul_docker_build.sh');
-        if (existsSync(scriptFile)) require('fs').unlinkSync(scriptFile);
+        if (existsSync(scriptFile)) unlinkSync(scriptFile);
       } catch { /* ignore cleanup errors */ }
     }
   }

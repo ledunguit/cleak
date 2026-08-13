@@ -49,7 +49,7 @@ export const navigationStore = createStore<NavState & NavActions>()((set, get) =
     // The current class checks `this.access.get().agents.length === 0` — that cross-store
     // check will be handled when the component calls enterAgentList() conditional on agents presence.
     // For now, just set the mode — the component gates the call.
-    set((s) => ({
+    set(() => ({
       navMode: 'agentlist' as NavMode,
       navIndex: 0,
     }));
@@ -68,7 +68,6 @@ export const navigationStore = createStore<NavState & NavActions>()((set, get) =
   },
 
   openFocusedAgent: () => {
-    const s = get();
     // Components pass the selected agent via navIndex — openFocusedAgent
     // sets the view to that agent's log. The actual agent lookup happens
     // in the component layer (MainScreen).
@@ -87,7 +86,7 @@ export const navigationStore = createStore<NavState & NavActions>()((set, get) =
     });
   },
 
-  logFocusMove: (delta, viewportRows) => {
+  logFocusMove: (delta, _viewportRows) => {
     const s = get();
     if (s.navMode !== 'agentlog') return;
     // focusMsgId scroll logic simplified — the actual visible messages

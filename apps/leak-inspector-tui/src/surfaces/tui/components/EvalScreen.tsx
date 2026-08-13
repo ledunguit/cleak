@@ -349,7 +349,7 @@ function Cases({ s }: { s: EvalUiState }) {
 }
 
 function Detail({
-  s,
+  s: _s,
   selected,
   logLines,
   logRows,

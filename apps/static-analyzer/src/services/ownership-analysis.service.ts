@@ -7,7 +7,7 @@ import { CParserService, FunctionInfo } from './c-parser.service';
 export class OwnershipAnalysisService {
   constructor(private readonly cParser: CParserService) {}
 
-  async summarize(files: string[], rootPath: string) {
+  async summarize(files: string[], _rootPath: string) {
     const ownerships: {
       functionName: string;
       filePath: string;

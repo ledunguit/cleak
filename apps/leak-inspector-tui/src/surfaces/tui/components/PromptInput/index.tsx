@@ -59,7 +59,6 @@ export function PromptInput({
   useEffect(() => {
     lastEmitted.current = value;
     setCursor(value.length);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rev]);
 
   useInput(

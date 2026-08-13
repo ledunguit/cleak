@@ -25,7 +25,7 @@ export function nodeText(node: TreeSitterNode | null | undefined, lines: string[
   if (!node || node.startIndex == null) return '';
   const sp = node.startPosition!;
   const ep = node.endPosition!;
-  let text = '';
+  let text: string;
   if (sp.row === ep.row) {
     text = lines[sp.row]?.substring(sp.column, ep.column) || '';
   } else {

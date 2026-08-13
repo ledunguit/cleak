@@ -1,7 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { CParserService, FunctionInfo, ControlFlowGraph, ExitPathAnalysis, LoopInfo } from './c-parser.service';
+import { CParserService, type FunctionInfo } from './c-parser.service';
 import { readFileSync } from 'fs';
-import { ALLOCATION_FUNCTIONS as ALLOC_FUNCS, DEALLOCATION_FUNCTIONS as FREE_FUNCS } from '@cleak/common/constants/allocators';
 
 export interface MemoryPattern {
   patternType: string;
@@ -282,7 +281,6 @@ export class AstScanService {
 
     // For each allocation, check if there's a NULL check in the 3 lines after
     for (const alloc of fn.allocationVariables) {
-      const lineAfterAlloc = alloc.line + 1;
       const nullCheckExists = fn.conditions.some(
         (c) => c.line >= alloc.line && c.line <= alloc.line + 4 &&
           (c.text.includes(`${alloc.variable} == NULL`) ||

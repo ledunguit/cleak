@@ -4,7 +4,13 @@
  */
 
 import { SCAN_PHASE_ORDER, type ScanPhase } from '@cleak/common/flow/scan-flow-contract';
-import type { PhaseStatus } from '../../../stores';
+// Import the PhaseStatus type from stores/types directly — NOT the stores
+// barrel (index.ts). scan-store.ts (which imports this module) is re-exported
+// by the barrel, so importing the barrel here would create a module cycle:
+//   stores/scan-store → surfaces/tui/store/scan-helpers → stores/index → stores/scan-store
+// stores/types is a leaf type module (imports only domain + surfaces/findingView,
+// never the barrel), so it keeps the stores package a clean DAG.
+import type { PhaseStatus } from '../../../stores/types';
 
 export function initialPhases(): Record<ScanPhase, PhaseStatus> {
   const p = {} as Record<ScanPhase, PhaseStatus>;

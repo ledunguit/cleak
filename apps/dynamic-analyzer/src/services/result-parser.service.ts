@@ -158,7 +158,6 @@ export class ResultParserService {
     for (let i = 0; i < lines.length; i++) {
       let kind: string | null = null;
       let message: string | null = null;
-      let matchedPattern: RegExp | null = null;
 
       for (const pat of errorPatterns) {
         pat.lastIndex = 0;
@@ -166,7 +165,6 @@ export class ResultParserService {
         if (m?.groups) {
           kind = m.groups.kind.trim();
           message = lines[i].trim();
-          matchedPattern = pat;
           break;
         }
       }

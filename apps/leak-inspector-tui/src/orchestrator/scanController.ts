@@ -662,7 +662,7 @@ export async function runScan(input: ScanInput, deps: ScanDeps): Promise<ScanRes
   if (input.buildCommand) emitter.emit(ScanEventName.BUILD_PLAN_SELECTED, { buildCommand: input.buildCommand });
   emitter.emit(ScanEventName.WORKSPACE_FINISHED, {});
 
-  const { totalFiles, warning, dynamicRanInDiscovery } = await runDiscovery(input, deps, candidates, emitter, pathResolver, caches);
+  const { dynamicRanInDiscovery } = await runDiscovery(input, deps, candidates, emitter, pathResolver, caches);
 
   const discovered = candidates.getAllBundles().length;
   const staticDiscovery = input.staticDiscovery !== false;

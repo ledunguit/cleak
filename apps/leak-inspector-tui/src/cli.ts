@@ -10,11 +10,10 @@
  *   eval   --corpus <p>   batch-evaluate a labeled corpus
  */
 
-import { existsSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { Command } from 'commander';
 import { McpClient, loadMcpTools } from '@cleak/agent-core';
-import { loadConfig, type Provider, saveConfigFile, setConfigKey, unsetConfigKey, configTemplate, configFilePath, loadConfigFile } from '@cleak/config';
-import type { CleakConfig, EndpointOverride } from '@cleak/config';
+import { loadConfig, saveConfigFile, setConfigKey, unsetConfigKey, configTemplate, configFilePath } from '@cleak/config';
 import { mcpToolFlags, phaseForMcpTool } from './domain/mcpToolPlan';
 import { VERSION } from './version';
 

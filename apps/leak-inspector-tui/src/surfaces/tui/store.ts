@@ -12,7 +12,6 @@ import type { AgentEvent } from '@cleak/agent-core';
 import type { ScanEvent } from '../../orchestrator/events';
 import type { AgentMeta } from '../../orchestrator/investigation';
 import type { EvalResult } from '../../domain/evalHarness';
-import type { SnapshotFinding, LabeledFlaw, CleanSite } from '../../domain/evalScoring';
 import type { FindingView } from './findings/findingView';
 
 import { navigationStore } from '../../stores/navigation-store';
@@ -22,7 +21,6 @@ import { configStore } from '../../stores/config-store';
 import { evalStore } from '../../stores/eval-store';
 import type { EvalActions } from '../../stores/eval-store';
 import { findingsStore } from '../../stores/findings-store';
-import type { FindingsActions } from '../../stores/findings-store';
 import { visibleFindings as _visibleFindings } from '../../stores/findings-store';
 
 // ── Re-export all types and standalone functions for backward compatibility ──
@@ -41,27 +39,10 @@ export type {
   FindingsTab, FindingsSort, FindingsUiState, UiState,
 } from '../../stores/types';
 
-import type { NavMode, UiMessage, UiState } from '../../stores/types';
-import { SCAN_PHASE_ORDER, ScanPhase } from '@cleak/common/flow/scan-flow-contract';
+import type { UiMessage, UiState } from '../../stores/types';
 
 /** Listener signature compatible with Zustand's ReadonlyStoreApi.subscribe. */
 type Listener = (state?: unknown, prevState?: unknown) => void;
-
-function initialPhases(): Record<ScanPhase, 'pending'> {
-  const p = {} as Record<ScanPhase, 'pending'>;
-  for (const ph of SCAN_PHASE_ORDER) p[ph] = 'pending';
-  return p;
-}
-
-/** Default UiState snapshot — used by getInitialState(). */
-const DEFAULT_UI_STATE: UiState = {
-  messages: [], phases: initialPhases(), status: 'idle', statusText: 'idle',
-  usage: { inputTokens: 0, outputTokens: 0, thinkingTokens: 0 },
-  mode: 'llm_assisted', dynamic: 'off', provider: 'local', model: '',
-  view: 'main', autoShowReport: false, fullscreen: false, sidebarPosition: 'right', permissionMode: 'ask',
-  ranDynamicTool: false, scrollOffset: 0, agents: [],
-  viewAgentId: 'main', navMode: 'normal', navIndex: 0,
-};
 
 export class TuiStore {
   private listeners = new Set<Listener>();
@@ -213,7 +194,7 @@ export class TuiStore {
   backToMain(): void {
     navigationStore.getState().backToMain();
   }
-  logFocusMove(delta: number, viewportRows: number): void {
+  logFocusMove(delta: number, _viewportRows: number): void {
     const n = navigationStore.getState();
     const agentId = n.viewAgentId;
     const messages = scanStore.getState().messages.filter((m) => m.agentId === agentId);
@@ -268,7 +249,7 @@ export class TuiStore {
   isRunning(): boolean { return scanStore.getState().isRunning(); }
   enqueueSteering(text: string): void { scanStore.getState().enqueueSteering(text); }
   drainSteering(): string[] { return scanStore.getState().drainSteering(); }
-  beginRun(scanId: string, mode: UiState['mode']): void {
+  beginRun(scanId: string, _mode: UiState['mode']): void {
     scanStore.getState().beginRun(scanId);
     navigationStore.getState().resetForNewScan();
   }

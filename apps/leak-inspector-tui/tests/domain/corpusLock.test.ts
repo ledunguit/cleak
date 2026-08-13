@@ -1,6 +1,6 @@
-import { afterAll, afterEach, beforeAll, describe, expect, test, mock } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, test } from 'vitest';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, appendFileSync, unlinkSync, existsSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { corpusContentHash, readCorpusLock, checkCorpusGate } from '../../src/domain/corpusLock';
 

@@ -23,7 +23,7 @@ export function toolParametersJSONSchema(tool: Tool): Record<string, unknown> {
         tool.inputSchema,
       );
       // Strip the $schema meta key — providers don't need it.
-      const { $schema, ...rest } = schema as Record<string, unknown>;
+      const { $schema: _drop, ...rest } = schema as Record<string, unknown>;
       return rest;
     } catch {
       return EMPTY_OBJECT_SCHEMA;

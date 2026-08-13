@@ -23,7 +23,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { existsSync, mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from 'fs';
 import * as fs from 'fs';
-import { basename, join, sep } from 'path';
+import { basename, join } from 'path';
 import { CompileCommandsService, extractReusableFlags, resolveCompileEntry } from './compile-commands.service';
 import { runConfined, sanitizeRunId, intEnv } from './safe-exec';
 import { assertInsideWorkspace, isPathInside } from './path-guard';

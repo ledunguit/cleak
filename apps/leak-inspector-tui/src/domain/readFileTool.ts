@@ -14,10 +14,6 @@ import type { FileContentCache } from './fileContentCache';
 
 const MAX_FILE_CHARS = 16_000;
 
-type ReadFileResult =
-  | { error: string }
-  | { path: string; truncated: boolean; content: string };
-
 /** Canonicalize `p` — realpath the deepest existing ancestor so a symlink
  * inside the repo cannot smuggle reads to a path outside it. */
 function canonicalize(p: string): string {

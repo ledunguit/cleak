@@ -43,27 +43,6 @@ export interface InputKey {
   delete?: boolean; // a plain Backspace press arrives as `delete` in Ink
 }
 
-const isSpace = (ch: string): boolean => /\s/.test(ch);
-
-/** Start of the word at/just before `cursor`: skip trailing spaces, then word chars. */
-function prevWordStart(value: string, cursor: number): number {
-  let i = cursor;
-  while (i > 0 && isSpace(value[i - 1]!)) i--;
-  while (i > 0 && !isSpace(value[i - 1]!)) i--;
-  return i;
-}
-
-/** End of the word at/just after `cursor`: skip leading spaces, then word chars. */
-function nextWordEnd(value: string, cursor: number): number {
-  const n = value.length;
-  let i = cursor;
-  while (i < n && isSpace(value[i]!)) i++;
-  while (i < n && !isSpace(value[i]!)) i++;
-  return i;
-}
-
-const clamp = (n: number, hi: number): number => Math.max(0, Math.min(hi, n));
-
 /** lineEdit now re-exports from PromptInput/keybindings module to avoid duplication.
  *  The implementations live in components/PromptInput/keybindings. */
 

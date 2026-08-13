@@ -15,7 +15,7 @@ import type { SnapshotFinding, LabeledFlaw, CleanSite } from '../domain/evalScor
 
 // ─── State & Actions interfaces ───────────────────────────────────────────
 
-export interface EvalState extends EvalUiState {}
+export type EvalState = EvalUiState;
 
 export interface EvalActions {
   beginEval: (meta: {

@@ -90,7 +90,7 @@ export function usePasteSupport(): {
     }
     const start = input.indexOf(PASTE_START);
     if (start < 0) return null;
-    let rest = input.slice(start + PASTE_START.length);
+    const rest = input.slice(start + PASTE_START.length);
     const close = rest.indexOf(PASTE_END);
     if (close >= 0) return rest.slice(0, close);
     pasting.current = true;

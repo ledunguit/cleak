@@ -41,7 +41,7 @@ export async function fetchWithRetry(
       return res;
     } catch (err) {
       // Caller-initiated abort (e.g. user pressed ESC): propagate clearly, no retry.
-      if (opts.signal?.aborted) throw new Error('interrupted');
+      if (opts.signal?.aborted) throw new Error('interrupted', { cause: err });
       const reason = timedOut
         ? `timed out after ${opts.timeoutMs >= 1000 ? `${Math.round(opts.timeoutMs / 1000)}s` : `${opts.timeoutMs}ms`}`
         : 'network error';
@@ -196,7 +196,7 @@ export async function streamWithRetry(url: string, init: RequestInit, opts: Stre
       }
       return;
     } catch (err: unknown) {
-      if (opts.signal?.aborted) throw new Error('interrupted');
+      if (opts.signal?.aborted) throw new Error('interrupted', { cause: err });
       const reason = deadlineExceeded
         ? `exceeded absolute deadline of ${secs(opts.maxTotalMs!)} (gateway likely stuck — kept alive by heartbeats past the idle timeout)`
         : timedOut

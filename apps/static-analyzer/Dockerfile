@@ -52,6 +52,19 @@ COPY --from=build /app/dist/apps/static-analyzer ./dist
 # package dir on its own would carry the symlink without its target.
 COPY --from=build /app/node_modules ./node_modules
 
+# ── Non-root runtime user ──────────────────────────────────────────────────
+# Safe to run as non-root here: this service only READS the scanned project
+# (docker-compose mounts ./demo + ./targets READ-ONLY — scan-build writes its
+# reports under RUNS_DIR, default ./runs, inside the container) and binds the
+# unprivileged MCP port 50061 (>1024). So there are no host-writable bind-mounts
+# to break by dropping root — unlike dynamic-analyzer, which builds INTO host rw
+# mounts and needs mount-ownership coordination first (see its Dockerfile).
+RUN groupadd --system --gid 10001 cleak \
+ && useradd --system --uid 10001 --gid 10001 --home-dir /home/cleak --shell /usr/sbin/nologin cleak \
+ && mkdir -p /home/cleak /app/runs \
+ && chown -R cleak:cleak /home/cleak /app/runs
+USER cleak
+
 EXPOSE 50061
 
 CMD ["node", "dist/main.js"]

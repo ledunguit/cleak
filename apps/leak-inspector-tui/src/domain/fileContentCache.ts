@@ -49,7 +49,7 @@ export class FileContentCache {
     const hit = this.entries.get(abs);
     if (hit && hit.stamp === stamp) return hit.content;
 
-    let content: string | null = null;
+    let content: string | null;
     try {
       content = readFileSync(abs, 'utf-8');
     } catch {

@@ -23,9 +23,11 @@ import type { ParseResult, FunctionInfo } from './c-parser.types';
  * (main-thread singleton or per-worker singleton) — construction is the
  * expensive part, `.parse()` calls on an existing instance are cheap. */
 export function createParser(cpp: boolean): TreeSitterParser {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  // tree-sitter's native addons are CommonJS-only — dynamic `require` is the
+  // only way to load them from this ESM package, so this is intentional.
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const Parser = require('tree-sitter');
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const lang = require(cpp ? 'tree-sitter-cpp' : 'tree-sitter-c');
   const p = new Parser();
   p.setLanguage(lang);

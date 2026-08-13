@@ -48,9 +48,7 @@ export interface MainScreenProps {
 
 export const MainScreen = memo(function MainScreen({
   store,
-  resultsDir,
   recentScans,
-  staticUrl,
   cwd,
   input,
   inputRev,
@@ -61,7 +59,6 @@ export const MainScreen = memo(function MainScreen({
   onInputChange,
   onInputSubmit,
   onOverlayCancel,
-  completeCommand,
 }: MainScreenProps) {
   const { columns: termCols, rows: termRows } = useTerminalSize();
   // Scan fields from Zustand scanStore

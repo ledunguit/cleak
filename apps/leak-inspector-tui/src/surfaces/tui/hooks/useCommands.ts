@@ -187,11 +187,13 @@ export function useCommands(
         return;
 
       case '/mode':
-        arg ? applyMode(arg) : openSelect('/mode', applyMode, state.mode);
+        if (arg) applyMode(arg);
+        else openSelect('/mode', applyMode, state.mode);
         return;
 
       case '/dynamic':
-        arg ? applyDynamic(arg) : openSelect('/dynamic', applyDynamic, state.dynamic);
+        if (arg) applyDynamic(arg);
+        else openSelect('/dynamic', applyDynamic, state.dynamic);
         return;
 
       case '/preflight':
@@ -404,8 +406,7 @@ function mostRecentScanId(resultsDir: string): string | undefined {
 
 /** Standalone connectivity check (the scan does its own, but this lets you verify before scanning). */
 async function doPreflight(store: TuiStore, staticUrl?: string, dynamicUrl?: string) {
-  const { McpClient, buildCallModel } = await import('@cleak/agent-core');
-  const { loadConfig, toProviderSettings } = await import('@cleak/config');
+  const { loadConfig } = await import('@cleak/config');
   const cfg = loadConfig({
     ...(staticUrl ? { staticUrl } : {}),
     ...(dynamicUrl ? { dynamicUrl } : {}),

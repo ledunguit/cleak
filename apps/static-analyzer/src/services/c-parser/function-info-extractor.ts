@@ -163,7 +163,7 @@ function extractFreedVariables(
   node: TreeSitterNode,
   lines: string[],
   deallocCalls: { name: string; line: number }[],
-  freeSet: Set<string>,
+  _freeSet: Set<string>,
 ): { variable: string; line: number }[] {
   const body = findChild(node, 'compound_statement');
   if (!body) return [];

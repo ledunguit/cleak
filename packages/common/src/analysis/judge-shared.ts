@@ -63,7 +63,7 @@ export function evidenceIndicatesLeak(e: {
 
 /**
  * Strip C/C++ comments (newline-preserving) so benchmark giveaway labels — Juliet's
- * `/* POTENTIAL FLAW *​/`, `GoodSource`/`GoodSink` — never reach the judge. Letting
+ * `POTENTIAL FLAW` / `GoodSource`/`GoodSink` — never reach the judge. Letting
  * the model read them skews BOTH recall (it cheats on `bad`) and precision (a clean
  * function carrying a leftover FLAW comment gets flagged). Reasoning is on code, not labels.
  */

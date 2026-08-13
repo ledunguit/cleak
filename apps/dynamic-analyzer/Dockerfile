@@ -81,6 +81,28 @@ WORKDIR /app
 COPY --from=build /app/dist/apps/dynamic-analyzer ./dist
 COPY --from=build /app/node_modules ./node_modules
 
+# ── Non-root runtime user: NOT enabled by default — why ─────────────────────
+# This container BUILD-AND-RUNS untrusted C/C++ projects INTO host bind-mounts
+# that docker-compose mounts READ-WRITE (`./demo:/workspace/demo`,
+# `./targets:/workspace/targets`), plus the named volumes `runs:/runs` and
+# `ccache-data:/ccache` (build-target.service.ts, harness-build.service.ts and
+# ccache all write there). Host bind-mounts keep the host owner's uid, and
+# fresh named volumes are initialized root-owned on first mount — so a plain
+# non-root `USER` in this image alone makes every build/sanitizer write fail
+# with EACCES. Dropping root here REQUIRES out-of-image coordination:
+#   1. docker-compose `user: "${UID}:${GID}"` (host uid/gid) so the process can
+#      write the host rw bind-mounts;
+#   2. pre-chown the named volumes once, e.g. an init step:
+#        docker run --rm -v runs:/runs -v ccache-data:/ccache \
+#          alpine chown -R <UID>:<GID> /runs /ccache
+#      before the first `up`;
+#   3. create /home/<user> + chown it (node cache), and keep /app readable
+#      (dist + node_modules already are — no /app writes beyond RUNS_DIR=/runs).
+# Without steps 1–2 the container is broken as non-root, so enabling `USER`
+# here is intentionally left to the deployment that guarantees those mounts.
+# (static-analyzer CAN run non-root by default — it has read-only mounts only;
+# see its Dockerfile for the applied pattern.)
+
 EXPOSE 50062
 
 CMD ["node", "dist/main.js"]

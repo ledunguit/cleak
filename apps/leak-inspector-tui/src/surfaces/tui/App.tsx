@@ -53,7 +53,7 @@ export function App({ store, staticUrl, dynamicUrl, cwd, resultsDir, recentScans
   const {
     history, recallHistory, completeCommand, matches, showSuggest, resetHistoryCursor,
   } = useHistoryNavigation(input, setInput, store, overlay, setInputRev);
-  const { dispatch, openReport, showMetrics, openSelect, launchEval, openEvalHistory } = useCommands(
+  const { dispatch, openReport, launchEval, openEvalHistory } = useCommands(
     store, exit, resultsDir, setOverlay, staticUrl, dynamicUrl,
   );
 
