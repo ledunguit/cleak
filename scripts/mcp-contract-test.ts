@@ -10,7 +10,7 @@
  */
 
 import { McpClient } from '@cleak/agent-core';
-import { STATIC_TOOL_NAMES, DYNAMIC_TOOL_NAMES } from '../apps/leak-inspector-tui/src/domain/mcpToolPlan';
+import { STATIC_TOOL_NAMES, DYNAMIC_TOOL_NAMES } from '@cleak/common/mcp/tool-catalog';
 
 const STATIC_URL = process.env.STATIC_ANALYZER_MCP_URL ?? 'http://127.0.0.1:50071/mcp';
 const DYNAMIC_URL = process.env.DYNAMIC_ANALYZER_MCP_URL ?? 'http://127.0.0.1:50072/mcp';

@@ -8,20 +8,13 @@
  */
 
 import { ScanPhase } from '@cleak/common/flow/scan-flow-contract';
+import { STATIC_TOOL_NAMES, DYNAMIC_TOOL_NAMES } from '@cleak/common/mcp/tool-catalog';
 import type { McpToolFlags } from '@cleak/agent-core';
 
 /** Tools that are fast, pure, side-effect-free → safe to batch concurrently. */
 const CONCURRENCY_SAFE = new Set<string>([
-  'indexFiles',
-  'candidateScan',
-  'astScan',
-  'callGraph',
-  'functionSummary',
-  'interproceduralFlow',
-  'pathConstraints',
-  'ownershipSummary',
-  'ownershipConventions',
-  'scanBuildGetReport',
+  // Every static tool except the build-spawning scan-build run.
+  ...STATIC_TOOL_NAMES.filter((name) => name !== 'scanBuildRun'),
   'valgrindGetReport',
   'valgrindListFindings',
   'valgrindCompareRuns',
@@ -31,13 +24,7 @@ const CONCURRENCY_SAFE = new Set<string>([
 /** Heavy/process-spawning tools — read-only w.r.t. source, but must run serially. */
 const SERIAL_HEAVY = new Set<string>([
   'scanBuildRun',
-  'buildTarget',
-  'valgrindMemcheck',
-  'asanRun',
-  'lsanRun',
-  'runBinary',
-  'buildHarness',
-  'libfuzzerRun',
+  ...DYNAMIC_TOOL_NAMES.filter((name) => !['valgrindGetReport', 'valgrindListFindings', 'valgrindCompareRuns', 'listRuns'].includes(name)),
 ]);
 
 // Analyzer outputs (AST dumps, flow graphs) are verbose; cap them so the agent
@@ -91,53 +78,8 @@ export type ToolSource = 'mcp-static' | 'mcp-dynamic' | 'local';
 
 /** Classify a tool by where it runs: the static/dynamic analyzer (MCP) or a local domain tool. */
 export function toolSource(toolName: string): ToolSource {
-  if ((DYNAMIC_TOOL_NAMES as readonly string[]).includes(toolName)) return 'mcp-dynamic';
-  if ((STATIC_TOOL_NAMES as readonly string[]).includes(toolName) || MCP_TOOL_PHASE[toolName]) return 'mcp-static';
+  if (DYNAMIC_TOOL_NAMES.includes(toolName)) return 'mcp-dynamic';
+  if (STATIC_TOOL_NAMES.includes(toolName) || MCP_TOOL_PHASE[toolName]) return 'mcp-static';
   return 'local';
 }
 
-/**
- * Static-analyzer tools that accept file CONTENT (so the orchestrator can pass
- * host file content instead of relying on a shared filesystem). These are the
- * only static tools exposed to the agent — the multi-file / filesystem tools
- * (indexFiles, callGraph, interproceduralFlow, ownershipSummary, scanBuild*)
- * need a shared mount and are excluded so the analyzer stays a stateless,
- * remote-deployable service.
- */
-export const CONTENT_CAPABLE_TOOLS = new Set<string>([
-  'candidateScan',
-  'astScan',
-  'functionSummary',
-  'pathConstraints',
-  'ownershipConventions',
-]);
-
-/** Static-analyzer tool names available without dynamic analysis. */
-export const STATIC_TOOL_NAMES = [
-  'indexFiles',
-  'candidateScan',
-  'astScan',
-  'callGraph',
-  'functionSummary',
-  'interproceduralFlow',
-  'pathConstraints',
-  'ownershipSummary',
-  'ownershipConventions',
-  'scanBuildRun',
-  'scanBuildGetReport',
-] as const;
-
-/** Dynamic-analyzer tool names (gated behind --dynamic). */
-export const DYNAMIC_TOOL_NAMES = [
-  'buildTarget',
-  'valgrindMemcheck',
-  'valgrindGetReport',
-  'valgrindListFindings',
-  'valgrindCompareRuns',
-  'asanRun',
-  'lsanRun',
-  'runBinary',
-  'listRuns',
-  'buildHarness',
-  'libfuzzerRun',
-] as const;

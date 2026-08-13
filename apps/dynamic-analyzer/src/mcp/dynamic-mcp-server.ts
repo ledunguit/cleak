@@ -1,6 +1,6 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { z } from 'zod';
 import { ok } from '@cleak/common/mcp/ok-helper';
+import { DYNAMIC_TOOL_DEFS } from '@cleak/common/mcp/tool-catalog';
 import type {
   BuildTargetResponse,
   ValgrindMemcheckResponse,
@@ -46,80 +46,65 @@ export interface DynamicToolServices {
   libfuzzerRun: { run(binaryPath: string, maxTotalTimeSec: number, timeoutSec?: number): Promise<LibfuzzerRunResponse> };
 }
 
-const runArgs = { binaryPath: z.string(), args: z.array(z.string()).optional(), timeoutSec: z.number().optional() };
-
-/** Build the dynamic-analyzer MCP server exposing build + sanitizer tools. */
+/** Build the dynamic-analyzer MCP server exposing build + sanitizer tools.
+ * Tool names, descriptions and input schemas come from the shared catalog
+ * (`@cleak/common/mcp/tool-catalog`) — the single source of truth. */
 export function createDynamicMcpServer(svc: DynamicToolServices): McpServer {
   const server = new McpServer({ name: 'dynamic-analyzer', version: '1.0.0' });
 
   server.registerTool(
-    'buildTarget',
-    { description: 'Build the project with sanitizer-instrumented compiler flags', inputSchema: { projectPath: z.string(), buildCommand: z.string(), timeoutSec: z.number().optional() } },
+    DYNAMIC_TOOL_DEFS.buildTarget.name,
+    { description: DYNAMIC_TOOL_DEFS.buildTarget.description, inputSchema: DYNAMIC_TOOL_DEFS.buildTarget.inputSchema },
     async (a) => ok(await svc.buildTarget.build(a.projectPath, a.buildCommand, a.timeoutSec)),
   );
 
   server.registerTool(
-    'valgrindMemcheck',
-    { description: 'Run Valgrind Memcheck for detailed leak analysis', inputSchema: { binaryPath: z.string(), args: z.array(z.string()).optional(), runId: z.string().optional(), timeoutSec: z.number().optional() } },
+    DYNAMIC_TOOL_DEFS.valgrindMemcheck.name,
+    { description: DYNAMIC_TOOL_DEFS.valgrindMemcheck.description, inputSchema: DYNAMIC_TOOL_DEFS.valgrindMemcheck.inputSchema },
     async (a) => ok(await svc.valgrind.runMemcheck(a.binaryPath, a.args ?? [], a.runId, a.timeoutSec)),
   );
 
   server.registerTool(
-    'valgrindGetReport',
-    { description: 'Retrieve a normalized Valgrind report', inputSchema: { runId: z.string() } },
+    DYNAMIC_TOOL_DEFS.valgrindGetReport.name,
+    { description: DYNAMIC_TOOL_DEFS.valgrindGetReport.description, inputSchema: DYNAMIC_TOOL_DEFS.valgrindGetReport.inputSchema },
     async (a) => ok(await svc.valgrind.getReport(a.runId)),
   );
 
   server.registerTool(
-    'valgrindListFindings',
-    { description: 'Query Valgrind findings with optional filters', inputSchema: { runId: z.string(), severity: z.string().optional(), functionName: z.string().optional() } },
+    DYNAMIC_TOOL_DEFS.valgrindListFindings.name,
+    { description: DYNAMIC_TOOL_DEFS.valgrindListFindings.description, inputSchema: DYNAMIC_TOOL_DEFS.valgrindListFindings.inputSchema },
     async (a) => ok(await svc.valgrind.listFindings(a.runId, a.severity, a.functionName)),
   );
 
   server.registerTool(
-    'valgrindCompareRuns',
-    { description: 'Compare two Valgrind analysis runs', inputSchema: { runIdA: z.string(), runIdB: z.string() } },
+    DYNAMIC_TOOL_DEFS.valgrindCompareRuns.name,
+    { description: DYNAMIC_TOOL_DEFS.valgrindCompareRuns.description, inputSchema: DYNAMIC_TOOL_DEFS.valgrindCompareRuns.inputSchema },
     async (a) => ok(await svc.compare.compareValgrindRuns(a.runIdA, a.runIdB)),
   );
 
   server.registerTool(
-    'asanRun',
-    { description: 'Run the binary under AddressSanitizer for leak detection', inputSchema: { ...runArgs } },
+    DYNAMIC_TOOL_DEFS.asanRun.name,
+    { description: DYNAMIC_TOOL_DEFS.asanRun.description, inputSchema: DYNAMIC_TOOL_DEFS.asanRun.inputSchema },
     async (a) => ok(await svc.asan.run(a.binaryPath, a.args ?? [], a.timeoutSec)),
   );
 
   server.registerTool(
-    'lsanRun',
-    { description: 'Run the binary under LeakSanitizer', inputSchema: { ...runArgs } },
+    DYNAMIC_TOOL_DEFS.lsanRun.name,
+    { description: DYNAMIC_TOOL_DEFS.lsanRun.description, inputSchema: DYNAMIC_TOOL_DEFS.lsanRun.inputSchema },
     async (a) => ok(await svc.lsan.run(a.binaryPath, a.args ?? [], a.timeoutSec)),
   );
 
   server.registerTool(
-    'runBinary',
-    { description: 'Run a binary without instrumentation', inputSchema: { ...runArgs } },
+    DYNAMIC_TOOL_DEFS.runBinary.name,
+    { description: DYNAMIC_TOOL_DEFS.runBinary.description, inputSchema: DYNAMIC_TOOL_DEFS.runBinary.inputSchema },
     async (a) => ok(await svc.binaryRunner.run(a.binaryPath, a.args ?? [], a.timeoutSec)),
   );
 
   server.registerTool(
-    'buildHarness',
+    DYNAMIC_TOOL_DEFS.buildHarness.name,
     {
-      description:
-        'Compile+link a TARGETED harness (a driver calling one suspicious function/call-chain) against the real project\'s ' +
-        'own compiler flags (recovered via compile_commands.json), instead of building the whole project. For a `static` ' +
-        '(internal-linkage) target function, harnessSource MUST #include the defining source file directly and closureFiles ' +
-        'MUST NOT also list that file (would duplicate-define it) — for an externally-linked function, harnessSource should ' +
-        'extern-declare it and closureFiles should list the file(s) needed to link it. entryStyle="fuzzer" compiles the SAME ' +
-        'harness source with -fsanitize=fuzzer,address instead of a plain single-run binary. Returns reason="harness_unresolvable" ' +
-        'when the build system could not be captured (unsupported build) — fall back rather than retry.',
-      inputSchema: {
-        projectPath: z.string(),
-        buildCommand: z.string(),
-        harnessSource: z.string(),
-        targetFile: z.string(),
-        closureFiles: z.array(z.string()).optional(),
-        entryStyle: z.enum(['single', 'fuzzer']),
-        timeoutSec: z.number().optional(),
-      },
+      description: DYNAMIC_TOOL_DEFS.buildHarness.description,
+      inputSchema: DYNAMIC_TOOL_DEFS.buildHarness.inputSchema,
     },
     async (a) =>
       ok(
@@ -136,19 +121,17 @@ export function createDynamicMcpServer(svc: DynamicToolServices): McpServer {
   );
 
   server.registerTool(
-    'libfuzzerRun',
+    DYNAMIC_TOOL_DEFS.libfuzzerRun.name,
     {
-      description:
-        'Run a harness binary built with buildHarness(entryStyle="fuzzer") for a short BOUNDED time budget (seconds), ' +
-        'exploring inputs instead of one fixed value. Use only after a single-shot run on the same harness came back clean.',
-      inputSchema: { binaryPath: z.string(), maxTotalTimeSec: z.number(), timeoutSec: z.number().optional() },
+      description: DYNAMIC_TOOL_DEFS.libfuzzerRun.description,
+      inputSchema: DYNAMIC_TOOL_DEFS.libfuzzerRun.inputSchema,
     },
     async (a) => ok(await svc.libfuzzerRun.run(a.binaryPath, a.maxTotalTimeSec, a.timeoutSec)),
   );
 
   server.registerTool(
-    'listRuns',
-    { description: 'List stored dynamic analysis runs', inputSchema: { tool: z.string().optional(), limit: z.number().optional() } },
+    DYNAMIC_TOOL_DEFS.listRuns.name,
+    { description: DYNAMIC_TOOL_DEFS.listRuns.description, inputSchema: DYNAMIC_TOOL_DEFS.listRuns.inputSchema },
     async (a) => ok(await svc.runManager.listRuns(a.tool, a.limit)),
   );
 

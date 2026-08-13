@@ -19,7 +19,6 @@ import {
   expectedCalibrationError,
   bootstrapCI,
   makeRng,
-  type ConfusionMatrix,
   type Metrics,
   type CalibrationBin,
   type ConfidenceInterval,
@@ -162,7 +161,7 @@ const EvalOptionsSchema = z.object({
   onCaseResult: z.function().optional(),
 }).strict();
 
-export function parseEvalOptions(raw: unknown): EvalOptions {
+function parseEvalOptions(raw: unknown): EvalOptions {
   return EvalOptionsSchema.parse(raw) as EvalOptions;
 }
 
@@ -322,6 +321,7 @@ async function assertLlmAvailable(mode: string, allowFallback?: boolean, provide
       `llm_assisted health-check FAILED for provider '${cfg.provider}' @ ${cfg.baseUrl} (model ${cfg.model}): ` +
         `${msg}. The gateway is unreachable/misconfigured — every case would silently fall back ` +
         `to the heuristic (Δ=0 confound). Fix the endpoint (e.g. --provider local), or pass --allow-heuristic-fallback.`,
+      { cause: err },
     );
   }
 }
@@ -390,6 +390,7 @@ export function loadManifest(corpusDir: string): LabeledManifest {
   } catch (err) {
     throw new Error(
       `Failed to parse corpus manifest at '${manifestPath}': ${err instanceof Error ? err.message : String(err)}`,
+      { cause: err },
     );
   }
 }
@@ -400,7 +401,7 @@ export function loadManifest(corpusDir: string): LabeledManifest {
  * When overridden a loud warning is emitted to stderr and the gate result
  * carries the `ok: false` but is returned instead of thrown.
  */
-export function gateCorpus(corpusDir: string, allowUnvalidated: boolean): CorpusGateResult {
+function gateCorpus(corpusDir: string, allowUnvalidated: boolean): CorpusGateResult {
   const gate = checkCorpusGate(corpusDir);
   if (!gate.ok) {
     if (!allowUnvalidated) {
@@ -431,7 +432,7 @@ function samplingProvenance(opts: EvalOptions): EvalProvenance['sampling'] {
   return { mode: 'topN', limit: opts.limit };
 }
 
-export function captureRunProvenance(opts: EvalOptions, _manifest: LabeledManifest, gate: CorpusGateResult): EvalProvenance {
+function captureRunProvenance(opts: EvalOptions, _manifest: LabeledManifest, gate: CorpusGateResult): EvalProvenance {
   const llmCfg = opts.mode === 'llm_assisted' ? loadConfig({}).llm : undefined;
   return captureProvenance({
     provider: llmCfg?.provider,
@@ -451,7 +452,7 @@ export function captureRunProvenance(opts: EvalOptions, _manifest: LabeledManife
 /**
  * Phase 5: Create the per-case cache directory and determine concurrency.
  */
-export function prepareCaseCache(outDir: string, concurrencyOverride?: number, mode?: 'no_llm' | 'llm_assisted'): { cacheDir: string; concurrency: number } {
+export function prepareCaseCache(outDir: string, concurrencyOverride?: number, _mode?: 'no_llm' | 'llm_assisted'): { cacheDir: string; concurrency: number } {
   const cacheDir = join(outDir, 'cases');
   mkdirSync(cacheDir, { recursive: true });
   // no_llm lowered 6→3 (now matching llm_assisted's existing default): stacked
@@ -485,7 +486,7 @@ function mergeSignals(a?: AbortSignal, b?: AbortSignal): AbortSignal {
  * cancellation (aborted signal → skipped), per-case progress callbacks, and
  * per-case cache persistence to disk so `--resume` can skip completed cases.
  */
-export async function scoreCases(
+async function scoreCases(
   cases: LabeledCase[],
   opts: EvalOptions,
   manifest: LabeledManifest,
@@ -722,7 +723,7 @@ export async function scoreCases(
  * by flow variant, functional variant, and CWE, plus calibration, confidence
  * intervals, judge-path distribution, and cost reporting.
  */
-export function aggregateResults(cached: CachedCase[], cases: LabeledCase[], opts: EvalOptions, provenance: EvalProvenance, pricing?: RunConfig['pricing']): EvalResult {
+function aggregateResults(cached: CachedCase[], cases: LabeledCase[], opts: EvalOptions, provenance: EvalProvenance, pricing?: RunConfig['pricing']): EvalResult {
   const allSamples: Sample[] = [];
   const byFlow = new Map<string, Sample[]>();
   const byFunc = new Map<string, Sample[]>();

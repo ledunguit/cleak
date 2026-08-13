@@ -1,6 +1,6 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { z } from 'zod';
 import { ok } from '@cleak/common/mcp/ok-helper';
+import { STATIC_TOOL_DEFS } from '@cleak/common/mcp/tool-catalog';
 import type {
   RepoIndexResponse,
   CandidateScanResponse,
@@ -33,94 +33,81 @@ export interface StaticToolServices {
   scanBuild: { run(projectPath: string, buildCommand: string, timeoutSec?: number): Promise<ScanBuildRunResponse>; getReport(runId: string): Promise<ScanBuildReportResponse> };
 }
 
-/** Build the static-analyzer MCP server with all 11 memory-leak analysis tools. */
+/** Build the static-analyzer MCP server with all 11 memory-leak analysis tools.
+ * Tool names, descriptions and input schemas come from the shared catalog
+ * (`@cleak/common/mcp/tool-catalog`) — the single source of truth. */
 export function createStaticMcpServer(svc: StaticToolServices): McpServer {
   const server = new McpServer({ name: 'static-analyzer', version: '1.0.0' });
 
   server.registerTool(
-    'indexFiles',
-    { description: 'Index all C/C++ source files recursively from a root path', inputSchema: { rootPath: z.string(), fileLimit: z.number().optional(), excludePatterns: z.array(z.string()).optional() } },
+    STATIC_TOOL_DEFS.indexFiles.name,
+    { description: STATIC_TOOL_DEFS.indexFiles.description, inputSchema: STATIC_TOOL_DEFS.indexFiles.inputSchema },
     async (a) => ok(await svc.fileIndexing.indexFiles(a.rootPath, a.fileLimit, a.excludePatterns)),
   );
 
   server.registerTool(
-    'candidateScan',
+    STATIC_TOOL_DEFS.candidateScan.name,
     {
-      description:
-        'Scan a file for allocation sites (malloc, calloc, realloc, strdup, new). ' +
-        'Optionally supply per-project factory allocators / custom deallocators (≈ LAMeD AllocSource/FreeSink) ' +
-        'so wrapper-named allocators (e.g. cJSON_Duplicate) become candidates.',
-      inputSchema: {
-        filePath: z.string(),
-        content: z.string().optional(),
-        extraAllocators: z.array(z.string()).optional(),
-        extraDeallocators: z.array(z.string()).optional(),
-      },
+      description: STATIC_TOOL_DEFS.candidateScan.description,
+      inputSchema: STATIC_TOOL_DEFS.candidateScan.inputSchema,
     },
     async (a) => ok(await svc.candidateScan.scan(a.filePath, a.content ?? '', a.extraAllocators, a.extraDeallocators)),
   );
 
   server.registerTool(
-    'astScan',
-    { description: 'AST-based structural analysis for memory leak patterns', inputSchema: { filePath: z.string(), content: z.string().optional() } },
+    STATIC_TOOL_DEFS.astScan.name,
+    { description: STATIC_TOOL_DEFS.astScan.description, inputSchema: STATIC_TOOL_DEFS.astScan.inputSchema },
     async (a) => ok(await svc.astScan.parse(a.filePath, a.content ?? '')),
   );
 
   server.registerTool(
-    'callGraph',
-    { description: 'Extract call graph edges and nodes, plus cross-function/cross-file ownership correlations (a caller\'s heap allocation passed into a callee parameter — freed there, or never freed on any path). Optionally supply per-project allocators/deallocators so the alloc→free reachability chains track factory allocators.', inputSchema: { rootPath: z.string(), files: z.array(z.string()), extraAllocators: z.array(z.string()).optional(), extraDeallocators: z.array(z.string()).optional() } },
+    STATIC_TOOL_DEFS.callGraph.name,
+    { description: STATIC_TOOL_DEFS.callGraph.description, inputSchema: STATIC_TOOL_DEFS.callGraph.inputSchema },
     async (a) => ok(await svc.callGraph.extract(a.rootPath, a.files, a.extraAllocators, a.extraDeallocators)),
   );
 
   server.registerTool(
-    'functionSummary',
-    { description: 'Summarize a function: alloc/free balance, local vars, calls. Optionally supply per-project allocators/deallocators so factory-allocated vars are paired.', inputSchema: { filePath: z.string(), content: z.string().optional(), functionName: z.string(), extraAllocators: z.array(z.string()).optional(), extraDeallocators: z.array(z.string()).optional() } },
+    STATIC_TOOL_DEFS.functionSummary.name,
+    { description: STATIC_TOOL_DEFS.functionSummary.description, inputSchema: STATIC_TOOL_DEFS.functionSummary.inputSchema },
     async (a) => ok(await svc.functionSummary.summarize(a.filePath, a.content ?? '', a.functionName, a.extraAllocators, a.extraDeallocators)),
   );
 
   server.registerTool(
-    'interproceduralFlow',
+    STATIC_TOOL_DEFS.interproceduralFlow.name,
     {
-      description:
-        'Interprocedural alloc/free flow tracing for a function. Optionally supply per-project allocators/deallocators so the trace tracks factory allocators (cJSON_malloc/_TIFFfree/…) — without them it is blind to non-libc memory APIs.',
-      inputSchema: {
-        rootPath: z.string(),
-        functionName: z.string(),
-        files: z.array(z.string()),
-        extraAllocators: z.array(z.string()).optional(),
-        extraDeallocators: z.array(z.string()).optional(),
-      },
+      description: STATIC_TOOL_DEFS.interproceduralFlow.description,
+      inputSchema: STATIC_TOOL_DEFS.interproceduralFlow.inputSchema,
     },
     async (a) => ok(await svc.interproceduralFlow.analyze(a.rootPath, a.functionName, a.files, a.extraAllocators, a.extraDeallocators)),
   );
 
   server.registerTool(
-    'pathConstraints',
-    { description: 'Analyze path constraints and feasible paths around an allocation. Optionally supply per-project allocators/deallocators so factory allocations are tracked on exit paths.', inputSchema: { filePath: z.string(), content: z.string().optional(), lineNumber: z.number(), extraAllocators: z.array(z.string()).optional(), extraDeallocators: z.array(z.string()).optional() } },
+    STATIC_TOOL_DEFS.pathConstraints.name,
+    { description: STATIC_TOOL_DEFS.pathConstraints.description, inputSchema: STATIC_TOOL_DEFS.pathConstraints.inputSchema },
     async (a) => ok(await svc.pathConstraints.analyze(a.filePath, a.content ?? '', a.lineNumber, a.extraAllocators, a.extraDeallocators)),
   );
 
   server.registerTool(
-    'ownershipSummary',
-    { description: 'Summarize ownership conventions across files', inputSchema: { files: z.array(z.string()), rootPath: z.string() } },
+    STATIC_TOOL_DEFS.ownershipSummary.name,
+    { description: STATIC_TOOL_DEFS.ownershipSummary.description, inputSchema: STATIC_TOOL_DEFS.ownershipSummary.inputSchema },
     async (a) => ok(await svc.ownership.summarize(a.files, a.rootPath)),
   );
 
   server.registerTool(
-    'ownershipConventions',
-    { description: 'Detect ownership-transfer conventions in a file', inputSchema: { content: z.string().optional(), filePath: z.string() } },
+    STATIC_TOOL_DEFS.ownershipConventions.name,
+    { description: STATIC_TOOL_DEFS.ownershipConventions.description, inputSchema: STATIC_TOOL_DEFS.ownershipConventions.inputSchema },
     async (a) => ok(await svc.ownership.conventions(a.content ?? '', a.filePath)),
   );
 
   server.registerTool(
-    'scanBuildRun',
-    { description: 'Run the project-level Clang Static Analyzer (scan-build) over the project build', inputSchema: { projectPath: z.string(), buildCommand: z.string(), timeoutSec: z.number().optional() } },
+    STATIC_TOOL_DEFS.scanBuildRun.name,
+    { description: STATIC_TOOL_DEFS.scanBuildRun.description, inputSchema: STATIC_TOOL_DEFS.scanBuildRun.inputSchema },
     async (a) => ok(await svc.scanBuild.run(a.projectPath, a.buildCommand, a.timeoutSec)),
   );
 
   server.registerTool(
-    'scanBuildGetReport',
-    { description: 'Retrieve Clang Static Analyzer (scan-build) findings', inputSchema: { runId: z.string() } },
+    STATIC_TOOL_DEFS.scanBuildGetReport.name,
+    { description: STATIC_TOOL_DEFS.scanBuildGetReport.description, inputSchema: STATIC_TOOL_DEFS.scanBuildGetReport.inputSchema },
     async (a) => ok(await svc.scanBuild.getReport(a.runId)),
   );
 

@@ -30,7 +30,8 @@ import {
 import { AgentActionKind, DynamicMode, type AgentDecision, type LeakBundle } from '@cleak/common/types';
 import { toProviderSettings, type RunConfig } from '@cleak/config';
 import type { AgentMeta, InvestigationContext, InvestigationOutcome, InvestigationPhase } from './investigation';
-import { mcpToolFlags, CONTENT_CAPABLE_TOOLS } from '../domain/mcpToolPlan';
+import { CONTENT_CAPABLE_TOOLS } from '@cleak/common/mcp/tool-catalog';
+import { mcpToolFlags } from '../domain/mcpToolPlan';
 import { buildReadFileTool } from '../domain/readFileTool';
 import { walkCFiles } from '../domain/fileWalk';
 import { heuristicVerdict } from '../domain/judge';
@@ -191,7 +192,7 @@ async function stageStaticEvidence(
   callModel: CallModel,
   bridge: AgentEventBridge,
   toolCtx: ToolCtx,
-  onNotice: (text: string) => void,
+  _onNotice: (text: string) => void,
 ): Promise<void> {
   if (ctx.abortSignal?.aborted) return;
   await mapWithLimit(groups, cfg.workflow.staticConcurrency, async (group, gi) => {
@@ -358,7 +359,7 @@ async function stageTargetedHarness(
     // `closureFiles` so the worker isn't guessing blind on multi-file leaks. The
     // worker still decides what to actually pass (this narrows, doesn't replace,
     // its judgment).
-    let suggestedClosureFiles: string[] = [];
+    const suggestedClosureFiles: string[] = [];
     const fn = bundle.candidate.function_name;
     if (fn) {
       try {
