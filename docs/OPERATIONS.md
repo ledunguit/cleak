@@ -156,7 +156,43 @@ pnpm exec tsx scripts/compare-baselines.ts --corpus demo/juliet_cwe401 --limit 3
 | `CLANG_BIN` / `INFER_BIN` | binary baseline | `clang` / `infer` |
 | `STATIC_PARSER_WORKERS` | số worker-thread parse tree-sitter (static-analyzer) | `os.cpus()-1` |
 | `DYNAMIC_MAX_CONCURRENT_RUNS` | số tiến trình Valgrind/ASan/LSan chạy đồng thời tối đa | `os.cpus()/2` |
+| `LOG_LEVEL` | ngưỡng log tối thiểu của hai analyzer: `trace\|debug\|info\|warn\|error\|fatal` | `info` |
+| `LOG_FORMAT` | `json` (dòng JSON) hay `pretty` (tô màu, đọc tay) | `pretty` nếu stdout là TTY, else `json` |
 
 **Pricing (tuỳ chọn, để có cột chi phí $ trong report):** `cleak config set
 pricing.<modelId>.inputPerMillion <giá>` và `...outputPerMillion <giá>` — không có giá mặc
 định sẵn, `report.md`/`metrics.json` báo "unpriced" thay vì `$0` giả nếu chưa cấu hình.
+
+## 7. Logging & Observability
+
+Cả hai analyzer log dạng **JSON có cấu trúc** qua `packages/observability` (pino) —
+không còn "im lặng" như trước: mọi request MCP và mọi tool call đều để lại một dòng
+log, không chỉ khi lỗi.
+
+- **Envelope mỗi dòng log:** `ts, level, label (static-analyzer|dynamic-analyzer),
+  service, event?, requestId, correlationId?, tool?, durationMs?, outcome?, msg,
+  …field riêng theo event` (vd `projectPath`, `exitCode`, `sanitizer`, `findingCount`).
+  Danh sách đầy đủ `event` (tên chuẩn hoá): `packages/common/src/mcp/server-events.ts`.
+- **Tương quan một scan ↔ log server:** TUI gắn `scanId` (đã sinh sẵn, dùng đặt tên
+  thư mục `results/<scanId>/`) vào header `x-scan-id` của mọi lời gọi MCP; server đọc
+  header này thành `correlationId` và tự động gắn vào MỌI dòng log phát sinh trong
+  request đó (qua `AsyncLocalStorage`, không cần truyền tay qua từng hàm). `requestId`
+  là id ngắn hạn cho riêng một lời gọi HTTP (dùng khi cần tách 2 tool-call cùng
+  `correlationId`).
+- **Đọc log:**
+  ```bash
+  docker compose logs -f static-analyzer dynamic-analyzer
+  # Lọc theo scan cụ thể:
+  docker compose logs static-analyzer dynamic-analyzer | grep '"correlationId":"scan_XXXX"'
+  # Chỉ lỗi (cần jq):
+  docker compose logs static-analyzer dynamic-analyzer | jq -c 'select(.level=="error")'
+  # Trace một request/tool-call cụ thể:
+  docker compose logs static-analyzer dynamic-analyzer | grep '"requestId":"<uuid>"'
+  ```
+- **Tăng độ chi tiết tạm thời:** đặt `LOG_LEVEL=debug` trong `environment:` của
+  `docker-compose.yml` (hoặc file `.env` khi chạy host) rồi `docker compose up --build`.
+- **Chạy local (không Docker):** `LOG_FORMAT=pretty` tự bật khi stdout là TTY
+  (`turbo run dev --filter=static-analyzer`), cho log tô màu dễ đọc thay vì JSON thô.
+- **Kiểm chứng logging không bị "câm" trở lại:** `scripts/logging-smoke-test.ts` tự
+  spawn cả hai analyzer, gọi từng MCP tool, và assert mỗi lời gọi có đủ cặp
+  `mcp_tool_started`/`finished|failed` cùng một `requestId`.

@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { readFileSync } from 'fs';
 
 export interface StackFrame {
@@ -23,13 +23,17 @@ export interface LeakBlock {
 
 @Injectable()
 export class ResultParserService {
+  private readonly logger = new Logger(ResultParserService.name);
+
   // ── Valgrind XML Parser ──
 
   parseValgrindXml(xmlPath: string): Finding[] {
+    this.logger.debug(`parsing valgrind xml: ${xmlPath}`);
     try {
       const xml = readFileSync(xmlPath, 'utf-8');
       return this.parseValgrindXmlString(xml);
-    } catch {
+    } catch (err) {
+      this.logger.warn(`valgrind xml unreadable/unparseable: ${xmlPath} (${err instanceof Error ? err.message : String(err)})`);
       return [];
     }
   }
@@ -145,6 +149,7 @@ export class ResultParserService {
   // ── ASan Parser ──
 
   parseAsanOutput(output: string): Finding[] {
+    this.logger.debug(`parsing asan output (${output.length} chars)`);
     const findings: Finding[] = [];
     const lines = output.split('\n');
 
@@ -218,6 +223,7 @@ export class ResultParserService {
   // ── LSan Parser (same format as ASan for leak reports) ──
 
   parseLsanOutput(output: string): Finding[] {
+    this.logger.debug(`parsing lsan output (${output.length} chars)`);
     // LSan's LEAK format differs from ASan's ERROR format: one block per leak,
     //   "Direct leak of 100 byte(s) in 1 object(s) allocated from:" + a stack whose
     // FIRST frame is the allocator interceptor (__interceptor_calloc …) — the user

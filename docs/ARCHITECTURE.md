@@ -105,6 +105,36 @@ Tập tool được khai báo bằng **Zod `inputSchema`** ngay trong các MCP s
   ValgrindCompareRuns, AsanRun, LsanRun, RunBinary, BuildHarness, LibfuzzerRun, ListRuns`. Hai
   tool cuối phục vụ Stage B2 (targeted harness synthesis, opt-in) — xem §5.
 
+Mỗi request `/mcp` mang thêm header `x-scan-id` (tuỳ chọn) — `McpClient` gắn `scanId`
+của scan đang chạy; server đọc thành `correlationId` phục vụ logging (§4.1a), không
+phải một phần của payload JSON-RPC.
+
+#### 4.1a Logging & request context (`packages/observability`)
+
+Cả hai app boot qua `NestFactory.createApplicationContext()` (DI context thuần, không
+có `INestApplication`), nên các cơ chế HTTP-layer của Nest (`useGlobalInterceptors`,
+`app.use`) không áp dụng được. Thay vào đó:
+
+- `packages/observability` (`@cleak/observability`) cung cấp logger pino (JSON có cấu
+  trúc) + một adapter `PinoNestLogger implements LoggerService`, gắn một lần qua
+  `ctx.useLogger(...)` trong mỗi `main.ts` — nâng cấp MỌI `new Logger(ClassName.name)`
+  có sẵn trong toàn bộ DI graph, không cần sửa từng call site.
+  `packages/common/src/mcp/mcp-http.ts` (transport MCP dùng chung, một Express app
+  thuần bên trong `startMcpHttp`) là nơi DUY NHẤT một request được gán
+  `requestId`/`correlationId`, qua `AsyncLocalStorage` (`packages/common/src/mcp/
+  request-context.ts`) bọc quanh toàn bộ handler.
+- pino's `mixin` hook đọc context đang active từ `AsyncLocalStorage` và tự động gắn vào
+  MỌI dòng log phát sinh trong request đó — kể cả log từ service nằm sâu trong call
+  chain — mà không cần truyền tham số qua từng hàm.
+- `tool-instrumentation.ts` (`instrumentTool`) bọc MỖI MCP tool handler (`registerTool`
+  trong hai `*-mcp-server.ts`), phát `mcp_tool_started/finished/failed` — nguồn "MCP tool
+  nào đang chạy" thống nhất cho cả 21 tool.
+- Tên event chuẩn hoá (enum, không phải chuỗi tự do) sống tại
+  `packages/common/src/mcp/server-events.ts`, cùng idiom với `flow/scan-flow-contract.ts`
+  (enum + bảng tra cứu — pure TypeScript, không import Node/pino, để `@cleak/common`
+  vẫn bundle được cho mọi consumer).
+- Chi tiết vận hành (đọc log, lọc theo scan, đổi `LOG_LEVEL`): [OPERATIONS.md §7](OPERATIONS.md).
+
 ### 4.2 LLM — HTTP SSE streaming
 
 TUI stream phản hồi model (SSE). agent-core dùng **idle-timeout** (reset theo mỗi

@@ -3,7 +3,8 @@ import type { INestApplicationContext } from '@nestjs/common';
 import { resolve } from 'path';
 import { StaticAnalyzerModule } from './static-analyzer.module';
 import { createStaticMcpServer } from './mcp/static-mcp-server';
-import { startMcpHttp } from './mcp/mcp-http';
+import { startMcpHttp } from '@cleak/common/mcp/mcp-http';
+import { createRootLogger, PinoNestLogger } from '@cleak/observability';
 import { FileIndexingService } from './services/file-indexing.service';
 import { CandidateScanService } from './services/candidate-scan.service';
 import { AstScanService } from './services/ast-scan.service';
@@ -20,6 +21,8 @@ import { existsSync } from 'fs';
 const envPath = resolve('apps/static-analyzer/.env');
 if (existsSync(envPath)) dotenv.config({ path: envPath });
 
+const logger = createRootLogger({ label: 'static-analyzer' });
+
 /** Build the MCP server from the DI-resolved analysis services and serve it over HTTP. */
 async function serveMcp(ctx: INestApplicationContext) {
   // Services are DI singletons; only the thin McpServer wrapper is rebuilt per request.
@@ -34,7 +37,7 @@ async function serveMcp(ctx: INestApplicationContext) {
     ownership: ctx.get(OwnershipAnalysisService),
     scanBuild: ctx.get(ScanBuildAdapterService),
   };
-  await startMcpHttp(() => createStaticMcpServer(svc), Number(process.env.MCP_HTTP_PORT || 50061), 'static-analyzer');
+  await startMcpHttp(() => createStaticMcpServer(svc, logger), Number(process.env.MCP_HTTP_PORT || 50061), 'static-analyzer', logger);
 }
 
 async function bootstrap() {
@@ -42,7 +45,12 @@ async function bootstrap() {
   // analyzer over MCP. (A gRPC server lived here for the removed web control-plane;
   // it had no consumer once the project went TUI-only, so it was dropped along with
   // the proto schemas. The DI context just resolves the analysis services.)
-  const ctx = await NestFactory.createApplicationContext(StaticAnalyzerModule);
+  // Pass the logger via factory options (not a later `ctx.useLogger()` call) —
+  // module init (onModuleInit, e.g. CParserService's worker-pool startup log)
+  // runs INSIDE createApplicationContext, before it returns, so setting the
+  // logger afterward would miss bootstrap-time logs and leave them on Nest's
+  // default console format instead of structured JSON.
+  const ctx = await NestFactory.createApplicationContext(StaticAnalyzerModule, { logger: new PinoNestLogger(logger) });
   await serveMcp(ctx);
 }
 

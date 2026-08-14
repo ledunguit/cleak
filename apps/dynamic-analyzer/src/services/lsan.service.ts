@@ -1,4 +1,5 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
+import { ServerEventName } from '@cleak/common/mcp/server-events';
 import { RunManagerService } from './run-manager.service';
 import { ResultParserService } from './result-parser.service';
 import { runConfined, sanitizeRunId } from './safe-exec';
@@ -6,6 +7,8 @@ import { assertExecutablePath } from './path-guard';
 
 @Injectable()
 export class LsanService {
+  private readonly logger = new Logger(LsanService.name);
+
   constructor(
     private readonly runManager: RunManagerService,
     private readonly resultParser: ResultParserService,
@@ -26,8 +29,12 @@ export class LsanService {
       canonicalBinary = assertExecutablePath(binaryPath);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
+      this.logger.error({ event: ServerEventName.SANITIZER_RUN_FAILED, sanitizer: 'lsan', runId, err: msg }, 'lsan run rejected');
       return { success: false, runId, findings: [], rawOutput: msg };
     }
+
+    const startedAt = Date.now();
+    this.logger.log({ event: ServerEventName.SANITIZER_RUN_STARTED, sanitizer: 'lsan', runId, binaryPath: canonicalBinary }, 'lsan run started');
 
     // No shell; confined. LeakSanitizer reports on stderr and exits non-zero on a leak.
     const result = await runConfined(canonicalBinary, args ?? [], {
@@ -39,6 +46,10 @@ export class LsanService {
     const findings = this.resultParser.parseLsanOutput(output);
 
     this.runManager.saveRun(runId, { tool: 'lsan', binaryPath: canonicalBinary, output, findings, success: true });
+    this.logger.log(
+      { event: ServerEventName.SANITIZER_RUN_FINISHED, sanitizer: 'lsan', runId, durationMs: Date.now() - startedAt, findingCount: findings.length },
+      'lsan run finished',
+    );
 
     return { success: true, runId, findings, rawOutput: output };
   }

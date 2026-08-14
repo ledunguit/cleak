@@ -1,6 +1,7 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { writeFileSync, readFileSync, existsSync, mkdirSync, readdirSync } from 'fs';
 import { join } from 'path';
+import { ServerEventName } from '@cleak/common/mcp/server-events';
 import { sanitizeRunId } from './safe-exec';
 
 export interface RunRecord {
@@ -15,6 +16,7 @@ export interface RunRecord {
 
 @Injectable()
 export class RunManagerService {
+  private readonly logger = new Logger(RunManagerService.name);
   private runsDir = process.env.RUNS_DIR || './runs';
 
   constructor() {
@@ -37,6 +39,7 @@ export class RunManagerService {
       createdAt: new Date().toISOString(),
     };
     writeFileSync(join(this.runsDir, `${id}.json`), JSON.stringify(record, null, 2));
+    this.logger.log({ event: ServerEventName.RUN_SAVED, runId: id, tool: record.tool }, 'run saved');
   }
 
   async getRun(runId: string): Promise<RunRecord | null> {
@@ -46,7 +49,11 @@ export class RunManagerService {
     // arbitrary *.json file outside RUNS_DIR.
     const id = sanitizeRunId(runId, 'run');
     const filePath = join(this.runsDir, `${id}.json`);
-    if (!existsSync(filePath)) return null;
+    if (!existsSync(filePath)) {
+      this.logger.warn({ event: ServerEventName.RUN_READ, runId: id, found: false }, 'run not found');
+      return null;
+    }
+    this.logger.log({ event: ServerEventName.RUN_READ, runId: id, found: true }, 'run read');
     return JSON.parse(readFileSync(filePath, 'utf-8'));
   }
 
@@ -60,7 +67,7 @@ export class RunManagerService {
         try {
           return JSON.parse(readFileSync(filePath, 'utf-8')) as RunRecord;
         } catch {
-          console.debug(`corrupt run file: ${filePath}`);
+          this.logger.warn({ event: ServerEventName.RUN_READ_CORRUPT, filePath }, 'corrupt run file, skipped');
           return null;
         }
       })
@@ -76,6 +83,7 @@ export class RunManagerService {
         success: run.success,
       }));
 
+    this.logger.log({ event: ServerEventName.RUNS_LISTED, tool, runCount: runs.length }, 'runs listed');
     return { runs };
   }
 }

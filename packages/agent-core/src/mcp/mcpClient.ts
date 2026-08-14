@@ -26,6 +26,14 @@ export interface McpClientOptions {
   maxRetries?: number;
   /** Notified before each backoff so a caller can surface "retrying…". */
   onRetry?: (info: { action: string; attempt: number; delayMs: number; reason: string }) => void;
+  /**
+   * The current scan's id — sent as the `x-scan-id` HTTP header on every request so
+   * the analyzer's structured logs (`packages/observability`) can correlate a
+   * server-side log line back to the scan that triggered it, even for content-taking
+   * tools (functionSummary, pathConstraints, …) whose args carry no path to infer it
+   * from. Purely additive: omitted, the server just logs no `correlationId`.
+   */
+  correlationId?: string;
 }
 
 /**
@@ -97,6 +105,7 @@ export class McpClient {
   private connecting?: Promise<void>;
   private readonly maxRetries: number;
   private readonly onRetry?: McpClientOptions['onRetry'];
+  private readonly correlationId?: string;
   /** Count of logical `callTool` invocations (retries NOT double-counted). An
    * efficiency metric for the ablation (#MCP calls per scan) — read after a scan. */
   callCount = 0;
@@ -109,6 +118,7 @@ export class McpClient {
     const envRetries = Number(process.env.MCP_MAX_RETRIES);
     this.maxRetries = opts.maxRetries ?? (Number.isFinite(envRetries) ? envRetries : 3);
     this.onRetry = opts.onRetry;
+    this.correlationId = opts.correlationId;
   }
 
   get endpoint(): string {
@@ -137,7 +147,8 @@ export class McpClient {
     if (!this.connecting) {
       this.connecting = (async () => {
         const client = new Client({ name: `leak-tui-${this.label}`, version: '1.0.0' });
-        await client.connect(new StreamableHTTPClientTransport(new URL(this.url)));
+        const transportOpts = this.correlationId ? { requestInit: { headers: { 'x-scan-id': this.correlationId } } } : undefined;
+        await client.connect(new StreamableHTTPClientTransport(new URL(this.url), transportOpts));
         this.client = client;
       })().catch((err) => {
         this.connecting = undefined; // never cache a rejected connect — it would poison every later call

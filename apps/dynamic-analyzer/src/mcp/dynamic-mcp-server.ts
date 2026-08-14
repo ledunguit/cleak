@@ -1,6 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { ok } from '@cleak/common/mcp/ok-helper';
 import { DYNAMIC_TOOL_DEFS } from '@cleak/common/mcp/tool-catalog';
+import { instrumentTool, type Logger } from '@cleak/observability';
 import type {
   BuildTargetResponse,
   ValgrindMemcheckResponse,
@@ -48,56 +49,61 @@ export interface DynamicToolServices {
 
 /** Build the dynamic-analyzer MCP server exposing build + sanitizer tools.
  * Tool names, descriptions and input schemas come from the shared catalog
- * (`@cleak/common/mcp/tool-catalog`) — the single source of truth. */
-export function createDynamicMcpServer(svc: DynamicToolServices): McpServer {
+ * (`@cleak/common/mcp/tool-catalog`) — the single source of truth. Every handler
+ * is wrapped with `instrumentTool` so each tool call logs its own
+ * started/finished/failed lifecycle (name, redacted args, duration, outcome) —
+ * see `@cleak/observability`. */
+export function createDynamicMcpServer(svc: DynamicToolServices, logger: Logger): McpServer {
   const server = new McpServer({ name: 'dynamic-analyzer', version: '1.0.0' });
+  const wrap = <A extends Record<string, unknown>, R>(name: string, handler: (a: A) => Promise<R>) =>
+    instrumentTool(logger, name, 'dynamic-analyzer', handler);
 
   server.registerTool(
     DYNAMIC_TOOL_DEFS.buildTarget.name,
     { description: DYNAMIC_TOOL_DEFS.buildTarget.description, inputSchema: DYNAMIC_TOOL_DEFS.buildTarget.inputSchema },
-    async (a) => ok(await svc.buildTarget.build(a.projectPath, a.buildCommand, a.timeoutSec)),
+    wrap(DYNAMIC_TOOL_DEFS.buildTarget.name, async (a) => ok(await svc.buildTarget.build(a.projectPath, a.buildCommand, a.timeoutSec))),
   );
 
   server.registerTool(
     DYNAMIC_TOOL_DEFS.valgrindMemcheck.name,
     { description: DYNAMIC_TOOL_DEFS.valgrindMemcheck.description, inputSchema: DYNAMIC_TOOL_DEFS.valgrindMemcheck.inputSchema },
-    async (a) => ok(await svc.valgrind.runMemcheck(a.binaryPath, a.args ?? [], a.runId, a.timeoutSec)),
+    wrap(DYNAMIC_TOOL_DEFS.valgrindMemcheck.name, async (a) => ok(await svc.valgrind.runMemcheck(a.binaryPath, a.args ?? [], a.runId, a.timeoutSec))),
   );
 
   server.registerTool(
     DYNAMIC_TOOL_DEFS.valgrindGetReport.name,
     { description: DYNAMIC_TOOL_DEFS.valgrindGetReport.description, inputSchema: DYNAMIC_TOOL_DEFS.valgrindGetReport.inputSchema },
-    async (a) => ok(await svc.valgrind.getReport(a.runId)),
+    wrap(DYNAMIC_TOOL_DEFS.valgrindGetReport.name, async (a) => ok(await svc.valgrind.getReport(a.runId))),
   );
 
   server.registerTool(
     DYNAMIC_TOOL_DEFS.valgrindListFindings.name,
     { description: DYNAMIC_TOOL_DEFS.valgrindListFindings.description, inputSchema: DYNAMIC_TOOL_DEFS.valgrindListFindings.inputSchema },
-    async (a) => ok(await svc.valgrind.listFindings(a.runId, a.severity, a.functionName)),
+    wrap(DYNAMIC_TOOL_DEFS.valgrindListFindings.name, async (a) => ok(await svc.valgrind.listFindings(a.runId, a.severity, a.functionName))),
   );
 
   server.registerTool(
     DYNAMIC_TOOL_DEFS.valgrindCompareRuns.name,
     { description: DYNAMIC_TOOL_DEFS.valgrindCompareRuns.description, inputSchema: DYNAMIC_TOOL_DEFS.valgrindCompareRuns.inputSchema },
-    async (a) => ok(await svc.compare.compareValgrindRuns(a.runIdA, a.runIdB)),
+    wrap(DYNAMIC_TOOL_DEFS.valgrindCompareRuns.name, async (a) => ok(await svc.compare.compareValgrindRuns(a.runIdA, a.runIdB))),
   );
 
   server.registerTool(
     DYNAMIC_TOOL_DEFS.asanRun.name,
     { description: DYNAMIC_TOOL_DEFS.asanRun.description, inputSchema: DYNAMIC_TOOL_DEFS.asanRun.inputSchema },
-    async (a) => ok(await svc.asan.run(a.binaryPath, a.args ?? [], a.timeoutSec)),
+    wrap(DYNAMIC_TOOL_DEFS.asanRun.name, async (a) => ok(await svc.asan.run(a.binaryPath, a.args ?? [], a.timeoutSec))),
   );
 
   server.registerTool(
     DYNAMIC_TOOL_DEFS.lsanRun.name,
     { description: DYNAMIC_TOOL_DEFS.lsanRun.description, inputSchema: DYNAMIC_TOOL_DEFS.lsanRun.inputSchema },
-    async (a) => ok(await svc.lsan.run(a.binaryPath, a.args ?? [], a.timeoutSec)),
+    wrap(DYNAMIC_TOOL_DEFS.lsanRun.name, async (a) => ok(await svc.lsan.run(a.binaryPath, a.args ?? [], a.timeoutSec))),
   );
 
   server.registerTool(
     DYNAMIC_TOOL_DEFS.runBinary.name,
     { description: DYNAMIC_TOOL_DEFS.runBinary.description, inputSchema: DYNAMIC_TOOL_DEFS.runBinary.inputSchema },
-    async (a) => ok(await svc.binaryRunner.run(a.binaryPath, a.args ?? [], a.timeoutSec)),
+    wrap(DYNAMIC_TOOL_DEFS.runBinary.name, async (a) => ok(await svc.binaryRunner.run(a.binaryPath, a.args ?? [], a.timeoutSec))),
   );
 
   server.registerTool(
@@ -106,7 +112,7 @@ export function createDynamicMcpServer(svc: DynamicToolServices): McpServer {
       description: DYNAMIC_TOOL_DEFS.buildHarness.description,
       inputSchema: DYNAMIC_TOOL_DEFS.buildHarness.inputSchema,
     },
-    async (a) =>
+    wrap(DYNAMIC_TOOL_DEFS.buildHarness.name, async (a) =>
       ok(
         await svc.harnessBuild.build({
           projectPath: a.projectPath,
@@ -118,6 +124,7 @@ export function createDynamicMcpServer(svc: DynamicToolServices): McpServer {
           timeoutSec: a.timeoutSec,
         }),
       ),
+    ),
   );
 
   server.registerTool(
@@ -126,13 +133,13 @@ export function createDynamicMcpServer(svc: DynamicToolServices): McpServer {
       description: DYNAMIC_TOOL_DEFS.libfuzzerRun.description,
       inputSchema: DYNAMIC_TOOL_DEFS.libfuzzerRun.inputSchema,
     },
-    async (a) => ok(await svc.libfuzzerRun.run(a.binaryPath, a.maxTotalTimeSec, a.timeoutSec)),
+    wrap(DYNAMIC_TOOL_DEFS.libfuzzerRun.name, async (a) => ok(await svc.libfuzzerRun.run(a.binaryPath, a.maxTotalTimeSec, a.timeoutSec))),
   );
 
   server.registerTool(
     DYNAMIC_TOOL_DEFS.listRuns.name,
     { description: DYNAMIC_TOOL_DEFS.listRuns.description, inputSchema: DYNAMIC_TOOL_DEFS.listRuns.inputSchema },
-    async (a) => ok(await svc.runManager.listRuns(a.tool, a.limit)),
+    wrap(DYNAMIC_TOOL_DEFS.listRuns.name, async (a) => ok(await svc.runManager.listRuns(a.tool, a.limit))),
   );
 
   return server;

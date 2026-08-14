@@ -1,6 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { ok } from '@cleak/common/mcp/ok-helper';
 import { STATIC_TOOL_DEFS } from '@cleak/common/mcp/tool-catalog';
+import { instrumentTool, type Logger } from '@cleak/observability';
 import type {
   RepoIndexResponse,
   CandidateScanResponse,
@@ -35,14 +36,19 @@ export interface StaticToolServices {
 
 /** Build the static-analyzer MCP server with all 11 memory-leak analysis tools.
  * Tool names, descriptions and input schemas come from the shared catalog
- * (`@cleak/common/mcp/tool-catalog`) — the single source of truth. */
-export function createStaticMcpServer(svc: StaticToolServices): McpServer {
+ * (`@cleak/common/mcp/tool-catalog`) — the single source of truth. Every handler
+ * is wrapped with `instrumentTool` so each tool call logs its own
+ * started/finished/failed lifecycle (name, redacted args, duration, outcome) —
+ * see `@cleak/observability`. */
+export function createStaticMcpServer(svc: StaticToolServices, logger: Logger): McpServer {
   const server = new McpServer({ name: 'static-analyzer', version: '1.0.0' });
+  const wrap = <A extends Record<string, unknown>, R>(name: string, handler: (a: A) => Promise<R>) =>
+    instrumentTool(logger, name, 'static-analyzer', handler);
 
   server.registerTool(
     STATIC_TOOL_DEFS.indexFiles.name,
     { description: STATIC_TOOL_DEFS.indexFiles.description, inputSchema: STATIC_TOOL_DEFS.indexFiles.inputSchema },
-    async (a) => ok(await svc.fileIndexing.indexFiles(a.rootPath, a.fileLimit, a.excludePatterns)),
+    wrap(STATIC_TOOL_DEFS.indexFiles.name, async (a) => ok(await svc.fileIndexing.indexFiles(a.rootPath, a.fileLimit, a.excludePatterns))),
   );
 
   server.registerTool(
@@ -51,25 +57,27 @@ export function createStaticMcpServer(svc: StaticToolServices): McpServer {
       description: STATIC_TOOL_DEFS.candidateScan.description,
       inputSchema: STATIC_TOOL_DEFS.candidateScan.inputSchema,
     },
-    async (a) => ok(await svc.candidateScan.scan(a.filePath, a.content ?? '', a.extraAllocators, a.extraDeallocators)),
+    wrap(STATIC_TOOL_DEFS.candidateScan.name, async (a) => ok(await svc.candidateScan.scan(a.filePath, a.content ?? '', a.extraAllocators, a.extraDeallocators))),
   );
 
   server.registerTool(
     STATIC_TOOL_DEFS.astScan.name,
     { description: STATIC_TOOL_DEFS.astScan.description, inputSchema: STATIC_TOOL_DEFS.astScan.inputSchema },
-    async (a) => ok(await svc.astScan.parse(a.filePath, a.content ?? '')),
+    wrap(STATIC_TOOL_DEFS.astScan.name, async (a) => ok(await svc.astScan.parse(a.filePath, a.content ?? ''))),
   );
 
   server.registerTool(
     STATIC_TOOL_DEFS.callGraph.name,
     { description: STATIC_TOOL_DEFS.callGraph.description, inputSchema: STATIC_TOOL_DEFS.callGraph.inputSchema },
-    async (a) => ok(await svc.callGraph.extract(a.rootPath, a.files, a.extraAllocators, a.extraDeallocators)),
+    wrap(STATIC_TOOL_DEFS.callGraph.name, async (a) => ok(await svc.callGraph.extract(a.rootPath, a.files, a.extraAllocators, a.extraDeallocators))),
   );
 
   server.registerTool(
     STATIC_TOOL_DEFS.functionSummary.name,
     { description: STATIC_TOOL_DEFS.functionSummary.description, inputSchema: STATIC_TOOL_DEFS.functionSummary.inputSchema },
-    async (a) => ok(await svc.functionSummary.summarize(a.filePath, a.content ?? '', a.functionName, a.extraAllocators, a.extraDeallocators)),
+    wrap(STATIC_TOOL_DEFS.functionSummary.name, async (a) =>
+      ok(await svc.functionSummary.summarize(a.filePath, a.content ?? '', a.functionName, a.extraAllocators, a.extraDeallocators)),
+    ),
   );
 
   server.registerTool(
@@ -78,37 +86,41 @@ export function createStaticMcpServer(svc: StaticToolServices): McpServer {
       description: STATIC_TOOL_DEFS.interproceduralFlow.description,
       inputSchema: STATIC_TOOL_DEFS.interproceduralFlow.inputSchema,
     },
-    async (a) => ok(await svc.interproceduralFlow.analyze(a.rootPath, a.functionName, a.files, a.extraAllocators, a.extraDeallocators)),
+    wrap(STATIC_TOOL_DEFS.interproceduralFlow.name, async (a) =>
+      ok(await svc.interproceduralFlow.analyze(a.rootPath, a.functionName, a.files, a.extraAllocators, a.extraDeallocators)),
+    ),
   );
 
   server.registerTool(
     STATIC_TOOL_DEFS.pathConstraints.name,
     { description: STATIC_TOOL_DEFS.pathConstraints.description, inputSchema: STATIC_TOOL_DEFS.pathConstraints.inputSchema },
-    async (a) => ok(await svc.pathConstraints.analyze(a.filePath, a.content ?? '', a.lineNumber, a.extraAllocators, a.extraDeallocators)),
+    wrap(STATIC_TOOL_DEFS.pathConstraints.name, async (a) =>
+      ok(await svc.pathConstraints.analyze(a.filePath, a.content ?? '', a.lineNumber, a.extraAllocators, a.extraDeallocators)),
+    ),
   );
 
   server.registerTool(
     STATIC_TOOL_DEFS.ownershipSummary.name,
     { description: STATIC_TOOL_DEFS.ownershipSummary.description, inputSchema: STATIC_TOOL_DEFS.ownershipSummary.inputSchema },
-    async (a) => ok(await svc.ownership.summarize(a.files, a.rootPath)),
+    wrap(STATIC_TOOL_DEFS.ownershipSummary.name, async (a) => ok(await svc.ownership.summarize(a.files, a.rootPath))),
   );
 
   server.registerTool(
     STATIC_TOOL_DEFS.ownershipConventions.name,
     { description: STATIC_TOOL_DEFS.ownershipConventions.description, inputSchema: STATIC_TOOL_DEFS.ownershipConventions.inputSchema },
-    async (a) => ok(await svc.ownership.conventions(a.content ?? '', a.filePath)),
+    wrap(STATIC_TOOL_DEFS.ownershipConventions.name, async (a) => ok(await svc.ownership.conventions(a.content ?? '', a.filePath))),
   );
 
   server.registerTool(
     STATIC_TOOL_DEFS.scanBuildRun.name,
     { description: STATIC_TOOL_DEFS.scanBuildRun.description, inputSchema: STATIC_TOOL_DEFS.scanBuildRun.inputSchema },
-    async (a) => ok(await svc.scanBuild.run(a.projectPath, a.buildCommand, a.timeoutSec)),
+    wrap(STATIC_TOOL_DEFS.scanBuildRun.name, async (a) => ok(await svc.scanBuild.run(a.projectPath, a.buildCommand, a.timeoutSec))),
   );
 
   server.registerTool(
     STATIC_TOOL_DEFS.scanBuildGetReport.name,
     { description: STATIC_TOOL_DEFS.scanBuildGetReport.description, inputSchema: STATIC_TOOL_DEFS.scanBuildGetReport.inputSchema },
-    async (a) => ok(await svc.scanBuild.getReport(a.runId)),
+    wrap(STATIC_TOOL_DEFS.scanBuildGetReport.name, async (a) => ok(await svc.scanBuild.getReport(a.runId))),
   );
 
   return server;

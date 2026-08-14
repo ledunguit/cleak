@@ -147,8 +147,8 @@ export async function runHeadless(opts: HeadlessOptions): Promise<HeadlessResult
   if (opts.onEvent) sinks.push(new CallbackSink(opts.onEvent));
   const emitter = new ScanEmitter(new MultiSink(sinks));
 
-  const staticClient = new McpClient(cfg.staticUrl, 'static');
-  let dynamicClient = dynamicMode !== DynamicMode.OFF ? new McpClient(cfg.dynamicUrl, 'dynamic') : undefined;
+  const staticClient = new McpClient(cfg.staticUrl, 'static', { correlationId: scanId });
+  let dynamicClient = dynamicMode !== DynamicMode.OFF ? new McpClient(cfg.dynamicUrl, 'dynamic', { correlationId: scanId }) : undefined;
   const pathResolver = buildPathResolver({
     hostRoot: cfg.hostRoot,
     analyzerRoot: cfg.analyzerRoot,

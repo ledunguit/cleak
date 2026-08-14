@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { CParserService, type FunctionInfo } from './c-parser.service';
 import { readFileSync } from 'fs';
+import { ServerEventName } from '@cleak/common/mcp/server-events';
 
 export interface MemoryPattern {
   patternType: string;
@@ -45,8 +46,15 @@ export class AstScanService {
   constructor(private readonly cParser: CParserService) {}
 
   async parse(filePath: string, content?: string): Promise<ScanResult> {
+    this.logger.log({ event: ServerEventName.AST_PARSE_STARTED, filePath }, 'ast parse started');
     const source = content || readFileSync(filePath, 'utf-8');
-    const parseResult = await this.cParser.parse(source, filePath);
+    let parseResult: Awaited<ReturnType<CParserService['parse']>>;
+    try {
+      parseResult = await this.cParser.parse(source, filePath);
+    } catch (err) {
+      this.logger.error({ event: ServerEventName.AST_PARSE_FAILED, filePath, err: err instanceof Error ? err.message : String(err) }, 'ast parse failed');
+      throw err;
+    }
     const patterns: MemoryPattern[] = [];
     const summaries: FunctionSummary[] = [];
 
@@ -100,6 +108,7 @@ export class AstScanService {
       });
     }
 
+    this.logger.log({ event: ServerEventName.AST_PARSE_FINISHED, filePath, patternCount: patterns.length }, 'ast parse finished');
     return { patterns, functionSummaries: summaries };
   }
 

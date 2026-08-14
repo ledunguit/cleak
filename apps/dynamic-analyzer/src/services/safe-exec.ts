@@ -16,6 +16,10 @@
 
 import { execFile } from 'node:child_process';
 import os from 'node:os';
+import { Logger } from '@nestjs/common';
+import { ServerEventName } from '@cleak/common/mcp/server-events';
+
+const logger = new Logger('safe-exec');
 
 export interface ConfinedResult {
   stdout: string;
@@ -115,10 +119,15 @@ function confine(bin: string, args: string[], cpuSec: number, unlimitedAS = fals
  */
 export async function runConfined(binaryPath: string, args: string[], opts: ConfinedOptions = {}): Promise<ConfinedResult> {
   await acquireRunSlot();
+  const startedAt = Date.now();
   try {
     const timeoutSec = opts.timeoutSec ?? 120;
     const { cmd, argv } = confine(binaryPath, args ?? [], timeoutSec + 5, opts.unlimitedAddressSpace);
-    return await new Promise((resolve) => {
+    logger.log(
+      { event: ServerEventName.EXEC_CONFINED_STARTED, binaryPath, argCount: args?.length ?? 0, timeoutSec, unlimitedAddressSpace: !!opts.unlimitedAddressSpace },
+      'confined exec started',
+    );
+    const result = await new Promise<ConfinedResult>((resolve) => {
       execFile(
         cmd,
         argv,
@@ -140,6 +149,11 @@ export async function runConfined(binaryPath: string, args: string[], opts: Conf
         },
       );
     });
+    logger.log(
+      { event: ServerEventName.EXEC_CONFINED_FINISHED, binaryPath, exitCode: result.code, timedOut: result.timedOut, durationMs: Date.now() - startedAt },
+      'confined exec finished',
+    );
+    return result;
   } finally {
     releaseRunSlot();
   }

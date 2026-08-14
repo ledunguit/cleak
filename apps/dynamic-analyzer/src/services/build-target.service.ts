@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { execSync, execFileSync } from 'child_process';
 import { existsSync, readdirSync, statSync, writeFileSync, realpathSync, unlinkSync } from 'fs';
 import { join, resolve } from 'path';
+import { ServerEventName } from '@cleak/common/mcp/server-events';
 import type { BuildTargetResponse } from '../types/mcp-responses';
 import { assertInsideWorkspace, isPathInside } from './path-guard';
 
@@ -50,6 +51,8 @@ export class BuildTargetService {
     }
 
     // Native build
+    const startedAt = Date.now();
+    this.logger.log({ event: ServerEventName.BUILD_STARTED, projectPath: canonicalProject, buildCommand: adaptedCommand }, 'build started');
     try {
       // RESIDUAL RISK (documented, per docs/SECURITY.md): `buildCommand` is an
       // operator-supplied shell command executed as-is via execSync — this is
@@ -67,6 +70,10 @@ export class BuildTargetService {
       });
 
       const binaryPath = this.findBinary(canonicalProject, buildLog);
+      this.logger.log(
+        { event: ServerEventName.BUILD_SUCCEEDED, projectPath: canonicalProject, binaryPath, buildLogBytes: buildLog.length, durationMs: Date.now() - startedAt },
+        'build succeeded',
+      );
 
       return {
         success: true,
@@ -77,7 +84,15 @@ export class BuildTargetService {
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       const execErr = err as { stderr?: string; stdout?: string };
-      errors.push(execErr.stderr || msg);
+      const stderr = execErr.stderr || msg;
+      errors.push(stderr);
+      // A single greppable line up front — the raw multi-hundred-line linker/compiler
+      // dump that follows (from execSync's own uncaught propagation) has no case or
+      // command context on its own.
+      this.logger.error(
+        { event: ServerEventName.BUILD_FAILED, projectPath: canonicalProject, buildCommand: adaptedCommand, durationMs: Date.now() - startedAt },
+        `build FAILED: ${stderr.split('\n').find((l) => l.trim()) ?? stderr}`,
+      );
       return {
         success: false,
         binaryPath: '',
@@ -131,7 +146,7 @@ echo "---BUILD_COMPLETE---"
         '/bin/sh', '.mcpvul_docker_build.sh',
       ];
 
-      this.logger.log(`Docker build: docker ${dockerArgs.join(' ')}`);
+      this.logger.log({ event: ServerEventName.BUILD_DOCKER_STARTED, projectPath, dockerArgs }, 'docker build started');
       const output = execFileSync('docker', dockerArgs, {
         timeout: timeoutSec * 1000,
         encoding: 'utf-8',

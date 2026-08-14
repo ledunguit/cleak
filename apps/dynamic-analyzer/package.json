@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@cleak/common": "workspace:*",
+    "@cleak/observability": "workspace:*",
     "dotenv": "^16.4.7"
   }
 }

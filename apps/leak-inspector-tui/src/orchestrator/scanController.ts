@@ -333,7 +333,7 @@ async function runDiscovery(
     const poolSize = Math.min(Math.max(1, THRESHOLDS.discoveryConcurrency), cFiles.length || 1);
     const workerClients = Array.from(
       { length: poolSize },
-      (_, i) => new McpClient(deps.staticClient.endpoint, `static-discovery-${i}`),
+      (_, i) => new McpClient(deps.staticClient.endpoint, `static-discovery-${i}`, { correlationId: input.scanId }),
     );
     const scanned = new Array<any>(cFiles.length);
     let nextIdx = 0;

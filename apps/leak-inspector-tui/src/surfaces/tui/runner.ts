@@ -70,8 +70,8 @@ export async function runTuiScan(store: TuiStore, req: TuiScanRequest): Promise<
   ]);
   const emitter = new ScanEmitter(sink);
 
-  const staticClient = new McpClient(cfg.staticUrl, 'static');
-  const dynamicClient = dynamicMode !== DynamicMode.OFF ? new McpClient(cfg.dynamicUrl, 'dynamic') : undefined;
+  const staticClient = new McpClient(cfg.staticUrl, 'static', { correlationId: scanId });
+  const dynamicClient = dynamicMode !== DynamicMode.OFF ? new McpClient(cfg.dynamicUrl, 'dynamic', { correlationId: scanId }) : undefined;
   const pathResolver = buildPathResolver({
     hostRoot: cfg.hostRoot,
     analyzerRoot: cfg.analyzerRoot,

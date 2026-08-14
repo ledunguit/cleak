@@ -1,4 +1,5 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
+import { ServerEventName } from '@cleak/common/mcp/server-events';
 import { RunManagerService } from './run-manager.service';
 import { ResultParserService } from './result-parser.service';
 import { runConfined, sanitizeRunId } from './safe-exec';
@@ -6,6 +7,8 @@ import { assertExecutablePath } from './path-guard';
 
 @Injectable()
 export class ValgrindService {
+  private readonly logger = new Logger(ValgrindService.name);
+
   constructor(
     private readonly runManager: RunManagerService,
     private readonly resultParser: ResultParserService,
@@ -28,7 +31,8 @@ export class ValgrindService {
       const canonicalBinary = assertExecutablePath(binaryPath);
       // No shell: valgrind + the untrusted binary + its args go through an argv array.
       const vgArgs = ['--tool=memcheck', '--leak-check=full', '--xml=yes', `--xml-file=${xmlPath}`, canonicalBinary, ...(args || [])];
-      console.error(`[Valgrind] Running: valgrind ${vgArgs.join(' ')}`);
+      const startedAt = Date.now();
+      this.logger.log({ event: ServerEventName.SANITIZER_RUN_STARTED, sanitizer: 'valgrind', runId: id, binaryPath }, 'valgrind run started');
       const result = await runConfined('valgrind', vgArgs, { timeoutSec: timeout, unlimitedAddressSpace: true });
       const output = result.stdout || result.stderr;
 
@@ -51,6 +55,11 @@ export class ValgrindService {
         low: findings.filter(f => f.severity === 'low').length,
       };
 
+      this.logger.log(
+        { event: ServerEventName.SANITIZER_RUN_FINISHED, sanitizer: 'valgrind', runId: id, durationMs: Date.now() - startedAt, ...stats },
+        'valgrind run finished',
+      );
+
       return {
         success: true,
         runId: id,
@@ -59,7 +68,7 @@ export class ValgrindService {
       };
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
-      console.error(`[Valgrind] Error: ${msg}`);
+      this.logger.error({ event: ServerEventName.SANITIZER_RUN_FAILED, sanitizer: 'valgrind', runId: id, err: msg }, 'valgrind run failed');
       return {
         success: false,
         runId: id,

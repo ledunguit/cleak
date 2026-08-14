@@ -1,0 +1,49 @@
+{
+  "name": "@cleak/observability",
+  "version": "0.1.0",
+  "description": "Structured logging for the analyzer MCP services — pino-backed, AsyncLocalStorage request context, NestJS Logger adapter, redaction helpers.",
+  "type": "module",
+  "license": "Apache-2.0",
+  "author": "Le Dang Dung <ledung.itsme@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ledunguit/leak-investigator.git",
+    "directory": "packages/observability"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "files": [
+    "dist",
+    "LICENSE",
+    "NOTICE"
+  ],
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "lint": "eslint . --max-warnings=0",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@cleak/common": "workspace:*",
+    "pino": "^9.5.0"
+  },
+  "peerDependencies": {
+    "@nestjs/common": "^11.0.0"
+  },
+  "devDependencies": {
+    "pino-pretty": "^13.0.0"
+  }
+}

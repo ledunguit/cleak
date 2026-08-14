@@ -33,6 +33,7 @@
 import { Logger } from '@nestjs/common';
 import { existsSync, realpathSync } from 'fs';
 import { basename, dirname, join, resolve, sep } from 'path';
+import { ServerEventName } from '@cleak/common/mcp/server-events';
 
 const logger = new Logger('PathGuard');
 
@@ -110,6 +111,9 @@ function assertInsideRoot(p: string, root: string): string {
   // non-existent component cannot be a symlink.
   const { real, tail } = realpathDeepestExisting(abs);
   if (real !== rootReal && !real.startsWith(rootReal + sep)) {
+    // Centralized here (not left to each of the ~7 callers) so every rejection
+    // is captured consistently, security-relevant, worth `warn` not `debug`.
+    logger.warn({ event: ServerEventName.PATH_REJECTED, path: p, root: rootReal }, 'path rejected: escapes workspace root');
     throw new PathGuardError(`path escapes WORKSPACE_ROOT (${rootReal}): ${p}`);
   }
   return tail.length ? join(real, ...tail.split(sep)) : real;

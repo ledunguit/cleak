@@ -1,6 +1,7 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { readFileSync, statSync } from 'fs';
 import { CParserService, FunctionInfo } from './c-parser.service';
+import { ServerEventName } from '@cleak/common/mcp/server-events';
 
 type FlowPath = {
   functionName: string;
@@ -21,6 +22,8 @@ type TraceResult = {
 
 @Injectable()
 export class InterproceduralFlowService {
+  private readonly logger = new Logger(InterproceduralFlowService.name);
+
   constructor(private readonly cParser: CParserService) {}
 
   // Cross-call parse cache. analyze() is invoked once PER CANDIDATE, and every call over
@@ -85,6 +88,7 @@ export class InterproceduralFlowService {
     extraAllocators?: string[],
     extraDeallocators?: string[],
   ) {
+    this.logger.log({ event: ServerEventName.FLOW_ANALYSIS_STARTED, rootPath, functionName, fileCount: files.length }, 'flow analysis started');
     // Stat every file ONCE per call: the parse cache key and the reachability
     // fingerprint share the same mtime view, so a changed file flips BOTH keys and
     // neither cache can serve stale data.
@@ -149,6 +153,10 @@ export class InterproceduralFlowService {
       ? [...new Set(start.allocationVariables.map((a) => a.variable))].filter((v) => !trace.freedVars.has(v))
       : [];
 
+    this.logger.log(
+      { event: ServerEventName.FLOW_ANALYSIS_FINISHED, rootPath, functionName, pathCount: trace.paths.length },
+      'flow analysis finished',
+    );
     return {
       paths: trace.paths,
       freeParameters: [...new Set(trace.freeParams)],

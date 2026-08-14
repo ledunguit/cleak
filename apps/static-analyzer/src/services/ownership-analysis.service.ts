@@ -1,13 +1,17 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { readFileSync } from 'fs';
 import { OwnershipSummary } from '@cleak/common';
+import { ServerEventName } from '@cleak/common/mcp/server-events';
 import { CParserService, FunctionInfo } from './c-parser.service';
 
 @Injectable()
 export class OwnershipAnalysisService {
+  private readonly logger = new Logger(OwnershipAnalysisService.name);
+
   constructor(private readonly cParser: CParserService) {}
 
   async summarize(files: string[], _rootPath: string) {
+    this.logger.log({ event: ServerEventName.OWNERSHIP_SUMMARY_STARTED, fileCount: files.length }, 'ownership summary started');
     const ownerships: {
       functionName: string;
       filePath: string;
@@ -53,6 +57,7 @@ export class OwnershipAnalysisService {
       }
     }
 
+    this.logger.log({ event: ServerEventName.OWNERSHIP_SUMMARY_FINISHED, fileCount: files.length, ownershipCount: ownerships.length }, 'ownership summary finished');
     return { ownerships };
   }
 
@@ -127,6 +132,7 @@ export class OwnershipAnalysisService {
   }
 
   async conventions(content: string, filePath: string) {
+    this.logger.log({ event: ServerEventName.OWNERSHIP_CONVENTIONS_STARTED, filePath }, 'ownership conventions started');
     const rules: { pattern: string; description: string; conventionType: string }[] = [];
     const result = await this.cParser.parse(content, filePath);
 
@@ -192,6 +198,7 @@ export class OwnershipAnalysisService {
       }
     }
 
+    this.logger.log({ event: ServerEventName.OWNERSHIP_CONVENTIONS_FINISHED, filePath, ruleCount: rules.length }, 'ownership conventions finished');
     return { rules };
   }
 

@@ -1,7 +1,8 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { spawnSync } from 'child_process';
 import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from 'fs';
 import { basename, dirname, join, resolve, sep } from 'path';
+import { ServerEventName } from '@cleak/common/mcp/server-events';
 
 /**
  * Project-level Clang Static Analyzer pass.
@@ -37,6 +38,7 @@ import { basename, dirname, join, resolve, sep } from 'path';
  */
 @Injectable()
 export class ScanBuildAdapterService {
+  private readonly logger = new Logger(ScanBuildAdapterService.name);
   private readonly runsDir = process.env.RUNS_DIR || './runs';
   private readonly scanBuildBin = process.env.SCAN_BUILD_BIN || 'scan-build';
 
@@ -109,6 +111,8 @@ export class ScanBuildAdapterService {
     // shell interpretation). --keep-going: don't abort the whole pass on a single TU failure.
     const simple = !/[|&;<>$`(){}[\]*?~\n]/.test(buildCommand);
     const buildArgv = simple ? buildCommand.trim().split(/\s+/) : ['/bin/sh', '-c', buildCommand];
+    const startedAt = Date.now();
+    this.logger.log({ event: ServerEventName.SCAN_BUILD_STARTED, runId, projectPath: cwd, buildCommand }, 'scan-build started');
     const result = spawnSync(
       this.scanBuildBin,
       ['-o', reportDir, '--keep-going', ...buildArgv],
@@ -116,7 +120,13 @@ export class ScanBuildAdapterService {
     );
     // clang analyzer diagnostics go to stderr; merge with stdout so we parse them.
     const output = `${result.stdout || ''}${result.stderr || ''}` || result.error?.message || '';
-    this.saveRun(runId, output, projectPath);
+    const findingCount = this.saveRun(runId, output, projectPath);
+    const durationMs = Date.now() - startedAt;
+    if (result.status === 0) {
+      this.logger.log({ event: ServerEventName.SCAN_BUILD_FINISHED, runId, durationMs, findingCount }, 'scan-build finished');
+    } else {
+      this.logger.error({ event: ServerEventName.SCAN_BUILD_FAILED, runId, durationMs, exitCode: result.status }, 'scan-build failed');
+    }
     return { success: result.status === 0, runId, output };
   }
 
@@ -124,6 +134,7 @@ export class ScanBuildAdapterService {
     this.assertValidRunId(runId);
     const filePath = join(this.runsDir, `${runId}.scanbuild.json`);
     if (!existsSync(filePath)) {
+      this.logger.warn({ event: ServerEventName.SCAN_BUILD_REPORT_READ, runId, found: false }, 'scan-build report not found');
       return {
         report: '',
         findings: [],
@@ -131,18 +142,20 @@ export class ScanBuildAdapterService {
     }
 
     const record = JSON.parse(readFileSync(filePath, 'utf-8'));
+    this.logger.log({ event: ServerEventName.SCAN_BUILD_REPORT_READ, runId, found: true, findingCount: (record.findings || []).length }, 'scan-build report read');
     return {
       report: record.output || '',
       findings: record.findings || [],
     };
   }
 
-  private saveRun(runId: string, output: string, projectPath?: string) {
+  private saveRun(runId: string, output: string, projectPath?: string): number {
     const findings = this.parseFindings(output, projectPath);
     writeFileSync(
       join(this.runsDir, `${runId}.scanbuild.json`),
       JSON.stringify({ runId, output, findings }, null, 2),
     );
+    return findings.length;
   }
 
   private parseFindings(output: string, projectPath?: string) {

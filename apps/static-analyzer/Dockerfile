@@ -17,12 +17,14 @@ COPY package.json turbo.json tsconfig.base.json nest-cli.json pnpm-workspace.yam
 COPY apps/static-analyzer/package.json apps/static-analyzer/tsconfig.app.json apps/static-analyzer/webpack.config.js ./apps/static-analyzer/
 COPY apps/dynamic-analyzer/package.json apps/dynamic-analyzer/tsconfig.app.json ./apps/dynamic-analyzer/
 COPY packages/common/package.json packages/common/tsconfig.lib.json packages/common/tsup.config.ts ./packages/common/
+COPY packages/observability/package.json packages/observability/tsconfig.json packages/observability/tsup.config.ts ./packages/observability/
 
 RUN pnpm install --frozen-lockfile
 
 # 2. Copy source code
 COPY apps/static-analyzer/src ./apps/static-analyzer/src
 COPY packages/common/src ./packages/common/src
+COPY packages/observability/src ./packages/observability/src
 
 # 3. Build via turbo
 RUN pnpm exec turbo run build --filter=static-analyzer

@@ -1,12 +1,16 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { FeasibleLeakPath } from '@cleak/common';
+import { ServerEventName } from '@cleak/common/mcp/server-events';
 import { CParserService, FunctionInfo } from './c-parser.service';
 
 @Injectable()
 export class PathConstraintsService {
+  private readonly logger = new Logger(PathConstraintsService.name);
+
   constructor(private readonly cParser: CParserService) {}
 
   async analyze(filePath: string, content: string, lineNumber: number, extraAllocators?: string[], extraDeallocators?: string[]) {
+    this.logger.log({ event: ServerEventName.PATH_CONSTRAINTS_STARTED, filePath, lineNumber }, 'path constraints started');
     const result = await this.cParser.parse(content, filePath, extraAllocators, extraDeallocators);
     const functions = result.functions;
 
@@ -33,6 +37,7 @@ export class PathConstraintsService {
     }
 
     if (!containingFunction) {
+      this.logger.log({ event: ServerEventName.PATH_CONSTRAINTS_FINISHED, filePath, lineNumber, containingFunction: null }, 'no enclosing function at line');
       return { constraints: [], feasiblePaths: [], exitPaths: [] };
     }
 
@@ -60,6 +65,10 @@ export class PathConstraintsService {
     // filter the literature (MemHint) calls for — we only emit reachable paths.
     const feasibleLeakPaths = this.buildFeasibleLeakPaths(containingFunction);
 
+    this.logger.log(
+      { event: ServerEventName.PATH_CONSTRAINTS_FINISHED, filePath, lineNumber, containingFunction: containingFunction.functionName, feasibleLeakPathCount: feasibleLeakPaths.length },
+      'path constraints finished',
+    );
     return {
       constraints,
       feasiblePaths,

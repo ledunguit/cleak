@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { createHash } from 'crypto';
 
 interface StackFrame {
@@ -39,12 +39,15 @@ interface NormalizedReport {
 
 @Injectable()
 export class LeakBundleNormalizerService {
+  private readonly logger = new Logger(LeakBundleNormalizerService.name);
+
   normalizeMemcheck(
     runId: string,
     rawErrors: Finding[],
     _xmlPath?: string,
     _logPath?: string,
   ): NormalizedReport {
+    this.logger.debug(`normalizing ${rawErrors.length} memcheck finding(s) for run ${runId}`);
     const findings: NormalizedFinding[] = [];
     let high = 0, medium = 0, low = 0;
 

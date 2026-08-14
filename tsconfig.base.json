@@ -26,7 +26,9 @@
       "@cleak/agent-core": ["packages/agent-core/src"],
       "@cleak/agent-core/*": ["packages/agent-core/src/*"],
       "@cleak/config": ["packages/config/src"],
-      "@cleak/config/*": ["packages/config/src/*"]
+      "@cleak/config/*": ["packages/config/src/*"],
+      "@cleak/observability": ["packages/observability/src"],
+      "@cleak/observability/*": ["packages/observability/src/*"]
     }
   }
 }

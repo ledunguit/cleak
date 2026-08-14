@@ -56,6 +56,10 @@ services:
       # not a profiled memory-per-thread constant — a host with more RAM can
       # likely afford more threads.
       STATIC_PARSER_WORKERS: 2
+      # Structured JSON logging (@cleak/observability) — explicit defaults so a
+      # container gets sane logging without an operator needing to create a .env.
+      LOG_LEVEL: info
+      LOG_FORMAT: json
     volumes:
       # Static analysis only READS the scanned sources (indexing, AST, scan-build
       # writes its report under RUNS_DIR). Mount read-only so a compromised
@@ -97,6 +101,10 @@ services:
       # See static-analyzer's comment above — the earlier OOM crash-loop was a
       # cap set TOO LOW, so these are runaway bounds, not tight budgets.
       DYNAMIC_MAX_CONCURRENT_RUNS: 3
+      # Structured JSON logging (@cleak/observability) — explicit defaults so a
+      # container gets sane logging without an operator needing to create a .env.
+      LOG_LEVEL: info
+      LOG_FORMAT: json
     volumes:
       # Dynamic analysis BUILDS the scanned project (writes object files into
       # the tree) and runs the result, so these mounts must stay read-write —

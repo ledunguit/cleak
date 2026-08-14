@@ -8,7 +8,8 @@
  * the same way at exit, just after driving many inputs instead of zero.
  */
 
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
+import { ServerEventName } from '@cleak/common/mcp/server-events';
 import { RunManagerService } from './run-manager.service';
 import { ResultParserService } from './result-parser.service';
 import { runConfined, sanitizeRunId } from './safe-exec';
@@ -16,6 +17,8 @@ import { assertExecutablePath } from './path-guard';
 
 @Injectable()
 export class LibfuzzerRunService {
+  private readonly logger = new Logger(LibfuzzerRunService.name);
+
   constructor(
     private readonly runManager: RunManagerService,
     private readonly resultParser: ResultParserService,
@@ -36,6 +39,8 @@ export class LibfuzzerRunService {
       return { success: false, runId, findings: [], rawOutput: msg };
     }
 
+    const startedAt = Date.now();
+    this.logger.log({ event: ServerEventName.FUZZER_RUN_STARTED, runId, binaryPath: canonicalBinary, budgetSec: budget }, 'fuzzer run started');
     const args = [`-max_total_time=${budget}`, '-runs=-1', '-close_fd_mask=3'];
     const result = await runConfined(canonicalBinary, args, {
       timeoutSec: timeout,
@@ -46,6 +51,10 @@ export class LibfuzzerRunService {
     const findings = this.resultParser.parseLsanOutput(output);
 
     this.runManager.saveRun(runId, { tool: 'libfuzzer', binaryPath: canonicalBinary, output, findings, success: true });
+    this.logger.log(
+      { event: ServerEventName.FUZZER_RUN_FINISHED, runId, durationMs: Date.now() - startedAt, findingCount: findings.length },
+      'fuzzer run finished',
+    );
 
     return { success: true, runId, findings, rawOutput: output };
   }

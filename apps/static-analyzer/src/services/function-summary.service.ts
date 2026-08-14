@@ -1,19 +1,26 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { readFileSync } from 'fs';
 import { AllocFreePair } from '@cleak/common';
+import { ServerEventName } from '@cleak/common/mcp/server-events';
 import { CParserService, FunctionInfo } from './c-parser.service';
 
 @Injectable()
 export class FunctionSummaryService {
+  private readonly logger = new Logger(FunctionSummaryService.name);
+
   constructor(private readonly cParser: CParserService) {}
 
   async summarize(filePath: string, content?: string, functionName?: string, extraAllocators?: string[], extraDeallocators?: string[]) {
+    this.logger.log({ event: ServerEventName.FUNCTION_SUMMARY_STARTED, filePath, functionName }, 'function summary started');
     const source = content || readFileSync(filePath, 'utf-8');
     const result = await this.cParser.parse(source, filePath, extraAllocators, extraDeallocators);
 
     const functions = result.functions.filter(
       (fn) => !functionName || fn.functionName === functionName,
     );
+    if (functionName && functions.length === 0) {
+      this.logger.warn({ event: ServerEventName.FUNCTION_NOT_FOUND, filePath, functionName }, 'function not found in parsed source');
+    }
 
     const summaries = functions.map((fn) => {
       const freedVarNames = new Set(fn.freedVariables.map((f) => f.variable));
@@ -58,6 +65,10 @@ export class FunctionSummaryService {
       ? summaries[0] || null
       : summaries;
 
+    this.logger.log(
+      { event: ServerEventName.FUNCTION_SUMMARY_FINISHED, filePath, functionName, functionsMatched: functions.length },
+      'function summary finished',
+    );
     return {
       summary: JSON.stringify(specific),
       allocations: functions.flatMap((f) =>

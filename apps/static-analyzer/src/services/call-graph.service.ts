@@ -1,6 +1,7 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { readFileSync } from 'fs';
 import { CParserService, type FunctionInfo } from './c-parser.service';
+import { ServerEventName } from '@cleak/common/mcp/server-events';
 import type {
   FreedCrossFileEntry, UnfreedSinkParamEntry, FreedViaCallerEntry, UnfreedReturnOwnershipEntry,
 } from '../types/mcp-responses';
@@ -15,6 +16,8 @@ const MAX_OWNERSHIP_HOPS = 8;
 
 @Injectable()
 export class CallGraphService {
+  private readonly logger = new Logger(CallGraphService.name);
+
   constructor(private readonly cParser: CParserService) {}
 
   // Resolves a call site to the RIGHT implementation when the receiver's
@@ -63,6 +66,7 @@ export class CallGraphService {
   }
 
   async extract(rootPath: string, files: string[], extraAllocators?: string[], extraDeallocators?: string[]) {
+    this.logger.log({ event: ServerEventName.CALL_GRAPH_STARTED, rootPath, fileCount: files.length }, 'call graph extraction started');
     const allFunctions: Map<string, string> = new Map();
     const callEdges: { caller: string; callee: string; filePath: string; lineNumber: number; callee_file?: string }[] = [];
     const recursionCycles: string[][] = [];
@@ -178,6 +182,10 @@ export class CallGraphService {
     // Allocation-to-free reachability analysis
     const allocFreeChains = this.analyzeAllocFreeChains(files, callEdges, extraAllocators, extraDeallocators);
 
+    this.logger.log(
+      { event: ServerEventName.CALL_GRAPH_FINISHED, rootPath, nodeCount: nodes.length, edgeCount: callEdges.length },
+      'call graph extraction finished',
+    );
     return {
       edges: callEdges,
       nodes,
