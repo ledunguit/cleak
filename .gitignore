@@ -84,3 +84,10 @@ demo/**/corpus_validation_report.json
 demo/**/corpus_validation_report.md
 
 .omo
+
+# evaluation/ CLI's own scratch cache (unzip staging for the Juliet auto-ingest sub-flow)
+/evaluation/.cache/
+
+# ad hoc smoke-test corpora created while exercising evaluation/cli.ts's ingest flow
+/demo/*-smoke-test/
+/demo/*-smoke-test.lock.json
