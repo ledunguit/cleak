@@ -64,10 +64,16 @@ Every scan must deliver all five of the following:
   research contribution is detailed in [CONTRIBUTION.md](CONTRIBUTION.md).
 - **How to run** evals + baseline comparison + reproducibility gates: [OPERATIONS.md](OPERATIONS.md)
   and [BASELINE-COMPARISON.md](BASELINE-COMPARISON.md).
-- **Current reproducible result** (Juliet CWE-401, 30 cases, analyzers over MCP Docker):
-  `no_llm` heuristic **P 0.806 / R 0.906 / F1 0.853** — beats Clang Static Analyzer (F1 ≈0.76)
-  on the same corpus + same scorer; the consensus judge cuts the run-to-run verdict flip rate
-  **~2–4× (single-LLM 13–27% → consensus 6.7%, replicated across two ablation campaigns)**.
+- **Current reproducible result** (Juliet CWE-401, **validated** 1658-case corpus): the
+  9-baseline ablation (`configs/baselines/`, stratified n=50) has **B6a** (planner + deterministic
+  recipe + LLM judge) on top at **F1 0.938** (P0.973/R0.906), ahead of static-only B1 (F1 0.792)
+  and Clang Static Analyzer (F1 ≈0.76) on the same corpus + scorer — see
+  [EVALUATION.md §3b](EVALUATION.md). At **full-corpus scale (1658 cases, static-only)** F1 drops
+  to 0.612 (two weak families, `new`/C++ and `malloc`, dilute out of the n=50 stratified sample —
+  see [CONTRIBUTION.md](CONTRIBUTION.md)). The consensus judge cuts the run-to-run verdict flip
+  rate **~2–4× (single-LLM 13–27% → consensus 6.7%, replicated across two ablation campaigns)**.
+  (The older 30-case P0.806/R0.906/F1 0.853 number was measured on a pre-remediation corpus
+  defect and is superseded — do not cite it.)
 - **`llm_assisted` needs a reachable LLM endpoint to diverge.** Without a key for a cloud
   provider the run fails loudly (no silent fallback to the heuristic). Provider/endpoint is
   selectable (`local | openai | anthropic | openai-compat`) — see [OPERATIONS.md](OPERATIONS.md).

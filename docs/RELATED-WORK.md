@@ -146,6 +146,11 @@ hệ của luận văn, cột cuối). Ô của cleak đối chiếu kiến trú
 
 ## 6b. So sánh kết quả thực nghiệm theo dataset
 
+> ⚠️ **Bảng 30-ca dưới đây đo trên corpus tiền-remediation (đã superseded, xem EVALUATION.md
+> §3a/§8).** Số hiện hành: [EVALUATION.md §3b](EVALUATION.md) (9-baseline ablation, stratified
+> n=50, corpus đã validate 1658 ca, B6a F1 0.938) và [CONTRIBUTION.md](CONTRIBUTION.md)
+> (full-corpus F1 0.612 + phân rã theo family yếu `new`/`malloc`).
+
 **Juliet CWE-401 (30 ca, function-mode, analyzer qua MCP Docker)** — nguồn `paper/de-cuong.md`
 L271-288; là đánh giá **30 ca con**, không phải toàn bộ 1984 ca của NIST Juliet.
 

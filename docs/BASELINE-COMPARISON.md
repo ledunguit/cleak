@@ -54,6 +54,13 @@ chỉ cần `clang` trên PATH (hoặc `CLANG_BIN`).
 
 ## 5. Kết quả thực (Juliet CWE-401, 30 ca đầu)
 
+> ⚠️ **Corpus tiền-remediation — số dưới đây đã bị EVALUATION.md §3a/§8 tuyên bố superseded.**
+> 30 ca này được chạy trên bản Juliet **trước khi sửa lỗi corpus** (422/1984 ca C++ không build
+> được bị loại âm thầm khỏi confusion matrix). Số hiện hành trên corpus đã validate (1658 ca):
+> xem [EVALUATION.md §3b](EVALUATION.md) (ablation 9-baseline, stratified n=50, B6a F1 0.938)
+> và [CONTRIBUTION.md](CONTRIBUTION.md) (full-corpus F1 0.612 + phân rã theo family). Bảng dưới
+> giữ lại chỉ để minh hoạ cách chạy `compare-baselines.ts`, không dùng làm số liệu báo cáo.
+
 Chạy thật trong dự án (analyzer Docker; Infer không cài → bỏ qua):
 
 | Tool | sites | TP | FP | FN | TN | Precision | Recall | **F1** | FP/KLOC |

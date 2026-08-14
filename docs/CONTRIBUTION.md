@@ -86,14 +86,23 @@ duyệt findings của TUI (verdict card), nên một verdict luôn **truy vết
 
 ## Kết quả đo được
 
-Trên **Juliet CWE-401** (30 ca, analyzer qua MCP Docker; số liệu thật đã chạy trong dự án):
+Trên **Juliet CWE-401** (corpus **đã validate**, 1658 ca, content-hash `f578c3ee…`; analyzer
+qua MCP Docker; số liệu thật đã chạy trong dự án — xem [EVALUATION.md §8](EVALUATION.md) cho
+quy trình validate corpus):
 
-### Hệ thống vs baseline static
+### Hệ thống vs baseline static (9-baseline ablation, stratified n=50 — `configs/baselines/`)
 | Hệ | Precision | Recall | F1 |
 |---|---|---|---|
-| **leak-investigator** (no_llm heuristic) | **0.806** | **0.906** | **0.853** |
-| Clang Static Analyzer (cùng corpus, cùng `scoreCase`) | ~0.69 | ~0.84 | **~0.76** |
+| **B6a** — planner + recipe tất định + LLM judge (điểm mạnh nhất) | **0.973** | 0.906 | **0.938** |
+| B1 — static only (no_llm heuristic) | 0.792 | 0.792 | 0.792 |
+| Clang Static Analyzer (cùng corpus, cùng `scoreCase`) | ~0.69 | ~0.84 | ~0.76 |
 
+> **Full-corpus (1658 ca, static-only, dynamic off) cho P0.680/R0.556/F1 0.612 — thấp hơn mẫu
+> n=50 ở trên.** Nguyên nhân cụ thể: family C++ `new`/`delete` (1736 site) chỉ recall 16.7%,
+> family `malloc` chỉ precision 36.7% (FP cao) — cả hai bị mẫu stratified (lấy đều theo family)
+> pha loãng nên không hiện rõ ở n=50. Đây là giới hạn thật của hệ ở quy mô lớn, không phải lỗi đo;
+> bảng 9-baseline đang được chạy lại ở quy mô lớn hơn để có số liệu đối chiếu đầy đủ.
+>
 > Heuristic dùng tín hiệu cấu trúc cấp nguồn (định vị missing-free site) làm static evidence,
 > nên `no_llm` thực sự *phát hiện* leak chứ không trả về toàn `uncertain`. Số baseline clang
 > tái tạo qua [BASELINE-COMPARISON.md](BASELINE-COMPARISON.md) (chạy lại live, không phải số bịa).
@@ -129,11 +138,13 @@ FN3 TN38. Gate `determinism-gate.sh` chứng nhận; đồng thời từ chối 
 
 ## Bàn luận trung thực (threats to validity)
 
-- **Trên Juliet *dễ*, heuristic baseline là mạnh nhất (F1 0.853).** LLM + dynamic trên
-  corpus tổng hợp đơn giản có thể **TĂNG FP** (ví dụ consensus×3 + `--dynamic selective`
-  từng cho FP cao hơn cả dyn-off), vì bằng chứng dynamic làm heuristic *tự tin hơn* → ít ca
-  rơi vào dải biên nơi consensus phát huy, và tương quan dynamic↔ứng viên còn thô. Giá trị
-  của LLM/consensus kỳ vọng thể hiện trên **ca khó** (dự án thực, control-flow phức tạp).
+- **Trên Juliet *dễ* ở quy mô nhỏ (n=50), planner+judge (B6a) là mạnh nhất (F1 0.938)** nhưng
+  **ở quy mô toàn corpus (1658 ca) F1 rơi xuống 0.612** do 2 family cụ thể (`new`/C++, `malloc`)
+  — xem bảng ở trên. LLM + dynamic trên corpus tổng hợp đơn giản có thể **TĂNG FP** (ví dụ
+  consensus×3 + `--dynamic selective` từng cho FP cao hơn cả dyn-off), vì bằng chứng dynamic làm
+  heuristic *tự tin hơn* → ít ca rơi vào dải biên nơi consensus phát huy, và tương quan
+  dynamic↔ứng viên còn thô. Giá trị của LLM/consensus kỳ vọng thể hiện trên **ca khó** (dự án
+  thực, control-flow phức tạp).
 - **Hướng cải thiện đã thử:** escalation theo *bất đồng* static↔dynamic (`shouldEscalate`)
   đã *re-engage* consensus và thu hồi phần lớn FP regression — nhưng vẫn cần tương quan
   dynamic↔ứng viên chặt hơn. Đây là việc còn mở.
@@ -177,8 +188,9 @@ FN3 TN38. Gate `determinism-gate.sh` chứng nhận; đồng thời từ chối 
     ở no_llm để điền `staticEvidence`; thêm term judge path-sensitive (không cho ownership-penalty
     che leak trên đường lỗi). **Cơ chế chạy** (pathConstraints phát hiện `feasibleLeakPaths` với
     `unreconciledAllocations`; judge flag nhiều hơn hẳn trên cjson thật). **NHƯNG** exit-path analysis
-    là **CFG heuristic (không SMT)** → over-report đường rò → bật mặc định làm **sập precision Juliet
-    (FP 7→44)**. ⇒ để **opt-in** (`STATIC_ENRICH=on`); baseline Juliet giữ nguyên P0.806/R0.906/F1 0.853.
+    là **CFG heuristic (không SMT)** → over-report đường rò → bật mặc định làm **sập precision Juliet**
+    (thử nghiệm gốc trên fixture 30-ca tiền-remediation: FP 7→44). ⇒ để **opt-in** (`STATIC_ENRICH=on`);
+    baseline Juliet giữ nguyên cấu hình mặc định (không bật STATIC_ENRICH).
     **Phát hiện cốt lõi:** path-sensitive leak detection cần **feasibility chính xác** để dập over-report
     NULL-guard của CFG heuristic; nhưng SMT in-process (Z3) là **bất khả thi** (trần WASM 2 GiB, abort
     không catch — xem F4), nên độ chính xác đó được cấp bởi **hybrid static+DYNAMIC + consensus judge**

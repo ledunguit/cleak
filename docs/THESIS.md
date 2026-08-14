@@ -72,14 +72,20 @@ Tầng judge có **3 cấu hình** so sánh được như-nhau: **heuristic** (t
 
 ## 4. Kết quả chính
 
-Trên **Juliet CWE-401** (corpus 1984 ca; các phép đo dưới đây trên 30 ca, analyzer chạy
-qua MCP Docker), số liệu **thực** đã chạy trong dự án:
+Trên **Juliet CWE-401** (corpus **đã validate**, 1658 ca, content-hash `f578c3ee…`; xem
+[EVALUATION.md §8](EVALUATION.md)), số liệu **thực** đã chạy trong dự án:
 
 | Hạng mục | Kết quả |
 |---|---|
-| **Hệ thống thắng baseline static** | no_llm heuristic **F1 0.853** (P0.806/R0.906) **>** Clang Static Analyzer **F1 ≈0.76** |
+| **9-baseline ablation** (`configs/baselines/`, stratified n=50) | **B6a** (planner + recipe tất định + LLM judge) thắng: **F1 0.938** (P0.973/R0.906) — vượt B1 static-only (F1 0.792), B3 rule-ensemble (F1 0.857), và các cấu hình agentic B6b/B7 (F1 0.929, tốn ~9× token); xem [EVALUATION §3b](EVALUATION.md) |
+| **Full-corpus (1658 ca, static + heuristic, dynamic off)** | P0.680/R0.556/F1 0.612 — **thấp hơn mẫu n=50**, do 2 family yếu bị mẫu stratified pha loãng: C++ `new`/`delete` (R 16.7% trên 1736 site) và `malloc` (P 36.7%, FP cao); bảng đối chiếu quy mô lớn hơn theo đúng 9 config đang được chạy lại |
 | **Consensus giảm dao động ~2–4×** | tỉ lệ lật verdict **13–27% → 6.7%** (consensus lặp lại y hệt qua 2 đợt; single-LLM tự dao động); xem [EVALUATION §7](EVALUATION.md) |
-| **Tier-1 tất định** | hai lần chạy `no_llm` cho **kết quả chấm điểm y hệt** (TP29 FP7 FN3 TN38) |
+| **Tier-1 tất định** | hai lần chạy `no_llm` cho **kết quả chấm điểm y hệt** |
+
+> **Lưu ý (đối chiếu 2026-08):** số liệu trước đây trên bản 30-ca (F1 0.853, P0.806/R0.906)
+> được đo trên **corpus có lỗi** (422/1984 ca C++ không build được, bị loại âm thầm khỏi
+> confusion matrix) — đã **loại bỏ, không còn trích dẫn**. Bảng trên là số liệu trên corpus
+> đã validate (1658 ca, 0 quarantined).
 
 → Phương pháp đầy đủ (scoring site-based, bootstrap CI, McNemar, hai tầng tất định):
 [EVALUATION.md](EVALUATION.md). Cách chạy so sánh baseline: [BASELINE-COMPARISON.md](BASELINE-COMPARISON.md).
