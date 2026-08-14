@@ -50,7 +50,7 @@ export type StopReason = 'stop' | 'tool_use' | 'max_tokens' | 'error';
 /** What `callModel` returns, normalized across providers. */
 export interface NormalizedResponse {
   text: string;
-  /** Provider reasoning / thinking content, when exposed (e.g. mimo reasoning_content). */
+  /** Provider reasoning / thinking content, when exposed (e.g. DeepSeek reasoning_content). */
   thinking?: string;
   toolUses: ToolUseBlock[];
   usage?: Usage;

@@ -55,7 +55,7 @@ cứng) ⇒ eval tất định.
 `callOpenAiChat`. Cách giao system prompt: Anthropic đặt ở tham số top-level `system`
 (`providers/anthropic.ts:29`); OpenAI-compatible chèn làm message đầu `{role:'system',
 content}` (`providers/normalize.ts:41`). Mặc định thesis: gateway OpenAI-compatible nội bộ
-`local`, model `mimo/mimo-v2.5-pro` tại `localhost:20128/v1` (host-aware) — `config.ts:105-166`.
+`local`, model `deepseek-v4-flash-0731` tại `localhost:20128/v1` (host-aware) — `config.ts:105-166`.
 
 ---
 

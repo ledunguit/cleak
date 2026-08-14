@@ -28,7 +28,7 @@
                               v
                   ┌──────────────────────────────┐
                   │   LLM gateway  :20128         │
-                  │  mimo / OpenAI / Anthropic /  │
+                  │  local / OpenAI / Anthropic / │
                   │  openai-compat                │
                   └──────────────────────────────┘
 ```

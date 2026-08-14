@@ -154,6 +154,13 @@ pnpm exec tsx scripts/run-baselines.ts --only B1,B3 --dry-run                   
 **Representative headline (Juliet CWE-401, **validated** corpus, stratified n=50, single run, `mimo/mimo-v2.5-pro`
 @ temp 0, real 9router gateway; planner-guardrail + LLM health-check + corpus integrity gate on):**
 
+> **Model default changed (2026-08-14):** the standing thesis default for the `local` provider is now
+> `deepseek-v4-flash-0731` (DeepSeek's own official model ID — the whole DeepSeek API has migrated to this
+> snapshot, so it is stable regardless of gateway), replacing `mimo/mimo-v2.5-pro`. The table below is the
+> `mimo/mimo-v2.5-pro` run and is kept as-is (it is what actually produced these numbers); a re-run of the
+> full §3b/§3d sweep on `deepseek-v4-flash-0731` is queued — do not assume the numbers below transfer to the
+> new model until that re-run lands.
+
 | ID | Baseline | TP | FP | FN | TN | P | R | F1 | ECE | total tok |
 |---|---|--:|--:|--:|--:|--:|--:|--:|--:|--:|
 | B1 | Static only | 42 | 11 | 11 | 146 | 0.792 | 0.792 | 0.792 | 0.548 | 0 |

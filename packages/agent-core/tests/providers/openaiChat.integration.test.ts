@@ -1,6 +1,6 @@
 /**
  * Integration: drive the real callOpenAiChat (the exact path used against the
- * local mimo gateway) through a streaming SSE stub — no gateway required. Proves
+ * local OpenAI-compatible gateway) through a streaming SSE stub — no gateway required. Proves
  * the request opts into streaming and the SSE deltas fold into a NormalizedResponse.
  */
 import { afterAll, describe, expect, test } from 'vitest';
@@ -44,7 +44,7 @@ const settings: ProviderSettings = {
   provider: 'local',
   baseUrl: `http://localhost:${serverPort}`,
   apiKey: '',
-  model: 'mimo/mimo-v2.5-pro',
+  model: 'deepseek-v4-flash-0731',
   maxTokens: 256,
   timeoutMs: 75_000,
   idleTimeoutMs: 1_000,

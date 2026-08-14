@@ -18,7 +18,7 @@ const recent = ['scan_simple_leak_20260610-1158', 'scan_early_return_leak_202606
 const cwd = '/Users/zed/Master/leak-investigator';
 
 {
-  const store = new TuiStore({ provider: 'local', model: 'mimo/mimo-v2.5-pro', mode: 'llm_assisted', dynamic: 'off' });
+  const store = new TuiStore({ provider: 'local', model: 'deepseek-v4-flash-0731', mode: 'llm_assisted', dynamic: 'off' });
   const { lastFrame, unmount } = render(
     <App store={store} staticUrl="http://127.0.0.1:50071/mcp" cwd={cwd} resultsDir="results" recentScans={recent} />,
   );
@@ -28,7 +28,7 @@ const cwd = '/Users/zed/Master/leak-investigator';
 }
 
 {
-  const store = new TuiStore({ provider: 'local', model: 'mimo/mimo-v2.5-pro', mode: 'llm_assisted', dynamic: 'off' });
+  const store = new TuiStore({ provider: 'local', model: 'deepseek-v4-flash-0731', mode: 'llm_assisted', dynamic: 'off' });
   store.addUserMessage('/scan demo/memory_leak_corpus/early_return_leak');
   store.beginRun('scan_demo_x', 'llm_assisted');
   store.applyScanEvent({ seq: 0, ts: 0, name: ScanEventName.DISCOVERY_STARTED });
@@ -50,7 +50,7 @@ const cwd = '/Users/zed/Master/leak-investigator';
 }
 
 {
-  const store = new TuiStore({ provider: 'local', model: 'mimo/mimo-v2.5-pro', mode: 'llm_assisted', dynamic: 'off' });
+  const store = new TuiStore({ provider: 'local', model: 'deepseek-v4-flash-0731', mode: 'llm_assisted', dynamic: 'off' });
   store.addUserMessage('/scan demo/memory_leak_corpus/array_leak');
   store.beginRun('scan_demo_x', 'llm_assisted');
   store.applyScanEvent({ seq: 0, ts: 0, name: ScanEventName.INVESTIGATION_STARTED });

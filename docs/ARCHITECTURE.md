@@ -46,7 +46,7 @@ Juliet giữ nguyên. Thêm project mới = **0 dòng code**.
 | **dynamic-analyzer** | NestJS + valgrind/asan/lsan | 50062 (MCP HTTP) | MCP Streamable-HTTP | 11 tool: build target + Valgrind/ASan/LSan + run binary + targeted harness (Stage B2, opt-in) |
 | **packages/agent-core** | TS library | — | (nhúng) | Vòng lặp agentic, tool abstraction, MCP client, provider LLM (streaming) |
 | **@cleak/common** | TS library | — | (chia sẻ) | Type/Zod, heuristic judge + consensus judge + leak analysis, report renderer |
-| *(ngoài)* **LLM gateway** | OpenAI-compatible | 20128 | HTTP SSE | `mimo/mimo-v2.5-pro` cục bộ (hoặc OpenAI/Anthropic) |
+| *(ngoài)* **LLM gateway** | OpenAI-compatible | 20128 | HTTP SSE | `deepseek-v4-flash-0731` cục bộ (hoặc OpenAI/Anthropic) |
 
 Hai analyzer nối qua Docker bridge network `mcpvul-net` (`docker-compose.yml`).
 
@@ -70,7 +70,7 @@ flowchart TB
     end
 
     subgraph External["External"]
-        LLM["LLM gateway :20128<br/>(mimo / OpenAI / Anthropic)"]
+        LLM["LLM gateway :20128<br/>(local / OpenAI / Anthropic)"]
     end
 
     TUI -- "MCP Streamable-HTTP /mcp" --> SA
@@ -204,7 +204,7 @@ flowchart TB
 ## 6. Kết nối LLM
 
 - **Provider dispatch:** `local` (gateway OpenAI-compatible, mặc định
-  `mimo/mimo-v2.5-pro` @ `host.docker.internal:20128/v1`) · `openai` · `anthropic` ·
+  `deepseek-v4-flash-0731` @ `host.docker.internal:20128/v1`) · `openai` · `anthropic` ·
   **`openai-compat`** (endpoint OpenAI-tương-thích tuỳ chỉnh: base URL + model + key, route
   qua đường `/chat/completions`). Khoá tách biệt theo provider.
 - **Điều phối TUI:** `agent-core/providers` (`openaiChat`/`anthropic`) — streaming SSE, idle-timeout,

@@ -176,7 +176,7 @@ export function configTemplate(): CleakConfig {
     autoShowReport: false,
     provider: 'local',
     endpoints: {
-      local: { baseUrl: 'http://localhost:20128/v1', model: 'mimo/mimo-v2.5-pro', apiKey: '' },
+      local: { baseUrl: 'http://localhost:20128/v1', model: 'deepseek-v4-flash-0731', apiKey: '' },
     },
     staticUrl: 'http://localhost:50061/mcp',
     dynamicUrl: 'http://localhost:50062/mcp',

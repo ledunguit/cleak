@@ -134,7 +134,7 @@ export function resolveProvider(provider: Provider, file?: CleakConfig): Provide
     provider: "local",
     baseUrl: pickStr(e.baseUrl, "http://localhost:20128/v1"),
     apiKey: pickStr(e.apiKey, ""),
-    model: pickStr(e.model, "mimo/mimo-v2.5-pro"),
+    model: pickStr(e.model, "deepseek-v4-flash-0731"),
     jsonMode: pickBool(llm.jsonMode, true),
     ...common,
   };
