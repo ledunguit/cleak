@@ -59,6 +59,7 @@ function resolvePlanFromFlags(flags: CliFlags): ResolvedPlan {
     provider: flags.provider,
     maxCaseMs: flags.maxCaseMs,
     maxCaseCostUsd: flags.maxCaseCostUsd,
+    maxConsecutiveErrors: flags.maxConsecutiveErrors,
     verbose: flags.verbose,
   };
 }
@@ -123,6 +124,7 @@ async function runBaselineMode(flags: CliFlags): Promise<void> {
     enrichOverride: flags.enrich,
     staticTools: flags.staticTools,
     includeUnwired: flags.includeUnwired,
+    maxConsecutiveErrors: flags.maxConsecutiveErrors,
   });
 }
 

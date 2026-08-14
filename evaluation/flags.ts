@@ -26,6 +26,7 @@ export interface CliFlags {
   consensusRule?: 'majority' | 'weighted' | 'unanimous-to-flag';
   maxCaseMs?: number;
   maxCaseCostUsd?: number;
+  maxConsecutiveErrors?: number;
   staticUrl?: string;
   dynamicUrl?: string;
   allowUnvalidated?: boolean;
@@ -83,6 +84,7 @@ export function parseFlags(argv: string[] = process.argv.slice(2)): CliFlags {
   const consensusNRaw = flag(argv, 'consensus-n');
   const maxCaseMsRaw = flag(argv, 'max-case-ms');
   const maxCaseCostUsdRaw = flag(argv, 'max-case-cost-usd');
+  const maxConsecutiveErrorsRaw = flag(argv, 'max-consecutive-errors');
 
   const stratifyVal = flag(argv, 'stratify');
   const hasStratify = has(argv, 'stratify');
@@ -116,6 +118,7 @@ export function parseFlags(argv: string[] = process.argv.slice(2)): CliFlags {
     consensusRule: flag(argv, 'consensus-rule') as CliFlags['consensusRule'],
     maxCaseMs: maxCaseMsRaw ? Math.max(0, parseInt(maxCaseMsRaw, 10)) : undefined,
     maxCaseCostUsd: maxCaseCostUsdRaw ? Math.max(0, parseFloat(maxCaseCostUsdRaw)) : undefined,
+    maxConsecutiveErrors: maxConsecutiveErrorsRaw ? Math.max(0, parseInt(maxConsecutiveErrorsRaw, 10)) : undefined,
     staticUrl: flag(argv, 'static-url'),
     dynamicUrl: flag(argv, 'dynamic-url'),
     allowUnvalidated: has(argv, 'allow-unvalidated') ? true : undefined,
@@ -171,6 +174,9 @@ LLM / judge:
   --static-discovery / --no-static-discovery
   --static-tools <list>    Comma-separated static evidence tools ('none' to disable)
   --max-case-ms <n> / --max-case-cost-usd <n>
+  --max-consecutive-errors <n>  Abort the run after N consecutive per-case errors
+                                 (dead/exhausted provider guard). 0 = disabled.
+                                 Default: cleak config's eval.maxConsecutiveErrors (10).
 
 Ingest (only reachable via --interactive, since flag-only mode never auto-ingests):
   --auto-ingest            Skip the "ingest now?" confirm — just do it

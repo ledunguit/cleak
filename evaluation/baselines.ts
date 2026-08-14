@@ -48,6 +48,9 @@ export interface SweepOptions {
   enrichOverride?: boolean;
   staticTools?: string[];
   includeUnwired?: boolean;
+  /** Per-baseline-run circuit breaker override — see EvalOptions.maxConsecutiveErrors.
+   * Undefined = each run falls back to cleak config's eval.maxConsecutiveErrors. */
+  maxConsecutiveErrors?: number;
 }
 
 function gitCommit(): string | undefined {
@@ -85,6 +88,7 @@ export async function runBaselineSweep(configs: BaselineConfig[], opts: SweepOpt
   );
 
   const rows: BaselineSweepRow[] = [];
+  let circuitBrokenAt: string | undefined;
   for (const c of configs) {
     const plan = resolveCapabilities(c.capabilities, { consensusN: opts.consensusOverride ?? c.consensusN, runs: opts.runsOverride ?? c.runs });
     const wired = isWiredNow(plan);
@@ -113,18 +117,22 @@ export async function runBaselineSweep(configs: BaselineConfig[], opts: SweepOpt
       provider: opts.provider,
       stratify: opts.stratify,
       allowUnvalidated: opts.allowUnvalidated,
+      maxConsecutiveErrors: opts.maxConsecutiveErrors,
       ...(opts.staticTools ? { staticTools: opts.staticTools } : {}),
     };
 
     try {
       let row: BaselineSweepRow;
+      let circuitBroken = false;
       if (plan.runs <= 1) {
         const r = await runEval({ ...evalOpts });
         writeEval(caseOut, r);
+        circuitBroken = !!r.circuitBroken;
         row = {
           id: c.id,
           name: c.name,
           status: 'ok',
+          ...(circuitBroken ? { error: 'circuit breaker tripped — run cut short, numbers are partial' } : {}),
           ranOk: r.ranOk,
           caseCount: r.caseCount,
           runs: 1,
@@ -146,12 +154,14 @@ export async function runBaselineSweep(configs: BaselineConfig[], opts: SweepOpt
         const rep = await runEvalRepeated({ ...evalOpts }, plan.runs);
         rep.perRun.forEach((r, i) => writeEval(join(caseOut, `run-${i + 1}`), r));
         writeFileSync(join(caseOut, 'variance.json'), JSON.stringify(rep, null, 2));
+        circuitBroken = rep.perRun.some((r) => r.circuitBroken);
         const mean = (sel: (r: (typeof rep.perRun)[number]) => number) => rep.perRun.reduce((a, r) => a + sel(r), 0) / rep.perRun.length;
         const meanRound = (sel: (r: (typeof rep.perRun)[number]) => number) => Math.round(mean(sel));
         row = {
           id: c.id,
           name: c.name,
           status: 'ok',
+          ...(circuitBroken ? { error: `circuit breaker tripped in ${rep.perRun.length}/${plan.runs} run(s) — numbers are partial` } : {}),
           ranOk: meanRound((r) => r.ranOk),
           caseCount: rep.perRun[0]?.caseCount,
           runs: rep.runs,
@@ -178,10 +188,25 @@ export async function runBaselineSweep(configs: BaselineConfig[], opts: SweepOpt
             ` · FP/KLOC ${row.fpPerKloc!.toFixed(3)} · ${Math.round(row.meanMcpCalls!)} MCP/case · ${Math.round(row.meanTokens!)} tok/case`,
         );
       }
+      if (circuitBroken) {
+        circuitBrokenAt = c.id;
+        console.log(
+          `\n⛔ ${c.id}: circuit breaker tripped — provider looks dead/exhausted. ` +
+            `Stopping the sweep here instead of burning through the remaining configs. ` +
+            `Re-run the SAME command with --resume once fixed.\n`,
+        );
+        break;
+      }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       rows.push({ id: c.id, name: c.name, status: 'error', error: msg });
       console.log(`── ${c.id} ${c.name}: ERROR ${msg}`);
+    }
+  }
+
+  if (circuitBrokenAt) {
+    for (const c of configs.slice(rows.length)) {
+      rows.push({ id: c.id, name: c.name, status: 'skipped', skipReason: `sweep stopped: circuit breaker tripped in ${circuitBrokenAt}` });
     }
   }
 

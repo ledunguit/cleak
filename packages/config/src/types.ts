@@ -112,6 +112,10 @@ export interface RunConfig {
   evalMaxCaseMs: number;
   /** Soft $ cap per eval case (checked at turn granularity). 0/undefined = disabled. */
   evalMaxCaseCostUsd: number;
+  /** Circuit breaker: abort the rest of the run after this many consecutive
+   * per-case `error` results (e.g. provider quota exhausted — every case would
+   * otherwise burn its retries and fail the same way). 0 = disabled. */
+  evalMaxConsecutiveErrors: number;
   /** User-supplied $/1M-token price table, keyed by exact model ID string
    * (must match `llm.model`). No baked-in defaults — filled in by the user via
    * `cleak config set pricing.<modelId>.inputPerMillion <price>`. */

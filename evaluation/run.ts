@@ -37,6 +37,7 @@ function toEvalOptions(plan: ResolvedPlan): Omit<EvalOptions, 'outDir'> {
     provider: plan.provider,
     maxCaseMs: plan.maxCaseMs,
     maxCaseCostUsd: plan.maxCaseCostUsd,
+    maxConsecutiveErrors: plan.maxConsecutiveErrors,
   };
 }
 
@@ -63,6 +64,7 @@ export function printResolvedPlan(plan: ResolvedPlan): void {
   console.log(`  staticTools: ${plan.staticTools ?? 'default'}`);
   console.log(`  maxCaseMs: ${plan.maxCaseMs ?? 'off (config default)'}`);
   console.log(`  maxCaseCostUsd: ${plan.maxCaseCostUsd ?? 'off (config default)'}`);
+  console.log(`  maxConsecutiveErrors: ${plan.maxConsecutiveErrors ?? 'default (config: eval.maxConsecutiveErrors)'}`);
   console.log(`  allowUnvalidated: ${plan.allowUnvalidated ?? false}`);
   console.log(`  outDir: ${plan.outDir}`);
   console.log(`  verbose: ${plan.verbose}`);

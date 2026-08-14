@@ -111,6 +111,8 @@ export const CleakConfigSchema = z
         maxCaseMs: zNum,
         /** Soft $ cap per case (checked at turn granularity, not instant). 0 = disabled. */
         maxCaseCostUsd: zNum,
+        /** Abort the run after this many consecutive per-case errors. 0 = disabled. */
+        maxConsecutiveErrors: zNum,
       })
       .partial(),
     // User-supplied $/1M-token price table, keyed by exact model ID — no

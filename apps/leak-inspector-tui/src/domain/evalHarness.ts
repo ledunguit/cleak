@@ -118,6 +118,15 @@ export interface EvalOptions {
    * no cap. Only enforceable when pricing is configured for the model (see
    * `computeCostUsd`) — silently a no-op otherwise, same as cost reporting today. */
   maxCaseCostUsd?: number;
+  /** Circuit breaker: abort the rest of THIS run after this many consecutive
+   * per-case `error` results (real failures — not `skipped`/`budget_exceeded`,
+   * which don't necessarily indicate a dead provider). Overrides `cleak config`'s
+   * `eval.maxConsecutiveErrors`; 0 = disabled. Cases already in flight when the
+   * threshold trips are cut short and marked `circuit_broken`; not-yet-started
+   * ones skip immediately with the same status. `EvalResult.circuitBroken` lets
+   * callers (`runEvalRepeated`, the baseline sweep) stop early too instead of
+   * grinding through a corpus against an exhausted/dead provider. */
+  maxConsecutiveErrors?: number;
   /** Cancel the run: in-flight cases are aborted, not-yet-started ones are skipped. */
   signal?: AbortSignal;
   onProgress?: (done: number, total: number, id: string) => void;
@@ -154,6 +163,7 @@ const EvalOptionsSchema = z.object({
   provider: z.any().optional(),
   maxCaseMs: z.number().nonnegative().optional(),
   maxCaseCostUsd: z.number().nonnegative().optional(),
+  maxConsecutiveErrors: z.number().nonnegative().optional(),
   signal: z.any().optional(),
   onProgress: z.function().optional(),
   onCaseStart: z.function().optional(),
@@ -172,8 +182,11 @@ export interface CaseRow {
   functionalVariant?: string;
   /** `budget_exceeded`: the case's own `maxCaseMs`/`maxCaseCostUsd` cap fired — distinct
    * from `error` (a real failure) and `skipped` (run-level cancel) since real cost was
-   * spent and partial evidence may exist; see `error` for how much/what cap. */
-  status: 'ok' | 'error' | 'skipped' | 'budget_exceeded';
+   * spent and partial evidence may exist; see `error` for how much/what cap.
+   * `circuit_broken`: the run-wide consecutive-error breaker tripped (see
+   * `maxConsecutiveErrors`) — this case was cut short or never started because of
+   * OTHER cases' failures, not its own. */
+  status: 'ok' | 'error' | 'skipped' | 'budget_exceeded' | 'circuit_broken';
   tp: number;
   fp: number;
   fn: number;
@@ -208,6 +221,12 @@ export interface EvalResult {
   provenance: EvalProvenance;
   caseCount: number;
   ranOk: number;
+  /** True when the consecutive-error circuit breaker tripped during this run
+   * (see `EvalOptions.maxConsecutiveErrors`) — the provider looked systemically
+   * dead/exhausted rather than the corpus genuinely containing hard cases.
+   * `runEvalRepeated` and the baseline sweep check this to stop early instead
+   * of repeating/continuing against a still-broken provider. */
+  circuitBroken?: boolean;
   overall: Metrics;
   byFlowVariant: Record<string, Metrics>;
   byFunctionalVariant: Record<string, Metrics>;
@@ -502,6 +521,26 @@ async function scoreCases(
   const evalCfg = loadConfig({ provider: opts.provider });
   const maxCaseMs = opts.maxCaseMs ?? evalCfg.evalMaxCaseMs;
   const maxCaseCostUsd = opts.maxCaseCostUsd ?? evalCfg.evalMaxCaseCostUsd;
+  const maxConsecutiveErrors = opts.maxConsecutiveErrors ?? evalCfg.evalMaxConsecutiveErrors;
+  // Circuit breaker: tripped once `maxConsecutiveErrors` real `error` results land
+  // back-to-back (reset by any `ok`). `breaker` is merged into the run-wide signal so
+  // every existing signal.aborted check (early-skip, in-flight case cancellation)
+  // picks it up for free — `circuitTripped` only exists to tell a breaker-triggered
+  // abort apart from a caller-initiated one when labeling a case's final status.
+  const breaker = new AbortController();
+  const runSignal = mergeSignals(opts.signal, breaker.signal);
+  let consecutiveErrors = 0;
+  let circuitTripped = false;
+  const tripBreaker = (atCaseId: string) => {
+    if (circuitTripped) return;
+    circuitTripped = true;
+    breaker.abort();
+    process.stderr.write(
+      `\n⛔ circuit breaker: ${consecutiveErrors} consecutive case errors (last: ${atCaseId}) — ` +
+        `provider looks dead/exhausted. Aborting remaining cases in this run. ` +
+        `Re-run with --resume once fixed to pick up where this left off.\n`,
+    );
+  };
   // Only needed (and only loaded) for a real-time cost cap; report-time cost in
   // aggregateResults() loads pricing separately and is unaffected either way.
   const pricing = maxCaseCostUsd > 0 && opts.mode === 'llm_assisted' ? evalCfg.pricing : undefined;
@@ -555,6 +594,14 @@ async function scoreCases(
         /* fall through to re-run */
       }
     }
+    // Circuit breaker already tripped by an earlier/concurrent case → skip it,
+    // labeled distinctly from a caller-initiated cancel (see CaseRow.status doc).
+    if (breaker.signal.aborted) {
+      const result: CachedCase = { id: c.id, samples: [], row: { ...skippedRow(c), status: 'circuit_broken' }, findings: [] };
+      emitResult(c, result);
+      onProgress?.(++done, cases.length, `${c.id} (circuit breaker)`);
+      return result;
+    }
     // Cancelled before this case got a worker → skip it.
     if (opts.signal?.aborted) {
       const result: CachedCase = { id: c.id, samples: [], row: skippedRow(c), findings: [] };
@@ -597,7 +644,7 @@ async function scoreCases(
         staticUrl: opts.staticUrl,
         dynamicUrl: opts.dynamicUrl,
         quiet: true,
-        signal: mergeSignals(opts.signal, caseController.signal),
+        signal: mergeSignals(runSignal, caseController.signal),
         onUsageDelta,
         ...(opts.strategy ? { strategy: opts.strategy } : {}),
         ...(opts.enrich !== undefined ? { enrich: opts.enrich } : {}),
@@ -663,24 +710,35 @@ async function scoreCases(
       writeFileSync(cachePath, JSON.stringify(result));
       emitResult(c, result);
       onProgress?.(++done, cases.length, c.id);
+      consecutiveErrors = 0;
       return result;
     } catch (err: unknown) {
       // A case interrupted by cancel counts as skipped (not a real error); a case
       // cut off by its OWN budget cap (not a run-level cancel) is distinct — real
-      // cost was spent, so report it instead of a misleading 0. Neither is cached,
-      // so a later --resume re-runs the case.
-      const budgetExceeded = caseController.signal.aborted && !opts.signal?.aborted;
+      // cost was spent, so report it instead of a misleading 0. A case cut short by
+      // the circuit breaker (this run's OR an in-flight sibling's failures, not this
+      // case's own merits) is distinct again. None of the three are cached, so a
+      // later --resume re-runs the case.
+      const budgetExceeded = caseController.signal.aborted && !runSignal.aborted;
       const msg = err instanceof Error ? err.message : String(err);
-      const aborted = !budgetExceeded && (opts.signal?.aborted || (err instanceof Error && err.name === 'AbortError'));
+      const circuitBrokenAbort = !budgetExceeded && breaker.signal.aborted;
+      const aborted = !budgetExceeded && !circuitBrokenAbort && (opts.signal?.aborted || (err instanceof Error && err.name === 'AbortError'));
       const partialMcpCalls = err instanceof Error ? (err as Error & { partialMcpCalls?: number }).partialMcpCalls ?? 0 : 0;
       const spentMs = Date.now() - started;
       const spentCostUsd = budgetExceeded ? computeCostUsd(caseUsage.inputTokens, caseUsage.outputTokens, evalCfg.llm.model, pricing).costUsd : undefined;
+      const status: CaseRow['status'] = budgetExceeded
+        ? 'budget_exceeded'
+        : circuitBrokenAbort
+          ? 'circuit_broken'
+          : aborted
+            ? 'skipped'
+            : 'error';
       const row: CaseRow = {
         id: c.id,
         cwe: c.cwe,
         flowVariant: c.flowVariant,
         functionalVariant: c.functionalVariant,
-        status: budgetExceeded ? 'budget_exceeded' : aborted ? 'skipped' : 'error',
+        status,
         tp: 0,
         fp: 0,
         fn: 0,
@@ -702,13 +760,21 @@ async function scoreCases(
                 ` vs cap ${maxCaseMs}ms` +
                 (maxCaseCostUsd > 0 ? `/$${maxCaseCostUsd}` : ''),
             }
-          : aborted
-            ? {}
-            : { error: msg }),
+          : circuitBrokenAbort
+            ? { error: 'circuit breaker: interrupted mid-flight by another case tripping the run' }
+            : aborted
+              ? {}
+              : { error: msg }),
       };
       const result: CachedCase = { id: c.id, samples: [], row, findings: [] };
       emitResult(c, result);
-      onProgress?.(++done, cases.length, `${c.id} (${budgetExceeded ? 'budget exceeded' : aborted ? 'skipped' : 'error'})`);
+      onProgress?.(++done, cases.length, `${c.id} (${status})`);
+      // Only a genuine `error` (this case's own failure, not budget/cancel/breaker)
+      // counts toward the breaker — those are the ones a dead provider produces.
+      if (status === 'error') {
+        consecutiveErrors++;
+        if (maxConsecutiveErrors > 0 && consecutiveErrors >= maxConsecutiveErrors) tripBreaker(c.id);
+      }
       return result;
     } finally {
       clearTimeout(caseTimer);
@@ -790,6 +856,7 @@ function aggregateResults(cached: CachedCase[], cases: LabeledCase[], opts: Eval
     provenance,
     caseCount: cases.length,
     ranOk: okRows.length,
+    circuitBroken: rows.some((r) => r.status === 'circuit_broken') || undefined,
     overall: computeMetrics(cm),
     byFlowVariant: metricsByKey(byFlow),
     byFunctionalVariant: metricsByKey(byFunc),
@@ -864,6 +931,10 @@ export async function runEvalRepeated(opts: EvalOptions, runs: number): Promise<
     const result = await runEval({ ...opts, outDir: join(opts.outDir, `run-${k + 1}`), runs: n });
     perRun.push(result);
     opts.onProgress?.(k + 1, n, `run ${k + 1}/${n}`);
+    // Each run gets its own circuit breaker (fresh AbortController per runEval
+    // call) — a trip doesn't carry over automatically, so check explicitly here
+    // to stop repeating against a provider that just proved itself dead/exhausted.
+    if (result.circuitBroken) break;
   }
   const pick = (sel: (m: Metrics) => number) => summarizeStat(perRun.map((r) => sel(r.overall)));
   return {

@@ -31,5 +31,6 @@ export interface ResolvedPlan {
   provider?: Provider;
   maxCaseMs?: number;
   maxCaseCostUsd?: number;
+  maxConsecutiveErrors?: number;
   verbose: boolean;
 }

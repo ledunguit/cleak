@@ -547,6 +547,115 @@ describe('runEval — per-case budget cap (maxCaseMs)', () => {
   });
 });
 
+describe('runEval — circuit breaker (maxConsecutiveErrors)', () => {
+  function setupCorpus(n: number): string {
+    const tmp = mkdtempSync(join(tmpdir(), 'runEval-breaker-'));
+    writeFileSync(
+      join(tmp, 'corpus_manifest.json'),
+      JSON.stringify({
+        meta: { name: 'test-corpus', version: '1' },
+        cases: Array.from({ length: n }, (_, i) => ({
+          id: `case-${i}`,
+          repo_path: '.',
+          build_command: 'make',
+          cwe: 'CWE-401',
+          flaws: [{ function: 'leaky' }],
+          clean: [],
+        })),
+        allocators: [],
+        deallocators: [],
+      }),
+    );
+    writeFileSync(join(tmp, 'main.c'), 'int leaky() { return 0; }\n');
+    return tmp;
+  }
+
+  test('trips after N consecutive errors, skips the rest as circuit_broken, does not call runHeadless for them', async () => {
+    const tmp = setupCorpus(6);
+    mockRunHeadless.mockClear();
+    mockRunHeadless.mockImplementation(() => {
+      throw new Error('simulated dead provider (e.g. quota exhausted)');
+    });
+    const { runEval } = await import('../../src/domain/evalHarness');
+    try {
+      const result = await runEval({
+        corpusDir: tmp,
+        mode: 'no_llm',
+        dynamic: 'off',
+        outDir: join(tmp, 'out'),
+        allowUnvalidated: true,
+        concurrency: 1, // deterministic ordering for the "consecutive" assertion
+        maxConsecutiveErrors: 3,
+      });
+      expect(result.circuitBroken).toBe(true);
+      expect(result.rows).toHaveLength(6);
+      expect(result.rows.slice(0, 3).map((r) => r.status)).toEqual(['error', 'error', 'error']);
+      expect(result.rows.slice(3).map((r) => r.status)).toEqual(['circuit_broken', 'circuit_broken', 'circuit_broken']);
+      // Only the 3 cases that actually tripped the breaker should have been attempted.
+      expect(mockRunHeadless).toHaveBeenCalledTimes(3);
+    } finally {
+      rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
+  test('an ok case resets the consecutive-error count — breaker never trips', async () => {
+    const tmp = setupCorpus(6);
+    const scanOut = mkdtempSync(join(tmpdir(), 'scanOut-breaker-'));
+    writeFileSync(join(scanOut, 'snapshot.json'), JSON.stringify({ findings: [] }));
+    mockRunHeadless.mockClear();
+    let call = 0;
+    mockRunHeadless.mockImplementation(() => {
+      call++;
+      // error, error, ok, error, error, ok — never 3-in-a-row.
+      if (call % 3 === 0) return { dir: scanOut, scanId: 'mock', investigation: { usage: { inputTokens: 0, outputTokens: 0 } }, mcpCalls: 0, usage: { inputTokens: 0, outputTokens: 0 } };
+      throw new Error('transient failure');
+    });
+    const { runEval } = await import('../../src/domain/evalHarness');
+    try {
+      const result = await runEval({
+        corpusDir: tmp,
+        mode: 'no_llm',
+        dynamic: 'off',
+        outDir: join(tmp, 'out'),
+        allowUnvalidated: true,
+        concurrency: 1,
+        maxConsecutiveErrors: 3,
+      });
+      expect(result.circuitBroken).toBeUndefined();
+      expect(mockRunHeadless).toHaveBeenCalledTimes(6);
+      expect(result.rows.map((r) => r.status)).toEqual(['error', 'error', 'ok', 'error', 'error', 'ok']);
+    } finally {
+      rmSync(tmp, { recursive: true, force: true });
+      rmSync(scanOut, { recursive: true, force: true });
+    }
+  });
+
+  test('maxConsecutiveErrors=0 disables the breaker — every case is attempted even if all fail', async () => {
+    const tmp = setupCorpus(5);
+    mockRunHeadless.mockClear();
+    mockRunHeadless.mockImplementation(() => {
+      throw new Error('always fails');
+    });
+    const { runEval } = await import('../../src/domain/evalHarness');
+    try {
+      const result = await runEval({
+        corpusDir: tmp,
+        mode: 'no_llm',
+        dynamic: 'off',
+        outDir: join(tmp, 'out'),
+        allowUnvalidated: true,
+        concurrency: 1,
+        maxConsecutiveErrors: 0,
+      });
+      expect(result.circuitBroken).toBeUndefined();
+      expect(mockRunHeadless).toHaveBeenCalledTimes(5);
+      expect(result.rows.every((r) => r.status === 'error')).toBe(true);
+    } finally {
+      rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+});
+
 // ── runEvalRepeated (mocked aggregation) ───────────────────────────────
 
 describe('runEvalRepeated', () => {
@@ -641,6 +750,41 @@ describe('runEvalRepeated', () => {
 
       // Provenance carried from first run
       expect(result.provenance).toBeDefined();
+    } finally {
+      rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
+  test('a circuit-broken run stops further repeats instead of repeating against a dead provider', async () => {
+    const tmp = mkdtempSync(join(tmpdir(), 'repeated-breaker-'));
+    try {
+      writeFileSync(
+        join(tmp, 'corpus_manifest.json'),
+        JSON.stringify({
+          meta: { name: 'test-corpus', version: '1' },
+          cases: Array.from({ length: 3 }, (_, i) => ({ id: `tc-${i}`, repo_path: '.', flaws: [{ function: 'leaky' }], clean: [] })),
+          allocators: [],
+          deallocators: [],
+        }),
+      );
+      writeFileSync(join(tmp, 'main.c'), 'int leaky() { return 0; }\n');
+
+      mockRunHeadless.mockClear();
+      mockRunHeadless.mockImplementation(() => {
+        throw new Error('simulated dead provider');
+      });
+
+      const { runEvalRepeated } = await import('../../src/domain/evalHarness');
+      const result = await runEvalRepeated(
+        { corpusDir: tmp, mode: 'no_llm', dynamic: 'off', outDir: join(tmp, 'out'), allowUnvalidated: true, concurrency: 1, maxConsecutiveErrors: 2 },
+        3, // asked for 3 runs
+      );
+
+      // Run 1 alone trips the breaker (2 consecutive errors, 3rd case skipped) —
+      // runs 2 and 3 must never happen.
+      expect(result.runs).toBe(1);
+      expect(result.perRun).toHaveLength(1);
+      expect(result.perRun[0].circuitBroken).toBe(true);
     } finally {
       rmSync(tmp, { recursive: true, force: true });
     }
