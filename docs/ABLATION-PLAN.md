@@ -2,7 +2,7 @@
 
 > Mục tiêu: biến mỗi thành phần kiến trúc thành **đóng góp đo được**, chạy được bằng cách đổi
 > config YAML — thay vì chỉ so với paper ngoài. External comparison thu gọn về **FuzzingBrain V2**
-> (so kiến trúc). Thiết kế baseline gốc: [BASELINE_PROPOSED.md](./BASELINE_PROPOSED.md).
+> (so kiến trúc). Thiết kế baseline gốc: [BASELINE-B7-FULL-ADAPTIVE.md](./BASELINE-B7-FULL-ADAPTIVE.md).
 
 ## 0. Khung thực nghiệm (chốt)
 
@@ -53,7 +53,7 @@
 | B6 | LLM + all (no planner/sel) | ✅ | ✅ | ❌ | ❌ | ✅ |
 | **B6a** | **+ planner only** | ✅ | ✅ | ✅ | ❌ | ✅ |
 | **B6b** | **+ tool_selector only** | ✅ | ✅ | ❌ | ✅ | ✅ |
-| B7 | Proposed (full adaptive) | ✅ | ✅ | ✅ | ✅ | ✅ |
+| B7 | Full adaptive | ✅ | ✅ | ✅ | ✅ | ✅ |
 
 ---
 

@@ -149,6 +149,7 @@ export async function runBaselineSweep(configs: BaselineConfig[], opts: SweepOpt
           meanMcpCalls: r.cost.meanMcpCalls,
           meanTokens: r.cost.meanTokens,
           totalTokens: r.cost.totalTokens,
+          totalCostUsd: r.cost.priced ? r.cost.costUsd : undefined,
         };
       } else {
         const rep = await runEvalRepeated({ ...evalOpts }, plan.runs);
@@ -179,6 +180,7 @@ export async function runBaselineSweep(configs: BaselineConfig[], opts: SweepOpt
           meanMcpCalls: mean((r) => r.cost.meanMcpCalls),
           meanTokens: mean((r) => r.cost.meanTokens),
           totalTokens: rep.perRun.reduce((a, r) => a + r.cost.totalTokens, 0),
+          totalCostUsd: rep.perRun[0]?.cost.priced ? rep.perRun.reduce((a, r) => a + (r.cost.costUsd ?? 0), 0) : undefined,
         };
       }
       rows.push(row);

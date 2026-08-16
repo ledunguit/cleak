@@ -44,6 +44,11 @@ export interface BaselineSweepRow {
   /** Total LLM tokens across all cases (the enterprise cost criterion — peripheral to
    * detection accuracy but reported alongside it). */
   totalTokens?: number;
+  /** Total USD cost across all cases/runs — `undefined` when the model has no price
+   * configured (see `computeCostUsd`'s `priced` contract), NOT when cost is $0. A
+   * `no_llm` baseline reports 0 tokens so `totalTokens` is 0, but `totalCostUsd` stays
+   * `undefined` unless a price entry exists — same "unpriced ≠ free" distinction. */
+  totalCostUsd?: number;
 }
 
 export interface SweepMeta {
@@ -56,6 +61,7 @@ export interface SweepMeta {
 const pct = (x?: number) => (x === undefined ? '—' : `${(x * 100).toFixed(1)}%`);
 const f3 = (x?: number) => (x === undefined ? '—' : x.toFixed(3));
 const n0 = (x?: number) => (x === undefined ? '—' : String(Math.round(x)));
+const usd = (x?: number) => (x === undefined ? '—' : `$${x.toFixed(2)}`);
 
 /** F1 cell — `mean ± std` for multi-run configs, plain for single-run. */
 function f1Cell(r: BaselineSweepRow): string {
@@ -88,21 +94,25 @@ export function renderSweepMarkdown(rows: BaselineSweepRow[], meta: SweepMeta): 
 function tokenCostSection(rows: BaselineSweepRow[]): string[] {
   const ok = rows.filter((r) => r.status === 'ok' && (r.totalTokens ?? 0) > 0);
   if (!ok.length) return [];
-  const grand = ok.reduce((a, r) => a + (r.totalTokens ?? 0), 0);
+  const grandTokens = ok.reduce((a, r) => a + (r.totalTokens ?? 0), 0);
+  // Priced rows only — an unpriced model's $0 would understate the grand total as
+  // if it were genuinely free (see totalCostUsd's doc comment).
+  const priced = ok.filter((r) => r.totalCostUsd !== undefined);
+  const grandUsd = priced.length ? priced.reduce((a, r) => a + r.totalCostUsd!, 0) : undefined;
   return [
     '## Token cost (LLM)',
     '',
-    '| ID | Baseline | total tokens | tokens/case |',
-    '|---|---|--:|--:|',
-    ...ok.map((r) => `| ${r.id} | ${r.name} | ${n0(r.totalTokens)} | ${n0(r.meanTokens)} |`),
-    `| **Σ** | **sweep total** | **${n0(grand)}** | — |`,
+    '| ID | Baseline | total tokens | tokens/case | $ cost |',
+    '|---|---|--:|--:|--:|',
+    ...ok.map((r) => `| ${r.id} | ${r.name} | ${n0(r.totalTokens)} | ${n0(r.meanTokens)} | ${usd(r.totalCostUsd)} |`),
+    `| **Σ** | **sweep total** | **${n0(grandTokens)}** | — | **${usd(grandUsd)}**${priced.length < ok.length ? ' _(partial — some models unpriced)_' : ''} |`,
     '',
   ];
 }
 
 export function renderSweepCsv(rows: BaselineSweepRow[]): string {
   const header =
-    'id,name,status,ranOk,caseCount,runs,tp,fp,fn,tn,precision,recall,f1,f1Std,fpPerKloc,ece,meanDurationMs,meanMcpCalls,meanTokens,totalTokens';
+    'id,name,status,ranOk,caseCount,runs,tp,fp,fn,tn,precision,recall,f1,f1Std,fpPerKloc,ece,meanDurationMs,meanMcpCalls,meanTokens,totalTokens,totalCostUsd';
   const cell = (x: number | undefined) => (x === undefined ? '' : String(x));
   const lines = rows.map((r) =>
     [
@@ -126,6 +136,7 @@ export function renderSweepCsv(rows: BaselineSweepRow[]): string {
       cell(r.meanMcpCalls),
       cell(r.meanTokens),
       cell(r.totalTokens),
+      cell(r.totalCostUsd),
     ].join(','),
   );
   return [header, ...lines].join('\n') + '\n';
@@ -136,15 +147,15 @@ export function renderSweepLatex(rows: BaselineSweepRow[], meta: SweepMeta): str
   const ok = rows.filter((r) => r.status === 'ok');
   const body = ok.map(
     (r) =>
-      `${r.id} & ${esc(r.name)} & ${n0(r.tp)} & ${n0(r.fp)} & ${n0(r.fn)} & ${n0(r.tn)} & ${pct(r.precision)} & ${pct(r.recall)} & ${f1Cell(r)} & ${f3(r.fpPerKloc)} & ${f3(r.ece)} & ${n0(r.meanMcpCalls)} & ${n0(r.meanTokens)} \\\\`,
+      `${r.id} & ${esc(r.name)} & ${n0(r.tp)} & ${n0(r.fp)} & ${n0(r.fn)} & ${n0(r.tn)} & ${pct(r.precision)} & ${pct(r.recall)} & ${f1Cell(r)} & ${f3(r.fpPerKloc)} & ${f3(r.ece)} & ${n0(r.meanMcpCalls)} & ${n0(r.meanTokens)} & ${usd(r.totalCostUsd)} \\\\`,
   );
   return [
     '\\begin{table}[t]',
     '\\centering',
     `\\caption{Baseline ablation on ${esc(meta.corpus)}.}`,
-    '\\begin{tabular}{llrrrrrrrrrr}',
+    '\\begin{tabular}{llrrrrrrrrrrr}',
     '\\toprule',
-    'ID & Baseline & TP & FP & FN & TN & P & R & F1 & FP/KLOC & ECE & MCP/case & tok/case \\\\',
+    'ID & Baseline & TP & FP & FN & TN & P & R & F1 & FP/KLOC & ECE & MCP/case & tok/case & \\$ cost \\\\',
     '\\midrule',
     ...body,
     '\\bottomrule',

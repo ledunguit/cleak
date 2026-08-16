@@ -5,7 +5,7 @@
  * `capabilityResolver.ts` maps these academic names onto the engine's existing
  * run knobs, and `scripts/run-baselines.ts` sweeps them on a corpus.
  *
- * The flags are the ablation axes from docs/BASELINE_PROPOSED.md. planner and
+ * The flags are the ablation axes from docs/BASELINE-B7-FULL-ADAPTIVE.md. planner and
  * tool_selector are INDEPENDENT axes (so B6a/B6b can isolate each contribution),
  * which is why both can be toggled separately even though the original design
  * only flipped them together at B7.

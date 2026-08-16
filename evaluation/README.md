@@ -50,7 +50,7 @@ gate instead, same as `evaluate-corpus.ts`.
 ## Baseline ablation configs (`configs/baselines/*.yaml`)
 
 The same 9 declarative capability profiles (B1..B7 — static-only, dynamic-only, the full
-proposed adaptive orchestrator, etc.) that `scripts/run-baselines.ts` sweeps are runnable
+adaptive orchestrator, etc.) that `scripts/run-baselines.ts` sweeps are runnable
 here too, with the wizard's corpus picker + auto-ingest on top:
 
 ```bash
@@ -95,16 +95,45 @@ Same artifacts as `evaluate-corpus.ts` (`writeEval`): JSON/Markdown/HTML/snapsho
 `<outDir>`. `--runs > 1` additionally writes `variance.json`/`variance.md` and one
 `run-<n>/` subdirectory per repetition.
 
+## Inspecting a sweep (`inspect.ts`)
+
+Report the full metrics table for a `--baseline`/`--all-baselines` sweep output
+directory **without re-running anything** — reads whatever is on disk right now, so
+it's safe to point at a directory another process is still writing to (e.g. checking
+progress over SSH mid-sweep):
+
+```bash
+pnpm exec tsx evaluation/inspect.ts results/baseline-sweep-<timestamp>
+pnpm exec tsx evaluation/inspect.ts results/baseline-sweep-<timestamp> --baseline B1,B6b,B7
+```
+
+Finished baselines (single-run: `<id>/metrics.json`; multi-run: `<id>/variance.json`,
+which — like `runEvalRepeated` itself — only exists once **every** repeat run has
+completed) render as the exact `baseline-sweep.md` table via the real
+`renderSweepMarkdown`. A baseline still mid-run (only `cases/*.json` cache files on
+disk, no `metrics.json`/`variance.json` yet — this is also multi-run's state for
+runs that finished caching all their cases but haven't been through the
+end-of-group aggregation in `runBaselineSweep`) gets a live per-run progress line
+instead: case count so far, any non-`ok` statuses, the judge `llm`/`heuristic`
+ratio, running FP/KLOC, and a live F1 estimate. That judge ratio is the same
+integrity signal `judgePathDistribution` reports at the end of a run — watch it
+against the OTHER runs of the same baseline; a sudden drop (e.g. ~40% → ~20%) with
+no visible errors is the silent LLM-judge-fallback-to-heuristic pattern (see
+`llmJudge.ts`'s `judgeBundleWithLlm`), not necessarily a harder sample of cases.
+
+Core logic lives in `inspectSweep.ts` (`aggregateCaseCache`, `inspectBaselineDir`) —
+pure functions over a directory path, unit-tested without needing a real eval run.
+
 ## Tests
 
 ```bash
 pnpm exec vitest run evaluation/tests
 ```
 
-Pure-logic unit tests only (`corpusCatalog`, `flags`, `providerSetup`, `baselines`) —
-`cli.ts`/`run.ts`/`wizard.ts`/`ingestRunners.ts` are integration-style, verified by hand
-per the smoke tests below (matching the existing bar: no `scripts/*.ts` entrypoint has its
-own test wrapper either, only pure helpers do).
+Pure-logic unit tests only (`corpusCatalog`, `flags`, `providerSetup`, `baselines`,
+`inspectSweep`) — `cli.ts`/`run.ts`/`wizard.ts`/`ingestRunners.ts`/`inspect.ts` are
+integration-style, verified by hand per the smoke tests below (matching the existing
+bar: no `scripts/*.ts` entrypoint has its own test wrapper either, only pure helpers do).
 
 ### Manual smoke tests
 

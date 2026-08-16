@@ -213,7 +213,7 @@ This baseline removes adaptive planning and adaptive tool selection.
 
 ---
 
-# Baseline 7 – Proposed Adaptive LLM Orchestrator
+# Baseline 7 – Full Adaptive LLM Orchestrator
 
 ### Configuration
 
@@ -255,7 +255,8 @@ Source Code
 
 ### Purpose
 
-Evaluate the proposed adaptive orchestration framework that:
+Evaluate the fully adaptive orchestration configuration — every axis on at once —
+that:
 
 - Generates hypotheses from source code.
 - Dynamically selects analysis tools.
@@ -275,4 +276,4 @@ Evaluate the proposed adaptive orchestration framework that:
 | Baseline 4 – LLM + Static | ❌ | ❌ | ✅ | ❌ | ✅ |
 | Baseline 5 – LLM + Dynamic | ❌ | ❌ | ❌ | ✅ | ✅ |
 | Baseline 6 – LLM + All Tools | ❌ | ❌ | ✅ | ✅ | ✅ |
-| Baseline 7 – Proposed Method | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Baseline 7 – Full Adaptive | ✅ | ✅ | ✅ | ✅ | ✅ |

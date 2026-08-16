@@ -129,7 +129,7 @@ isolate each contribution (the original design only flipped them together at B7)
 | B6 | LLM + all (no planner/sel) | ✅ | ✅ | ❌ | ❌ | ✅ |
 | B6a | + planner only (isolation) | ✅ | ✅ | ✅ | ❌ | ✅ |
 | B6b | + tool_selector only (isolation) | ✅ | ✅ | ❌ | ✅ | ✅ |
-| B7 | Proposed (full adaptive) | ✅ | ✅ | ✅ | ✅ | ✅ |
+| B7 | Full adaptive | ✅ | ✅ | ✅ | ✅ | ✅ |
 
 ```bash
 # Representative sweep: stratify the sample evenly across families (§3c), real LLM gateway.
@@ -171,7 +171,7 @@ pnpm exec tsx scripts/run-baselines.ts --only B1,B3 --dry-run                   
 | B6 | LLM + all (no planner/sel) | 48 | 1 | 5 | 156 | 0.973 | 0.899 | 0.935 | 0.129 | 455,434 |
 | **B6a** | **+ planner only** | 48 | 1 | 5 | 156 | **0.973** | **0.906** | **0.938** | 0.125 | 463,047 |
 | B6b | + tool_selector only | 48 | 2 | 5 | 155 | 0.960 | 0.899 | 0.929 | 0.128 | **4,239,560** |
-| B7 | Proposed (full adaptive) | 48 | 2 | 5 | 155 | 0.960 | 0.899 | 0.929 | 0.130 | **4,115,938** |
+| B7 | Full adaptive | 48 | 2 | 5 | 155 | 0.960 | 0.899 | 0.929 | 0.130 | **4,115,938** |
 
 Σ sweep = **10.6 M tokens** — B6b + B7 (the agentic configs) alone are **8.36 M (79%)**.
 
@@ -202,6 +202,63 @@ Readings (Juliet is still the EASY corpus, see §3a):
 > at n=50, so n=100 is run for the non-agentic configs first. **LAMeD** tests the agentic-tool-selection
 > hypothesis on a HARD corpus. The pre-remediation n=100/n=50 numbers were measured on the defective corpus
 > (~422 C++ cases silently excluded) — discard them.
+
+### 3b-bis. The 9-baseline ablation, re-measured on the FULL validated corpus (n=1658)
+
+> **Full narrative + timeline (bugs, contamination, redos):**
+> [EXPERIMENT-LOG-2026-08-15-wsl2-juliet-sweep.md](EXPERIMENT-LOG-2026-08-15-wsl2-juliet-sweep.md).
+> This subsection reports only the final numbers; do not delete/overwrite §3b
+> above (different sample size AND different model — §3b is n=50 stratified on
+> `mimo/mimo-v2.5-pro`, this is the full n=1658 corpus on `deepseek-v4-flash`;
+> they answer complementary questions — family-balanced component ablation vs.
+> whole-corpus performance, per §Full-corpus caveat in `conference/main.tex`).
+
+**Environment:** WSL2 (Ubuntu 22.04, Ryzen 9, 32 cores), `deepseek-v4-flash` via
+OpenCode Go (`openai-compat`), `--concurrency 16`, commit `5eec8b1`. Every
+fusion-mode baseline (B4–B7) run 3× for mean ± std. **Two of the 27 individual
+runs (B6b/run-2, B7/run-3) were independently discovered contaminated by the
+same silent-LLM-judge-fallback mechanism (see EXPERIMENT-LOG §Timeline items 6
+and 8) and redone before being counted** — this is reported explicitly rather
+than silently, since it is now a confirmed recurring risk for any multi-run
+LLM-assisted sweep, not a one-off.
+
+| ID | Baseline | TP | FP | FN | TN | P | R | F1 | FP/KLOC | ECE | tok/case | $ cost |
+|---|---|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|
+| B1 | Static only | 1433 | 674 | 1145 | 2785 | 0.680 | 0.556 | 0.612 | 1.241 | 0.328 | 0 | — |
+| B2 | Dynamic only | 735 | 0 | 2283 | 0 | **1.000** | 0.244 | 0.392 | 0.000 | 0.034 | 0 | — |
+| B3 | Rule-based ensemble | 1686 | 674 | 892 | 2785 | 0.714 | 0.654 | 0.683 | 1.241 | 0.087 | 0 | — |
+| B4 | LLM + static | 2035 | 470 | 543 | 2989 | 0.812 | 0.789 | 0.801 ± 0.001 | 0.865 | 0.083 | 9,947 | $9.69 |
+| B5 | LLM + dynamic | 735 | 0 | 2282 | 0 | **1.000** | 0.244 | 0.392 ± 0.005 | 0.000 | 0.003 | 303 | $0.26 |
+| B6 | LLM + all (no planner/sel) | 2009 | 74 | 569 | 3390 | 0.964 | 0.779 | 0.862 ± 0.001 | 0.136 | 0.110 | 5,513 | $5.99 |
+| **B6a** | **+ planner only** | **2010** | **72** | **568** | **3392** | **0.965** | **0.780** | **0.863 ± 0.001** | **0.133** | 0.109 | 6,155 | $6.63 |
+| B6b | + tool_selector only | 2017 | 104 | 561 | 3360 | 0.951 | 0.782 | 0.858 ± 0.003 | 0.192 | 0.157 | 30,590 | $26.07 |
+| B7 | Full adaptive | 2004 | 101 | 574 | 3363 | 0.952 | 0.777 | 0.856 ± 0.002 | 0.186 | 0.156 | 32,004 | $27.14 |
+
+Σ sweep = **$75.78** (B1-B3 `no_llm`, unpriced). F1 ranking: **B6a ≈ B6 > B6b ≈
+B7 > B4 > B3 > B1 > B5 ≈ B2**.
+
+Readings (full corpus, N=1658 — larger and family-skewed toward `new`
+allocators vs. the family-balanced §3b, so treat these as complementary, not a
+replacement):
+- **The full-corpus ranking replicates §3b's headline exactly, on a different
+  model and 33× more cases**: the deterministic-recipe configs (B6/B6a) beat
+  the agentic-tool-selection configs (B6b/B7) on both F1 *and* cost — B6a's
+  6,155 tok/case vs B6b/B7's ~31K tok/case (~5× more) for *lower* F1. This is
+  no longer a single-model, single-sample-size artifact.
+- **`planner` alone (B6a) is the best-cost/best-F1 point on this corpus** —
+  matching §3b's n=50 finding. The full-corpus std (±0.001) is tight enough
+  that B6a's edge over B6 (0.863 vs 0.862) is within noise; the real,
+  reproducible separation is B6/B6a **vs** B6b/B7, not among B6/B6a themselves.
+- **Dynamic evidence is again the false-positive suppressor at full-corpus
+  scale**: B4 (LLM+static, no dynamic) FP=470; adding dynamic (B6) drops it to
+  FP=74 at a *higher* F1 — the same effect §3b measured at n=50 (18→1 FP),
+  now confirmed on the full corpus.
+- **This full-corpus sweep is also the first full-corpus (n=1658) measurement
+  WITH dynamic evidence** for every capability configuration — `conference/main.tex`'s
+  current full-corpus table (`tab:progression`) is `llm_assisted` static-only
+  (no dynamic, F1 0.776) specifically because a dynamic-augmented full-corpus
+  run had not yet been performed; this sweep closes that gap (B6a: F1 0.863 on
+  the same 1658-case corpus, with dynamic).
 
 ### 3c. Sampling: stratify, don't take the top-N
 

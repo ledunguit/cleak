@@ -51,14 +51,16 @@ independent samples as the system's central judging contribution. A
 two-tier reproducibility protocol reports bitwise-deterministic results for
 the non-agentic configuration and honest mean$\pm$std / verdict-stability
 statistics for the LLM-assisted configuration, rather than claiming
-determinism the latter cannot have. On the full validated NIST Juliet
-CWE-401 corpus (1{,}658 cases) the best end-to-end configuration reaches
-Precision~77.9\%, Recall~77.3\%, F1~0.776, MCC~0.610. A controlled ablation
-over five orchestration factors on a family-stratified sample ($n{=}100$)
-isolates a deterministic static+dynamic+planner configuration that reaches
-F1~0.932 at zero false positives, while showing that unconstrained
-LLM-driven tool selection is $\sim$9$\times$ more expensive in tokens for no
-accuracy gain. On seven real-world C projects from the peer-reviewed LAMeD
+determinism the latter cannot have. A controlled ablation over five
+orchestration factors, run on the full validated NIST Juliet CWE-401
+corpus (1{,}658 cases, not a sub-sample), isolates a deterministic
+static+dynamic+planner configuration that reaches Precision~96.5\%,
+Recall~78.0\%, F1~0.863, MCC~0.790, while showing that unconstrained
+LLM-driven tool selection is $\sim$4$\times$ more expensive in dollar cost
+for \emph{lower} accuracy. Performance varies substantially by allocator
+family (F1 ranges from 0.991 on \texttt{malloc} to 0.584 on \texttt{strdup}
+sites), a heterogeneity a family-balanced sub-sample would average away. On
+seven real-world C projects from the peer-reviewed LAMeD
 benchmark, the system achieves 100\% precision with recall rising from
 0.159 to 0.273 as cross-function ownership evidence is added, including
 one previously-unreported cJSON leak caught end-to-end. We report all of
@@ -138,11 +140,11 @@ We evaluate CLeak on the NIST Juliet CWE-401 suite (a validated,
 integrity-checked 1{,}658-case subset), on the peer-reviewed LAMeD
 real-world benchmark (41 developer-confirmed leaks across seven C
 projects), and against live re-runs of Clang Static Analyzer and Infer on
-identical scoring. Section~\ref{sec:evaluation} reports both the
-full-corpus system result and a controlled five-factor ablation on a
-family-stratified sample, explicitly labeled as answering two different
-questions, together with a set of results we report as inconclusive or
-partially superseded rather than omit.
+identical scoring. Section~\ref{sec:evaluation} reports a controlled
+five-factor ablation run on the \emph{entire} validated Juliet corpus
+(not a sub-sample), broken down by allocator family to surface where
+performance varies, together with a set of results we report as
+inconclusive or partially superseded rather than omit.
 
 \section{Related Work}
 \label{sec:related}
@@ -652,36 +654,18 @@ comparisons are directional, not a claim of superiority.
 \subsection{Full-corpus result}
 \label{sec:eval-fullcorpus}
 
-Table~\ref{tab:progression} reports the system's best full-corpus result
-to date, alongside the deterministic \texttt{no\_llm} configuration on the
-same corpus for reference.
-
-\begin{table}[htbp]
-\centering
-\caption{Full-corpus (1{,}658-case) Juliet results. The second row is the
-current best end-to-end system result; it uses static evidence, the
-heuristic judge, and the LLM judge, but \textbf{no dynamic stage}, a scope
-limitation we state explicitly since a dynamic-augmented full-corpus run
-has not yet been performed.}
-\label{tab:progression}
-\small
-\begin{tabular}{@{}lcccccc@{}}
-\toprule
-\textbf{Configuration} & \textbf{TP} & \textbf{FP} & \textbf{FN} & \textbf{TN} & \textbf{P/R} & \textbf{F1 / MCC} \\
-\midrule
-\texttt{no\_llm} (static + heuristic) & 1395 & 776 & 1183 & 2683 & 64.3 / 54.1 & 0.587 / 0.327 \\
-\textbf{\texttt{llm\_assisted} (best)} & \textbf{1992} & \textbf{566} & \textbf{586} & \textbf{2895} & \textbf{77.9 / 77.3} & \textbf{0.776 / 0.610} \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-This full-corpus F1 (0.776) is \emph{not} directly comparable to the
-stratified-sample ablation F1 in Section~\ref{sec:eval-ablation}
-(0.932): the full corpus is heavily skewed toward the \texttt{new}
-allocator family ($\sim$588/1{,}658 cases) and includes harder,
-under-represented variants, so the two numbers answer different questions
-(whole-corpus performance vs.\ family-balanced per-component ablation) and
-we report both rather than either alone.
+Unlike an earlier measurement that covered only a family-stratified
+sub-sample, all nine capability configurations below (Section~\ref{sec:eval-ablation})
+were run on the \emph{entire} validated corpus --- 1{,}658 cases, not a
+sample --- with static evidence, dynamic evidence, and the LLM judge all
+enabled where the configuration calls for them. The best end-to-end result
+is the deterministic static+dynamic+planner configuration, B6a: Precision
+96.5\%, Recall 78.0\%, F1~0.863, MCC~0.790 (Table~\ref{tab:ablation}), a
+substantial improvement over the static-only \texttt{no\_llm} baseline
+(F1~0.612, MCC~0.375) it is measured against. Because this is the full
+corpus rather than a family-balanced sample, per-family performance is not
+uniform (Table~\ref{tab:family}); we report the full distribution rather
+than only the aggregate.
 
 \subsection{Capability ablation: five orchestration factors}
 \label{sec:eval-ablation}
@@ -690,54 +674,106 @@ To isolate \emph{which} architectural factor drives system performance,
 we ran nine declarative baseline configurations (B1--B7, with two
 sub-variants of B6) sweeping five independent factors (static evidence,
 dynamic evidence, an LLM planner, agentic tool-selection, and evidence
-fusion) on a family-stratified sample of $n{=}100$ Juliet cases (equal
-representation across all ten functional variants, unlike the
-family-skewed full corpus). Table~\ref{tab:ablation} reports full
-confusion matrices.
+fusion) on the full 1{,}658-case Juliet corpus, each LLM-assisted
+configuration (B4--B7) repeated three times to report mean $\pm$ std.
+Table~\ref{tab:ablation} reports full confusion matrices and real dollar
+cost (at DeepSeek's published per-token rate).
 
 \begin{table}[htbp]
 \centering
-\caption{Nine-baseline capability ablation, Juliet $n{=}100$ stratified.
-B6a is the deterministic static+dynamic+planner configuration (no agentic
-tool selection); B6b/B7 add agentic tool selection at $\sim$9$\times$ the
-token cost for no F1 gain.}
+\caption{Nine-baseline capability ablation, FULL Juliet corpus
+($n{=}1{,}658$, not a sub-sample). B6a is the deterministic
+static+dynamic+planner configuration (no agentic tool selection); B6b/B7
+add agentic tool selection at $\sim$4$\times$ the dollar cost for
+\emph{lower} F1. B4--B7 are the mean of 3 runs; std $\le 0.005$ on F1
+throughout.}
 \label{tab:ablation}
 \resizebox{\textwidth}{!}{%
-\begin{tabular}{@{}llccccccc@{}}
+\begin{tabular}{@{}llccccccc c@{}}
 \toprule
-\textbf{ID} & \textbf{Configuration} & \textbf{TP} & \textbf{FP} & \textbf{FN} & \textbf{TN} & \textbf{P} & \textbf{R} & \textbf{F1} \\
+\textbf{ID} & \textbf{Configuration} & \textbf{TP} & \textbf{FP} & \textbf{FN} & \textbf{TN} & \textbf{P} & \textbf{R} & \textbf{F1} & \textbf{\$ cost} \\
 \midrule
-B1 & Static only & 78 & 22 & 24 & 289 & 0.780 & 0.765 & 0.772 \\
-B2 & Dynamic only & 68 & 0 & 46 & 0 & 1.000 & 0.596 & 0.747 \\
-B3 & Rule-based ensemble (static+dynamic) & 90 & 22 & 12 & 289 & 0.804 & 0.882 & 0.841 \\
-B4 & LLM judge + static & 97 & 41 & 5 & 270 & 0.703 & 0.951 & 0.808 \\
-B5 & LLM judge + dynamic & 67 & 0 & 45 & 0 & 1.000 & 0.598 & 0.749 \\
-B6 & LLM judge + static + dynamic & 86 & 0 & 16 & 311 & 1.000 & 0.843 & 0.915 \\
-\textbf{B6a} & \textbf{+ deterministic planner} & \textbf{89} & \textbf{0} & \textbf{13} & \textbf{311} & \textbf{1.000} & \textbf{0.873} & \textbf{0.932} \\
-B6b & + agentic tool selection & 88 & 2 & 14 & 309 & 0.978 & 0.863 & 0.917 \\
-B7 & Full adaptive (planner + tool selection) & 88 & 2 & 14 & 309 & 0.978 & 0.863 & 0.917 \\
+B1 & Static only & 1433 & 674 & 1145 & 2785 & 0.680 & 0.556 & 0.612 & --- \\
+B2 & Dynamic only & 735 & 0 & 2283 & 0 & 1.000 & 0.244 & 0.392 & --- \\
+B3 & Rule-based ensemble (static+dynamic) & 1686 & 674 & 892 & 2785 & 0.714 & 0.654 & 0.683 & --- \\
+B4 & LLM judge + static & 2035 & 470 & 543 & 2989 & 0.812 & 0.789 & 0.801 & \$9.69 \\
+B5 & LLM judge + dynamic & 735 & 0 & 2282 & 0 & 1.000 & 0.244 & 0.392 & \$0.26 \\
+B6 & LLM judge + static + dynamic & 2009 & 74 & 569 & 3390 & 0.964 & 0.779 & 0.862 & \$5.99 \\
+\textbf{B6a} & \textbf{+ deterministic planner} & \textbf{2010} & \textbf{72} & \textbf{568} & \textbf{3392} & \textbf{0.965} & \textbf{0.780} & \textbf{0.863} & \textbf{\$6.63} \\
+B6b & + agentic tool selection & 2017 & 104 & 561 & 3360 & 0.951 & 0.782 & 0.858 & \$26.07 \\
+B7 & Full adaptive (planner + tool selection) & 2004 & 101 & 574 & 3363 & 0.952 & 0.777 & 0.856 & \$27.14 \\
 \bottomrule
 \end{tabular}}
 \end{table}
 
-Three findings recur consistently across both the $n{=}50$ and $n{=}100$
-stratified sweeps. First, \textbf{dynamic evidence is the dominant
-false-positive suppressor}: adding it to the LLM-judge-plus-static
-configuration (B4$\to$B6) drops false positives from 41 to 0 while
-\emph{raising} F1. Second, the two static-evidence tools
-(\texttt{functionSummary} and \texttt{pathConstraints}) are
-\textbf{synergistic, not additive}: enabling either alone leaves the
+Three findings hold at full-corpus scale. First, \textbf{dynamic evidence
+is the dominant false-positive suppressor}: adding it to the
+LLM-judge-plus-static configuration (B4$\to$B6) drops false positives from
+470 to 74 (an $\sim$85\% reduction) while \emph{raising} F1 from 0.801 to
+0.862. Second, the two static-evidence tools (\texttt{functionSummary} and
+\texttt{pathConstraints}) are \textbf{synergistic, not additive}: a
+separate $n{=}50$ stratified ablation isolating this effect (orthogonal to
+the full-corpus sweep above) shows enabling either alone leaves the
 confusion matrix identical to candidate-scan-only, and only enabling both
-together lifts recall (a separate $n{=}50$ ablation isolating this effect
-measures 0.792$\to$0.943 recall, $+8$ true positives, from adding both
-simultaneously). Third, and most actionable for system design,
-\textbf{unconstrained agentic tool selection is counter-productive on this
-corpus}: B6a, a deterministic recipe using $\sim$463K tokens, matches or
-beats B6b/B7's agentic tool-selection loop at $\sim$4.2M tokens each
-($\sim$9$\times$ the cost) for equal or worse F1. The LLM planner
-chooses well when constrained to \emph{when} to run static or dynamic
-analysis, but adds cost without benefit when also given latitude over
-\emph{which} tool to call next.
+together lifts recall 0.792$\to$0.943 ($+8$ true positives). Third, and
+most actionable for system design, \textbf{unconstrained agentic tool
+selection is counter-productive on this corpus, at full-corpus scale, in
+real dollars}: B6a (6{,}155 tokens/case, \$6.63 total) beats B6b/B7's
+agentic tool-selection loop ($\sim$31K tokens/case, $\sim$4$\times$ the
+dollar cost each) on F1 (0.863 vs.\ 0.858/0.856) \emph{and} on false-positive
+density (FP/KLOC 0.133 vs.\ 0.192/0.186). The LLM planner chooses well
+when constrained to \emph{when} to run static or dynamic analysis, but
+adds cost without benefit --- and slightly \emph{more} noise --- when also
+given latitude over \emph{which} tool to call next.
+
+\textbf{Performance is not uniform across allocator families.}
+Table~\ref{tab:family} breaks B6a's full-corpus result down by Juliet's ten
+functional variants. \texttt{malloc}-family sites (realloc-augmented
+allocations, $n{=}294$) are nearly solved (F1~0.991); \texttt{strdup}-family
+sites ($n{=}348$ sites across 96 test cases) are the weakest (F1~0.584),
+driven by low recall (41.3\%) rather than false positives (precision
+remains 100\%). We traced
+one representative miss (\texttt{CWE401\_Memory\_Leak\_\_strdup\_char\_12},
+flow-variant 12) to a concrete mechanism: the case's true leak is guarded
+by two \emph{independent} randomized branches (one selecting a heap
+allocation via \texttt{strdup} vs.\ a stack allocation via \texttt{alloca},
+one selecting whether \texttt{free} executes), so a single dynamic run
+exercises only one random path; when that path is non-leaking, the
+heuristic judge combines the resulting \texttt{exercised\_clean} dynamic
+signal with a coarse (not fully guard-reconciled) static alloc/free pairing
+to reach a confident (0.8) false-positive verdict without escalating to
+the LLM judge at all. A structurally identical \texttt{malloc}-family case
+did escalate and was judged correctly, so the mechanism is not specific to
+\texttt{strdup} as an allocator; we regard it as one verified contributor
+to the family's low recall, not an exhaustive account of all 59 affected
+cases, and note that the two smallest families (\texttt{destructor},
+\texttt{virtual}, $n{=}3$ and $n{=}5$ cases respectively) are too small in
+this corpus for their F1 to be statistically meaningful on their own.
+
+\begin{table}[htbp]
+\centering
+\caption{B6a full-corpus result by Juliet functional family (sites, not
+cases; one case can score multiple sites). \texttt{destructor}/\texttt{virtual}
+are shown for completeness but are too small ($n\le5$) to be reliable.}
+\label{tab:family}
+\small
+\begin{tabular}{@{}lrccc@{}}
+\toprule
+\textbf{Family} & \textbf{n} & \textbf{P} & \textbf{R} & \textbf{F1} \\
+\midrule
+\texttt{malloc} (+realloc) & 294 & 0.991 & 0.991 & \textbf{0.991} \\
+\texttt{wchar} & 609 & 0.984 & 0.810 & 0.888 \\
+\texttt{twoIntsStruct} & 609 & 0.989 & 0.801 & 0.885 \\
+\texttt{char} & 609 & 0.979 & 0.805 & 0.884 \\
+\texttt{int} & 1{,}218 & 0.969 & 0.803 & 0.878 \\
+\texttt{struct} & 611 & 0.969 & 0.801 & 0.877 \\
+\texttt{new} & 1{,}736 & 0.949 & 0.784 & 0.858 \\
+\texttt{strdup} & 348 & 1.000 & 0.413 & 0.584 \\
+\texttt{destructor}$^{\ast}$ & 3 & 1.000 & 0.500 & 0.667 \\
+\texttt{virtual}$^{\ast}$ & 5 & 1.000 & 0.333 & 0.500 \\
+\bottomrule
+\end{tabular}
+\end{table}
 
 \subsection{LLM orchestration $\times$ dynamic evidence}
 
@@ -884,7 +920,7 @@ MemHint~\cite{memhint} & 8 real projects, 3.6M LOC & 52--54 leaks found & LLM + 
 LAMeD~\cite{lamed} (Cooddy) & cJSON + 6 real projects & 28 TP / 2 FP & LLM annotation $\to$ Cooddy & Yes \\
 LAMeD~\cite{lamed} (CodeQL) & 6 real projects & 5$\to$10 detections & LLM annotation $\to$ CodeQL & Yes \\
 \textbf{CLeak (this work)} & LAMeD, 41 cases & 12 TP / 0 FP & LLM orchestration + heuristic & --- \\
-\textbf{CLeak (this work)} & Juliet, $n{=}100$ stratified & 89 TP / 0 FP (B6a) & LLM orchestration + static + dynamic & --- \\
+\textbf{CLeak (this work)} & Juliet, full corpus ($n{=}1{,}658$) & 2010 TP / 72 FP (B6a) & LLM orchestration + static + dynamic & --- \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -905,14 +941,15 @@ truth it is scored against.
 \section{Discussion and Threats to Validity}
 \label{sec:discussion}
 
-\textbf{Juliet is a comparatively easy corpus.} The gap between the
-full-corpus F1 (0.776, Section~\ref{sec:eval-fullcorpus}) and the
-stratified-ablation F1 (0.932, Section~\ref{sec:eval-ablation}) is not a
-regression; it reflects the full corpus's skew toward the more tractable
-\texttt{new}-allocator family. Neither number alone should be read as
-\emph{the} system F1. We report both with their sampling scope stated
-and recommend that future work quote the family-stratified number only
-alongside its sample size.
+\textbf{Aggregate F1 hides real per-family variation.} Table~\ref{tab:family}
+shows B6a's full-corpus F1 (0.863) is not uniform across Juliet's ten
+functional families: \texttt{malloc} sites are nearly solved (F1~0.991)
+while \texttt{strdup} sites lag (F1~0.584, recall-limited, not
+precision-limited). We traced this to a concrete, verified mechanism
+(Section~\ref{sec:eval-ablation}) rather than reporting the gap without
+explanation, and flag that a single aggregate F1 --- ours or any other
+system's --- can obscure large family-level swings that matter for
+practical deployment on a codebase dominated by one allocation pattern.
 
 \textbf{Dynamic evidence dominates precision.} Every ablation in
 Section~\ref{sec:evaluation} agrees that adding dynamic evidence is the
@@ -932,12 +969,16 @@ subsumes SMT-based path feasibility, only that it recovers most of its
 practical value without that risk.
 
 \textbf{Token economics.} Section~\ref{sec:eval-ablation}'s finding that
-agentic tool-selection costs $\sim$9$\times$ the tokens of a deterministic
-recipe for no accuracy gain is corpus-specific (Juliet's leak patterns are
-largely intraprocedural and well-served by a fixed evidence-gathering
-recipe); we would expect the balance to shift toward agentic tool
-selection on corpora with more structurally diverse investigation needs,
-and flag this as an open question rather than a settled one.
+agentic tool-selection costs real money for no accuracy gain is
+corpus-specific (Juliet's leak patterns are largely intraprocedural and
+well-served by a fixed evidence-gathering recipe): at full-corpus scale,
+B6b/B7 spend $\sim$5$\times$ the tokens of B6a but $\sim$4$\times$ the
+dollar cost (\$26--27 vs.\ \$6.63) --- the token and dollar multiples are
+close but not identical, a distinction worth stating precisely rather than
+assuming one ratio implies the other. We would expect the balance to
+shift toward agentic tool selection on corpora with more structurally
+diverse investigation needs, and flag this as an open question rather than
+a settled one.
 
 \textbf{LLM-as-judge is fundamentally non-deterministic.} We do not treat
 this as fixable; the two-tier protocol of Section~\ref{sec:reproducibility}
@@ -946,10 +987,12 @@ rather than obscured by reporting only aggregate metrics from a single
 run.
 
 \textbf{Incomplete measurements.} We explicitly did not substitute an
-estimate for the pending dynamic-augmented full-corpus run
-(Section~\ref{sec:eval-fullcorpus}) or the pending re-measurement of
-\texttt{llm\_assisted} LAMeD recall (Section~\ref{sec:eval-lamed}); both
-are reported as open rather than assumed favorable.
+estimate for the pending re-measurement of \texttt{llm\_assisted} LAMeD
+recall (Section~\ref{sec:eval-lamed}); it is reported as open rather than
+assumed favorable. The dynamic-augmented full-corpus run flagged as
+pending in an earlier version of this evaluation is no longer open ---
+Section~\ref{sec:eval-fullcorpus} now reports it, with dynamic evidence
+enabled across all nine capability configurations.
 
 \section{Conclusion and Future Work}
 
@@ -963,11 +1006,14 @@ reproducible rather than claiming uniform determinism; a deterministic
 dynamic-analysis recipe keeps runtime evidence capture free of LLM
 variance; and structured, guard-subset-reconciled evidence enrichment lets
 even the purely deterministic judge catch path-sensitive and
-parameter-ownership leaks without an SMT solver. On the full validated
-Juliet corpus the system reaches F1~0.776/MCC~0.610; a controlled
-five-factor ablation isolates a deterministic configuration reaching
-F1~0.932 at zero false positives for roughly one-ninth the token cost of
-unconstrained agentic tool selection; and on the real-world, peer-reviewed
+parameter-ownership leaks without an SMT solver. A controlled five-factor
+ablation on the full validated Juliet corpus (1{,}658 cases, not a
+sub-sample) isolates a deterministic static+dynamic+planner configuration
+reaching F1~0.863/MCC~0.790 at roughly one-quarter the dollar cost of
+unconstrained agentic tool selection, with performance varying by
+allocator family (F1 0.991 on \texttt{malloc} sites down to 0.584 on
+\texttt{strdup} sites, a gap we trace to a concrete dynamic-coverage
+mechanism rather than leaving unexplained); and on the real-world, peer-reviewed
 LAMeD benchmark the system holds 100\% precision while recall improves as
 cross-function ownership evidence is added, including one previously
 unreported cJSON leak caught end-to-end.
