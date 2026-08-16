@@ -106,3 +106,13 @@
 [42] Anthropic, "Model Context Protocol (MCP) Specification," 2024. [Online]. Available: https://modelcontextprotocol.io/
 
 [43] D. Svoboda, W. Klieber, L. Flynn, R. Martins, and J. Hoskinson, "A Pointer-Ownership Model for C Inspired by Rust," in Proc. LCTES (ACM SIGPLAN), 2026. DOI: 10.1145/3814943.3816182.
+
+## I. Kiến trúc & hiệu năng phân tích tĩnh quy mô lớn
+
+[44] r2c, Inc., "Semgrep: Lightweight Static Analysis for Many Languages." [Online]. Available: https://semgrep.dev
+
+[45] C. Sadowski, J. van Gogh, C. Jaspan, E. Söderberg, and C. Winter, "Tricorder: Building a Program Analysis Ecosystem," in Proc. 37th Int. Conf. on Software Engineering (ICSE), 2015, pp. 598–608. DOI: 10.1109/ICSE.2015.76.
+
+[46] C. Calcagno, D. Distefano, J. Dubreil, D. Gabi, P. Hooimeijer, M. Luca, P. W. O'Hearn, I. Papakonstantinou, J. Purbrick, and D. Rodriguez, "Moving Fast with Software Verification," in NASA Formal Methods (LNCS vol. 9058), Springer, 2015, pp. 3–11.
+
+[47] T. Szabó, "Incrementalizing Production CodeQL Analyses," in Proc. 31st ACM Joint European Software Engineering Conf. and Symp. on the Foundations of Software Engineering (ESEC/FSE), 2023. DOI: 10.1145/3611643.3613860. arXiv:2308.09660.

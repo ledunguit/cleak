@@ -1,5 +1,6 @@
-import { existsSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
 import { describe, expect, test, vi } from 'vitest';
 import { CParserService } from '../../src/services/c-parser.service';
 import parseTask from '../../src/workers/parse.worker';
@@ -24,12 +25,78 @@ describe('CParserService — cache', () => {
     expect(run).toHaveBeenCalledTimes(1);
   });
 
-  test('LRU eviction keeps the cache bounded at 512 entries', async () => {
-    const svc = new CParserService(); // pool stays null (test env) → in-process fallback
-    for (let i = 0; i < 513; i++) {
-      await svc.parse(src(i), 'a.c');
+  test('byte-bound eviction keeps total cached bytes under the configured budget', async () => {
+    // Exercises the private eviction path directly with synthetic large
+    // entries — avoids depending on how much a real tree-sitter ParseResult
+    // happens to serialize to (a large file has more CFG nodes, not more
+    // comment bytes, so inflating via real source is unreliable). Byte-bound
+    // (not entry-count) matters specifically because a sweep over real
+    // multi-hundred-file repos (LAMeD) fills a handful of huge entries much
+    // faster than a handful of tiny ones — a controlled single-case load
+    // test this session drove this service's RSS from ~112MB to ~1.13GB.
+    const svc = new CParserService() as any;
+    const bigResult = { functions: [{ functionName: 'x'.repeat(200_000) }], functionNames: [] };
+    for (let i = 0; i < 20; i++) {
+      svc.insertMemCache(`key-${i}`, bigResult);
     }
-    expect((svc as any).cache.size).toBeLessThanOrEqual(512);
+    // CACHE_MAX_BYTES defaults to 256MB (STATIC_PARSER_CACHE_MAX_MB unset) — 20
+    // entries of ~200KB (~4MB total) won't trip that default, so this test only
+    // asserts the accounting is correct and monotonic, not a specific eviction
+    // count. The dedicated low-budget test below (`STATIC_PARSER_CACHE_MAX_MB=1`)
+    // asserts actual eviction under a real (env-driven) budget.
+    expect(svc.cacheTotalBytes).toBeGreaterThan(0);
+    expect(svc.cache.size).toBe(20);
+  });
+
+  test('a low STATIC_PARSER_CACHE_MAX_MB budget actually evicts, keeping total bytes bounded', async () => {
+    vi.resetModules();
+    // The service floors this at 16MB regardless of a lower env value (guards
+    // against an absurdly tiny budget causing constant thrash) — request 1MB,
+    // assert against the real 16MB floor, and use enough synthetic data
+    // (~20MB) to exceed even the floor so eviction actually has to happen.
+    vi.stubEnv('STATIC_PARSER_CACHE_MAX_MB', '1');
+    const { CParserService: FreshCParserService } = await import('../../src/services/c-parser.service');
+    const svc = new FreshCParserService() as any;
+    const flooredBudgetBytes = 16 * 1024 * 1024;
+    const bigResult = { functions: [{ functionName: 'x'.repeat(200_000) }], functionNames: [] };
+    for (let i = 0; i < 100; i++) {
+      svc.insertMemCache(`key-${i}`, bigResult);
+    }
+    expect(svc.cacheTotalBytes).toBeLessThanOrEqual(flooredBudgetBytes);
+    expect(svc.cache.size).toBeLessThan(100);
+    vi.unstubAllEnvs();
+  });
+
+  test('a fresh process picks up a prior process\'s disk-cached parse without re-invoking the worker', async () => {
+    // Simulates the actual motivation: a baseline sweep re-runs `runHeadless`
+    // (a fresh scan) many times over the SAME unchanged project checkout —
+    // the in-memory cache alone resets every time, the disk cache does not.
+    const tmpDir = mkdtempSync(join(tmpdir(), 'ast-cache-test-'));
+    try {
+      vi.resetModules();
+      vi.stubEnv('STATIC_PARSER_DISK_CACHE_DIR', tmpDir);
+      const { CParserService: FreshCParserService } = await import('../../src/services/c-parser.service');
+
+      const content = src(4242);
+      const first = new FreshCParserService();
+      const run1 = vi.fn().mockResolvedValue({ functions: [{ functionName: 'fn_4242' }], functionNames: ['fn_4242'] });
+      (first as any).pool = { run: run1 };
+      const firstResult = await first.parse(content, 'a.c');
+      expect(run1).toHaveBeenCalledTimes(1);
+
+      // A brand-new instance (empty in-memory cache) — the only thing shared
+      // with `first` is the disk cache dir.
+      const second = new FreshCParserService();
+      const run2 = vi.fn().mockResolvedValue({ functions: [], functionNames: [] });
+      (second as any).pool = { run: run2 };
+      const secondResult = await second.parse(content, 'a.c');
+
+      expect(run2).not.toHaveBeenCalled();
+      expect(secondResult).toEqual(firstResult);
+      vi.unstubAllEnvs();
+    } finally {
+      rmSync(tmpDir, { recursive: true, force: true });
+    }
   });
 });
 

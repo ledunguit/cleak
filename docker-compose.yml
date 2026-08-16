@@ -66,6 +66,21 @@ services:
       # static-analyzer cannot tamper with the corpus on the host.
       - ./demo:/workspace/demo:ro
       - ./targets:/workspace/targets:ro
+      # scan-build reports + the AST disk cache (CParserService, content-hash-keyed
+      # parse memoization) both live under RUNS_DIR (default ./runs relative to
+      # /app, i.e. /app/runs — deliberately NOT overridden to /runs). Persists
+      # across container recreates, same durability goal as dynamic-analyzer's
+      # `runs:`/`ccache-data:` below, but as its OWN volume: dynamic-analyzer's
+      # container runs as root and its `runs:` volume ends up root-owned, while
+      # this container runs as the unprivileged `cleak` user (Dockerfile) —
+      # sharing the SAME volume left static-analyzer unable to write at all
+      # (confirmed: `touch` inside the container failed with EACCES). Docker
+      # copies the image directory's existing content — including the
+      # Dockerfile's `chown -R cleak:cleak /app/runs` — into a NAMED volume the
+      # first time it's mounted onto a non-empty image path, so this volume
+      # inherits the right ownership automatically instead of needing a root
+      # init step (which the security hardening above deliberately avoids).
+      - static-runs:/app/runs
     networks:
       - mcpvul-net
     restart: unless-stopped
@@ -135,6 +150,7 @@ services:
 volumes:
   runs:
   ccache-data:
+  static-runs:
 
 networks:
   mcpvul-net:

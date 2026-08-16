@@ -74,6 +74,8 @@ Hai giai đoạn đầu (profiling, strategy) là tầng POLICY host-side, chạ
 
 Ranh giới MUST-STAY-CODE: parse tree-sitter, CFG construction, alloc→free pairing, scoring math, consensus logic, grep-verify. Những thứ này không bao giờ được LLM hoá.
 
+Trong engine, kết quả parse được cache theo hash nội dung file thay vì tính lại ở mỗi lần gọi — content-addressed memoization là kỹ thuật chuẩn để tránh lặp lại công việc trong một lõi phân tích tất định, cùng nguyên lý compositional summary mà Facebook Infer dùng để scale [46].
+
 ### 2.3.3. Sơ đồ thành phần
 
 ```mermaid

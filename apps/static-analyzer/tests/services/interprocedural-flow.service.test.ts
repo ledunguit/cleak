@@ -68,6 +68,24 @@ void entry(void) {
   });
 });
 
+describe('InterproceduralFlowService — parseCache is bounded', () => {
+  test('parseCache does not grow without bound across many distinct files', async () => {
+    // Regression test: this service is a long-lived DI singleton, so an
+    // unbounded parseCache accumulates one entry per DISTINCT file ever seen
+    // across every case a process handles — confirmed directly: a 15-case
+    // batch across several real projects drove the container's RSS from
+    // ~105MB to its 4GB ceiling with no plateau, even with
+    // CParserService's own cache separately byte-bounded (Phase 2). Uses
+    // nonexistent file paths — parseFile's own read-error fallback still
+    // exercises the cache-size/eviction path without needing real files.
+    const svc = new InterproceduralFlowService(new CParserService()) as any;
+    for (let i = 0; i < 5000; i++) {
+      await svc.parseFile(`/nonexistent-${i}.c`, i, [], []);
+    }
+    expect(svc.parseCache.size).toBeLessThanOrEqual(4096);
+  });
+});
+
 describe('InterproceduralFlowService — reachability memoization', () => {
   test('repeated analyze() over unchanged inputs returns byte-identical results from the cache', async () => {
     const a = write(

@@ -106,6 +106,15 @@ Symbolic execution (King, 1976; Cadar et al., KLEE 2008) chạy chương trình 
 
 Trong ngữ cảnh memory leak, abstract interpretation thường quá thận trọng (mọi cấp phát đều có thể leak → FP cao), còn symbolic execution tốn kém để chạy trên codebase lớn. Cách tiếp cận trong luận văn nằm ở giữa: dùng Tree-sitter [4] parse AST nhẹ (không symbolic), kết hợp guard-subset reconciliation để đạt một phần path-sensitivity mà không cần SMT — đổi precision lấy scalability.
 
+### 1.2.8. Kiến trúc quy mô công nghiệp — tiền lệ mà CLeak áp dụng
+
+Ngoài năng lực phát hiện leak, kiến trúc engine của CLeak được thiết kế theo đúng các nguyên tắc mà nền tảng phân tích quy mô công nghiệp đã dùng để đạt tốc độ, độc lập với việc chọn ngôn ngữ lập trình:
+
+- **Compositional summary (Infer).** Việc cache kết quả parse theo hash nội dung file (Chương 3) thay vì tính lại mỗi lần gọi phản ánh đúng nguyên lý compositional analysis của Infer: mỗi hàm chỉ được tóm tắt một lần, caller tái sử dụng summary thay vì suy luận lại từ đầu — đây là lý do Infer scale được tới hàng triệu dòng code tại Meta [46].
+- **Shardable, stateless services (Tricorder).** Việc chỉ 5/22 MCP tool được cấp trực tiếp cho LLM sub-agent, và các tool này nhận nội dung source inline thay vì yêu cầu filesystem dùng chung, giữ cho cả hai service phân tích ở trạng thái stateless và triển khai độc lập — cùng nguyên lý kiến trúc microservice có thể chia nhỏ (shardable) mà Google Tricorder dùng để chạy hàng trăm analyzer trên hàng trăm nghìn thay đổi code mỗi ngày [45]. Nguyên lý này cũng lý giải cho việc engine tất định chạy trước, LLM chỉ được gọi cho các case biên (Chương 4) — một biến thể của kỷ luật kiểm soát tỉ lệ false-positive liên tục mà Tricorder áp dụng.
+- **So khớp trực tiếp trên AST, không qua database trung gian (Semgrep).** Semgrep đạt tốc độ bằng cách match pattern trực tiếp trên AST đã parse, không xây database trung gian như CodeQL [44] — CLeak dùng cùng nguyên lý này thay vì cách tiếp cận database-query của CodeQL.
+- **Tái sử dụng kết quả build qua các lần chạy lặp lại (CodeQL incremental).** Ở tầng dynamic-analyzer, việc build lại project cho cùng một commit (phổ biến trên corpus như LAMeD: 41 case nhưng chỉ 7 repo khác nhau) được tránh nhờ compiler cache — cùng nguyên lý incremental reuse mà CodeQL đã áp dụng trong production để không phân tích lại phần code không đổi [47].
+
 ---
 
 ## 1.3. Phân tích động cho memory leak

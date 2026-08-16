@@ -165,6 +165,28 @@ large codebases~\cite{symexec-scaling} point toward combining
 learned and symbolic reasoning, a direction CLeak takes with an LLM instead
 of a learned model.
 
+Independent of leak-detection capability, CLeak's engine deliberately
+follows architectural precedent set by industrial-scale analysis platforms.
+Content-hash-keyed memoization of parsed structure (Section~\ref{sec:arch})
+mirrors the compositional-summary discipline that lets Infer scale to
+million-line codebases by summarizing each procedure once and letting
+callers reuse the summary rather than re-deriving it~\cite{infer-verification}.
+Exposing the engine as small, stateless, independently-callable MCP
+services (Section~\ref{sec:arch}) mirrors the shardable-microservice
+architecture Google's Tricorder uses to run hundreds of analyzers across
+hundreds of thousands of changes per day~\cite{tricorder}; the same source
+also motivates our deterministic-engine-first, LLM-reserved-for-borderline-cases
+triage (Section~\ref{sec:judging}), which is a version of Tricorder's
+continuous false-positive-rate discipline applied to a leak-specific
+judge rather than a general lint ecosystem. Semgrep's direct AST-pattern
+matching without an intermediate database~\cite{semgrep} is the same
+DB-free principle our engine applies in place of CodeQL's queryable-database
+approach; and where CLeak does rely on across-run reuse to avoid redundant
+work (the dynamic analyzer's compiler-cache-backed rebuilds,
+Section~\ref{sec:arch}), the motivating principle mirrors the incremental
+reuse CodeQL itself has since adopted in production to avoid re-analyzing
+unchanged code~\cite{codeql-incremental}.
+
 \paragraph{Dynamic analysis for memory leaks.}
 Valgrind Memcheck~\cite{valgrind} and
 AddressSanitizer / LeakSanitizer~\cite{asan} instrument and run a binary
@@ -355,7 +377,11 @@ construction, alloc$\to$free pairing, heuristic scoring, and consensus
 aggregation) executes deterministically and never depends on the LLM on
 the measured evaluation path. Three host-side modules implement this
 pattern (Table~\ref{tab:policy}); onboarding a new project therefore
-requires zero lines of new code.
+requires zero lines of new code. Within the engine itself, parsed
+structure is memoized by a hash of file content rather than recomputed
+per call site --- content-addressed memoization of this kind is the
+standard technique for avoiding redundant work in a deterministic
+analysis core~\cite{infer-verification}.
 
 \begin{table}[htbp]
 \centering
@@ -405,7 +431,9 @@ five are given directly to the LLM sub-agent of Stage~A
 \texttt{ownershipConventions}. These are the \emph{content-capable} tools
 --- they accept inline source content rather than requiring a shared
 filesystem mount, which keeps both analyzer services stateless and
-independently deployable. The remaining tools (indexing,
+independently deployable, the same shardable-service property Google's
+Tricorder relies on to scale program analysis across hundreds of
+distinct analyzers~\cite{tricorder}. The remaining tools (indexing,
 call-graph/interprocedural-flow extraction, \texttt{scan-build}
 orchestration, and all dynamic build/sanitizer tools) are driven directly
 by the orchestrator, not by the LLM, because they either require
@@ -980,6 +1008,32 @@ shift toward agentic tool selection on corpora with more structurally
 diverse investigation needs, and flag this as an open question rather than
 a settled one.
 
+\textbf{Architectural alignment with industry practice, measured.}
+Section~\ref{sec:related} situates CLeak's engine relative to compositional
+analysis~\cite{infer-verification}, shardable stateless
+services~\cite{tricorder}, and incremental reuse~\cite{codeql-incremental,
+semgrep}; two of those principles are now backed by a direct measurement
+rather than only an architectural claim. The AST memoization cache was
+generalized from process-local to disk-persisted (content-hash-keyed, so a
+fresh process reuses a prior process's parses instead of repeating them)
+and rebounded from an entry-count budget to a byte-size budget --- closing
+an out-of-memory failure mode a real-world corpus in this evaluation (LAMeD)
+reproduced directly during development. On a controlled single-case
+measurement (a 143-file real checkout, LAMeD's \texttt{libxml2} case,
+\texttt{no\_llm} mode), a repeat scan against an already-warmed cache
+completed in 3.0s at 266MiB peak service memory versus 54.0s at 1.03GiB
+cold --- an $\sim$18$\times$ wall-clock reduction and $\sim$74\% lower peak
+memory for exactly the re-scan pattern a baseline sweep performs many times
+over the same unchanged checkout. A second, smaller fix removed a literal
+duplicate full-project parse pass inside call-graph extraction
+(Section~\ref{sec:arch}). Both changes are mechanical --- neither touches
+judge logic or evidence content, and the cached representation is a
+JSON-safe plain data structure with no lossy round-trip --- so we expect,
+but did not re-run the full ablation sweep to confirm, that no
+precision/recall/F1 number in Section~\ref{sec:evaluation} changes as a
+result; we report this as an assumption grounded in the cache's semantics,
+not an independently measured invariant.
+
 \textbf{LLM-as-judge is fundamentally non-deterministic.} We do not treat
 this as fixable; the two-tier protocol of Section~\ref{sec:reproducibility}
 exists specifically so that this non-determinism is measured and reported
@@ -1111,6 +1165,14 @@ recall materially, though we have not yet confirmed this.
 \bibitem{mcp} Anthropic, ``Model Context Protocol (MCP) Specification,'' 2024. [Online]. Available: https://modelcontextprotocol.io/
 
 \bibitem{ownership-model} D. Svoboda, W. Klieber, L. Flynn, R. Martins, and J. Hoskinson, ``A Pointer-Ownership Model for C Inspired by Rust,'' in \textit{Proc. LCTES (ACM SIGPLAN)}, 2026. DOI: 10.1145/3814943.3816182.
+
+\bibitem{semgrep} r2c, Inc., ``Semgrep: Lightweight Static Analysis for Many Languages.'' [Online]. Available: https://semgrep.dev
+
+\bibitem{tricorder} C. Sadowski, J. van Gogh, C. Jaspan, E. S\"{o}derberg, and C. Winter, ``Tricorder: Building a Program Analysis Ecosystem,'' in \textit{Proc. 37th Int. Conf. on Software Engineering (ICSE)}, 2015, pp.~598--608. DOI: 10.1109/ICSE.2015.76.
+
+\bibitem{infer-verification} C. Calcagno, D. Distefano, J. Dubreil, D. Gabi, P. Hooimeijer, M. Luca, P. W. O'Hearn, I. Papakonstantinou, J. Purbrick, and D. Rodriguez, ``Moving Fast with Software Verification,'' in \textit{NASA Formal Methods (LNCS vol.~9058)}, Springer, 2015, pp.~3--11.
+
+\bibitem{codeql-incremental} T. Szab\'{o}, ``Incrementalizing Production CodeQL Analyses,'' in \textit{Proc. 31st ACM Joint European Software Engineering Conf. and Symp. on the Foundations of Software Engineering (ESEC/FSE)}, 2023. DOI: 10.1145/3611643.3613860. arXiv:2308.09660.
 
 \end{thebibliography}
 

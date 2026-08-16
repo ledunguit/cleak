@@ -47,7 +47,13 @@ The workspace consists of these main components:
 - NestJS service serving **MCP/HTTP on port 50061** to the TUI.
 - Tree-sitter AST, lexical scan, call graph, ownership analysis, Clang Static
   Analyzer / `scan-build`. All analysis routes through `CParserService` (tree-sitter
-  C/C++ parser with a 512-entry SHA1-content LRU cache).
+  C/C++ parser with a SHA1-content-keyed LRU cache, byte-bounded via
+  `STATIC_PARSER_CACHE_MAX_MB`, default 256MB/16MB floor) that is also
+  disk-persisted under `RUNS_DIR/ast-cache` — a fresh process picks up a
+  prior process's parses instead of re-parsing, which is the common case
+  across a baseline sweep's repeated configs/runs over the same unchanged
+  checkout (measured: repeat scan of a 143-file real-project case dropped
+  from 54s/1.03GiB peak RSS cold to 3s/266MiB warm).
 - **MCP/HTTP is the only transport.** The old gRPC server (+ `proto/` + `@grpc/*`
   / `@nestjs/microservices`) had no consumer once the web path was removed and has
   been **deleted**; `main.ts` just builds a DI context and serves MCP.

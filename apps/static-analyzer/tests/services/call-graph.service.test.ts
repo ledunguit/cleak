@@ -1,7 +1,7 @@
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, beforeEach, describe, expect, test } from 'vitest';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { CParserService } from '../../src/services/c-parser.service';
 import { CallGraphService } from '../../src/services/call-graph.service';
 
@@ -20,6 +20,25 @@ function write(name: string, content: string): string {
   writeFileSync(p, content, 'utf-8');
   return p;
 }
+
+describe('CallGraphService — parses each file once, not twice', () => {
+  test('extract() invokes CParserService.parse exactly once per file', async () => {
+    // extract() used to run TWO full passes over `files` (a "first pass" to
+    // build the name→file index, a "second pass" — over identical, pure
+    // input — to build edges), each re-reading and re-parsing every file.
+    // Since a project checkout is re-scanned unchanged many times over a
+    // baseline sweep, this doubled real work for no different result.
+    const a = write('a.c', `void helper(void) { }`);
+    const b = write('b.c', `void caller(void) { helper(); }`);
+
+    const cParser = new CParserService();
+    const parseSpy = vi.spyOn(cParser, 'parse');
+    const svc = new CallGraphService(cParser);
+    await svc.extract(dir, [a, b]);
+
+    expect(parseSpy).toHaveBeenCalledTimes(2); // one call per file, not four
+  });
+});
 
 describe('CallGraphService — recursion-cycle detection (adjacency-list DFS)', () => {
   test('direct recursion is reported as a single-function cycle', async () => {

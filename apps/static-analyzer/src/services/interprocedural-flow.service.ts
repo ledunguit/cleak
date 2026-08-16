@@ -34,7 +34,18 @@ export class InterproceduralFlowService {
   // Cached as a Promise (not the resolved array) so concurrent requests for the
   // same file+allocator-set during the same analyze() call dedupe onto one
   // in-flight parse instead of racing to populate the cache separately.
+  //
+  // Bounded: this service is a long-lived DI singleton, so an unbounded Map here
+  // accumulates one entry per DISTINCT file ever seen across every case a process
+  // handles, not just the current one — confirmed directly: a 15-case batch across
+  // several real LAMeD projects drove this service's container RSS from ~105MB to
+  // the 4GB container ceiling with no plateau, even though CParserService's own
+  // cache (which this wraps) is separately byte-bounded. Cleared once it outgrows a
+  // fixed cap, same policy as `reachabilityCache` below (a resolved entry here is
+  // cheap to recompute — it's a thin wrapper around cParser's own already-cached
+  // parse — so an occasional full clear is a fine trade for bounded memory).
   private parseCache = new Map<string, Promise<FunctionInfo[]>>();
+  private static readonly MAX_PARSE_CACHE = 4096;
 
   /**
    * Cross-candidate reachability memo. analyze() is invoked once PER CANDIDATE, and
@@ -66,6 +77,9 @@ export class InterproceduralFlowService {
       }
     })();
     this.parseCache.set(key, promise);
+    if (this.parseCache.size > InterproceduralFlowService.MAX_PARSE_CACHE) {
+      this.parseCache.clear();
+    }
     return promise;
   }
 

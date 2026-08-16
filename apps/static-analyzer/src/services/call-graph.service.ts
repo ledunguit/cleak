@@ -71,10 +71,14 @@ export class CallGraphService {
     const callEdges: { caller: string; callee: string; filePath: string; lineNumber: number; callee_file?: string }[] = [];
     const recursionCycles: string[][] = [];
 
-    // First pass: collect all internal function names with their files. Also keep
-    // the parsed FunctionInfo (first-definition-wins, same tie-break as
+    // Single parse pass: collect all internal function names with their files, AND
+    // keep the parsed FunctionInfo (first-definition-wins, same tie-break as
     // InterproceduralFlowService) — correlateOwnership() needs full function bodies,
-    // not just the name→file map the rest of extract() uses.
+    // not just the name→file map. Building the edges below is a second LOGICAL pass
+    // over this same parsed set, but it does not need to re-parse: `parsed` is a pure,
+    // deterministic function of `files`' content, so a second `parseAll(files)` call
+    // here would just re-read every file from disk and re-invoke cParser.parse() for
+    // results that are byte-identical to `parsed` — reuse it directly instead.
     const functionToFile = new Map<string, string>();
     const fnIndex = new Map<string, { fn: FunctionInfo; file: string }>();
     // Qualified index (`ClassName::method`) — resolves same-named methods across
@@ -82,8 +86,8 @@ export class CallGraphService {
     // collide in `fnIndex` on the bare name (first-definition-wins). See
     // `extractClassMembership`'s doc comment in extraction-helpers.ts.
     const qualifiedFnIndex = new Map<string, { fn: FunctionInfo; file: string }>();
-    const firstPass = await this.parseAll(files);
-    for (const { file, functions } of firstPass) {
+    const parsed = await this.parseAll(files);
+    for (const { file, functions } of parsed) {
       for (const fn of functions) {
         allFunctions.set(fn.functionName, file);
         functionToFile.set(fn.functionName, file);
@@ -94,10 +98,9 @@ export class CallGraphService {
       }
     }
 
-    // Second pass: build edges with CFG-aware analysis
+    // Build edges with CFG-aware analysis, over the SAME parsed set above.
     const calleeToCallers = new Map<string, string[]>();
-    const secondPass = await this.parseAll(files);
-    for (const { file, functions } of secondPass) {
+    for (const { file, functions } of parsed) {
       for (const fn of functions) {
         for (const call of fn.functionCalls) {
           // Only track calls to functions defined in this project (internal calls)
@@ -121,16 +124,16 @@ export class CallGraphService {
       }
     }
 
-    const paramOwnership = this.correlateOwnership(secondPass, fnIndex, qualifiedFnIndex);
-    const returnOwnership = this.correlateReturnOwnership(secondPass, fnIndex);
+    const paramOwnership = this.correlateOwnership(parsed, fnIndex, qualifiedFnIndex);
+    const returnOwnership = this.correlateReturnOwnership(parsed, fnIndex);
     // Out-param ownership (Juliet 43/62: `badSource(char *&data)` — callee
     // allocates, writes back through a reference parameter instead of `return`)
     // and RAII ownership (Juliet 83-84: ctor allocates a field, dtor frees it)
     // reuse the SAME freedViaCaller/unfreedReturnOwnership shape as return-value
     // ownership above — three different data-flow directions, one candidate
     // representation, so staticContext.ts needs no changes to consume them.
-    const outParamOwnership = this.correlateOutParamOwnership(secondPass, fnIndex, qualifiedFnIndex);
-    const raiiOwnership = this.correlateRaiiOwnership(secondPass);
+    const outParamOwnership = this.correlateOutParamOwnership(parsed, fnIndex, qualifiedFnIndex);
+    const raiiOwnership = this.correlateRaiiOwnership(parsed);
     const ownershipCorrelations = {
       freedCrossFile: paramOwnership.freedCrossFile,
       unfreedSinkParams: paramOwnership.unfreedSinkParams,
