@@ -8,7 +8,7 @@ import type { ConsensusRule } from "./types.js";
 import { loadConfigFile } from "./persist.js";
 import type { CleakConfig } from "./schema.js";
 import { PROVIDERS } from "./schema.js";
-import type { Provider, ProviderConfig, RunConfig, EnvOverrides } from "./types.js";
+import type { Provider, ProviderConfig, RunConfig, EnvOverrides, JudgeCacheConfig } from "./types.js";
 
 function isProvider(v: string): v is Provider {
   return (PROVIDERS as readonly string[]).includes(v);
@@ -161,7 +161,11 @@ export function resolveProvider(profileName: string, file?: CleakConfig): Provid
 }
 
 export function loadConfig(
-  overrides: Omit<Partial<RunConfig>, "llm"> & { provider?: string; llm?: Partial<ProviderConfig> } = {},
+  overrides: Omit<Partial<RunConfig>, "llm" | "judgeCache"> & {
+    provider?: string;
+    llm?: Partial<ProviderConfig>;
+    judgeCache?: Partial<JudgeCacheConfig>;
+  } = {},
 ): RunConfig {
   const file = loadConfigFile();
   const env = readEnvOverrides();
@@ -233,6 +237,10 @@ export function loadConfig(
       concurrency: Math.max(1, pickNum(file.consensus?.concurrency, 3)),
       earlyStop: pickBool(file.consensus?.earlyStop, false),
     },
+    judgeCache: {
+      enabled: pickBool(file.judgeCache?.enabled, true),
+      maxEntries: Math.max(1, pickNum(file.judgeCache?.maxEntries, 2000)),
+    },
     baselines: {
       clangBin: pickStr(file.baselines?.clangBin, "clang"),
       inferBin: pickStr(file.baselines?.inferBin, "infer"),
@@ -253,7 +261,7 @@ export function loadConfig(
     base.consensus.n = env.consensus.n;
   }
 
-  const { consensus: consensusOverride, llm: llmOverride, ...rest } = overrides;
+  const { consensus: consensusOverride, llm: llmOverride, judgeCache: judgeCacheOverride, ...rest } = overrides;
   const defined = Object.fromEntries(
     Object.entries(rest).filter(([, value]) => value !== undefined),
   );
@@ -263,6 +271,9 @@ export function loadConfig(
   }
   if (llmOverride) {
     merged.llm = { ...base.llm, ...pruneUndefined(llmOverride) };
+  }
+  if (judgeCacheOverride) {
+    merged.judgeCache = { ...base.judgeCache, ...pruneUndefined(judgeCacheOverride) };
   }
   return clampConfig(merged);
 }
@@ -332,6 +343,7 @@ export function clampConfig(cfg: RunConfig): RunConfig {
   cfg.consensus.n = Math.round(clamp("consensus.n", cfg.consensus.n, 1, 9, 1));
   cfg.consensus.temperature = clamp("consensus.temperature", cfg.consensus.temperature, 0, 2, 0.7);
   cfg.consensus.concurrency = Math.round(clamp("consensus.concurrency", cfg.consensus.concurrency, 1, 16, 3));
+  cfg.judgeCache.maxEntries = Math.round(clamp("judgeCache.maxEntries", cfg.judgeCache.maxEntries, 1, 100_000, 2000));
   // 0 = disabled (no cap) is a valid value for both — min bound is 0, not 1.
   cfg.evalMaxCaseMs = Math.round(clamp("eval.maxCaseMs", cfg.evalMaxCaseMs, 0, 4 * 3600_000, 0));
   cfg.evalMaxCaseCostUsd = clamp("eval.maxCaseCostUsd", cfg.evalMaxCaseCostUsd, 0, 50, 0);

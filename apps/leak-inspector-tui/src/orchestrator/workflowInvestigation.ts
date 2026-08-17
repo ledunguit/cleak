@@ -27,7 +27,7 @@ import {
   type Tool,
   type ToolCtx,
 } from '@cleak/agent-core';
-import { AgentActionKind, DynamicMode, type AgentDecision, type LeakBundle } from '@cleak/common/types';
+import { AgentActionKind, DynamicMode, type AgentDecision, type LeakBundle, type VerdictResult } from '@cleak/common/types';
 import { toProviderSettings, type RunConfig } from '@cleak/config';
 import type { AgentMeta, InvestigationContext, InvestigationOutcome, InvestigationPhase } from './investigation';
 import { CONTENT_CAPABLE_TOOLS } from '@cleak/common/mcp/tool-catalog';
@@ -61,6 +61,7 @@ import {
   harnessWorkerUserMessage,
 } from '../domain/subAgentPrompts';
 import { judgeBundleWithLlm, shouldEscalate, isBorderline } from '../domain/llmJudge';
+import { judgeCacheKey, readJudgeCache, writeJudgeCache } from '../domain/judgeVerdictCache';
 import { judgeByConsensus, type ConsensusVerdict } from '@cleak/common/analysis/consensus-judge';
 import { evidenceIndicatesLeak } from '@cleak/common/analysis/judge-shared';
 import { needsTargetedDynamic } from '../domain/harnessEscalation';
@@ -496,9 +497,47 @@ async function stageHybridJudge(
     state.usage.outputTokens += u.outputTokens;
     ctx.onUsageDelta?.(u);
   };
+  const recordJudgeDecision = (b: LeakBundle, verdict: VerdictResult | ConsensusVerdict, toolName: string): void => {
+    const agree = (verdict as ConsensusVerdict).agreement;
+    state.decisions.push({
+      turn: state.decisions.length + 1,
+      actionKind: AgentActionKind.JUDGE_BUNDLE,
+      rationale: (verdict.explanation || '').slice(0, 200),
+      strategySource: 'llm',
+      toolName,
+      targetBundleIds: [b.bundleId],
+      reasoning: '',
+      decidedAt: new Date().toISOString(),
+      resultSummary:
+        `${verdict.verdict} (${(verdict.confidence * 100).toFixed(0)}%)` +
+        (typeof agree === 'number' ? ` · agree ${(agree * 100).toFixed(0)}%` : ''),
+    });
+  };
+
+  let cacheHits = 0;
   await mapWithLimit(borderline, cfg.workflow.judgeConcurrency, async (b) => {
     if (ctx.abortSignal?.aborted) return;
     const sctx = staticStore.get(b.bundleId);
+
+    // Disk-persisted judge-verdict cache (default on) — a bundle whose evidence
+    // is byte-identical to a previously-judged one skips the LLM entirely,
+    // including every consensus sample. See judgeVerdictCache.ts for why this
+    // caches the final combined decision, not individual consensus samples.
+    const cacheKey = cfg.judgeCache.enabled
+      ? judgeCacheKey(b, sctx, ctx.projectOwnershipNotes, cfg.consensus, ctx.caches?.files)
+      : null;
+    if (cacheKey) {
+      const cached = readJudgeCache(ctx.repoPath, cacheKey);
+      if (cached) {
+        cacheHits++;
+        onNotice(`Stage D · ${b.bundleId} — judge cache hit, skipping LLM`);
+        b.verdict = cached;
+        b.updatedAt = new Date().toISOString();
+        recordJudgeDecision(b, cached, useConsensus ? 'consensus_judge_cached' : 'llm_judge_cached');
+        return;
+      }
+    }
+
     let verdict: ConsensusVerdict | Awaited<ReturnType<typeof judgeBundleWithLlm>>;
     if (useConsensus) {
       // Sample the per-bundle LLM judge N times at the consensus temperature,
@@ -515,21 +554,12 @@ async function stageHybridJudge(
     if (!verdict) return;
     b.verdict = verdict;
     b.updatedAt = new Date().toISOString();
-    const agree = (verdict as ConsensusVerdict).agreement;
-    state.decisions.push({
-      turn: state.decisions.length + 1,
-      actionKind: AgentActionKind.JUDGE_BUNDLE,
-      rationale: (verdict.explanation || '').slice(0, 200),
-      strategySource: 'llm',
-      toolName: useConsensus ? 'consensus_judge' : 'llm_judge',
-      targetBundleIds: [b.bundleId],
-      reasoning: '',
-      decidedAt: new Date().toISOString(),
-      resultSummary:
-        `${verdict.verdict} (${(verdict.confidence * 100).toFixed(0)}%)` +
-        (useConsensus && typeof agree === 'number' ? ` · agree ${(agree * 100).toFixed(0)}%` : ''),
-    });
+    if (cacheKey) writeJudgeCache(ctx.repoPath, cacheKey, verdict, cfg.judgeCache.maxEntries);
+    recordJudgeDecision(b, verdict, useConsensus ? 'consensus_judge' : 'llm_judge');
   });
+  if (cfg.judgeCache.enabled && borderline.length > 0) {
+    onNotice(`Stage D · judge cache: ${cacheHits}/${borderline.length} hit`);
+  }
 }
 
 export function buildWorkflowInvestigationPhase(

@@ -76,9 +76,11 @@ describe('callOpenAiChat (streaming)', () => {
 });
 
 describe('callOpenAiChat — response_format (jsonMode)', () => {
-  test('jsonMode + no tools → requests the provider JSON-object response mode', async () => {
+  const jsonReq: CallModelRequest = { systemPrompt: 'Respond with a JSON object ONLY.', messages: [{ role: 'user', content: 'go' }], tools: [] };
+
+  test('jsonMode + no tools + JSON mentioned in the prompt → requests the provider JSON-object response mode', async () => {
     mode = 'json';
-    await callOpenAiChat({ ...settings, jsonMode: true }, req, () => 'uuid');
+    await callOpenAiChat({ ...settings, jsonMode: true }, jsonReq, () => 'uuid');
     expect(lastBody.response_format).toEqual({ type: 'json_object' });
     expect(lastBody.tools).toBeUndefined();
   });
@@ -108,5 +110,31 @@ describe('callOpenAiChat — response_format (jsonMode)', () => {
     mode = 'json';
     await callOpenAiChat(settings, req, () => 'uuid');
     expect(lastBody.response_format).toBeUndefined();
+  });
+
+  test("jsonMode + no tools, but the prompt never mentions JSON → response_format withheld (the health-check regression)", async () => {
+    // The OpenAI-compatible API 400s on response_format:json_object unless the prompt
+    // mentions "json" — reproduced live against the real gateway this session via the LLM
+    // health-check's short probe prompt ("health check" / "reply ok"), neither of which
+    // says JSON.
+    mode = 'json';
+    const jsonAgnosticReq: CallModelRequest = {
+      systemPrompt: 'health check',
+      messages: [{ role: 'user', content: 'reply ok' }],
+      tools: [],
+    };
+    await callOpenAiChat({ ...settings, jsonMode: true }, jsonAgnosticReq, () => 'uuid');
+    expect(lastBody.response_format).toBeUndefined();
+  });
+
+  test('jsonMode + no tools, JSON mentioned only in the user message → response_format still set', async () => {
+    mode = 'json';
+    const req2: CallModelRequest = {
+      systemPrompt: 'You are a helper.',
+      messages: [{ role: 'user', content: 'Reply with a JSON object.' }],
+      tools: [],
+    };
+    await callOpenAiChat({ ...settings, jsonMode: true }, req2, () => 'uuid');
+    expect(lastBody.response_format).toEqual({ type: 'json_object' });
   });
 });

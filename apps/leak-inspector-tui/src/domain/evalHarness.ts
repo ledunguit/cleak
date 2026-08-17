@@ -90,6 +90,15 @@ export interface EvalOptions {
    * activates multi-agent consensus; n=1 (default) is the single-LLM baseline. */
   consensusN?: number;
   consensusRule?: ConsensusRule;
+  /** Stop sampling once the flag/no-flag decision is mathematically locked in
+   * (see @cleak/common's isDecisionLocked). Default false — samples all n,
+   * unchanged historical behavior. */
+  consensusEarlyStop?: boolean;
+  /** Judge-verdict disk-cache override. Default (unset) leaves the config value
+   * (true). Ablation/stability scripts that intentionally re-judge the SAME
+   * evidence across repeat runs should set this `false` — a cache hit would
+   * otherwise mask genuine LLM run-to-run variance entirely. */
+  judgeCacheEnabled?: boolean;
   /** Ablation knobs (baseline sweep): the LLM strategist (planner axis) and the
    * deterministic static-enrichment stage. Both off in the standard eval to keep
    * the Juliet baseline reproducible; the sweep sets them per baseline config. */
@@ -156,6 +165,8 @@ const EvalOptionsSchema = z.object({
   allowUnvalidated: z.boolean().optional(),
   consensusN: z.number().int().positive().optional(),
   consensusRule: z.string().optional(),
+  consensusEarlyStop: z.boolean().optional(),
+  judgeCacheEnabled: z.boolean().optional(),
   strategy: z.enum(['auto', 'off']).optional(),
   enrich: z.boolean().optional(),
   toolSelect: z.boolean().optional(),
@@ -464,7 +475,13 @@ function captureRunProvenance(opts: EvalOptions, _manifest: LabeledManifest, gat
     runs: opts.runs ?? 1,
     sampling: samplingProvenance(opts),
     ...(opts.mode === 'llm_assisted'
-      ? { consensus: { n: Math.max(1, opts.consensusN ?? 1), rule: opts.consensusRule ?? 'weighted' } }
+      ? {
+          consensus: {
+            n: Math.max(1, opts.consensusN ?? 1),
+            rule: opts.consensusRule ?? 'weighted',
+            ...(opts.consensusEarlyStop !== undefined ? { earlyStop: opts.consensusEarlyStop } : {}),
+          },
+        }
       : {}),
   });
 }
@@ -653,9 +670,16 @@ async function scoreCases(
         ...(opts.staticDiscovery !== undefined ? { staticDiscovery: opts.staticDiscovery } : {}),
         ...(opts.staticTools ? { staticTools: opts.staticTools } : {}),
         ...(opts.provider ? { provider: opts.provider } : {}),
-        ...(opts.consensusN != null || opts.consensusRule != null
-          ? { consensus: { ...(opts.consensusN != null ? { n: opts.consensusN } : {}), ...(opts.consensusRule ? { rule: opts.consensusRule } : {}) } }
+        ...(opts.consensusN != null || opts.consensusRule != null || opts.consensusEarlyStop !== undefined
+          ? {
+              consensus: {
+                ...(opts.consensusN != null ? { n: opts.consensusN } : {}),
+                ...(opts.consensusRule ? { rule: opts.consensusRule } : {}),
+                ...(opts.consensusEarlyStop !== undefined ? { earlyStop: opts.consensusEarlyStop } : {}),
+              },
+            }
           : {}),
+        ...(opts.judgeCacheEnabled !== undefined ? { judgeCacheEnabled: opts.judgeCacheEnabled } : {}),
         // Stream phase transitions so the UI can show each case's live progress.
         onEvent: onCasePhase
           ? (ev) => {

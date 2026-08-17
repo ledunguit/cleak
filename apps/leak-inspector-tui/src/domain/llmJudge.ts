@@ -16,7 +16,11 @@ import { enclosingFunctionSnippet, isLeakVerdictString, evidenceIndicatesLeak } 
 import { InvestigationVerdict, ToolKind, type LeakBundle, type VerdictResult } from '@cleak/common/types';
 import type { CallModel } from '@cleak/agent-core';
 
-const SYSTEM_PROMPT = [
+// Exported so judgeVerdictCache.ts can hash the LIVE prompt text (not a
+// hand-maintained version counter) into its cache key — any edit to this
+// prompt then automatically invalidates stale cached verdicts, with no risk
+// of someone forgetting to bump a version number.
+export const SYSTEM_PROMPT = [
   `You are an expert C/C++ memory-leak analyst. Decide whether ONE allocation is a real leak, using the code, static context, and any runtime evidence provided.`,
   `Respond with a JSON object ONLY (no prose), in this exact shape:`,
   `{"verdict": "confirmed_leak | likely_leak | uncertain | likely_false_positive | false_positive", "confidence": 0.0-1.0, "explanation": "...", "evidence": ["..."]}`,
@@ -175,6 +179,42 @@ export function parseVerdict(text: string): { ok: true; value: ParsedVerdict } |
 }
 
 /**
+ * Build the exact user-message text sent to the judge for one bundle. Exported —
+ * not just for `judgeBundleWithLlm` below — so `judgeVerdictCache.ts` can hash
+ * this SAME string into its cache key instead of separately re-deriving "what
+ * fields affect the prompt" (which would risk drifting out of sync with this
+ * function and silently under-keying the cache).
+ */
+export function buildJudgeUserMessage(
+  bundle: LeakBundle,
+  staticContext: Record<string, any> | undefined,
+  projectNotes: string[] | undefined,
+  fileCache?: FileContentCache,
+): string {
+  const c = bundle.candidate;
+  const notes = (projectNotes ?? []).filter(Boolean);
+  return [
+    `ALLOCATION SITE: ${c.function_name || '?'}() at ${c.file_path}:${c.line_number} (${c.allocation_type || 'alloc'})`,
+    ``,
+    'CODE (context around the allocation):',
+    '```c',
+    sourceSnippet(bundle, fileCache),
+    '```',
+    ``,
+    'STATIC ANALYSIS CONTEXT:',
+    summarizeStatic(staticContext),
+    ``,
+    `DYNAMIC EVIDENCE (${bundle.evidence.length}):`,
+    summarizeEvidence(bundle),
+    ...(notes.length
+      ? ['', 'PROJECT OWNERSHIP CONVENTIONS (respect these — they encode how THIS project manages memory):', ...notes.map((n) => `- ${n}`)]
+      : []),
+    ``,
+    'Return your JSON verdict.',
+  ].join('\n');
+}
+
+/**
  * Judge one bundle with the LLM. Returns an enriched VerdictResult, or null if the
  * model call/parse failed (the caller keeps the heuristic verdict in that case).
  */
@@ -198,26 +238,7 @@ export async function judgeBundleWithLlm(
   fileCache?: FileContentCache,
 ): Promise<VerdictResult | null> {
   const c = bundle.candidate;
-  const notes = (projectNotes ?? []).filter(Boolean);
-  const user = [
-    `ALLOCATION SITE: ${c.function_name || '?'}() at ${c.file_path}:${c.line_number} (${c.allocation_type || 'alloc'})`,
-    ``,
-    'CODE (context around the allocation):',
-    '```c',
-    sourceSnippet(bundle, fileCache),
-    '```',
-    ``,
-    'STATIC ANALYSIS CONTEXT:',
-    summarizeStatic(staticContext),
-    ``,
-    `DYNAMIC EVIDENCE (${bundle.evidence.length}):`,
-    summarizeEvidence(bundle),
-    ...(notes.length
-      ? ['', 'PROJECT OWNERSHIP CONVENTIONS (respect these — they encode how THIS project manages memory):', ...notes.map((n) => `- ${n}`)]
-      : []),
-    ``,
-    'Return your JSON verdict.',
-  ].join('\n');
+  const user = buildJudgeUserMessage(bundle, staticContext, projectNotes, fileCache);
 
   let resp;
   try {

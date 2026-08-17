@@ -55,6 +55,12 @@ Options:
   --static-discovery / --no-static-discovery  Static candidate discovery
   --consensus-n <n>       Consensus samples (default: 1 = single LLM)
   --consensus-rule <rule>  Consensus voting rule
+  --consensus-early-stop / --no-consensus-early-stop  Stop sampling once the
+                          flag/no-flag decision is mathematically locked in
+                          (default: config value, false)
+  --judge-cache / --no-judge-cache  Disk-persisted judge-verdict cache (default:
+                          config value, true) — ablation/stability scripts that
+                          repeat-run the SAME evidence must pass --no-judge-cache
   --max-case-ms <n>       Wall-clock deadline per case, ms (default: 0 = off)
   --max-case-cost-usd <n>  Soft $ cap per case (default: 0 = off)
   --static-url <url>       MCP static analyzer URL
@@ -81,6 +87,8 @@ const CorpusEvalOptionsSchema = z.object({
   dynamicUrl: z.string().default('http://127.0.0.1:50072/mcp'),
   consensusN: z.number().int().min(1).optional(),
   consensusRule: z.enum(['majority', 'weighted', 'unanimous-to-flag']).optional(),
+  consensusEarlyStop: z.boolean().optional(),
+  judgeCacheEnabled: z.boolean().optional(),
   allowUnvalidated: z.boolean().default(false),
   stratify: z.string().optional(),
   resume: z.boolean().default(false),
@@ -115,6 +123,17 @@ function parseCorpusArgs(): CorpusEvalOptions {
     ? Math.max(1, parseInt((flag('consensus-n') ?? process.env.CONSENSUS_N)!, 10))
     : cfg.consensus.n > 1 ? cfg.consensus.n : undefined;
   const consensusRule = flag('consensus-rule') as 'majority' | 'weighted' | 'unanimous-to-flag' | undefined;
+  const consensusEarlyStop = process.argv.includes('--consensus-early-stop') ? true
+    : process.argv.includes('--no-consensus-early-stop') ? false
+    : undefined;
+  // Ablation/stability scripts that intentionally re-judge the SAME evidence across
+  // repeat runs (consensus-ablation.sh, earlystop-ablation.sh) MUST disable the
+  // judge-verdict cache — a cache hit on the second run would just replay the
+  // first run's verdict verbatim, making every repeat trivially "0% flip rate"
+  // regardless of genuine LLM run-to-run variance.
+  const judgeCacheEnabled = process.argv.includes('--judge-cache') ? true
+    : process.argv.includes('--no-judge-cache') ? false
+    : undefined;
 
   const allowUnvalidated = process.argv.includes('--allow-unvalidated');
 
@@ -158,7 +177,7 @@ function parseCorpusArgs(): CorpusEvalOptions {
 
   const parsed = CorpusEvalOptionsSchema.parse({
     mode, limit, runs, dynamic, corpusDir, staticUrl, dynamicUrl,
-    consensusN, consensusRule, allowUnvalidated, stratify,
+    consensusN, consensusRule, consensusEarlyStop, judgeCacheEnabled, allowUnvalidated, stratify,
     resume, concurrency, staticTools, enrich, strategy,
     toolSelect, staticDiscovery, dryRun, verbose,
     maxCaseMs, maxCaseCostUsd,
@@ -194,6 +213,8 @@ export async function main(): Promise<void> {
     console.log(`  maxCaseMs: ${opts.maxCaseMs ?? 'off (config default)'}`);
     console.log(`  maxCaseCostUsd: ${opts.maxCaseCostUsd ?? 'off (config default)'}`);
     console.log(`  consensusRule: ${opts.consensusRule ?? 'default'}`);
+    console.log(`  consensusEarlyStop: ${opts.consensusEarlyStop ?? 'default (false)'}`);
+    console.log(`  judgeCacheEnabled: ${opts.judgeCacheEnabled ?? 'default (true)'}`);
     console.log(`  staticTools: ${opts.staticTools ?? 'default'}`);
     console.log(`  enrich: ${opts.enrich ?? 'default'}`);
     console.log(`  strategy: ${opts.strategy ?? 'default'}`);
@@ -205,7 +226,7 @@ export async function main(): Promise<void> {
     process.exit(0);
   }
 
-  const baseOpts = { corpusDir: opts.corpusDir, mode: opts.mode, dynamic: opts.dynamic, limit: opts.limit, concurrency: opts.concurrency, resume: opts.resume, stratify: opts.stratify, staticUrl: opts.staticUrl, dynamicUrl: opts.dynamicUrl, consensusN: opts.consensusN, consensusRule: opts.consensusRule, allowUnvalidated: opts.allowUnvalidated, staticTools: opts.staticTools, enrich: opts.enrich, strategy: opts.strategy, toolSelect: opts.toolSelect, staticDiscovery: opts.staticDiscovery, maxCaseMs: opts.maxCaseMs, maxCaseCostUsd: opts.maxCaseCostUsd };
+  const baseOpts = { corpusDir: opts.corpusDir, mode: opts.mode, dynamic: opts.dynamic, limit: opts.limit, concurrency: opts.concurrency, resume: opts.resume, stratify: opts.stratify, staticUrl: opts.staticUrl, dynamicUrl: opts.dynamicUrl, consensusN: opts.consensusN, consensusRule: opts.consensusRule, consensusEarlyStop: opts.consensusEarlyStop, judgeCacheEnabled: opts.judgeCacheEnabled, allowUnvalidated: opts.allowUnvalidated, staticTools: opts.staticTools, enrich: opts.enrich, strategy: opts.strategy, toolSelect: opts.toolSelect, staticDiscovery: opts.staticDiscovery, maxCaseMs: opts.maxCaseMs, maxCaseCostUsd: opts.maxCaseCostUsd };
   const pct = (x: number) => `${(x * 100).toFixed(1)}%`;
 
   let runningTP = 0, runningFP = 0, runningFN = 0, runningTN = 0;

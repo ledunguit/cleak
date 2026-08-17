@@ -18,6 +18,18 @@ export interface ConsensusJudgeConfig {
   earlyStop: boolean;
 }
 
+/** Disk-persisted, content-hash-keyed cache of LLM judge verdicts under
+ * `<repo>/.cleak/judge-cache/` — skips the LLM entirely (including every
+ * consensus sample) for a bundle whose evidence is byte-identical to a
+ * previously-judged one. Default ON: correctness rests on the cache key
+ * covering everything that affects the prompt (see judgeVerdictCache.ts),
+ * not on being opt-in — same default posture as the static-analyzer's AST
+ * cache. */
+export interface JudgeCacheConfig {
+  enabled: boolean;
+  maxEntries: number;
+}
+
 export interface ProviderConfig {
   provider: Provider;
   baseUrl: string;
@@ -110,6 +122,8 @@ export interface RunConfig {
   };
   /** Consensus judge (self-consistency) configuration for the borderline judge stage. */
   consensus: ConsensusJudgeConfig;
+  /** LLM judge-verdict disk cache — see JudgeCacheConfig. */
+  judgeCache: JudgeCacheConfig;
   /** External baseline tool paths. */
   baselines: BaselinesConfig;
   /** Eval-time host→container path remapping (format: "from=to"). */

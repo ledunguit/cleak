@@ -81,6 +81,11 @@ export interface HeadlessOptions {
   quiet?: boolean;
   /** Consensus-judge override (ablation): partial knobs merged over env defaults. */
   consensus?: Partial<ConsensusJudgeConfig>;
+  /** Judge-verdict disk-cache override. Default (unset) leaves the config value
+   * (true) — set `false` for ablation/stability experiments that intentionally
+   * re-judge the SAME evidence across repeat runs to measure genuine LLM
+   * run-to-run variance, which a cache hit would otherwise mask entirely. */
+  judgeCacheEnabled?: boolean;
   /** Live ScanEvent stream (used by the eval harness to show per-case phase). */
   onEvent?: (ev: ScanEvent) => void;
   /** Interrupt discovery + the agentic loop (e.g. eval cancel). */
@@ -114,6 +119,7 @@ export async function runHeadless(opts: HeadlessOptions): Promise<HeadlessResult
     ...(opts.hostRoot ? { hostRoot: opts.hostRoot } : {}),
     ...(opts.analyzerRoot ? { analyzerRoot: opts.analyzerRoot } : {}),
     ...(opts.consensus ? { consensus: opts.consensus as ConsensusJudgeConfig } : {}),
+    ...(opts.judgeCacheEnabled !== undefined ? { judgeCache: { enabled: opts.judgeCacheEnabled } } : {}),
   });
   // `workflow` isn't deep-merged by loadConfig's overrides (only `consensus`/`llm`
   // are) — flip just this one nested flag after defaults are resolved instead of

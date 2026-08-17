@@ -26,7 +26,7 @@ export interface EvalProvenance {
    * drift). False ⇒ this number was measured on UNVERIFIED data (--allow-unvalidated). */
   corpusValidated?: boolean;
   /** Consensus-judge configuration for this run (records the ablation condition). */
-  consensus?: { n: number; rule: string };
+  consensus?: { n: number; rule: string; earlyStop?: boolean };
   /** Which subset of the corpus was actually evaluated — 'all' cases, a plain
    * top-N slice, a SEEDED random sample (reproducible from `randomSeed` alone),
    * or a stratified round-robin sample keyed by `stratifyKey`. Recorded so a
@@ -93,7 +93,7 @@ export function captureProvenance(opts: {
   corpusValidated?: boolean;
   manifestPath?: string;
   runs?: number;
-  consensus?: { n: number; rule: string };
+  consensus?: { n: number; rule: string; earlyStop?: boolean };
   sampling?: EvalProvenance['sampling'];
 }): EvalProvenance {
   const hash = opts.corpusHash ?? (opts.manifestPath ? corpusHash(opts.manifestPath) : undefined);

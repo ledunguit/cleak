@@ -115,6 +115,15 @@ export const CleakConfigSchema = z
         earlyStop: zBool,
       })
       .partial(),
+    // Disk-persisted LLM judge-verdict cache under <repo>/.cleak/judge-cache/.
+    // Default ON (see JudgeCacheConfig in types.ts) — `cleak config set
+    // judgeCache.enabled false` to disable.
+    judgeCache: z
+      .object({
+        enabled: zBool,
+        maxEntries: zNum,
+      })
+      .partial(),
     // UI / runtime flags (previously env-only).
     fullscreen: zBool,
     sidebarPosition: z.enum(['left', 'right']),

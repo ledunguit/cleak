@@ -16,6 +16,16 @@ import {
 } from './normalize';
 import type { ProviderSettings } from './settings';
 
+/** The OpenAI-compatible API rejects response_format:{type:"json_object"} with a 400
+ * ("Prompt must contain the word 'json' in some form...") unless the prompt actually
+ * mentions it — discovered when this broke the LLM health-check's short, JSON-agnostic
+ * probe prompt. Checked instead of assumed so response_format is only ever set when the
+ * request can't be rejected for this reason. */
+function mentionsJson(req: CallModelRequest): boolean {
+  if (/json/i.test(req.systemPrompt)) return true;
+  return req.messages.some((m) => typeof m.content === 'string' && /json/i.test(m.content));
+}
+
 export async function callOpenAiChat(
   settings: ProviderSettings,
   req: CallModelRequest,
@@ -35,11 +45,13 @@ export async function callOpenAiChat(
   if (req.tools.length) {
     body.tools = toOpenAiTools(req.tools);
     body.tool_choice = 'auto';
-  } else if (settings.jsonMode) {
+  } else if (settings.jsonMode && mentionsJson(req)) {
     // Tool-less single-shot JSON prompts (judge / strategist / allocator-profiler) already
     // instruct "respond with a JSON object ONLY" — ask the provider to actually enforce
     // that syntactically instead of relying purely on prompt compliance. Gated on an empty
-    // tools array so this never interacts with the agentic tool-calling loops.
+    // tools array so this never interacts with the agentic tool-calling loops, and on
+    // mentionsJson so a JSON-agnostic tools:[] call (e.g. the LLM health-check's short
+    // probe prompt) doesn't get a response_format the API would 400 on.
     body.response_format = { type: 'json_object' };
   }
 

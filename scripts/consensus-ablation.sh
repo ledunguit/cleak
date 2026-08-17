@@ -24,7 +24,11 @@ export EVAL_DYNAMIC_URL="${EVAL_DYNAMIC_URL:-http://127.0.0.1:50062/mcp}"
 rm -rf "$OUT"; mkdir -p "$OUT"/s1a "$OUT"/s1b "$OUT"/sca "$OUT"/scb
 
 run () { # <subdir> <consensus-n>
-  RESULTS_DIR="$OUT/$1" pnpm exec tsx scripts/evaluate-corpus.ts llm_assisted --limit "$LIMIT" --consensus-n "$2"
+  # --no-judge-cache: this script's whole methodology is re-judging the SAME
+  # evidence twice per arm to measure genuine LLM run-to-run variance — the
+  # judge-verdict cache (default on) would otherwise make run B just replay
+  # run A's cached verdicts verbatim, trivially reporting 0% flip rate.
+  RESULTS_DIR="$OUT/$1" pnpm exec tsx scripts/evaluate-corpus.ts llm_assisted --limit "$LIMIT" --consensus-n "$2" --no-judge-cache
 }
 
 echo "############ single-LLM (n=1) — run A ############"; run s1a 1
