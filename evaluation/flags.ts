@@ -24,6 +24,7 @@ export interface CliFlags {
   staticDiscovery?: boolean;
   consensusN?: number;
   consensusRule?: 'majority' | 'weighted' | 'unanimous-to-flag';
+  judgeCacheEnabled?: boolean;
   maxCaseMs?: number;
   maxCaseCostUsd?: number;
   maxConsecutiveErrors?: number;
@@ -116,6 +117,7 @@ export function parseFlags(argv: string[] = process.argv.slice(2)): CliFlags {
     staticDiscovery: boolFlag(argv, 'static-discovery', 'no-static-discovery'),
     consensusN: consensusNRaw ? Math.max(1, parseInt(consensusNRaw, 10)) : undefined,
     consensusRule: flag(argv, 'consensus-rule') as CliFlags['consensusRule'],
+    judgeCacheEnabled: boolFlag(argv, 'judge-cache', 'no-judge-cache'),
     maxCaseMs: maxCaseMsRaw ? Math.max(0, parseInt(maxCaseMsRaw, 10)) : undefined,
     maxCaseCostUsd: maxCaseCostUsdRaw ? Math.max(0, parseFloat(maxCaseCostUsdRaw)) : undefined,
     maxConsecutiveErrors: maxConsecutiveErrorsRaw ? Math.max(0, parseInt(maxConsecutiveErrorsRaw, 10)) : undefined,
@@ -168,6 +170,10 @@ Run shape:
 LLM / judge:
   --provider <local|openai|anthropic|openai-compat>
   --consensus-n <n> / --consensus-rule <majority|weighted|unanimous-to-flag>
+  --judge-cache / --no-judge-cache  Disk-persisted judge-verdict cache (default:
+                           config value, true) — pass --no-judge-cache for any
+                           --runs>1 sweep (a cache hit on repeat 2+ would replay
+                           repeat 1's verdict, hiding real LLM run-to-run variance)
   --strategy <auto|off>
   --enrich / --no-enrich
   --tool-select / --no-tool-select

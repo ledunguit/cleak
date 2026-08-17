@@ -29,6 +29,7 @@ function toEvalOptions(plan: ResolvedPlan): Omit<EvalOptions, 'outDir'> {
     allowUnvalidated: plan.allowUnvalidated,
     consensusN: plan.consensusN,
     consensusRule: plan.consensusRule,
+    judgeCacheEnabled: plan.judgeCacheEnabled,
     strategy: plan.strategy,
     enrich: plan.enrich,
     toolSelect: plan.toolSelect,
@@ -57,6 +58,7 @@ export function printResolvedPlan(plan: ResolvedPlan): void {
   console.log(`  provider: ${plan.provider ?? '(config default)'}`);
   console.log(`  consensusN: ${plan.consensusN ?? 'default'}`);
   console.log(`  consensusRule: ${plan.consensusRule ?? 'default'}`);
+  console.log(`  judgeCacheEnabled: ${plan.judgeCacheEnabled ?? 'default (true)'}${plan.runs > 1 && plan.judgeCacheEnabled !== false ? '  ⚠ runs>1 with the cache on will hide real LLM variance on repeats — pass --no-judge-cache' : ''}`);
   console.log(`  strategy: ${plan.strategy ?? 'default'}`);
   console.log(`  enrich: ${plan.enrich ?? 'default'}`);
   console.log(`  toolSelect: ${plan.toolSelect ?? 'default'}`);

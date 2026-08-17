@@ -51,6 +51,11 @@ export interface SweepOptions {
   /** Per-baseline-run circuit breaker override — see EvalOptions.maxConsecutiveErrors.
    * Undefined = each run falls back to cleak config's eval.maxConsecutiveErrors. */
   maxConsecutiveErrors?: number;
+  /** Judge-verdict disk-cache override. IMPORTANT whenever any swept baseline has
+   * `runs > 1` (repeat-for-variance, e.g. the fusion baselines B4-B7) — a cache hit
+   * on repeat 2+ would replay repeat 1's verdict, hiding real LLM run-to-run
+   * variance. Default (unset) leaves the global config value (true). */
+  judgeCacheEnabled?: boolean;
 }
 
 function gitCommit(): string | undefined {
@@ -61,8 +66,20 @@ function gitCommit(): string | undefined {
   }
 }
 
-export function printSweepDryRun(configs: BaselineConfig[], opts: Pick<SweepOptions, 'consensusOverride' | 'runsOverride'>): void {
+export function printSweepDryRun(
+  configs: BaselineConfig[],
+  opts: Pick<SweepOptions, 'consensusOverride' | 'runsOverride' | 'judgeCacheEnabled'>,
+): void {
   console.log('DRY RUN — resolved baseline plans (nothing executed):\n');
+  const anyRepeats = configs.some((c) => (opts.runsOverride ?? c.runs ?? 1) > 1);
+  if (anyRepeats && opts.judgeCacheEnabled !== false) {
+    console.log(
+      '⚠ at least one config has runs>1 (repeat-for-variance) and the judge cache is not ' +
+        'disabled — a cache hit on repeat 2+ will replay repeat 1\'s verdict, hiding real LLM ' +
+        'run-to-run variance. Pass --no-judge-cache for a trustworthy variance measurement.\n',
+    );
+  }
+  console.log(`  judgeCacheEnabled: ${opts.judgeCacheEnabled ?? 'default (true)'}\n`);
   for (const c of configs) {
     const plan = resolveCapabilities(c.capabilities, { consensusN: opts.consensusOverride ?? c.consensusN, runs: opts.runsOverride ?? c.runs });
     const w = isWiredNow(plan);
@@ -110,6 +127,7 @@ export async function runBaselineSweep(configs: BaselineConfig[], opts: SweepOpt
       staticUrl: opts.staticUrl,
       dynamicUrl: opts.dynamicUrl,
       consensusN: plan.consensusN,
+      judgeCacheEnabled: opts.judgeCacheEnabled,
       strategy: plan.strategy,
       enrich: opts.enrichOverride ?? plan.enrich,
       toolSelect: plan.toolSelect,

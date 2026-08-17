@@ -51,6 +51,7 @@ function resolvePlanFromFlags(flags: CliFlags): ResolvedPlan {
     allowUnvalidated: flags.allowUnvalidated,
     consensusN: flags.consensusN,
     consensusRule: flags.consensusRule,
+    judgeCacheEnabled: flags.judgeCacheEnabled,
     strategy: flags.strategy,
     enrich: flags.enrich,
     toolSelect: flags.toolSelect,
@@ -91,7 +92,7 @@ async function runBaselineMode(flags: CliFlags): Promise<void> {
   }
 
   if (flags.dryRun) {
-    printSweepDryRun(configs, { consensusOverride: flags.consensusN, runsOverride: flags.runs });
+    printSweepDryRun(configs, { consensusOverride: flags.consensusN, runsOverride: flags.runs, judgeCacheEnabled: flags.judgeCacheEnabled });
     return;
   }
 
@@ -99,7 +100,7 @@ async function runBaselineMode(flags: CliFlags): Promise<void> {
   const outDir = flags.outDir ?? `results/baseline-sweep-${stamp}`;
 
   if (interactive) {
-    printSweepDryRun(configs, { consensusOverride: flags.consensusN, runsOverride: flags.runs });
+    printSweepDryRun(configs, { consensusOverride: flags.consensusN, runsOverride: flags.runs, judgeCacheEnabled: flags.judgeCacheEnabled });
     const { confirm } = await import('@inquirer/prompts');
     const go = await confirm({ message: `Run ${configs.length} baseline config(s) against ${corpusDir} now?`, default: true });
     if (!go) {
@@ -121,6 +122,7 @@ async function runBaselineMode(flags: CliFlags): Promise<void> {
     allowUnvalidated: flags.allowUnvalidated,
     consensusOverride: flags.consensusN,
     runsOverride: flags.runs,
+    judgeCacheEnabled: flags.judgeCacheEnabled,
     enrichOverride: flags.enrich,
     staticTools: flags.staticTools,
     includeUnwired: flags.includeUnwired,

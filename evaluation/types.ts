@@ -32,5 +32,11 @@ export interface ResolvedPlan {
   maxCaseMs?: number;
   maxCaseCostUsd?: number;
   maxConsecutiveErrors?: number;
+  /** Judge-verdict disk-cache override. IMPORTANT for `runs > 1` (repeat-for-
+   * variance): a cache hit on repeat 2+ would just replay repeat 1's cached
+   * verdict, silently collapsing measured LLM run-to-run variance to ~0
+   * regardless of the real number. Default (unset) leaves the global config
+   * value (true) — pass `--no-judge-cache` for any variance-measuring sweep. */
+  judgeCacheEnabled?: boolean;
   verbose: boolean;
 }
