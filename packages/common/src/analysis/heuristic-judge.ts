@@ -22,10 +22,8 @@ import { evidenceIndicatesLeak } from './judge-shared';
 /**
  * Verdict score thresholds. These are the FROZEN benchmark defaults — the evaluation
  * ALWAYS uses these, so the reported Juliet/LAMeD numbers are an honest, fixed-policy
- * measure (no per-project tuning leaks into the benchmark). A production scan MAY pass a
- * bounded per-project override (see domain/judgeTuner.ts) to adapt to a project's
- * ownership style; the thesis reports both default and tuned numbers. Named here (not
- * inlined) so the calibration is explicit + auditable rather than magic constants.
+ * measure (no per-project tuning leaks into the benchmark). Named here (not inlined)
+ * so the calibration is explicit + auditable rather than magic constants.
  */
 export interface VerdictThresholds {
   /** score ≥ this → confirmed_leak */

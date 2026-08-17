@@ -74,3 +74,39 @@ describe('callOpenAiChat (streaming)', () => {
     expect(r.stopReason).toBe('stop');
   });
 });
+
+describe('callOpenAiChat — response_format (jsonMode)', () => {
+  test('jsonMode + no tools → requests the provider JSON-object response mode', async () => {
+    mode = 'json';
+    await callOpenAiChat({ ...settings, jsonMode: true }, req, () => 'uuid');
+    expect(lastBody.response_format).toEqual({ type: 'json_object' });
+    expect(lastBody.tools).toBeUndefined();
+  });
+
+  test('jsonMode + tools present → tools win, no response_format (never touches agentic loops)', async () => {
+    mode = 'json';
+    const toolReq: CallModelRequest = {
+      ...req,
+      tools: [
+        {
+          name: 'read_file',
+          description: 'read a file',
+          inputSchema: undefined,
+          inputJSONSchema: { type: 'object', properties: {} },
+          isReadOnly: () => true,
+          isConcurrencySafe: () => true,
+          call: async () => ({}),
+        } as any,
+      ],
+    };
+    await callOpenAiChat({ ...settings, jsonMode: true }, toolReq, () => 'uuid');
+    expect(lastBody.tools).toBeDefined();
+    expect(lastBody.response_format).toBeUndefined();
+  });
+
+  test('jsonMode false/undefined → no response_format sent (unchanged default behavior)', async () => {
+    mode = 'json';
+    await callOpenAiChat(settings, req, () => 'uuid');
+    expect(lastBody.response_format).toBeUndefined();
+  });
+});

@@ -14,8 +14,16 @@ const EMPTY_OBJECT_SCHEMA: Record<string, unknown> = {
   additionalProperties: false,
 };
 
+// Tool objects are stable module-level singletons reused across every turn of
+// every queryLoop call (and across concurrent loops sharing the same tool
+// catalog) — z.toJSONSchema() is deterministic per tool, so memoize by Tool
+// identity instead of recomputing it on every single model call.
+const jsonSchemaCache = new WeakMap<Tool, Record<string, unknown>>();
+
 export function toolParametersJSONSchema(tool: Tool): Record<string, unknown> {
   if (tool.inputJSONSchema) return tool.inputJSONSchema;
+  const cached = jsonSchemaCache.get(tool);
+  if (cached) return cached;
   if (tool.inputSchema) {
     try {
       // zod v4 exposes a top-level JSON Schema emitter.
@@ -24,6 +32,7 @@ export function toolParametersJSONSchema(tool: Tool): Record<string, unknown> {
       );
       // Strip the $schema meta key — providers don't need it.
       const { $schema: _drop, ...rest } = schema as Record<string, unknown>;
+      jsonSchemaCache.set(tool, rest);
       return rest;
     } catch {
       return EMPTY_OBJECT_SCHEMA;

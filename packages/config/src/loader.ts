@@ -7,7 +7,12 @@
 import type { ConsensusRule } from "./types.js";
 import { loadConfigFile } from "./persist.js";
 import type { CleakConfig } from "./schema.js";
+import { PROVIDERS } from "./schema.js";
 import type { Provider, ProviderConfig, RunConfig, EnvOverrides } from "./types.js";
+
+function isProvider(v: string): v is Provider {
+  return (PROVIDERS as readonly string[]).includes(v);
+}
 
 // Layered resolution: config-file value > built-in default. CLI-flag overrides
 // are applied on top in loadConfig(), so the full precedence is
@@ -35,8 +40,10 @@ function pickBool(fileVal: boolean | undefined, fallback: boolean): boolean {
 function readEnvOverrides(): EnvOverrides {
   const out: EnvOverrides = {};
   const e = process.env;
-  if (e.LLM_PROVIDER && ["local", "openai", "anthropic", "openai-compat"].includes(e.LLM_PROVIDER)) {
-    out.provider = e.LLM_PROVIDER as Provider;
+  // Any non-empty value is accepted: a canonical provider type or a named profile
+  // (see resolveProvider) — consistent with the config-file/CLI-flag precedence.
+  if (e.LLM_PROVIDER) {
+    out.provider = e.LLM_PROVIDER;
   }
   if (e.STATIC_ANALYZER_MCP_URL) out.staticUrl = e.STATIC_ANALYZER_MCP_URL;
   if (e.DYNAMIC_ANALYZER_MCP_URL) out.dynamicUrl = e.DYNAMIC_ANALYZER_MCP_URL;
@@ -74,12 +81,29 @@ function injectEnvIntoFile(file: CleakConfig): CleakConfig {
   return result;
 }
 
-/** Resolve the per-provider LLM settings (separate keys so they never collide).
- * Reads tuning from the config file's `llm` block and per-provider `endpoints`. */
-export function resolveProvider(provider: Provider, file?: CleakConfig): ProviderConfig {
+/** Resolve the named-profile LLM settings (separate keys so they never collide).
+ * `profileName` is a lookup key into `endpoints` — either one of the 4 canonical
+ * provider types (pre-multi-profile configs) or a custom name whose entry declares
+ * its own `provider` transport (e.g. a second openai-compat-shaped vendor). Reads
+ * tuning from the config file's `llm` block and the resolved profile's `endpoints`
+ * entry. Throws if `profileName` can't be resolved to a known transport — fail
+ * loud, matching evalHarness.ts's LLM health-check pattern, rather than silently
+ * falling back to a wrong default. */
+export function resolveProvider(profileName: string, file?: CleakConfig): ProviderConfig {
   const resolvedFile = file ?? injectEnvIntoFile(loadConfigFile());
   const llm = resolvedFile.llm ?? {};
-  const ep = (p: Provider): { baseUrl?: string; model?: string; apiKey?: string } => resolvedFile.endpoints?.[p] ?? {};
+  const e = resolvedFile.endpoints?.[profileName] ?? {};
+  const provider: Provider =
+    e.provider ??
+    (isProvider(profileName)
+      ? profileName
+      : (() => {
+          throw new Error(
+            `provider profile '${profileName}' has no transport — set ` +
+              `\`endpoints.${profileName}.provider\` to one of ${PROVIDERS.join("|")}, ` +
+              `or point \`provider\` at an existing profile/canonical type.`,
+          );
+        })());
   const timeoutMs = pickNum(llm.timeoutMs, 75000);
   // Streaming path: an *idle* gap timer (no bytes for this long = hung), not a
   // total deadline — so a model that keeps emitting tokens is never killed.
@@ -93,7 +117,6 @@ export function resolveProvider(provider: Provider, file?: CleakConfig): Provide
   const judgeTemperature = pickNum(llm.judgeTemperature, 0);
   const common = { temperature, judgeTemperature, timeoutMs, idleTimeoutMs, connectTimeoutMs, retries, maxTokens };
   if (provider === "openai") {
-    const e = ep("openai");
     return {
       provider,
       baseUrl: pickStr(e.baseUrl, "https://api.openai.com/v1"),
@@ -104,7 +127,6 @@ export function resolveProvider(provider: Provider, file?: CleakConfig): Provide
     };
   }
   if (provider === "anthropic") {
-    const e = ep("anthropic");
     return {
       provider,
       baseUrl: pickStr(e.baseUrl, "https://api.anthropic.com"),
@@ -118,7 +140,6 @@ export function resolveProvider(provider: Provider, file?: CleakConfig): Provide
     // Any OpenAI-compatible server (LM Studio, vLLM, Ollama, OpenRouter, a private
     // gateway). No api.openai.com default — the base URL/model are user-supplied
     // (config file / CLI). Routes through the OpenAI chat path.
-    const e = ep("openai-compat");
     return {
       provider,
       baseUrl: pickStr(e.baseUrl, ""),
@@ -129,7 +150,6 @@ export function resolveProvider(provider: Provider, file?: CleakConfig): Provide
     };
   }
   // local OpenAI-compatible gateway (thesis default)
-  const e = ep("local");
   return {
     provider: "local",
     baseUrl: pickStr(e.baseUrl, "http://localhost:20128/v1"),
@@ -141,13 +161,14 @@ export function resolveProvider(provider: Provider, file?: CleakConfig): Provide
 }
 
 export function loadConfig(
-  overrides: Omit<Partial<RunConfig>, "llm"> & { provider?: Provider; llm?: Partial<ProviderConfig> } = {},
+  overrides: Omit<Partial<RunConfig>, "llm"> & { provider?: string; llm?: Partial<ProviderConfig> } = {},
 ): RunConfig {
   const file = loadConfigFile();
   const env = readEnvOverrides();
 
-  const provider =
-    overrides.provider ?? env.provider ?? (pickOpt(file.provider) as Provider | undefined) ?? "local";
+  // `provider` is now a lookup key (canonical type or named profile) — see
+  // resolveProvider() for how it's turned into an actual transport.
+  const provider: string = overrides.provider ?? env.provider ?? pickOpt(file.provider) ?? "local";
 
   const fileWithEnv = injectEnvIntoFile(file);
 
@@ -166,6 +187,13 @@ export function loadConfig(
       keepRecentTurns: pickNum(file.compaction?.keepRecentTurns, 3),
     },
     workflow: {
+      // staticConcurrency=3 / staticGroupSize=4: confirmed via an efficiency audit
+      // (this session) to be untuned literal defaults present since the earliest
+      // commit that added these keys — no benchmark/rationale behind the specific
+      // numbers. Left as-is rather than blind-retuned (that would just trade one
+      // unmeasured guess for another); only worth revisiting alongside a real batch
+      // benchmark (e.g. the LAMeD multi-case batch harness used elsewhere this
+      // session), not a one-off default change.
       staticConcurrency: Math.max(1, pickNum(file.workflow?.staticConcurrency, 3)),
       staticGroupSize: Math.max(1, pickNum(file.workflow?.staticGroupSize, 4)),
       judgeConcurrency: Math.max(1, pickNum(file.workflow?.judgeConcurrency, 3)),
@@ -203,6 +231,7 @@ export function loadConfig(
       rule: parseConsensusRule(pickStr(file.consensus?.rule, "weighted")),
       temperature: pickNum(file.consensus?.temperature, 0.7),
       concurrency: Math.max(1, pickNum(file.consensus?.concurrency, 3)),
+      earlyStop: pickBool(file.consensus?.earlyStop, false),
     },
     baselines: {
       clangBin: pickStr(file.baselines?.clangBin, "clang"),

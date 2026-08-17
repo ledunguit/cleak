@@ -21,8 +21,8 @@
 Path TUI **không** phải một agent tự do gọi mọi tool. Nó là một **workflow đa-agent theo
 tầng**, định nghĩa ở `apps/leak-inspector-tui/src/orchestrator/workflowInvestigation.ts`.
 
-LLM được gọi ở hai nơi: (1) **tầng POLICY host-side** TRƯỚC pipeline (3 prompt one-shot:
-allocator-profiler, strategist, judge-tuner — xem §0.5), và (2) **investigation 4-tầng** (Stage A,
+LLM được gọi ở hai nơi: (1) **tầng POLICY host-side** TRƯỚC pipeline (2 prompt one-shot:
+allocator-profiler, strategist — xem §0.5), và (2) **investigation 4-tầng** (Stage A,
 Stage B-khi-cần, Stage D). Stage C + hợp nhất bằng chứng là **tất định, không LLM**. Mọi prompt POLICY
 là one-shot temp-0, output **verify (grep/clamp) + cache**, và **bỏ qua trong benchmark** (manifest đông
 cứng) ⇒ eval tất định.
@@ -61,7 +61,7 @@ content}` (`providers/normalize.ts:41`). Mặc định thesis: gateway OpenAI-co
 
 ## 0.5. Tầng POLICY (host-side, one-shot, TRƯỚC investigation)
 
-Ba prompt khám-phá-theo-project, đều: *gather host-side → one-shot `callModel` (temp 0) → parse Zod
+Hai prompt khám-phá-theo-project, đều: *gather host-side → one-shot `callModel` (temp 0) → parse Zod
 lenient (kiểu `parseVerdict`) → **verify** → cache `<repo>/.cleak/`*. Resolve ở `surfaces/headless.ts`.
 **Bỏ qua khi allocators được cấp tường minh** (eval) ⇒ tất định.
 
@@ -108,21 +108,6 @@ Guidance:
 - judge: "consensus" (slower, more robust) for projects whose ownership is subtle — heavy smart-pointer / refcounting / C++; else "single".
 - staticDepth: "shallow" (function summaries only) for tiny or trivial projects; "full" (path constraints + ownership + interprocedural) for larger or control-flow-heavy ones.
 Be decisive; prefer cheaper plans when they lose no recall.
-```
-
-### 0.5.3. Judge tuner — `judgeTunerSystemPrompt`
-
-- **File:** `apps/leak-inspector-tui/src/domain/judgeTuner.ts:51-56`
-
-Từ profile → nudge ngưỡng verdict `{confirmed, likely}` cho hợp memory-style project. **Clamp cứng**
-(confirmed 0.55–0.85, likely 0.25–0.6, confirmed>likely) ⇒ LLM không thể làm judge liều. **Production-only**
-— eval LUÔN dùng ngưỡng đông cứng `JUDGE_VERDICT_THRESHOLDS`.
-
-```text
-You calibrate a C/C++ leak judge's verdict thresholds for ONE project. The judge scores each candidate in [0,1]; score ≥ confirmed → confirmed_leak, ≥ likely → likely_leak, else uncertain.
-Defaults: confirmed=0.7, likely=0.4.
-Nudge them to fit the project's memory style, staying near the defaults. Respond with JSON ONLY: {"confirmed": 0.55-0.85, "likely": 0.25-0.6, "rationale": "..."}.
-Heuristics: heavy smart-pointer/RAII or refcounting (false positives likely) → RAISE confirmed slightly; a project with many obvious manual malloc/free and missing frees → LOWER thresholds slightly to catch more. Keep confirmed > likely. Small moves only.
 ```
 
 ---
@@ -252,6 +237,80 @@ không** có trong toolset) + `read_file` + `done_dynamic`. `maxTurns` của wor
 No successful sanitizer run yet. buildTarget (with a sanitizer flag), then run lsanRun/asanRun/valgrindMemcheck, then call ${DONE_DYNAMIC}. Only tool calls advance the work.
 ```
 
+### 2.6. Stage B2 — Targeted harness worker (opt-in, off by default)
+
+- **Gate:** `workflow.targetedHarness.enabled` (mặc định `false` — bật qua
+  `cleak config set workflow.targetedHarness.enabled true` hoặc `--harness`) VÀ phải có
+  `ctx.buildCommand`. Chỉ chạy cho candidate mà static context + Stage B whole-binary vẫn
+  borderline (`needsTargetedDynamic`, `workflowInvestigation.ts:337`), tối đa
+  `maxHarnessesPerScan` (mặc định 5), concurrency `harnessCfg.concurrency` (mặc định 2).
+  Borderline bundle được ưu tiên trước CONFIRMED_LEAK cần double-check
+  (`workflowInvestigation.ts:341`, cờ `verifyConfirmedLeaks`).
+- **System prompt:** `harnessWorkerSystemPrompt(repoPath, buildCommand, analyzerProjectPath)` —
+  `domain/subAgentPrompts.ts:101-144`.
+- **User message:** `harnessWorkerUserMessage(bundle, staticCtx, suggestedClosureFiles)` —
+  `domain/subAgentPrompts.ts:151-174`. `suggestedClosureFiles` là gợi ý **tất định** từ một
+  `interproceduralFlow` call tính **một lần cho cả scan** (không phải LLM tool call,
+  `workflowInvestigation.ts:349-350,362-380`) — worker vẫn tự quyết có dùng hay không.
+- **Tool phát cho model:** `buildHarness`, `lsanRun`, `asanRun` (bọc
+  `withDynamicEvidenceCapture`), `read_file`, `done_harness`
+  (`workflowInvestigation.ts:382-394`).
+- **maxTurns:** `min(cfg.maxTurns, 12)` (`:400`).
+- **Completion nudge** (chèn khi model định dừng trước khi có sanitizer run thành công,
+  `:402-405`):
+
+```text
+No sanitizer run yet for this harness. Call buildHarness, then lsanRun/asanRun on the returned binaryPath, then call done_harness. Only tool calls advance the work.
+```
+
+````text
+You are a TARGETED-HARNESS sub-agent for ONE C/C++ memory-leak candidate. Static analysis alone was inconclusive for it, and the project's normal execution didn't exercise it either — your job is to write a SMALL driver that calls just the suspicious function, compile it, and run it under a sanitizer.
+You do NOT record verdicts — you only get a sanitizer to run against the right code. The system captures findings from your sanitizer run automatically.
+
+The repository root is ${repoPath}. Its build command is: `${buildCommand}`.
+
+Linkage — pick ONE based on the "static linkage" fact given below:
+- If the target function is NOT static (external linkage): your harness source should `extern`-declare it (matching the given return type + parameter types) and call it with concrete argument values. Pass the file(s) needed to link it (usually just the target's own file) as `closureFiles`.
+- If the target function IS `static` (internal linkage): a separate translation unit cannot link it. Your harness source MUST `#include "<absolute path to the target file>"` so the function compiles into the harness's own translation unit — and you must NOT also list that file in `closureFiles` (it would be defined twice).
+
+Choosing argument values: use the given path-constraint text to pick values that drive execution down the LEAKING branch (e.g. a condition text like `flag == NULL` means pass NULL for that parameter). A best-effort, plausible value beats no attempt — you do not need to be exhaustive.
+
+REQUIRED harness shape — the SAME source is compiled twice (once as a plain single run, once as a libFuzzer binary for a follow-up fuzz pass), so it must never define BOTH `main()` and `LLVMFuzzerTestOneInput` for the same build — linking libFuzzer already provides its own `main()`, and a harness with both is a duplicate-symbol error. Put the actual call in a `static` helper and switch the entry point on the `HARNESS_FUZZ` macro (the system defines it automatically for the fuzz build — you never set it):
+```c
+/* extern-declare OR #include the target file per the linkage rule above */
+static void run_case(/* concrete or data-derived args */) {
+    /* the actual call that should reach the leaking branch */
+}
+#ifdef HARNESS_FUZZ
+#include <stdint.h>
+#include <stddef.h>
+int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
+    /* derive AT LEAST ONE argument/buffer from data/size, then: */
+    run_case(/* ... */);
+    return 0;
+}
+#else
+int main(void) {
+    run_case(/* concrete values chosen from the path constraints */);
+    return 0;
+}
+#endif
+```
+Follow this skeleton exactly — same `run_case` body called from both branches, only the entry point differs.
+
+Tools:
+- `read_file` — inspect the target file (and any header it needs) before writing the harness.
+- `buildHarness` (projectPath="${analyzerProjectPath}", buildCommand, harnessSource, targetFile, closureFiles, entryStyle="single") — compiles+links your harness against the real project's own compiler flags. On reason="harness_unresolvable" (see its own description), stop and call done_harness, do not retry. Always call with entryStyle="single" — the system runs the fuzzer build itself later if needed.
+- `lsanRun` (binaryPath) or `asanRun` (binaryPath) — run the compiled harness under a sanitizer, using the binaryPath `buildHarness` returned.
+
+Call buildHarness at most ONCE, then run one sanitizer on the result. If buildHarness fails for a reason other than harness_unresolvable, you may fix the harness source and try ONE more time. When a sanitizer has run (or the harness is unresolvable), call `done_harness`. Do NOT reply with prose — only tool calls advance the work.
+````
+
+> **Sau worker — leo thang fuzz tất định, KHÔNG thêm LLM turn** (`workflowInvestigation.ts:413-443`):
+> nếu single-shot run "sạch" nhưng bundle vẫn borderline VÀ có `libfuzzerRun` tool, hệ thống tự
+> build lại harness đã có với `entryStyle="fuzzer"` và chạy `fuzzBudgetMs` (mặc định 15s) — tái
+> dùng chính xác input harness worker đã viết, không hỏi lại model.
+
 ---
 
 ## 3. Stage D — Judge (LLM, chỉ cho bundle borderline)
@@ -262,9 +321,9 @@ heuristic.
 
 ### 3.1. Cổng leo thang — bundle nào lên LLM
 
-- **`isBorderline`** — `apps/leak-inspector-tui/src/domain/llmJudge.ts:238-243`: verdict
+- **`isBorderline`** — `apps/leak-inspector-tui/src/domain/llmJudge.ts:307-312`: verdict
   `likely_leak`/`uncertain`, **hoặc** `confidence ∈ [0.35, 0.7]`.
-- **`shouldEscalate`** — `llmJudge.ts:256-287`: `isBorderline`, **hoặc** mâu thuẫn
+- **`shouldEscalate`** — `llmJudge.ts:325-355`: `isBorderline`, **hoặc** mâu thuẫn
   static↔verdict / dynamic↔verdict (vd cờ leak nhưng dynamic chạy sạch; không cờ nhưng có
   runtime leak tương quan; verdict nghịch `deriveFusion`). Đây là chỗ tái-kích-hoạt consensus
   khi nó cần nhất.
@@ -281,7 +340,8 @@ Respond with a JSON object ONLY (no prose), in this exact shape:
 Calibrate using the EVIDENCE, in this priority order:
 - A runtime leak (sanitizer/valgrind) whose allocation site is LINKED to this candidate is decisive → confirmed_leak (confidence ≥ 0.9). Weight by leak kind: definitely_lost / asan_leak ⇒ decisive; possibly_lost ⇒ weak corroboration; still_reachable ⇒ usually benign, lean false_positive.
 - A runtime finding in the SAME FILE but a DIFFERENT site (not linked) is weak — do not treat it as proof for this allocation. still_reachable with no other evidence → false_positive.
-- A CLEAN sanitizer/valgrind run that EXERCISED this allocation and reported NO leak here is strong evidence this is NOT a leak → lean false_positive / likely_false_positive (unless a runtime leak is LINKED to this very allocation).
+- A CLEAN sanitizer/valgrind run is only strong exculpation when it EXERCISED THIS ALLOCATION (the evidence entry is CORRELATED to this candidate). A clean run that merely covered the FILE (a different site, or a run with no correlated entry) is weak — it does NOT clear this allocation.
+- UNPAIRED alloc→free at the allocation site is a STRONG leak signal. When the static pairing table marks an allocation 'UNPAIRED' (no free found in this function), do NOT dismiss it with an ownership-transfer narrative (returned / stored in a struct / handed to a callback) UNLESS the code snippet actually shows the pointer being returned, stored, or handed off. When the static pairing is UNPAIRED and the only counter-evidence is an ambiguous clean dynamic run, default to likely_leak — not false_positive.
 - Ownership is decisive for false positives: if the allocation is RETURNED to the caller or its pointer is HANDED OFF to a sink/callback/another function (ownership transferred), freeing it is NOT this function's job. When ownership is transferred AND no runtime leak is linked to THIS allocation, answer likely_false_positive or false_positive — do NOT flag it just because you cannot see the free inside this snippet. An UNPAIRED alloc→free with a reachable leak path and NO ownership transfer → confirmed_leak (≥ 0.85).
 - PATH-SENSITIVE leak: an allocation freed on the main/success path but NOT on an error or early-return path (e.g. `if (err) return NULL;` or `goto fail;` before the free) IS a leak — confirmed_leak — EVEN IF the value is returned or added to a structure on the success path. Ownership transferring on success does not cover the error path that loses the object. If the static context lists the allocation as freed "on some paths only" (conditional) or names it on a reachable un-freed exit path, treat that as decisive.
 - PARAMETER-ownership leak (allocation_type 'parameter_ownership'): when a function frees a pointer PARAMETER on some paths (taking ownership from the caller, e.g. cJSON's `merge_patch` does `cJSON_Delete(target)`) but a reachable branch returns WITHOUT freeing it, that branch leaks the parameter — confirmed_leak. The parameter has no allocation site in the function; judge it by the conditional free + the reachable un-freed exit.
@@ -289,13 +349,24 @@ Calibrate using the EVIDENCE, in this priority order:
 - Control flow is concrete, not hypothetical: a constant or scaffolding global such as `if(1)`/`if(0)` or `globalReturnsTrue()` does NOT change between two checks in the SAME function — `if(1)` always runs and `if(0)` is dead code. If the buffer is freed under the same condition it was allocated (or in the `else` of a constant `if`), it IS freed. Do NOT call a leak just because the `free()` sits in a different block, behind a constant condition, or after a `break`/in a second loop — trace whether it actually executes.
 ```
 
-> **Thay đổi so với phiên bản đầu:** 2 câu được thêm vào SYSTEM_PROMPT:
-> (1) Cuối bullet PATH-SENSITIVE: "Ownership transferring on success does not cover the error path that loses the object." — nhấn mạnh rằng ownership transfer chỉ bao phủ success path, không bao phủ error path làm mất object.
-> (2) Bullet PARAMETER-ownership được mở rộng với "The parameter has no allocation site in the function; judge it by the conditional free + the reachable un-freed exit." — làm rõ rằng parameter không có allocation site trong function, judge dựa trên conditional free + reachable un-freed exit.
+> **Thay đổi so với phiên bản đầu** (đã đồng bộ với code hiện tại — bản trước của mục này trong
+> tài liệu bị lệch khỏi code, xem audit phiên làm việc gắn với việc sửa mục này):
+> (1) Bullet CLEAN sanitizer/valgrind được viết lại chặt hơn — trước đây "clean run EXERCISED
+> allocation này" coi là exculpation mạnh; nay chỉ exculpate khi evidence entry **CORRELATED**
+> với đúng candidate này (`llmJudge.ts:110-114`, ghi chú "task-5 class-(b) hardening" — clean
+> run chỉ cover cùng FILE nhưng khác site KHÔNG được tính là đã "exercise" allocation này, tránh
+> exculpate nhầm các allocation UNPAIRED).
+> (2) Bullet UNPAIRED alloc→free (mới, trước đây không có trong tài liệu): static pairing đánh
+> dấu UNPAIRED là tín hiệu leak MẠNH — không được gạt bỏ bằng narrative ownership-transfer trừ
+> khi snippet code thực sự cho thấy pointer được return/store/hand-off; khi UNPAIRED và bằng
+> chứng phản bác chỉ là 1 dynamic run "sạch" mơ hồ → mặc định `likely_leak`, không phải
+> `false_positive`.
+> (3) Cuối bullet PATH-SENSITIVE: "Ownership transferring on success does not cover the error path that loses the object." — nhấn mạnh rằng ownership transfer chỉ bao phủ success path, không bao phủ error path làm mất object.
+> (4) Bullet PARAMETER-ownership được mở rộng với "The parameter has no allocation site in the function; judge it by the conditional free + the reachable un-freed exit." — làm rõ rằng parameter không có allocation site trong function, judge dựa trên conditional free + reachable un-freed exit.
 
 ### 3.3. User message
 
-- **File:** `llmJudge.ts:193-211`. `${sourceSnippet}` = **toàn bộ hàm bao** quanh allocation
+- **File:** `llmJudge.ts:202-220` (trong `judgeBundleWithLlm`). `${sourceSnippet}` = **toàn bộ hàm bao** quanh allocation
   (đã **xoá comment** để không lộ nhãn benchmark; cửa sổ dự phòng ±(6,5) dòng,
   `judge-shared.ts:95`). `${summarizeStatic}` (`:48-91`) và `${summarizeEvidence}` (`:93-113`)
   dựng từ static context / dynamic evidence.
@@ -525,8 +596,12 @@ ownership transfer / freed-all-paths / clean-run ⇒ `false_positive`. `confiden
 | B | User | `dynamicWorkerUserMessage` | `domain/subAgentPrompts.ts` | 80-90 | — |
 | B | Nudge | dynamic completion | `orchestrator/workflowInvestigation.ts` | 275-278 | — |
 | B | (no-LLM) | `runDeterministicDynamic` | `domain/dynamicEvidence.ts` | 234-274 | — |
-| D | System+User | `judgeBundleWithLlm` | `domain/llmJudge.ts` | 18-31, 193-211 | JSON only |
-| D | Logic | `isBorderline` / `shouldEscalate` | `domain/llmJudge.ts` | 238-243, 256-287 | — |
+| B2 | System | `harnessWorkerSystemPrompt` (opt-in) | `domain/subAgentPrompts.ts` | 101-144 | tool-calling |
+| B2 | User | `harnessWorkerUserMessage` | `domain/subAgentPrompts.ts` | 151-174 | — |
+| B2 | Nudge | harness completion | `orchestrator/workflowInvestigation.ts` | 402-405 | — |
+| D | System | `SYSTEM_PROMPT` | `domain/llmJudge.ts` | 19-33 | JSON only |
+| D | System+User caller | `judgeBundleWithLlm` (user msg inline) | `domain/llmJudge.ts` | 181, 202-220 | JSON only |
+| D | Logic | `isBorderline` / `shouldEscalate` | `domain/llmJudge.ts` | 307-312, 325-355 | — |
 | D | Logic | `combineVerdicts` (consensus) | `common/analysis/consensus-judge.ts` | 151-226 | — |
 | — | Tool desc | done tools + `read_file` | `subAgentPrompts.ts` / `readFileTool.ts` | 17-26 / 17-43 | schema |
 | — | Tool desc ×11 | static MCP | `static-analyzer/src/mcp/static-mcp-server.ts` | 38-127 | schema |
@@ -534,7 +609,6 @@ ownership transfer / freed-all-paths / clean-run ⇒ `false_positive`. `confiden
 | — | Notice | compaction / nudge / elided | `agent-core/src/loop.ts`, `compaction.ts` | 103,174 / 66 | — |
 | POLICY | System | `allocatorProfileSystemPrompt` | `domain/allocatorProfiler.ts` | 90-103 | JSON only |
 | POLICY | System | `strategistSystemPrompt` | `domain/strategist.ts` | 72-80 | JSON only |
-| POLICY | System | `judgeTunerSystemPrompt` | `domain/judgeTuner.ts` | 51-56 | JSON only |
 
 ---
 
@@ -582,22 +656,10 @@ Build at most ONCE and run each dynamic tool at most once. If a build or sanitiz
 
 **Mục đích:** Judge một allocation riêng lẻ, output verdict JSON. Chỉ gọi cho bundle borderline.
 
-**File:** `llmJudge.ts:18-31`
+**File:** `llmJudge.ts:19-33`
 
-```text
-You are an expert C/C++ memory-leak analyst. Decide whether ONE allocation is a real leak, using the code, static context, and any runtime evidence provided.
-Respond with a JSON object ONLY (no prose), in this exact shape:
-{"verdict": "confirmed_leak | likely_leak | uncertain | likely_false_positive | false_positive", "confidence": 0.0-1.0, "explanation": "...", "evidence": ["..."]}
-Calibrate using the EVIDENCE, in this priority order:
-- A runtime leak (sanitizer/valgrind) whose allocation site is LINKED to this candidate is decisive → confirmed_leak (confidence ≥ 0.9). Weight by leak kind: definitely_lost / asan_leak ⇒ decisive; possibly_lost ⇒ weak corroboration; still_reachable ⇒ usually benign, lean false_positive.
-- A runtime finding in the SAME FILE but a DIFFERENT site (not linked) is weak — do not treat it as proof for this allocation. still_reachable with no other evidence → false_positive.
-- A CLEAN sanitizer/valgrind run that EXERCISED this allocation and reported NO leak here is strong evidence this is NOT a leak → lean false_positive / likely_false_positive (unless a runtime leak is LINKED to this very allocation).
-- Ownership is decisive for false positives: if the allocation is RETURNED to the caller or its pointer is HANDED OFF to a sink/callback/another function (ownership transferred), freeing it is NOT this function's job. When ownership is transferred AND no runtime leak is linked to THIS allocation, answer likely_false_positive or false_positive — do NOT flag it just because you cannot see the free inside this snippet. An UNPAIRED alloc→free with a reachable leak path and NO ownership transfer → confirmed_leak (≥ 0.85).
-- PATH-SENSITIVE leak: an allocation freed on the main/success path but NOT on an error or early-return path (e.g. `if (err) return NULL;` or `goto fail;` before the free) IS a leak — confirmed_leak — EVEN IF the value is returned or added to a structure on the success path. Ownership transferring on success does not cover the error path that loses the object. If the static context lists the allocation as freed "on some paths only" (conditional) or names it on a reachable un-freed exit path, treat that as decisive.
-- PARAMETER-ownership leak (allocation_type 'parameter_ownership'): when a function frees a pointer PARAMETER on some paths (taking ownership from the caller, e.g. cJSON's `merge_patch` does `cJSON_Delete(target)`) but a reachable branch returns WITHOUT freeing it, that branch leaks the parameter — confirmed_leak. The parameter has no allocation site in the function; judge it by the conditional free + the reachable un-freed exit.
-- Freed on all paths / static-global → false_positive (high confidence). Use uncertain only when the evidence is genuinely insufficient.
-- Control flow is concrete, not hypothetical: a constant or scaffolding global such as `if(1)`/`if(0)` or `globalReturnsTrue()` does NOT change between two checks in the SAME function — `if(1)` always runs and `if(0)` is dead code. If the buffer is freed under the same condition it was allocated (or in the `else` of a constant `if`), it IS freed. Do NOT call a leak just because the `free()` sits in a different block, behind a constant condition, or after a `break`/in a second loop — trace whether it actually executes.
-```
+Xem nội dung đầy đủ + changelog tại §3.2 (giữ một bản duy nhất để tránh lệch đồng bộ như bản
+trước của mục này từng bị).
 
 ### 10.4. Prompt dùng cho ALLOCATOR PROFILER (Policy)
 
@@ -636,20 +698,7 @@ Guidance:
 Be decisive; prefer cheaper plans when they lose no recall.
 ```
 
-### 10.6. Prompt dùng cho JUDGE TUNER (Policy)
-
-**Mục đích:** Nudge ngưỡng verdict cho hợp project. Clamp cứng, eval dùng default.
-
-**File:** `judgeTuner.ts:51-56`
-
-```text
-You calibrate a C/C++ leak judge's verdict thresholds for ONE project. The judge scores each candidate in [0,1]; score ≥ confirmed → confirmed_leak, ≥ likely → likely_leak, else uncertain.
-Defaults: confirmed=0.7, likely=0.4.
-Nudge them to fit the project's memory style, staying near the defaults. Respond with JSON ONLY: {"confirmed": 0.55-0.85, "likely": 0.25-0.6, "rationale": "..."}.
-Heuristics: heavy smart-pointer/RAII or refcounting (false positives likely) → RAISE confirmed slightly; a project with many obvious manual malloc/free and missing frees → LOWER thresholds slightly to catch more. Keep confirmed > likely. Small moves only.
-```
-
-### 10.7. Static tool descriptions bảng (5 content-capable tool)
+### 10.6. Static tool descriptions bảng (5 content-capable tool)
 
 > Chi tiết từng tool: [MCP-TOOLS.md](./MCP-TOOLS.md) (section 2).
 
@@ -663,7 +712,7 @@ Heuristics: heavy smart-pointer/RAII or refcounting (false positives likely) →
 
 Lọc bởi `CONTENT_CAPABLE_TOOLS` (`mcpToolPlan.ts:103-109`). Các tool tĩnh còn lại (indexFiles, callGraph, interproceduralFlow, ownershipSummary, scanBuildRun, scanBuildGetReport) không phơi cho TUI vì cần filesystem mount chung.
 
-### 10.8. Dynamic tool descriptions bảng (9 tool)
+### 10.7. Dynamic tool descriptions bảng (9 tool)
 
 > Chi tiết từng tool: [MCP-TOOLS.md](./MCP-TOOLS.md) (section 3).
 
@@ -679,7 +728,7 @@ Lọc bởi `CONTENT_CAPABLE_TOOLS` (`mcpToolPlan.ts:103-109`). Các tool tĩnh 
 | `runBinary` | *Run a binary without instrumentation* |
 | `listRuns` | *List stored dynamic analysis runs* |
 
-### 10.9. Domain tool (read_file) + done tools
+### 10.8. Domain tool (read_file) + done tools
 
 > Chi tiết: [MCP-TOOLS.md](./MCP-TOOLS.md) (section 4).
 

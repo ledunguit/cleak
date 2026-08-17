@@ -51,6 +51,25 @@ pnpm exec tsx src/cli.ts                       # mở TUI (lệnh mặc định)
 - Ngoài TUI, chỉnh từ CLI: `cleak config set staticUrl http://…` · `cleak config get` ·
   `cleak config init`. Config file là nguồn cấu hình duy nhất.
   **Ưu tiên:** CLI flag > config file > default.
+- **Nhiều vendor cùng lúc (named profiles).** `endpoints.<tên>` không còn giới hạn ở 4 khoá
+  cố định (`local`/`openai`/`anthropic`/`openai-compat`) — có thể tạo thêm profile tuỳ ý
+  (vd. hai vendor cùng dạng `openai-compat` nhưng khác gateway) và chuyển active provider
+  bằng đúng 1 lệnh, không cần sửa lại `baseUrl`/`model`/`apiKey` mỗi lần đổi:
+  ```bash
+  # Thêm một vendor thứ hai (đặt tên tuỳ ý), khai báo transport qua trường `provider`:
+  cleak config set endpoints.deepseek-direct.provider openai-compat
+  cleak config set endpoints.deepseek-direct.baseUrl <base-url-của-vendor>
+  cleak config set endpoints.deepseek-direct.model <model-id>
+  cleak config set endpoints.deepseek-direct.apiKey <key>
+
+  cleak config set provider deepseek-direct   # chuyển active sang profile mới
+  cleak config set provider openai-compat     # chuyển lại — profile cũ giữ nguyên, không mất
+
+  cleak config get endpoints                  # liệt kê mọi profile (apiKey ẩn mặc định)
+  cleak config get endpoints --show-secrets   # hiện apiKey thật
+  ```
+  Với 4 tên khoá cố định (`local`/`openai`/`anthropic`/`openai-compat`), trường `provider`
+  trong `endpoints.<tên>` có thể bỏ qua — tên khoá tự suy ra transport, đúng hành vi cũ.
 
 ### 2b. Headless (CI / script)
 ```bash

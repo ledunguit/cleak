@@ -2,10 +2,12 @@ import { describe, expect, test } from 'vitest';
 import {
   combineVerdicts,
   deriveFusion,
+  isDecisionLocked,
   judgeByConsensus,
   type ConsensusConfig,
   type EvidenceFusion,
 } from '../../src/analysis/consensus-judge';
+import { LEAK_POSITIVE_VERDICTS } from '../../src/analysis/judge-shared';
 import { InvestigationVerdict, ToolKind, type LeakBundle, type VerdictResult } from '../../src/types';
 
 /** A scripted sample/heuristic verdict. */
@@ -206,5 +208,135 @@ describe('judgeByConsensus', () => {
     const out = await judgeByConsensus(bundle({}), undefined, async () => null, cfg('majority', 3));
     expect(out.agreement).toBe(0);
     expect(out.tool).toBe(ToolKind.HEURISTIC);
+  });
+});
+
+// ── isDecisionLocked + earlyStop: the guarantee is "identical flag/no-flag call to
+// sampling all n", verified directly against the real combineVerdicts, not a
+// reimplementation — see isDecisionLocked's doc comment for what's and isn't guaranteed. ──
+
+const isFlagged = (verdictStr: string): boolean => LEAK_POSITIVE_VERDICTS.has(verdictStr as InvestigationVerdict);
+
+describe('isDecisionLocked', () => {
+  test('majority: locked NOT-flagged once remaining votes cannot reach a majority', () => {
+    // 1 flag out of 3 so far, 1 remaining — even if it flags, 2/4 is not a strict majority.
+    const soFar = [v('confirmed_leak'), v('false_positive'), v('false_positive')];
+    expect(isDecisionLocked(soFar, 1, cfg('majority', 4), NONE)).toBe(true);
+  });
+
+  test('majority: NOT locked while a remaining vote could still flip it', () => {
+    // 1 flag out of 2 so far, 2 remaining — could end 1/4 or 3/4, still undetermined.
+    const soFar = [v('confirmed_leak'), v('false_positive')];
+    expect(isDecisionLocked(soFar, 2, cfg('majority', 4), NONE)).toBe(false);
+  });
+
+  test('unanimous-to-flag: locked the instant a single dissent appears, however many remain', () => {
+    const soFar = [v('confirmed_leak'), v('uncertain')];
+    expect(isDecisionLocked(soFar, 5, cfg('unanimous-to-flag', 7), NONE)).toBe(true);
+  });
+
+  test('unanimous-to-flag: never locked-true early — reaching "flagged" always needs every vote', () => {
+    const soFar = [v('confirmed_leak'), v('confirmed_leak')];
+    expect(isDecisionLocked(soFar, 1, cfg('unanimous-to-flag', 3), NONE)).toBe(false);
+  });
+
+  test('weighted: a confirmed runtime leak caps non-flag weight, locking "flagged" even with a minority so far', () => {
+    const fusion: EvidenceFusion = { static: 'leak', dynamic: 'confirmed' };
+    // 1 flag @0.9 vs 1 non-flag capped at 0.3*conf — even 2 more non-flag votes at full
+    // (capped) weight can't out-weigh the already-decisive flag vote.
+    const soFar = [v('confirmed_leak', 0.9), v('false_positive', 0.9)];
+    expect(isDecisionLocked(soFar, 2, cfg('weighted', 4), fusion)).toBe(true);
+  });
+
+  test('weighted: not locked when remaining votes have full, undiscounted sway', () => {
+    const soFar = [v('confirmed_leak', 0.6)];
+    expect(isDecisionLocked(soFar, 3, cfg('weighted', 4), NONE)).toBe(false);
+  });
+
+  test('remaining=0 is always locked (nothing left that could change anything)', () => {
+    expect(isDecisionLocked([], 0, cfg('majority', 0), NONE)).toBe(true);
+  });
+});
+
+describe('earlyStop — exhaustive equivalence check against combineVerdicts on the full sample set', () => {
+  // For every rule and every combination of a small, fixed set of per-slot sample verdicts,
+  // simulate early-stop truncation (via isDecisionLocked over prefixes) and assert
+  // combineVerdicts on the TRUNCATED samples flags the same way as on the FULL n samples —
+  // the actual guarantee earlyStop relies on, checked exhaustively rather than on a few
+  // hand-picked cases.
+  const SLOT_VALUES: VerdictResult[] = [
+    v('confirmed_leak', 0.9),
+    v('confirmed_leak', 0.3),
+    v('false_positive', 0.9),
+    v('false_positive', 0.3),
+  ];
+  const N = 4;
+
+  function* combos(n: number): Generator<VerdictResult[]> {
+    if (n === 0) {
+      yield [];
+      return;
+    }
+    for (const rest of combos(n - 1)) {
+      for (const s of SLOT_VALUES) yield [s, ...rest];
+    }
+  }
+
+  function earlyStopTruncate(full: VerdictResult[], rule: ConsensusConfig, fusion: EvidenceFusion): VerdictResult[] {
+    for (let k = 1; k <= full.length; k++) {
+      const soFar = full.slice(0, k);
+      if (isDecisionLocked(soFar, full.length - k, rule, fusion)) return soFar;
+    }
+    return full;
+  }
+
+  for (const rule of ['majority', 'unanimous-to-flag', 'weighted'] as const) {
+    for (const fusion of [NONE, { static: 'leak', dynamic: 'confirmed' }, { static: 'clean', dynamic: 'cleared' }] as EvidenceFusion[]) {
+      test(`${rule} / dynamic=${fusion.dynamic}: truncated-vs-full flag decision always matches (${Math.pow(SLOT_VALUES.length, N)} combos)`, () => {
+        const config = cfg(rule, N);
+        let checked = 0;
+        for (const full of combos(N)) {
+          const truncated = earlyStopTruncate(full, config, fusion);
+          const fullOut = combineVerdicts(full, HEUR_UNCERTAIN, fusion, config);
+          const truncOut = combineVerdicts(truncated, HEUR_UNCERTAIN, fusion, config);
+          expect(isFlagged(truncOut.verdict)).toBe(isFlagged(fullOut.verdict));
+          checked++;
+        }
+        expect(checked).toBe(Math.pow(SLOT_VALUES.length, N));
+      });
+    }
+  }
+});
+
+describe('judgeByConsensus — earlyStop actually saves calls when the decision is obviously locked', () => {
+  test('unanimous-to-flag: one early dissent stops sampling well before n', async () => {
+    const scripted = [v('confirmed_leak'), v('uncertain'), v('confirmed_leak'), v('confirmed_leak'), v('confirmed_leak')];
+    let calls = 0;
+    const out = await judgeByConsensus(
+      bundle({}),
+      undefined,
+      async (i) => {
+        calls++;
+        return scripted[i];
+      },
+      { n: 5, rule: 'unanimous-to-flag', temperature: 0, concurrency: 1, earlyStop: true },
+    );
+    expect(calls).toBeLessThan(5);
+    expect(isFlagged(out.verdict)).toBe(false);
+  });
+
+  test('earlyStop:false (default) always samples all n, unchanged from before this feature existed', async () => {
+    const scripted = [v('confirmed_leak'), v('uncertain'), v('confirmed_leak'), v('confirmed_leak'), v('confirmed_leak')];
+    let calls = 0;
+    await judgeByConsensus(
+      bundle({}),
+      undefined,
+      async (i) => {
+        calls++;
+        return scripted[i];
+      },
+      { n: 5, rule: 'unanimous-to-flag', temperature: 0, concurrency: 1 },
+    );
+    expect(calls).toBe(5);
   });
 });

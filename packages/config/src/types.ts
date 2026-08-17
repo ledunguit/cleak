@@ -13,6 +13,9 @@ export interface ConsensusJudgeConfig {
   rule: ConsensusRule;
   temperature: number;
   concurrency: number;
+  /** Stop sampling once the flag/no-flag decision is mathematically locked in (see
+   * @cleak/common's isDecisionLocked). Default false — samples all n, unchanged. */
+  earlyStop: boolean;
 }
 
 export interface ProviderConfig {
@@ -75,7 +78,10 @@ export interface OwnershipVerificationConfig {
 export interface RunConfig {
   staticUrl: string;
   dynamicUrl: string;
-  provider: Provider;
+  /** Which named endpoint profile was selected (a canonical provider type, or a
+   * custom name like "deepseek-direct") — display/traceability only. The actual
+   * transport to call is always `llm.provider` (strict, resolved). */
+  provider: string;
   llm: ProviderConfig;
   /** Path translation between host paths and analyzer-visible paths. */
   hostRoot?: string;
@@ -125,7 +131,8 @@ export interface RunConfig {
 export interface EnvOverrides {
   staticUrl?: string;
   dynamicUrl?: string;
-  provider?: Provider;
+  /** A canonical provider type or a named profile — see RunConfig.provider. */
+  provider?: string;
   llm?: Partial<ProviderConfig>;
   consensus?: { n?: number };
   resultsDir?: string;

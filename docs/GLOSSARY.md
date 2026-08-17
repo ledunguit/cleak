@@ -73,7 +73,6 @@
   (chống hallucinate), cache `<repo>/.cleak/` (`domain/allocatorProfiler.ts`). Thay list hardcode.
 - **frozen profile** — profile đông cứng (manifest/committed) dùng trong eval ⇒ tất định; production discover động.
 - **strategist** — LLM chọn `{runDynamic, judge, staticDepth}` per-project (`domain/strategist.ts`).
-- **judge tuner** — LLM nudge ngưỡng verdict trong **clamp cứng**, production-only (`domain/judgeTuner.ts`).
 - **static enrichment** — stage tất định gọi functionSummary+pathConstraints → `bundle.staticEvidence`.
 - **path-sensitive leak** — alloc free trên đường chính nhưng MẤT trên đường lỗi/early-return.
 - **parameter-ownership leak** — tham số con trỏ free một-số-đường nhưng mất trên đường khác (vd merge_patch).

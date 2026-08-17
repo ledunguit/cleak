@@ -21,5 +21,6 @@ export function toProviderSettings(cfg: RunConfig): ProviderSettings {
     idleTimeoutMs: cfg.llm.idleTimeoutMs,
     connectTimeoutMs: cfg.llm.connectTimeoutMs,
     retries: cfg.llm.retries,
+    jsonMode: cfg.llm.jsonMode,
   };
 }

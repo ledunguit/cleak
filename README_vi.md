@@ -137,8 +137,16 @@ tự gán nhãn thủ công làm căn cứ đánh giá.
 cd apps/leak-inspector-tui
 pnpm install
 cleak config init                      # tạo template config đầy đủ
-cleak config set provider openai       # hoặc local / anthropic / openai-compat
+cleak config set provider openai       # hoặc local / anthropic / openai-compat / một profile tuỳ đặt tên
 cleak config set endpoints.openai.apiKey sk-...
+
+# Nhiều vendor cùng lúc: tên profile tuỳ ý, không giới hạn ở 4 kiểu dựng sẵn —
+# khai báo transport qua `provider`, rồi chuyển active bằng đúng 1 lệnh.
+cleak config set endpoints.deepseek-direct.provider openai-compat
+cleak config set endpoints.deepseek-direct.baseUrl https://api.deepseek.com/v1
+cleak config set endpoints.deepseek-direct.model deepseek-chat
+cleak config set endpoints.deepseek-direct.apiKey sk-...
+cleak config set provider deepseek-direct   # chuyển active — các profile khác giữ nguyên
 ```
 
 Thứ tự ưu tiên: **CLI flag > config file > built-in default**. Chi tiết:

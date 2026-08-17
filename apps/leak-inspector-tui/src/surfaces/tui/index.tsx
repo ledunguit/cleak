@@ -11,10 +11,11 @@ import { TuiStore, configStore } from '../../stores';
 import { ThemeProvider } from './theme';
 import { TerminalSizeProvider } from './components/TerminalSizeProvider';
 import { installSyncOutput } from './sync-output';
-import { loadConfig, type Provider, loadConfigFile } from '@cleak/config';
+import { loadConfig, loadConfigFile } from '@cleak/config';
 
 export interface LaunchTuiOptions {
-  provider?: Provider;
+  /** A canonical provider type or a named profile (see RunConfig.provider). */
+  provider?: string;
   /** Custom LLM endpoint overrides (CLI flags; win over saved prefs). */
   baseUrl?: string;
   model?: string;

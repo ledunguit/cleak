@@ -10,7 +10,16 @@ const zBool = z
 const zNum = z.coerce.number();
 
 const endpointSchema = z
-  .object({ baseUrl: z.string(), model: z.string(), apiKey: z.string() })
+  .object({
+    baseUrl: z.string(),
+    model: z.string(),
+    apiKey: z.string(),
+    // Which transport this named profile uses. Absent for a profile named exactly
+    // 'local'/'openai'/'anthropic'/'openai-compat' (falls back to the name itself,
+    // matching pre-multi-profile behavior); required for any other custom name
+    // (e.g. a second openai-compat-shaped vendor like "deepseek-direct").
+    provider: z.enum(PROVIDERS),
+  })
   .partial();
 
 export const CleakConfigSchema = z
@@ -19,16 +28,21 @@ export const CleakConfigSchema = z
     defaultMode: z.enum(['no_llm', 'llm_assisted']),
     defaultDynamic: z.enum(['off', 'selective', 'aggressive']),
     autoShowReport: zBool,
-    // Provider + per-provider endpoint overrides.
-    provider: z.enum(PROVIDERS),
-    endpoints: z
-      .object({
-        local: endpointSchema,
-        openai: endpointSchema,
-        anthropic: endpointSchema,
-        'openai-compat': endpointSchema,
-      })
-      .partial(),
+    // Active profile: a lookup key into `endpoints` below. For every config that
+    // predates multi-profile support this is one of the 4 canonical provider-type
+    // names, which is also a valid `endpoints` key, so old configs resolve
+    // identically. A custom name (e.g. "deepseek-direct") is equally valid as long
+    // as `endpoints.<name>.provider` declares its transport — see endpointSchema.
+    provider: z.string(),
+    // Named endpoint profiles, keyed by an arbitrary name (not just the 4 provider
+    // types) so e.g. two different openai-compat-shaped vendors can be configured
+    // side by side and switched between via `provider` without overwriting each
+    // other. Resolution/validation (does `provider` resolve to a real profile with
+    // a known transport?) happens in loader.ts's resolveProvider(), not here —
+    // `set`'s per-key validation only ever sees a partial probe object, so a
+    // cross-field check here would reject setting `provider` before its
+    // `endpoints.<name>` entry exists.
+    endpoints: z.record(z.string(), endpointSchema),
     // Analyzer MCP endpoints (the headline reason this file exists).
     staticUrl: z.string(),
     dynamicUrl: z.string(),
@@ -96,6 +110,9 @@ export const CleakConfigSchema = z
         rule: z.enum(['majority', 'weighted', 'unanimous-to-flag']),
         temperature: zNum,
         concurrency: zNum,
+        // Opt-in early-stop sampling (default false — samples all n, unchanged historical
+        // behavior). See @cleak/common's isDecisionLocked for the guarantee this relies on.
+        earlyStop: zBool,
       })
       .partial(),
     // UI / runtime flags (previously env-only).

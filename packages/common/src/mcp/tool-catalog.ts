@@ -257,6 +257,11 @@ export const DYNAMIC_TOOL_DEFS = {
   },
 } satisfies Record<string, McpToolDefinition>;
 
+// Deterministic tool order matters beyond readability: it's what the MCP spec itself
+// recommends for prompt-cache-friendliness (a stable tool-schema prefix), and `Object.values`
+// over a plain object literal is guaranteed insertion-order for string keys — verified during
+// this session's agentic-loop audit as already correct, not something that needed fixing.
+
 /** Every static-analyzer tool name, in registration order. */
 export const STATIC_TOOL_NAMES: readonly string[] = Object.values(STATIC_TOOL_DEFS).map((d) => d.name);
 

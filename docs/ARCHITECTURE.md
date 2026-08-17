@@ -164,7 +164,7 @@ flowchart TB
         G --> F
     end
     EN --> J
-    F --> J["HYBRID judge: heuristic (mọi bundle, path-sensitive)<br/>+ LLM/consensus (borderline) + ownershipNotes + judgeTuner"]
+    F --> J["HYBRID judge: heuristic (mọi bundle, path-sensitive)<br/>+ LLM/consensus (borderline) + ownershipNotes"]
     J --> K["LeakReporting.buildReport"]
     K --> L["results/&lt;scanId&gt;/<br/>snapshot · report.{json,md,html} · events.jsonl · metrics.json"]
     E -. "AgentEvent / ScanEvent" .-> TUI["Ink store"]
@@ -229,9 +229,8 @@ Judge tất định chấm `bundle.staticEvidence` + evidence động thành đi
   `merge_patch` (free `target` trên một số đường, rò trên đường lỗi).
 - **Parameter-ownership leak** (`allocation_type='parameter_ownership'`): tham số con trỏ được free trên
   một số đường nhưng mất trên đường khác.
-- **Ngưỡng verdict** đặt tên + đông cứng: `JUDGE_VERDICT_THRESHOLDS = {confirmed:0.7, likely:0.4}`.
-  Production có thể nhận override **có biên** từ `domain/judgeTuner.ts` (LLM nudge trong khoảng, clamp);
-  **eval LUÔN dùng ngưỡng đông cứng** ⇒ baseline không đổi.
+- **Ngưỡng verdict** đặt tên + đông cứng: `JUDGE_VERDICT_THRESHOLDS = {confirmed:0.7, likely:0.4}`,
+  dùng thống nhất cho cả production lẫn eval ⇒ baseline không đổi.
 - **LLM judge** (`domain/llmJudge.ts`) cho BORDERLINE: prompt được nạp thêm **ownership conventions**
   (LLM-discovered) + luật path-sensitive/parameter-ownership (xem [PROMPTS.md](PROMPTS.md)).
 
@@ -314,12 +313,11 @@ flowchart LR
 |---|---|---|---|
 | `allocatorProfiler.ts` | API cấp phát/giải phóng + ownership notes của project | **grep** tên trong source đã đọc | `extraAllocators/Deallocators` (discovery+engine) + `ownershipNotes` (judge) |
 | `strategist.ts` | `{runDynamic, judge, staticDepth}` per-project | (fallback rule-based tất định) | gate dynamic stage / fan-out |
-| `judgeTuner.ts` | nudge ngưỡng verdict theo project | **clamp** vào khoảng cứng | `judgeHeuristically(...thresholds)` |
 
 **Cầu nối:** LLM xuất **dữ liệu cấu trúc**, engine *thực thi*; output luôn **verify + cache theo repo+commit**
 (`<repo>/.cleak/`). **Đảm bảo determinism:** trong benchmark, manifest cung cấp allocators + không bật
-`--strategy`/tuner ⇒ **0 LLM non-deterministic trong đường eval** ⇒ Tier-1 gate (`assert-determinism.ts`) +
-baseline Juliet (TP29 FP7 FN3) giữ nguyên. LLM-tuned chỉ ở production; luận văn báo cáo cả default lẫn tuned.
+`--strategy` ⇒ **0 LLM non-deterministic trong đường eval** ⇒ Tier-1 gate (`assert-determinism.ts`) +
+baseline Juliet (TP29 FP7 FN3) giữ nguyên.
 
 Ranh giới **MUST-STAY-CODE** (không LLM hoá): parse tree-sitter, CFG, alloc→free pairing, scoring
 math, consensus, grep-verify. Lộ trình tổng quát hoá còn lại (run-recipe, test/vendor dir classify) xem

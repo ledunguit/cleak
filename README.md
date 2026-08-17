@@ -143,8 +143,16 @@ ground truth.
 cd apps/leak-inspector-tui
 pnpm install
 cleak config init                      # write a fully-keyed config template
-cleak config set provider openai       # or local / anthropic / openai-compat
+cleak config set provider openai       # or local / anthropic / openai-compat / a named profile
 cleak config set endpoints.openai.apiKey sk-...
+
+# Multiple vendors at once: any name works as a profile, not just the 4 built-in
+# types — declare its transport via `provider`, then switch with one command.
+cleak config set endpoints.deepseek-direct.provider openai-compat
+cleak config set endpoints.deepseek-direct.baseUrl https://api.deepseek.com/v1
+cleak config set endpoints.deepseek-direct.model deepseek-chat
+cleak config set endpoints.deepseek-direct.apiKey sk-...
+cleak config set provider deepseek-direct   # switch — other profiles stay intact
 ```
 
 Precedence: **CLI flag > config file > built-in default**. Details:

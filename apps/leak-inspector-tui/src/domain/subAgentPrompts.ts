@@ -37,6 +37,16 @@ function candidateList(bundles: LeakBundle[]): string {
 
 // ── Static sub-agent ──
 
+// staticSubAgentSystemPrompt deliberately does NOT tell the model to skip remaining
+// tools once a candidate already looks "clearly" resolved — it always runs all 4
+// static tools per candidate. This was flagged as a plausible token-saving
+// opportunity during an efficiency audit, then deliberately left as-is: this
+// codebase's own measured evaluation data (docs/EVALUATION.md §3b) shows the
+// DETERMINISTIC-recipe baseline (B6a) beats the agentic tool-selecting baselines
+// (B6b/B7) on F1 (0.938 vs 0.929) at ~9x LOWER token cost (463k vs ~4.2M) — i.e.
+// giving the model more autonomy over its own tool-calling procedure has already
+// been shown, in this exact system, to trade accuracy for savings that don't
+// materialize. Don't "fix" this without re-running that comparison.
 export function staticSubAgentSystemPrompt(repoPath: string): string {
   return [
     `You are a STATIC-ANALYSIS evidence-gathering sub-agent for C/C++ memory leaks.`,
@@ -136,7 +146,7 @@ export function harnessWorkerSystemPrompt(repoPath: string, buildCommand: string
     ``,
     `Tools:`,
     `- \`read_file\` — inspect the target file (and any header it needs) before writing the harness.`,
-    `- \`buildHarness\` (projectPath="${analyzerProjectPath}", buildCommand, harnessSource, targetFile, closureFiles, entryStyle="single") — compiles+links your harness against the real project's own compiler flags. If it returns reason="harness_unresolvable", the build system couldn't be captured — stop and call ${DONE_HARNESS}, do not retry. Always call with entryStyle="single" — the system runs the fuzzer build itself later if needed.`,
+    `- \`buildHarness\` (projectPath="${analyzerProjectPath}", buildCommand, harnessSource, targetFile, closureFiles, entryStyle="single") — compiles+links your harness against the real project's own compiler flags. On reason="harness_unresolvable" (see its own description), stop and call ${DONE_HARNESS}, do not retry. Always call with entryStyle="single" — the system runs the fuzzer build itself later if needed.`,
     `- \`lsanRun\` (binaryPath) or \`asanRun\` (binaryPath) — run the compiled harness under a sanitizer, using the binaryPath \`buildHarness\` returned.`,
     ``,
     `Call buildHarness at most ONCE, then run one sanitizer on the result. If buildHarness fails for a reason other than harness_unresolvable, you may fix the harness source and try ONE more time. When a sanitizer has run (or the harness is unresolvable), call \`${DONE_HARNESS}\`. Do NOT reply with prose — only tool calls advance the work.`,

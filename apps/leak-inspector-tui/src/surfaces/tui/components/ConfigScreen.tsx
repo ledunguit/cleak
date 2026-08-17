@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Box, Text, useInput } from 'ink';
 import { color, glyph } from '../theme';
-import type { Provider } from '@cleak/config';
 import { configFilePath, type CleakConfig, type EndpointOverride } from '@cleak/config';
 import { useTerminalSize } from '../hooks/useTerminalSize';
 
@@ -92,14 +91,20 @@ const FIELDS: FieldDef[] = [
   { section: 'Baselines', path: 'eval.staticPathMap', label: 'Eval path map (from=to)', type: 'text', scope: 'config', placeholder: '(unset)' },
 ];
 
-export const activeProvider = (d: CleakConfig): Provider => (d.provider ?? 'local') as Provider;
+// `provider` is a lookup key into `endpoints` — a canonical type or a named
+// profile (see RunConfig.provider in @cleak/config). The cycle field below
+// (PROVIDER_OPTIONS) only ever sets one of the 4 canonical names; a custom
+// profile set via `cleak config set provider <name>` still displays/edits
+// correctly here (generic string keying), it just isn't cycle-selectable yet.
+export const activeProvider = (d: CleakConfig): string => d.provider ?? 'local';
 
-export function getEndpointField(draft: CleakConfig, provider: Provider, key: keyof EndpointOverride): string {
-  return draft.endpoints?.[provider]?.[key] ?? '';
+export function getEndpointField(draft: CleakConfig, provider: string, key: keyof EndpointOverride): string {
+  const v = draft.endpoints?.[provider]?.[key];
+  return v === undefined ? '' : String(v);
 }
 
 export function setEndpointField(
-  draft: CleakConfig, provider: Provider, key: keyof EndpointOverride, value: string,
+  draft: CleakConfig, provider: string, key: keyof EndpointOverride, value: string,
 ): CleakConfig {
   const endpoints = { ...(draft.endpoints ?? {}) };
   endpoints[provider] = { ...(endpoints[provider] ?? {}), [key]: value };

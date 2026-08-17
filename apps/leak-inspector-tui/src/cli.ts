@@ -13,7 +13,15 @@
 import { readFileSync } from 'node:fs';
 import { Command } from 'commander';
 import { McpClient, loadMcpTools } from '@cleak/agent-core';
-import { loadConfig, saveConfigFile, setConfigKey, unsetConfigKey, configTemplate, configFilePath } from '@cleak/config';
+import {
+  loadConfig,
+  loadConfigFile,
+  saveConfigFile,
+  setConfigKey,
+  unsetConfigKey,
+  configTemplate,
+  configFilePath,
+} from '@cleak/config';
 import { mcpToolFlags, phaseForMcpTool } from './domain/mcpToolPlan';
 import { VERSION } from './version';
 
@@ -81,7 +89,7 @@ program
   .requiredOption('--repo <path>', 'path to the C/C++ repository to scan')
   .option('--mode <mode>', 'no_llm | llm_assisted', 'llm_assisted')
   .option('--dynamic <mode>', 'off | selective | aggressive', 'off')
-  .option('--provider <provider>', 'local | openai | anthropic | openai-compat')
+  .option('--provider <provider>', 'local | openai | anthropic | openai-compat, or a named endpoints.<name> profile')
   .option('--base-url <url>', 'LLM base URL override (e.g. an OpenAI-compatible endpoint)')
   .option('--model <name>', 'LLM model override')
   .option('--api-key <key>', 'LLM API key override')
@@ -141,7 +149,7 @@ program
 program
   .command('tui', { isDefault: true })
   .description('Interactive terminal UI')
-  .option('--provider <provider>', 'local | openai | anthropic | openai-compat')
+  .option('--provider <provider>', 'local | openai | anthropic | openai-compat, or a named endpoints.<name> profile')
   .option('--base-url <url>', 'LLM base URL override (e.g. an OpenAI-compatible endpoint)')
   .option('--model <name>', 'LLM model override')
   .option('--api-key <key>', 'LLM API key override')
@@ -269,7 +277,19 @@ config
   .option('--show-secrets', 'reveal the apiKey (masked by default)', false)
   .action((key, opts) => {
     const cfg = loadConfig({}) as Record<string, any>;
-    if (!opts.showSecrets && cfg.llm?.apiKey) cfg.llm = { ...cfg.llm, apiKey: '••••••' };
+    // `endpoints` (all named profiles, not just the active one) lives on the raw
+    // file, not the resolved RunConfig — merge it in so `config get endpoints` /
+    // `config get endpoints.<name>` can list/inspect profiles without editing the
+    // file directly (the point of multi-profile support).
+    cfg.endpoints = loadConfigFile().endpoints ?? {};
+    if (!opts.showSecrets) {
+      if (cfg.llm?.apiKey) cfg.llm = { ...cfg.llm, apiKey: '••••••' };
+      cfg.endpoints = Object.fromEntries(
+        Object.entries(cfg.endpoints).map(([name, ep]: [string, any]) =>
+          [name, ep?.apiKey ? { ...ep, apiKey: '••••••' } : ep],
+        ),
+      );
+    }
     const val = key ? key.split('.').reduce((o: any, k: string) => (o == null ? o : o[k]), cfg) : cfg;
     if (val === undefined) {
       process.stderr.write(`no such key: ${key}\n`);

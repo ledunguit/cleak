@@ -9,7 +9,7 @@ import { resolve, basename, join } from 'node:path';
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { McpClient, buildCallModel } from '@cleak/agent-core';
 import { AnalysisMode, DynamicMode } from '@cleak/common/types';
-import { loadConfig, type Provider, type ConsensusJudgeConfig, type RunConfig, toProviderSettings } from '@cleak/config';
+import { loadConfig, type ConsensusJudgeConfig, type RunConfig, toProviderSettings } from '@cleak/config';
 import { loadOrProfileAllocators, profileCachePath } from '../domain/allocatorProfiler';
 import { verifyAllocatorProfile } from '../domain/allocatorVerification';
 import { decideStrategy } from '../domain/strategist';
@@ -25,7 +25,8 @@ export interface HeadlessOptions {
   repo: string;
   mode: 'no_llm' | 'llm_assisted';
   dynamic: 'off' | 'selective' | 'aggressive';
-  provider?: Provider;
+  /** A canonical provider type or a named profile (see RunConfig.provider). */
+  provider?: string;
   /** Custom LLM endpoint overrides (e.g. an OpenAI-compatible base URL/model/key). */
   baseUrl?: string;
   model?: string;

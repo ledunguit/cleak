@@ -35,6 +35,12 @@ export async function callOpenAiChat(
   if (req.tools.length) {
     body.tools = toOpenAiTools(req.tools);
     body.tool_choice = 'auto';
+  } else if (settings.jsonMode) {
+    // Tool-less single-shot JSON prompts (judge / strategist / allocator-profiler) already
+    // instruct "respond with a JSON object ONLY" — ask the provider to actually enforce
+    // that syntactically instead of relying purely on prompt compliance. Gated on an empty
+    // tools array so this never interacts with the agentic tool-calling loops.
+    body.response_format = { type: 'json_object' };
   }
 
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };

@@ -92,9 +92,9 @@ Readings (honest, corpus-specific):
   always *run* the leak. Wiring a per-case driver to exercise such leaks is open work.
 
 **Tầng POLICY (LLM) bị ĐÔNG CỨNG / BỎ QUA trong eval — đây là lý do số benchmark vẫn tất định:**
-allocator profiler, strategist, judge-tuner (xem [ARCHITECTURE.md](ARCHITECTURE.md) §10, [PROMPTS.md](PROMPTS.md) §0.5)
+allocator profiler, strategist (xem [ARCHITECTURE.md](ARCHITECTURE.md) §10, [PROMPTS.md](PROMPTS.md) §0.5)
 đều **không chạy trong eval** — corpus manifest cung cấp allocators/deallocators đông cứng (≈ LAMeD
-AllocSource/FreeSink), `--strategy` để off, và judge dùng `JUDGE_VERDICT_THRESHOLDS` đông cứng (không tuner).
+AllocSource/FreeSink), `--strategy` để off, và judge dùng `JUDGE_VERDICT_THRESHOLDS` đông cứng.
 Vì vậy **đường eval không có LLM POLICY non-deterministic**; chỉ `llm_assisted` judge mới stochastic (và được đo
 variance, không giấu). Việc LLM khám phá allocator được đo RIÊNG bằng `scripts/validate-allocator-profile.ts`
 (precision/recall của discovery), KHÔNG đưa non-determinism vào leak-eval. Production thì các tầng này chạy động;

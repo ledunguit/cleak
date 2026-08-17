@@ -31,6 +31,13 @@ export interface ConsensusConfig {
   temperature: number;
   /** Cap on concurrent sample calls (defaults to n). Protects a single LLM gateway. */
   concurrency?: number;
+  /** Stop sampling once the flag/no-flag decision is mathematically locked in — no
+   * possible outcome of the remaining unsampled votes could still change it (see
+   * `isDecisionLocked`). Default false (sample all `n`, the historical/measured
+   * behavior). Opt-in: `agreement`/`confidence` are computed only from samples
+   * actually drawn, so they can differ slightly from a full-`n` run even though the
+   * flag/no-flag call itself is guaranteed identical — see `isDecisionLocked`'s doc. */
+  earlyStop?: boolean;
 }
 
 /** A compact view of the fused static + dynamic evidence, recorded for provenance. */
@@ -225,6 +232,80 @@ export function combineVerdicts(
   };
 }
 
+/** Per-vote weight ceiling for a HYPOTHETICAL sample that flags (or doesn't), given the
+ * evidence fusion — mirrors `weightOf`'s cap without needing the vote's actual confidence
+ * (unknown before it's drawn; confidence ∈ [0,1], so this is the max `weightOf` could return
+ * for that side). Used by `isDecisionLocked` to bound what remaining unsampled votes could
+ * possibly still do to the decision. */
+function maxWeightIfFlag(flag: boolean, fusion: EvidenceFusion): number {
+  if (flag && fusion.dynamic === 'cleared') return 0.3;
+  if (!flag && fusion.dynamic === 'confirmed') return 0.3;
+  return 1;
+}
+
+/**
+ * True when the flagged/not-flagged decision for `cfg.rule` is ALREADY DETERMINED by the
+ * samples collected so far — i.e. no possible outcome of `remaining` more unsampled votes
+ * could change it. This is a mathematical guarantee, not a heuristic: early-stopping the
+ * moment this returns true is provably identical, on the flag/no-flag call, to sampling all
+ * `soFar.length + remaining` votes. (`agreement`/`confidence`/the exact modal verdict string
+ * are still computed only from the samples actually drawn by the caller, so THOSE can differ
+ * slightly from a full-sample run even when the binary decision is locked — only the flag
+ * call itself is guaranteed.)
+ */
+export function isDecisionLocked(
+  soFar: VerdictResult[],
+  remaining: number,
+  cfg: ConsensusConfig,
+  fusion: EvidenceFusion,
+): boolean {
+  if (remaining <= 0) return true;
+  const n = soFar.length + remaining;
+
+  if (cfg.rule === 'unanimous-to-flag') {
+    // One dissenting vote permanently rules out unanimity; reaching "flagged" always
+    // requires every remaining vote to also flag, so it's never locked-true early.
+    return soFar.some((v) => !isFlag(v.verdict));
+  }
+
+  if (cfg.rule === 'weighted') {
+    // Mirrors combineVerdicts's own `weightOf` exactly, for the samples actually drawn.
+    const weightOf = (v: VerdictResult): number => {
+      const conf = clamp01(v.confidence ?? 0.5);
+      const flag = isFlag(v.verdict);
+      if (flag && fusion.dynamic === 'cleared') return conf * 0.3;
+      if (!flag && fusion.dynamic === 'confirmed') return conf * 0.3;
+      return conf;
+    };
+    const knownFlagW = soFar.filter((v) => isFlag(v.verdict)).reduce((a, v) => a + weightOf(v), 0);
+    const knownTotal = soFar.reduce((a, v) => a + weightOf(v), 0);
+
+    // Max achievable ratio: every remaining vote flags, each at its max weight — inflates
+    // both the numerator and denominator by the same capped amount.
+    const flagCap = maxWeightIfFlag(true, fusion);
+    const maxTotal = knownTotal + remaining * flagCap;
+    const maxRatio = maxTotal > 0 ? (knownFlagW + remaining * flagCap) / maxTotal : 0;
+
+    // Min achievable ratio: every remaining vote does NOT flag (adds 0 to flagW) at its max
+    // weight — dilutes the ratio down as far as possible.
+    const nonFlagCap = maxWeightIfFlag(false, fusion);
+    const minTotal = knownTotal + remaining * nonFlagCap;
+    const minRatio = minTotal > 0 ? knownFlagW / minTotal : 0;
+
+    const stillCouldFlag = maxRatio > 0.5;
+    const stillCouldNotFlag = minRatio <= 0.5;
+    return !(stillCouldFlag && stillCouldNotFlag);
+  }
+
+  // majority (strict, unweighted count): flagged iff finalFlagging*2 > n.
+  const f = soFar.filter((v) => isFlag(v.verdict)).length;
+  const minFinal = f; // remaining all non-flag
+  const maxFinal = f + remaining; // remaining all flag
+  const lockedNotFlagged = maxFinal * 2 <= n;
+  const lockedFlagged = minFinal * 2 > n;
+  return lockedNotFlagged || lockedFlagged;
+}
+
 /** Run `n` sample judges with a bounded concurrency pool; failures become null. */
 async function sampleAll(
   n: number,
@@ -250,6 +331,42 @@ async function sampleAll(
 }
 
 /**
+ * Like `sampleAll`, but draws in batches of `concurrency` and stops issuing further
+ * batches once `isDecisionLocked` proves the flag/no-flag outcome can no longer change —
+ * never MORE round-trips than `sampleAll`, only ever fewer or equal (see `isDecisionLocked`
+ * for the guarantee this relies on).
+ */
+async function sampleWithEarlyStop(
+  n: number,
+  concurrency: number,
+  cfg: ConsensusConfig,
+  fusion: EvidenceFusion,
+  sampleJudge: (index: number) => Promise<VerdictResult | null>,
+): Promise<Array<VerdictResult | null>> {
+  const out: Array<VerdictResult | null> = [];
+  const batchSize = Math.max(1, Math.min(concurrency, n));
+  let drawn = 0;
+  while (drawn < n) {
+    const batchLen = Math.min(batchSize, n - drawn);
+    const batch = await Promise.all(
+      Array.from({ length: batchLen }, (_, j) => drawn + j).map(async (i) => {
+        try {
+          return await sampleJudge(i);
+        } catch (err) {
+          console.debug(`consensus sample ${i} failed: ${err instanceof Error ? err.message : String(err)}`);
+          return null;
+        }
+      }),
+    );
+    out.push(...batch);
+    drawn += batchLen;
+    const soFar = out.filter((v): v is VerdictResult => v != null);
+    if (isDecisionLocked(soFar, n - drawn, cfg, fusion)) break;
+  }
+  return out;
+}
+
+/**
  * Judge one bundle by consensus: sample the injected `sampleJudge` N times, then
  * combine. The returned verdict is fully formed (the representative sample was
  * already enriched with rootCause/repairDiff by the caller). `n: 1` deliberately
@@ -262,8 +379,11 @@ export async function judgeByConsensus(
   cfg: ConsensusConfig,
 ): Promise<ConsensusVerdict> {
   const n = Math.max(1, Math.floor(cfg.n));
-  const results = await sampleAll(n, cfg.concurrency ?? n, sampleJudge);
+  const fusion = deriveFusion(bundle);
+  const results = cfg.earlyStop
+    ? await sampleWithEarlyStop(n, cfg.concurrency ?? n, cfg, fusion, sampleJudge)
+    : await sampleAll(n, cfg.concurrency ?? n, sampleJudge);
   const samples = results.filter((v): v is VerdictResult => v != null);
   const heuristic = judgeHeuristically(bundle, staticContext);
-  return combineVerdicts(samples, heuristic, deriveFusion(bundle), cfg);
+  return combineVerdicts(samples, heuristic, fusion, cfg);
 }

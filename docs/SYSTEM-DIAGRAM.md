@@ -87,7 +87,7 @@
         ┌───────────────────────────────────────────────────────────────┐
         │ HYBRID JUDGE                                                  │
         │   heuristic path-sensitive (MỌI bundle)                       │
-        │   + LLM/consensus (BORDERLINE) + ownershipNotes + judgeTuner  │
+        │   + LLM/consensus (BORDERLINE) + ownershipNotes               │
         └──────────────────────────────┬────────────────────────────────┘
                                        v
                          LeakReporting.buildReport

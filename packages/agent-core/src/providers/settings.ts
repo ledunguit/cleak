@@ -19,4 +19,11 @@ export interface ProviderSettings {
   /** Time-to-first-byte budget (headers) before giving up on connecting. */
   connectTimeoutMs: number;
   retries: number;
+  /** Request the provider's native JSON-object response mode for tool-less (single-shot
+   * prose-JSON) calls — the judge/strategist/allocator-profiler prompts already instruct
+   * "respond with a JSON object ONLY", so this constrains the provider to actually honor
+   * that instead of relying purely on prompt compliance + a regex-fallback parse. Only
+   * applied when no tools are attached (see callOpenAiChat) — never interferes with the
+   * agentic tool-calling loops. */
+  jsonMode?: boolean;
 }

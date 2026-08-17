@@ -29,7 +29,7 @@ import type { ConsensusRule } from '@cleak/common/analysis/consensus-judge';
 import { countSourceLoc } from '@cleak/common/analysis/harness-utils';
 import { EVENT_PHASE, EVENT_KIND, type ScanEventName } from '@cleak/common/flow/scan-flow-contract';
 import { runHeadless } from '../surfaces/headless';
-import { loadConfig, type Provider, type RunConfig, toProviderSettings, computeCostUsd } from '@cleak/config';
+import { loadConfig, type RunConfig, toProviderSettings, computeCostUsd } from '@cleak/config';
 import { captureProvenance, summarizeStat, type EvalProvenance, type Stat } from './provenance';
 import { checkCorpusGate, type CorpusGateResult } from './corpusLock';
 import {
@@ -104,8 +104,9 @@ export interface EvalOptions {
   /** Static evidence tools the enrich stage runs (tool-level ablation). */
   staticTools?: string[];
   /** LLM provider override (eval-scoped) — bypasses the cleak config file's provider
-   * so a sweep can target a known-good gateway without editing global config. */
-  provider?: Provider;
+   * so a sweep can target a known-good gateway without editing global config. A
+   * canonical provider type or a named profile (see RunConfig.provider). */
+  provider?: string;
   /** Wall-clock deadline per case, ms. Cuts ONLY the offending case (its own
    * AbortController), not the whole run — a runaway real-project case (hundreds of
    * candidates, e.g. LAMeD) no longer blocks the batch indefinitely. Overrides
@@ -303,7 +304,7 @@ const PROVIDER_KEY_ENV: Record<string, string> = {
  * runs. (A keyless `local` gateway is legitimate, so it's allowed through; the
  * post-run assertion in `runEval` still catches a dead local gateway.)
  */
-async function assertLlmAvailable(mode: string, allowFallback?: boolean, provider?: Provider): Promise<void> {
+async function assertLlmAvailable(mode: string, allowFallback?: boolean, provider?: string): Promise<void> {
   if (mode !== 'llm_assisted' || allowFallback) return;
   const full = loadConfig(provider ? { provider } : {});
   const cfg = full.llm;
