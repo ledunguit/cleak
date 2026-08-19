@@ -87,7 +87,7 @@ describe('stageHybridJudge — quota-exhaustion policy', () => {
     // Bundle keeps its pre-existing heuristic verdict — never silently
     // replaced by a fabricated LLM-looking one.
     expect(bundle.verdict).toBe(heuristicVerdict);
-    expect(notices.some((n) => n.includes('quota/rate-limit exhausted') && n.includes('keeping heuristic'))).toBe(true);
+    expect(notices.some((n) => n.includes('failed persistently') && n.includes('keeping heuristic'))).toBe(true);
   });
 
   test('a non-quota error still propagates regardless of the flag (unchanged prior behavior)', async () => {

@@ -205,12 +205,16 @@ export interface CaseRow {
    * `circuit_broken`: the run-wide consecutive-error breaker tripped (see
    * `maxConsecutiveErrors`) — this case was cut short or never started because of
    * OTHER cases' failures, not its own.
-   * `quota_exhausted`: THIS case's own LLM judge call hit provider quota/rate-limit
-   * exhaustion (see `QuotaExhaustedError`) — trips the breaker immediately
-   * (bypassing `maxConsecutiveErrors`) since every subsequent call would fail
-   * identically until the quota resets; distinct from `circuit_broken` (a
-   * sibling case's failure) and `error` (any other, potentially-transient
-   * failure that tolerates `maxConsecutiveErrors` retries first). */
+   * `quota_exhausted`: THIS case's own LLM judge call failed persistently — quota/
+   * rate-limit exhaustion is the clearest cause, but a dead/unreachable gateway or
+   * a connection that keeps failing under load counts too, since any error that
+   * reaches this point already survived the transport layer's own retries (see
+   * `QuotaExhaustedError`) — trips the breaker immediately (bypassing
+   * `maxConsecutiveErrors`) since every subsequent call would likely fail the same
+   * way until the underlying problem resolves; distinct from `circuit_broken` (a
+   * sibling case's failure) and `error` (any other, potentially-transient failure
+   * that tolerates `maxConsecutiveErrors` retries first — in practice this is now
+   * rare, since almost any judge-call failure classifies as `quota_exhausted`). */
   status: 'ok' | 'error' | 'skipped' | 'budget_exceeded' | 'circuit_broken' | 'quota_exhausted';
   tp: number;
   fp: number;
@@ -808,7 +812,7 @@ async function scoreCases(
         mcpCalls: budgetExceeded ? partialMcpCalls : 0,
         truncatedCalls: 0,
         ...(quotaExhausted
-          ? { error: `LLM judge quota/rate-limit exhausted: ${msg}` }
+          ? { error: `LLM judge call failed persistently (quota exhaustion or a dead/unreachable gateway): ${msg}` }
           : budgetExceeded
             ? {
                 error:
@@ -832,16 +836,18 @@ async function scoreCases(
         consecutiveErrors++;
         if (maxConsecutiveErrors > 0 && consecutiveErrors >= maxConsecutiveErrors) tripBreaker(c.id);
       } else if (status === 'quota_exhausted') {
-        // Immediate, unconditional trip — quota exhaustion isn't a flaky blip
-        // that might self-resolve on the next case; every subsequent judge
-        // call would fail identically until the quota resets, so waiting for
-        // maxConsecutiveErrors would just burn more cases for nothing.
+        // Immediate, unconditional trip — a persistent judge-call failure (this
+        // error already survived transport.ts's own retries) isn't a flaky blip
+        // that might self-resolve on the next case; every subsequent judge call
+        // would likely fail identically until the underlying problem (quota
+        // reset, gateway back up) resolves, so waiting for maxConsecutiveErrors
+        // would just burn more cases for nothing.
         tripBreaker(
           c.id,
-          `\n⛔ LLM judge quota/rate-limit exhausted at case ${c.id} — stopping instead of silently ` +
-            `falling back to the heuristic (would bias this run vs. others). Re-run with --resume ` +
-            `once quota resets. Disable via llm.pauseOnQuotaExhausted=false (or ` +
-            `--no-pause-on-quota-exhausted) to allow silent fallback instead.\n`,
+          `\n⛔ LLM judge call failed persistently at case ${c.id} (quota exhaustion or a dead/unreachable ` +
+            `gateway: ${msg}) — stopping instead of silently falling back to the heuristic (would bias ` +
+            `this run vs. others). Re-run with --resume once the provider is usable again. Disable via ` +
+            `llm.pauseOnQuotaExhausted=false (or --no-pause-on-quota-exhausted) to allow silent fallback instead.\n`,
         );
       }
       return result;

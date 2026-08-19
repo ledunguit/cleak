@@ -21,22 +21,30 @@ describe('isQuotaExhaustedError', () => {
     expect(isQuotaExhaustedError(new Error(text))).toBe(true);
   });
 
-  test.each(['request network error', 'timed out after 30s', 'malformed JSON in response', 'HTTP 500'])(
-    'generic error message %j → false',
+  test.each(['request network error', 'request timed out after 30s', 'request timed out after 1500ms', 'LLM stream had no response body', 'fetchWithRetry: exhausted retries'])(
+    'transport.ts post-retry-exhaustion message %j → true (a transient version never reaches here)',
     (text) => {
-      expect(isQuotaExhaustedError(new Error(text))).toBe(false);
+      expect(isQuotaExhaustedError(new Error(text))).toBe(true);
     },
   );
+
+  test("'interrupted' (deliberate cancellation) → false, even though it's an Error", () => {
+    expect(isQuotaExhaustedError(new Error('interrupted'))).toBe(false);
+  });
+
+  test('a non-429 status with a generic message → true (any structured status = a real response was received after retries)', () => {
+    const err = Object.assign(new Error('LLM error 500: internal error'), { status: 500 });
+    expect(isQuotaExhaustedError(err)).toBe(true);
+  });
+
+  test('an unrelated error with no status and no known transport-exhaustion shape → false (stays precise, not "catch everything")', () => {
+    expect(isQuotaExhaustedError(new Error('unexpected token in JSON'))).toBe(false);
+  });
 
   test('non-Error values → false', () => {
     expect(isQuotaExhaustedError('quota exceeded')).toBe(false);
     expect(isQuotaExhaustedError(undefined)).toBe(false);
     expect(isQuotaExhaustedError(null)).toBe(false);
-  });
-
-  test('a non-429 status with a generic message → false', () => {
-    const err = Object.assign(new Error('LLM error 500: internal error'), { status: 500 });
-    expect(isQuotaExhaustedError(err)).toBe(false);
   });
 });
 

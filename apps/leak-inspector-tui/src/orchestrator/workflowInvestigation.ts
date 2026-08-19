@@ -563,7 +563,7 @@ export async function stageHybridJudge(
       // instead of mislabeling a degraded run as LLM-assisted. Opt-out (rare,
       // e.g. an interactive scan the user wants to finish anyway) via config.
       if (cfg.llm.pauseOnQuotaExhausted) throw err;
-      onNotice(`Stage D · ${b.bundleId} — LLM quota/rate-limit exhausted; keeping heuristic verdict (pauseOnQuotaExhausted disabled)`);
+      onNotice(`Stage D · ${b.bundleId} — LLM judge call failed persistently (quota exhaustion or a dead/unreachable gateway); keeping heuristic verdict (pauseOnQuotaExhausted disabled)`);
       return;
     }
     if (!verdict) return;

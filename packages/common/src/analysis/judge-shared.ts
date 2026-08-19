@@ -12,9 +12,11 @@
 import { findEnclosingFunction } from './heuristic-leak-analysis';
 
 /**
- * Marks a judge-call failure as provider quota/rate-limit exhaustion — distinct
- * from a generic transient error (network blip, timeout, malformed response),
- * which recover on retry/next-case and should NOT abort a whole run. Thrown by
+ * Marks a judge-call failure as a PERSISTENT provider problem (quota/rate-limit
+ * exhaustion is the clearest case, but a dead gateway or a connection that keeps
+ * resetting under load carries the same signal) — distinct from a genuinely
+ * transient blip, which self-heals inside `packages/agent-core`'s own
+ * retry-with-backoff loop and never surfaces as an exception at all. Thrown by
  * both judge paths (single-LLM and per-consensus-sample) instead of silently
  * falling back to the heuristic verdict, so a caller that cares (the eval
  * harness's circuit breaker) can stop the run at this exact case rather than
@@ -27,15 +29,37 @@ export class QuotaExhaustedError extends Error {
   }
 }
 
-/** True when `err` looks like a provider quota/rate-limit exhaustion, as opposed
- * to any other call failure. Checks the structured HTTP status first (attached
- * by `packages/agent-core`'s transport layer on a non-ok response), falling
- * back to pattern-matching the message text for gateways that report quota
- * exhaustion via a non-429 status or an embedded body message. */
+/** Exact message strings `packages/agent-core/src/providers/transport.ts` throws
+ * ONLY after its own retry-with-backoff loop (2 attempts by default) has already
+ * given up — a real 429/quota block observed this session under concurrent load
+ * (`--concurrency 8`) sometimes surfaces as a dropped/reset connection instead of
+ * a clean 429 JSON body, i.e. as `request network error`, not a quota-worded
+ * message. Since a transient version of any of these never reaches this far
+ * (transport.ts already retried and recovered), anything matching here has
+ * already proven itself non-transient. */
+const TRANSPORT_RETRIES_EXHAUSTED_PATTERNS = [
+  /^request network error$/,
+  /^request timed out after/,
+  /^LLM stream had no response body$/,
+  /^fetchWithRetry: exhausted retries$/,
+];
+
+/** True when `err` represents a persistent provider failure that should pause a
+ * run rather than be silently absorbed. Checks (in order): a deliberate
+ * cancellation (`'interrupted'` — Ctrl-C, this case's own budget cap, a sibling
+ * case tripping the breaker; NOT a provider failure, must never trip this),
+ * a structured HTTP status attached by the transport layer (any non-ok response
+ * received after retries — the least ambiguous signal), a quota/rate-limit
+ * worded message (covers gateways that report exhaustion via a non-standard
+ * status or embedded body text), then the known post-retry-exhaustion message
+ * shapes above (covers the network-error/timeout manifestation of the same
+ * underlying block). */
 export function isQuotaExhaustedError(err: unknown): boolean {
   if (!(err instanceof Error)) return false;
-  if ((err as Error & { status?: number }).status === 429) return true;
-  return /quota|rate.?limit|too many requests|usage limit|insufficient (quota|credit|balance)/i.test(err.message);
+  if (err.message === 'interrupted') return false;
+  if (typeof (err as Error & { status?: number }).status === 'number') return true;
+  if (/quota|rate.?limit|too many requests|usage limit|insufficient (quota|credit|balance)/i.test(err.message)) return true;
+  return TRANSPORT_RETRIES_EXHAUSTED_PATTERNS.some((p) => p.test(err.message));
 }
 
 /** The five investigation verdicts, as wire strings (matches InvestigationVerdict). */

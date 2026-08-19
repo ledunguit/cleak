@@ -157,9 +157,16 @@ describe('judgeBundleWithLlm', () => {
     await expect(judgeBundleWithLlm(bundle(), {}, callModel)).rejects.toBeInstanceOf(QuotaExhaustedError);
   });
 
-  test('a non-quota error still returns null (regression guard: only quota errors change behavior)', async () => {
+  test('any other structured-status failure ALSO rethrows as QuotaExhaustedError (broadened scope: any persistent judge-call failure pauses, not just literal quota)', async () => {
     const callModel: CallModel = async () => {
       throw Object.assign(new Error('LLM error 500: internal error'), { status: 500 });
+    };
+    await expect(judgeBundleWithLlm(bundle(), {}, callModel)).rejects.toBeInstanceOf(QuotaExhaustedError);
+  });
+
+  test("a deliberate cancellation ('interrupted') still returns null — not a provider failure, must not pause the run", async () => {
+    const callModel: CallModel = async () => {
+      throw new Error('interrupted');
     };
     expect(await judgeBundleWithLlm(bundle(), {}, callModel)).toBeNull();
   });
