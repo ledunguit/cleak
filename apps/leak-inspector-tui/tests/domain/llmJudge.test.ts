@@ -1,7 +1,8 @@
 import { describe, expect, test } from 'vitest';
-import { isBorderline, shouldEscalate, judgeBundleWithLlm, parseVerdict } from '../../src/domain/llmJudge';
+import { isBorderline, shouldEscalate, judgeBundleWithLlm, judgeBundlesBatched, judgeBundlesConsensusBatched, parseVerdict, parseBatchVerdicts, type BatchJudgeItem } from '../../src/domain/llmJudge';
 import { InvestigationVerdict, ToolKind, type LeakBundle, type VerdictResult } from '@cleak/common/types';
 import { QuotaExhaustedError } from '@cleak/common/analysis/judge-shared';
+import type { ConsensusConfig } from '@cleak/common/analysis/consensus-judge';
 import type { CallModel } from '@cleak/agent-core';
 
 const verdict = (v: InvestigationVerdict, confidence: number): VerdictResult => ({
@@ -345,5 +346,262 @@ describe('parseVerdict (discriminated result)', () => {
     const r = parseVerdict('{"verdict":"uncertain"}');
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.value.confidence).toBe(0.5);
+  });
+});
+
+describe('parseBatchVerdicts', () => {
+  test('all-valid array matched by id', () => {
+    const text = JSON.stringify([
+      { id: 'b2', verdict: 'false_positive', confidence: 0.9 },
+      { id: 'b1', verdict: 'confirmed_leak', confidence: 0.8 },
+    ]);
+    const results = parseBatchVerdicts(text, ['b1', 'b2']);
+    expect(results.get('b1')).toMatchObject({ ok: true, value: { verdict: 'confirmed_leak' } });
+    expect(results.get('b2')).toMatchObject({ ok: true, value: { verdict: 'false_positive' } });
+  });
+
+  test('falls back to positional matching when id is absent', () => {
+    const text = JSON.stringify([{ verdict: 'confirmed_leak', confidence: 0.8 }, { verdict: 'false_positive', confidence: 0.9 }]);
+    const results = parseBatchVerdicts(text, ['b1', 'b2']);
+    expect(results.get('b1')).toMatchObject({ ok: true, value: { verdict: 'confirmed_leak' } });
+    expect(results.get('b2')).toMatchObject({ ok: true, value: { verdict: 'false_positive' } });
+  });
+
+  test('one malformed item does NOT invalidate the others', () => {
+    const text = JSON.stringify([
+      { id: 'b1', verdict: 'confirmed_leak', confidence: 0.8 },
+      { id: 'b2', verdict: 'not_a_real_verdict', confidence: 0.5 },
+      { id: 'b3', verdict: 'false_positive', confidence: 0.9 },
+    ]);
+    const results = parseBatchVerdicts(text, ['b1', 'b2', 'b3']);
+    expect(results.get('b1')?.ok).toBe(true);
+    expect(results.get('b2')).toMatchObject({ ok: false, reason: expect.stringContaining('not_a_real_verdict') });
+    expect(results.get('b3')?.ok).toBe(true);
+  });
+
+  test('a missing item (array shorter than expected) reports "missing from batch response"', () => {
+    const text = JSON.stringify([{ id: 'b1', verdict: 'confirmed_leak', confidence: 0.8 }]);
+    const results = parseBatchVerdicts(text, ['b1', 'b2']);
+    expect(results.get('b1')?.ok).toBe(true);
+    expect(results.get('b2')).toEqual({ ok: false, reason: 'missing from batch response' });
+  });
+
+  test('fully malformed response fails every id with the same reason, none silently dropped', () => {
+    const results = parseBatchVerdicts('not json at all, just prose', ['b1', 'b2', 'b3']);
+    expect(results.size).toBe(3);
+    for (const id of ['b1', 'b2', 'b3']) expect(results.get(id)).toMatchObject({ ok: false });
+  });
+
+  test('empty response reports "empty model response" for every id', () => {
+    const results = parseBatchVerdicts('', ['b1']);
+    expect(results.get('b1')).toEqual({ ok: false, reason: 'empty model response' });
+  });
+
+  test('NDJSON fallback: one JSON object per line, no enclosing array (real provider behavior observed on opencode-go-2)', () => {
+    const text = [
+      JSON.stringify({ id: 'b1', verdict: 'confirmed_leak', confidence: 0.9 }),
+      JSON.stringify({ id: 'b2', verdict: 'false_positive', confidence: 0.8 }),
+    ].join('\n');
+    const results = parseBatchVerdicts(text, ['b1', 'b2']);
+    expect(results.get('b1')).toMatchObject({ ok: true, value: { verdict: 'confirmed_leak' } });
+    expect(results.get('b2')).toMatchObject({ ok: true, value: { verdict: 'false_positive' } });
+  });
+
+  test('brace-scan fallback tolerates pretty-printed multi-line objects with no separators at all', () => {
+    const text = `
+      {
+        "id": "b1",
+        "verdict": "likely_leak",
+        "confidence": 0.6
+      }
+      {
+        "id": "b2",
+        "verdict": "uncertain",
+        "confidence": 0.5
+      }
+    `;
+    const results = parseBatchVerdicts(text, ['b1', 'b2']);
+    expect(results.get('b1')).toMatchObject({ ok: true, value: { verdict: 'likely_leak' } });
+    expect(results.get('b2')).toMatchObject({ ok: true, value: { verdict: 'uncertain' } });
+  });
+
+  test('brace-scan fallback does not get confused by braces/commas inside a string value', () => {
+    const text = [
+      JSON.stringify({ id: 'b1', verdict: 'confirmed_leak', confidence: 0.9, explanation: 'struct { int a, b; } was leaked' }),
+      JSON.stringify({ id: 'b2', verdict: 'false_positive', confidence: 0.8 }),
+    ].join('\n');
+    const results = parseBatchVerdicts(text, ['b1', 'b2']);
+    expect(results.get('b1')).toMatchObject({ ok: true, value: { verdict: 'confirmed_leak' } });
+    expect(results.get('b2')).toMatchObject({ ok: true, value: { verdict: 'false_positive' } });
+  });
+});
+
+describe('judgeBundlesBatched', () => {
+  function twoBundles(): BatchJudgeItem[] {
+    const b1 = bundle();
+    const b2 = { ...bundle(), bundleId: 'b2' };
+    return [
+      { bundle: b1, staticContext: {} },
+      { bundle: b2, staticContext: {} },
+    ];
+  }
+
+  test('empty items → empty map, no call made', async () => {
+    let called = false;
+    const callModel: CallModel = async () => {
+      called = true;
+      return { text: '[]', toolUses: [], stopReason: 'stop' };
+    };
+    const results = await judgeBundlesBatched([], callModel);
+    expect(results.size).toBe(0);
+    expect(called).toBe(false);
+  });
+
+  test('one call judges N bundles at once', async () => {
+    let callCount = 0;
+    const callModel: CallModel = async () => {
+      callCount++;
+      return {
+        text: JSON.stringify([
+          { id: 'b1', verdict: 'confirmed_leak', confidence: 0.9, explanation: 'e1' },
+          { id: 'b2', verdict: 'false_positive', confidence: 0.85, explanation: 'e2' },
+        ]),
+        toolUses: [],
+        stopReason: 'stop',
+      };
+    };
+    const results = await judgeBundlesBatched(twoBundles(), callModel);
+    expect(callCount).toBe(1);
+    expect(results.get('b1')?.verdict).toBe(InvestigationVerdict.CONFIRMED_LEAK);
+    expect(results.get('b2')?.verdict).toBe(InvestigationVerdict.FALSE_POSITIVE);
+    expect(results.get('b1')?.tool).toBe(ToolKind.LLM);
+  });
+
+  test('a malformed item for one bundle leaves the other bundle judged (partial success)', async () => {
+    const callModel: CallModel = async () => ({
+      text: JSON.stringify([
+        { id: 'b1', verdict: 'confirmed_leak', confidence: 0.9 },
+        { id: 'b2', verdict: 'nonsense_verdict', confidence: 0.5 },
+      ]),
+      toolUses: [],
+      stopReason: 'stop',
+    });
+    const notices: string[] = [];
+    const results = await judgeBundlesBatched(twoBundles(), callModel, undefined, undefined, (r) => notices.push(r));
+    expect(results.has('b1')).toBe(true);
+    expect(results.has('b2')).toBe(false);
+    expect(notices.some((n) => n.includes('keeping heuristic'))).toBe(true);
+  });
+
+  test('a non-quota call failure returns an empty map (all bundles keep heuristic), single notice', async () => {
+    const callModel: CallModel = async () => {
+      throw new Error('gateway down');
+    };
+    const notices: string[] = [];
+    const results = await judgeBundlesBatched(twoBundles(), callModel, undefined, undefined, (r) => notices.push(r));
+    expect(results.size).toBe(0);
+    expect(notices).toHaveLength(1);
+    expect(notices[0]).toContain('keeping heuristic for all');
+  });
+
+  test('a quota-classified failure rethrows QuotaExhaustedError instead of swallowing', async () => {
+    const callModel: CallModel = async () => {
+      throw Object.assign(new Error('LLM error 429: rate limit exceeded'), { status: 429 });
+    };
+    await expect(judgeBundlesBatched(twoBundles(), callModel)).rejects.toBeInstanceOf(QuotaExhaustedError);
+  });
+});
+
+describe('judgeBundlesConsensusBatched', () => {
+  function twoItems(): BatchJudgeItem[] {
+    const b1 = bundle();
+    const b2 = { ...bundle(), bundleId: 'b2' };
+    return [
+      { bundle: b1, staticContext: {} },
+      { bundle: b2, staticContext: {} },
+    ];
+  }
+
+  const baseCfg: ConsensusConfig = { n: 3, rule: 'weighted', temperature: 0.7, concurrency: 3, earlyStop: false };
+
+  test('empty items → empty map, no call made', async () => {
+    let called = false;
+    const callModel: CallModel = async () => {
+      called = true;
+      return { text: '[]', toolUses: [], stopReason: 'stop' };
+    };
+    const results = await judgeBundlesConsensusBatched([], callModel, baseCfg);
+    expect(results.size).toBe(0);
+    expect(called).toBe(false);
+  });
+
+  test('N bundles that fit in one JUDGE_BATCH_SIZE chunk → one batch call per sample round', async () => {
+    let callCount = 0;
+    const callModel: CallModel = async (req) => {
+      callCount++;
+      const ids = [...(req.messages[0].content as string).matchAll(/id: (b\d+)/g)].map((m) => m[1]);
+      return { text: JSON.stringify(ids.map((id) => ({ id, verdict: 'confirmed_leak', confidence: 0.9 }))), toolUses: [], stopReason: 'stop' };
+    };
+    const results = await judgeBundlesConsensusBatched(twoItems(), callModel, baseCfg);
+    // 2 bundles fit in one JUDGE_BATCH_SIZE(=12) round; n=3, earlyStop off → 3 calls total.
+    expect(callCount).toBe(3);
+    expect(results.get('b1')?.verdict).toBe(InvestigationVerdict.CONFIRMED_LEAK);
+    expect(results.get('b1')?.samples).toHaveLength(3);
+    expect(results.get('b2')?.samples).toHaveLength(3);
+  });
+
+  test('earlyStop drops a decision-locked bundle out of later rounds while the undecided one keeps sampling', async () => {
+    let round = 0;
+    const callModel: CallModel = async (req) => {
+      const ids = [...(req.messages[0].content as string).matchAll(/id: (b\d+)/g)].map((m) => m[1]);
+      const resp = {
+        text: JSON.stringify(
+          ids.map((id) =>
+            id === 'b1'
+              ? { id, verdict: 'confirmed_leak', confidence: 0.95 }
+              : { id, verdict: round % 2 === 0 ? 'confirmed_leak' : 'false_positive', confidence: 0.5 },
+          ),
+        ),
+        toolUses: [],
+        stopReason: 'stop' as const,
+      };
+      round++;
+      return resp;
+    };
+    const cfg: ConsensusConfig = { n: 5, rule: 'weighted', temperature: 0.7, concurrency: 3, earlyStop: true };
+    const results = await judgeBundlesConsensusBatched(twoItems(), callModel, cfg);
+    // b1's samples lock the weighted decision early (fewer than n=5 draws);
+    // b2 oscillates and never locks, so it collects all n=5 draws.
+    expect(results.get('b1')!.samples.length).toBeLessThan(5);
+    expect(results.get('b2')!.samples).toHaveLength(5);
+  });
+
+  test('a malformed per-bundle item in one round costs that bundle one sample, not the whole run', async () => {
+    let round = 0;
+    const callModel: CallModel = async (req) => {
+      const ids = [...(req.messages[0].content as string).matchAll(/id: (b\d+)/g)].map((m) => m[1]);
+      const items = ids.map((id) => {
+        // b2's very first round comes back malformed; every other round/bundle is fine.
+        if (id === 'b2' && round === 0) return { id, verdict: 'not_a_real_verdict', confidence: 0.5 };
+        return { id, verdict: 'confirmed_leak', confidence: 0.9 };
+      });
+      round++;
+      return { text: JSON.stringify(items), toolUses: [], stopReason: 'stop' as const };
+    };
+    const results = await judgeBundlesConsensusBatched(twoItems(), callModel, baseCfg);
+    expect(results.get('b1')!.samples).toHaveLength(3);
+    // b2 lost exactly its round-0 sample to the malformed item, keeping the other 2.
+    expect(results.get('b2')!.samples).toHaveLength(2);
+    expect(results.get('b2')!.verdict).toBe(InvestigationVerdict.CONFIRMED_LEAK);
+  });
+
+  test('a quota-classified failure on any round rethrows QuotaExhaustedError, aborting the remaining rounds', async () => {
+    let callCount = 0;
+    const callModel: CallModel = async () => {
+      callCount++;
+      throw Object.assign(new Error('LLM error 429: rate limit exceeded'), { status: 429 });
+    };
+    await expect(judgeBundlesConsensusBatched(twoItems(), callModel, baseCfg)).rejects.toBeInstanceOf(QuotaExhaustedError);
+    expect(callCount).toBe(1);
   });
 });

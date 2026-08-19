@@ -196,6 +196,18 @@ Readings (Juliet is still the EASY corpus, see §3a):
 > (3) **Token caveat:** `total tok` counts judge + agentic usage (the judge's tokens were previously dropped);
 > host-side strategist/profiler tokens are still not counted, so `planner` rows slightly understate cost.
 >
+> **Batching caveat (2026-08-19):** the table above predates **batch judging** — Stage D now
+> gathers borderline bundles into batched LLM calls (≤12 candidates/call for the single-shot
+> path; round-batched across bundles for consensus, see [PROMPTS.md §3–4](PROMPTS.md)) instead of
+> one call per bundle. This is an unconditional wire-format change (every baseline's judge calls
+> now go through it, not just new configs) that cuts the fixed per-call system-prompt overhead —
+> a real-world case (libsolv, 738 borderline candidates) measured 738+ calls → 34 (single-shot)
+> with an unchanged Juliet regression check (P/R/F1 = 1.000, 0 verdict diffs). The **judge-heavy
+> rows above (B6a/B6/B6b/B7) would now report meaningfully lower `total tok`** on a re-run;
+> **F1/P/R are not expected to move** (verdicts are the same content, just transported N-per-call
+> instead of 1-per-call) — not yet re-verified with a full sweep re-run, since that costs real
+> provider quota; treat the token column above as **pre-batching** until a re-run confirms it.
+>
 > **Scale caveat:** n=50 stratified, single run, on the **validated 1658-case corpus**. Effect sizes are large
 > and consistent (B6a winner, agentic ~9× cost for no F1 gain, dynamic = FP-killer). A staged **n=100** re-run
 > on the validated corpus (+ multi-run variance) is next — note the agentic configs now cost ~4 M tokens each

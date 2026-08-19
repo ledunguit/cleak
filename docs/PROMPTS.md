@@ -32,7 +32,7 @@ cứng) ⇒ eval tất định.
 | **A · Static fan-out** | nhiều **static sub-agent**, mỗi cái nhận một nhóm candidate, chạy tool tĩnh để **gom bằng chứng** — **không ra verdict** | ✅ | `staticSubAgentSystemPrompt` |
 | **B · Dynamic** | nếu biết `buildCommand` → **công thức tất định, KHÔNG LLM** (`buildTarget → lsanRun`); nếu không → **1 dynamic worker (LLM)** build + chạy sanitizer | ⚙️/✅ | `dynamicWorkerSystemPrompt` |
 | **C · Synthesize** | hợp nhất static context + dynamic evidence, đóng dấu coverage | ❌ | — |
-| **D · Hybrid judge** | heuristic (tất định) cho **mọi** bundle; **LLM judge** chỉ cho bundle **borderline**; **consensus** (k mẫu) tuỳ chọn | ✅ | `llmJudge` SYSTEM_PROMPT |
+| **D · Hybrid judge** | heuristic (tất định) cho **mọi** bundle; **LLM judge** chỉ cho bundle **borderline**, gộp theo lô (≤12/call); **consensus** (k mẫu, batch theo round) tuỳ chọn | ✅ | `llmJudge` BATCH_SYSTEM_PROMPT |
 
 Đặc điểm cốt lõi:
 - **Phân vùng tool cứng:** static sub-agent chỉ nhận tool tĩnh; dynamic worker chỉ nhận tool
@@ -321,17 +321,28 @@ heuristic.
 
 ### 3.1. Cổng leo thang — bundle nào lên LLM
 
-- **`isBorderline`** — `apps/leak-inspector-tui/src/domain/llmJudge.ts:307-312`: verdict
+- **`isBorderline`** — `apps/leak-inspector-tui/src/domain/llmJudge.ts:654`: verdict
   `likely_leak`/`uncertain`, **hoặc** `confidence ∈ [0.35, 0.7]`.
-- **`shouldEscalate`** — `llmJudge.ts:325-355`: `isBorderline`, **hoặc** mâu thuẫn
+- **`shouldEscalate`** — `llmJudge.ts:672`: `isBorderline`, **hoặc** mâu thuẫn
   static↔verdict / dynamic↔verdict (vd cờ leak nhưng dynamic chạy sạch; không cờ nhưng có
   runtime leak tương quan; verdict nghịch `deriveFusion`). Đây là chỗ tái-kích-hoạt consensus
   khi nó cần nhất.
 
-### 3.2. System prompt — `SYSTEM_PROMPT`
+### 3.2. System prompt — `SYSTEM_PROMPT` (+ `BATCH_SYSTEM_PROMPT`)
 
-- **File:** `llmJudge.ts` (`SYSTEM_PROMPT`)
+- **File:** `llmJudge.ts:51` (`SYSTEM_PROMPT`)
 - **Định dạng output:** **JSON only** (không native tool-calling; `tools: []`).
+- **Batch judging (mặc định, mọi call Stage D — cả single-shot lẫn consensus):** thay vì 1 call
+  LLM/bundle, N bundle borderline được **gộp vào 1 call** (`judgeBundlesBatched`,
+  `llmJudge.ts:482`), trả về **JSON ARRAY** N verdict thay vì 1 object — dùng
+  `BATCH_SYSTEM_PROMPT` (`llmJudge.ts:61`) thay `SYSTEM_PROMPT`. Hai prompt chia sẻ **y nguyên**
+  bộ luật calibration (`CALIBRATION_RULES`, `llmJudge.ts:34`) — chỉ khác phần mô tả định dạng
+  output (object đơn vs array N phần tử). Batch tối đa `JUDGE_BATCH_SIZE = 12` candidate/call
+  (`llmJudge.ts:369`) — đủ lớn để khấu hao chi phí cố định ~960 token của system prompt (đo
+  thực tế trên 1 case libsolv: 738 candidate → 738+ call riêng lẻ trước khi có batching), đủ nhỏ
+  để tránh "lost in the middle" và giới hạn thiệt hại nếu 1 response bị cắt/hỏng. Lý do ra đời:
+  chi phí thực tế trên project thật (LAMeD) đến từ **số lượng call**, không phải kích thước mỗi
+  call — batching cắt trực tiếp vào nguyên nhân đó thay vì tối ưu prompt từng call.
 
 ```text
 You are an expert C/C++ memory-leak analyst. Decide whether ONE allocation is a real leak, using the code, static context, and any runtime evidence provided.
@@ -353,7 +364,7 @@ Calibrate using the EVIDENCE, in this priority order:
 > tài liệu bị lệch khỏi code, xem audit phiên làm việc gắn với việc sửa mục này):
 > (1) Bullet CLEAN sanitizer/valgrind được viết lại chặt hơn — trước đây "clean run EXERCISED
 > allocation này" coi là exculpation mạnh; nay chỉ exculpate khi evidence entry **CORRELATED**
-> với đúng candidate này (`llmJudge.ts:110-114`, ghi chú "task-5 class-(b) hardening" — clean
+> với đúng candidate này (`llmJudge.ts:615`, ghi chú "task-5 class-(b) hardening" — clean
 > run chỉ cover cùng FILE nhưng khác site KHÔNG được tính là đã "exercise" allocation này, tránh
 > exculpate nhầm các allocation UNPAIRED).
 > (2) Bullet UNPAIRED alloc→free (mới, trước đây không có trong tài liệu): static pairing đánh
@@ -366,10 +377,13 @@ Calibrate using the EVIDENCE, in this priority order:
 
 ### 3.3. User message
 
-- **File:** `llmJudge.ts:202-220` (trong `judgeBundleWithLlm`). `${sourceSnippet}` = **toàn bộ hàm bao** quanh allocation
-  (đã **xoá comment** để không lộ nhãn benchmark; cửa sổ dự phòng ±(6,5) dòng,
-  `judge-shared.ts:95`). `${summarizeStatic}` (`:48-91`) và `${summarizeEvidence}` (`:93-113`)
-  dựng từ static context / dynamic evidence.
+- **File:** `buildJudgeUserMessage` (`llmJudge.ts:332`, single-bundle — dùng khi 1 batch chỉ có 1
+  candidate) / `buildBatchUserMessage` (`llmJudge.ts:383`, N candidate — mỗi candidate 1 khối
+  `── CANDIDATE i (id: ...) ──` nối liền, cùng dùng lại y nguyên `sourceSnippet` /
+  `summarizeStatic` / `summarizeEvidence` — batching chỉ đổi wire-format, không đổi nội dung
+  mỗi candidate thấy). `${sourceSnippet}` = **toàn bộ hàm bao** quanh allocation (đã **xoá
+  comment** để không lộ nhãn benchmark; cửa sổ dự phòng ±(6,5) dòng, `judge-shared.ts:95`).
+  `${summarizeStatic}` và `${summarizeEvidence}` dựng từ static context / dynamic evidence.
 
 ```text
 ALLOCATION SITE: ${function}() at ${file}:${line} (${allocation_type})
@@ -393,20 +407,63 @@ Return your JSON verdict.
 
 ### 3.4. Parse + làm giàu
 
-`parseVerdict` (`llmJudge.ts:136-169`): `JSON.parse`, fallback regex `/\{[\s\S]*\}/`; chỉ nhận
-nếu `verdict` là 1 trong 5 nhãn hợp lệ (`isLeakVerdictString`), `confidence` clamp `[0,1]`;
-hỏng → `null` → giữ verdict heuristic. Verdict hợp lệ chạy qua `enrichLeakVerdict`
-(`@cleak/common/analysis/heuristic-judge`) để gắn `rootCause` + repair diff source-anchored.
+- **Single-object parse** — `parseVerdict` (`llmJudge.ts:202`): `JSON.parse`, fallback regex
+  `/\{[\s\S]*\}/`; chỉ nhận nếu `verdict` là 1 trong 5 nhãn hợp lệ (`isLeakVerdictString`),
+  `confidence` clamp `[0,1]`; hỏng → `null` → giữ verdict heuristic.
+- **Batch-array parse** — `parseBatchVerdicts` (`llmJudge.ts:278`): kỳ vọng 1 JSON **array** N
+  phần tử, khớp lại từng item với `expectedIds` qua field `id` (khớp theo `id` nếu có, fallback
+  theo **vị trí**) — 1 item hỏng/thiếu chỉ mất verdict của **đúng candidate đó**, N-1 candidate
+  còn lại vẫn được xử lý bình thường (tránh 1 lỗi nhỏ làm hỏng cả batch). **Fallback NDJSON**
+  (`extractJsonObjects`, `llmJudge.ts:229`): nếu response không phải `[...]` hợp lệ, quét toàn
+  văn bản theo độ sâu ngoặc `{}` (bỏ qua ngoặc/dấu phẩy nằm trong chuỗi) để tách từng object JSON
+  độc lập bất kể có ngăn cách bằng dấu phẩy/xuống dòng/định dạng đẹp hay không — phát sinh từ
+  quan sát thực tế: model `mimo-v2.5` (qua endpoint `opencode-go-2`) trả về **1 object JSON mỗi
+  dòng** (NDJSON) thay vì mảng dù `BATCH_SYSTEM_PROMPT` yêu cầu rõ; không có fallback này thì
+  **toàn bộ batch bị vứt bỏ về heuristic** dù nội dung model trả lời đúng và đủ (đã tái hiện lỗi
+  này với dữ liệu response thật, xác nhận bằng test).
+- Verdict hợp lệ (từ cả 2 đường parse) chạy qua `enrichLeakVerdict`
+  (`@cleak/common/analysis/heuristic-judge`) để gắn `rootCause` + repair diff source-anchored.
 
 ---
 
-## 4. Consensus judge (tuỳ chọn — đóng góp luận văn)
+## 4. Batch judging + Consensus judge (tuỳ chọn — đóng góp luận văn)
 
-Bật khi `CONSENSUS_N > 1`. **Không có prompt riêng** — `judgeByConsensus`
-(`packages/common/src/analysis/consensus-judge.ts:258-269`) lấy mẫu **chính
-`judgeBundleWithLlm`** N lần ở `CONSENSUS_TEMPERATURE` (do đó **tái dùng y nguyên** SYSTEM_PROMPT
-§3.2), nối tại `workflowInvestigation.ts:316-349`. `combineVerdicts` (`:151-226`) gộp N nhãn
-thành 1 cờ flag theo luật, rồi chọn nhãn modal trong cụm đồng thuận (xem [§8](#8-ranh-giới-quyết-định-decision-boundaries) cho con số).
+### 4.1. Batch judging (mọi lần Stage D chạy, kể cả `CONSENSUS_N = 1`)
+
+Bundle borderline không còn được judge **từng cái một** — chúng được gom theo lô tối đa
+`JUDGE_BATCH_SIZE = 12` (`llmJudge.ts:369`) và gửi trong **1 call** (`judgeBundlesBatched`,
+`llmJudge.ts:482`), song song hoá theo `cfg.workflow.judgeConcurrency` (`stageHybridJudge`,
+`workflowInvestigation.ts:623-640`). Cache-check chạy **trước** khi gom lô — bundle cache-hit
+không tốn 1 slot nào trong batch. Lý do: đo thực tế trên 1 case libsolv (project thật) cho thấy
+738 candidate borderline ⇒ 738+ call LLM riêng lẻ ở baseline cũ; batching đưa con số đó xuống 34
+call (giảm ~21.7×) với **cùng độ chính xác** trên Juliet CWE-401 (P/R/F1 = 1.000, không regression).
+
+### 4.2. Consensus (bật khi `CONSENSUS_N > 1`) — batch theo ROUND
+
+**Không có prompt riêng** cho consensus — nó tái dùng y nguyên `BATCH_SYSTEM_PROMPT` §3.2 (không
+phải `SYSTEM_PROMPT` đơn-bundle). Trước đây consensus gọi `judgeBundleWithLlm` N lần **cho từng
+bundle riêng** (N×số-bundle call); giờ `judgeBundlesConsensusBatched`
+(`llmJudge.ts:543`, gọi từ `stageHybridJudge`, `workflowInvestigation.ts:549-600`) lấy mẫu
+**theo ROUND across bundles** thay vì theo bundle:
+
+- Vòng `round = 0..N-1`: mọi bundle còn "active" (chưa bị early-stop khoá) được gộp thành các lô
+  ≤ `JUDGE_BATCH_SIZE`, mỗi lô 1 call `judgeBundlesBatched` — đây CHÍNH LÀ "lấy mẫu #round cho
+  các bundle này", không phải logic mới, chỉ là gọi lại hàm batch ở §4.1 tại nhiệt độ
+  `cfg.consensus.temperature`.
+- Nếu `cfg.consensus.earlyStop` bật: sau mỗi round, `isDecisionLocked`
+  (`consensus-judge.ts:257`, không đổi) được áp **cho từng bundle** để loại khỏi tập active —
+  **y hệt** điều kiện dừng sớm của `sampleWithEarlyStop` cũ, chỉ khác là bây giờ nhiều bundle
+  chia sẻ chung 1 call mỗi round thay vì mỗi bundle tự vòng lặp riêng.
+- Kết thúc: `combineVerdicts` + `judgeHeuristically` (đều **không đổi**, `consensus-judge.ts`) gộp
+  N mẫu (hoặc ít hơn nếu early-stop khoá sớm) thành 1 `ConsensusVerdict`/bundle — logic gộp phiếu
+  (§8.4) **giữ nguyên hoàn toàn**, chỉ đường vận chuyển mẫu (transport) thay đổi.
+
+Chi phí: không có early-stop, tổng call ≈ `N × ceil(số-bundle-borderline / JUDGE_BATCH_SIZE)`
+thay vì `N × số-bundle-borderline` — vd đo thực tế 1 case cJSON (109 candidate, 73 borderline,
+`CONSENSUS_N=3`, earlyStop bật theo config mặc định): chỉ 26 call thật (so với baseline không
+batch sẽ là tối đa 73×3 = 219 call nếu early-stop không bao giờ khoá bundle nào) — 73 bundle
+nhận `ConsensusVerdict` với `samples[]` thật (phân bố 1–3 mẫu/bundle tuỳ lúc early-stop khoá),
+không còn rơi hết về heuristic sau khi fix NDJSON (§3.4).
 
 ---
 
@@ -509,6 +566,7 @@ timeout 30s; tool nặng (`SERIAL_HEAVY`: build/sanitizer/scan-build) read-only 
 | Judge temperature (single) | `0` | `JUDGE_LLM_TEMPERATURE` | `:118` |
 | Static fan-out | `staticConcurrency=3`, `staticGroupSize=4` | `WORKFLOW_STATIC_*` | `:190-191` |
 | Judge concurrency | `3` | `WORKFLOW_JUDGE_CONCURRENCY` | `:192` |
+| Judge batch size | `12` (không cấu hình qua config/env) | — | `llmJudge.ts:369` (`JUDGE_BATCH_SIZE`) |
 | Provider | `local` (`openai`/`anthropic`/`openai-compat`) | `LLM_PROVIDER` + khoá theo provider | `:105-166` |
 | Compaction threshold tokens | `100000` | `LLM_COMPACT_THRESHOLD_TOKENS` | `:185` |
 | Compaction keep recent turns | `3` | `LLM_COMPACT_KEEP_TURNS` | `:186` |
@@ -530,7 +588,7 @@ export const LEAK_POSITIVE_VERDICTS: ReadonlySet<string> = new Set(['confirmed_l
 ```
 
 `uncertain`, `likely_false_positive`, `false_positive` đều **KHÔNG** flag. Tập này là ranh giới
-nhị phân ở mọi consumer: consensus (`isFlag`, `consensus-judge.ts:59`) và bộ chấm eval
+nhị phân ở mọi consumer: consensus (`isFlag`, `consensus-judge.ts:66`) và bộ chấm eval
 (`isFlagged`, `evalScoring.ts:79`). **Không có cutoff confidence** ở bất kỳ đâu trên đường dự
 đoán/đo — confidence chỉ dùng cho cân consensus, hiển thị severity và calibration/ECE.
 
@@ -576,7 +634,7 @@ ownership transfer / freed-all-paths / clean-run ⇒ `false_positive`. `confiden
 
 ### 8.4. Consensus
 
-`combineVerdicts` (`consensus-judge.ts:151-225`):
+`combineVerdicts` (`consensus-judge.ts:159-234`):
 - **Cờ flag** theo luật: `majority` = `flagging*2 > n`; `weighted` = `flagW/total > 0.5` (phiếu
   **nghịch** bằng chứng dynamic quyết định bị nhân `×0.3`); `unanimous-to-flag` = `flagging === n`.
 - **Nhãn cuối** = verdict modal trong cụm đồng thuận (hoà → chọn **ít nghiêm trọng hơn**).
@@ -599,10 +657,13 @@ ownership transfer / freed-all-paths / clean-run ⇒ `false_positive`. `confiden
 | B2 | System | `harnessWorkerSystemPrompt` (opt-in) | `domain/subAgentPrompts.ts` | 101-144 | tool-calling |
 | B2 | User | `harnessWorkerUserMessage` | `domain/subAgentPrompts.ts` | 151-174 | — |
 | B2 | Nudge | harness completion | `orchestrator/workflowInvestigation.ts` | 402-405 | — |
-| D | System | `SYSTEM_PROMPT` | `domain/llmJudge.ts` | 19-33 | JSON only |
-| D | System+User caller | `judgeBundleWithLlm` (user msg inline) | `domain/llmJudge.ts` | 181, 202-220 | JSON only |
-| D | Logic | `isBorderline` / `shouldEscalate` | `domain/llmJudge.ts` | 307-312, 325-355 | — |
-| D | Logic | `combineVerdicts` (consensus) | `common/analysis/consensus-judge.ts` | 151-226 | — |
+| D | System (đơn-bundle) | `SYSTEM_PROMPT` | `domain/llmJudge.ts` | 51-56 | JSON object |
+| D | System (batch, mọi call) | `BATCH_SYSTEM_PROMPT` | `domain/llmJudge.ts` | 61-67 | JSON array |
+| D | Caller (single-shot batch) | `judgeBundlesBatched` + `buildBatchUserMessage` | `domain/llmJudge.ts` | 482, 383 | JSON array |
+| D | Caller (consensus, round-batch) | `judgeBundlesConsensusBatched` | `domain/llmJudge.ts` | 543 | JSON array ×N round |
+| D | Parse | `parseVerdict` / `parseBatchVerdicts` (+NDJSON fallback) | `domain/llmJudge.ts` | 202, 278, 229 | — |
+| D | Logic | `isBorderline` / `shouldEscalate` | `domain/llmJudge.ts` | 654, 672 | — |
+| D | Logic | `combineVerdicts` (consensus) | `common/analysis/consensus-judge.ts` | 159-234 | — |
 | — | Tool desc | done tools + `read_file` | `subAgentPrompts.ts` / `readFileTool.ts` | 17-26 / 17-43 | schema |
 | — | Tool desc ×11 | static MCP | `static-analyzer/src/mcp/static-mcp-server.ts` | 38-127 | schema |
 | — | Tool desc ×9 | dynamic MCP | `dynamic-analyzer/src/mcp/dynamic-mcp-server.ts` | 41-93 | schema |
@@ -654,9 +715,10 @@ Build at most ONCE and run each dynamic tool at most once. If a build or sanitiz
 
 ### 10.3. Prompt dùng cho LLM JUDGE (Stage D)
 
-**Mục đích:** Judge một allocation riêng lẻ, output verdict JSON. Chỉ gọi cho bundle borderline.
+**Mục đích:** Judge các allocation borderline, gộp theo lô (batch) tối đa 12 candidate/call,
+output verdict JSON (array nếu batch, object nếu batch chỉ có 1 candidate).
 
-**File:** `llmJudge.ts:19-33`
+**File:** `llmJudge.ts:51` (`SYSTEM_PROMPT`, đơn-bundle) / `llmJudge.ts:61` (`BATCH_SYSTEM_PROMPT`, dùng cho mọi call thật kể cả `CONSENSUS_N=1`)
 
 Xem nội dung đầy đủ + changelog tại §3.2 (giữ một bản duy nhất để tránh lệch đồng bộ như bản
 trước của mục này từng bị).

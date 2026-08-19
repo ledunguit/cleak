@@ -7,7 +7,7 @@
 
 import { resolve, basename, join } from 'node:path';
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
-import { McpClient, buildCallModel } from '@cleak/agent-core';
+import { McpClient, buildCallModel, type CallModel } from '@cleak/agent-core';
 import { AnalysisMode, DynamicMode } from '@cleak/common/types';
 import { loadConfig, type ConsensusJudgeConfig, type RunConfig, toProviderSettings } from '@cleak/config';
 import { loadOrProfileAllocators, profileCachePath } from '../domain/allocatorProfiler';
@@ -90,6 +90,17 @@ export interface HeadlessOptions {
    * of silently falling back to the heuristic verdict. Default (unset) leaves
    * the config value (`llm.pauseOnQuotaExhausted`, true). */
   pauseOnQuotaExhausted?: boolean;
+  /** Debug/observability hook: wraps EVERY `CallModel` this scan builds
+   * (allocator-profiler, strategist, and the main investigation — which
+   * covers Stage A/B/C/D including the judge) so a caller can log/inspect
+   * every LLM request+response. Purely additive — no-op when absent. See
+   * `scripts/debug-case-llm-trace.ts`. */
+  wrapCallModel?: (inner: CallModel) => CallModel;
+  /** Debug/observability hook: fired once per bundle that escalates to the LLM
+   * judge, before the call happens, with the heuristic confidence that
+   * triggered escalation. Purely additive — no-op when absent. See
+   * `scripts/debug-case-llm-trace.ts`. */
+  onEscalate?: (info: { bundleId: string; filePath: string; lineNumber: number; functionName?: string; confidence: number; verdict: string }) => void;
   /** Live ScanEvent stream (used by the eval harness to show per-case phase). */
   onEvent?: (ev: ScanEvent) => void;
   /** Interrupt discovery + the agentic loop (e.g. eval cancel). */
@@ -173,7 +184,7 @@ export async function runHeadless(opts: HeadlessOptions): Promise<HeadlessResult
 
   const investigation =
     analysisMode === AnalysisMode.LLM_ASSISTED
-      ? buildWorkflowInvestigationPhase(cfg, dynamicMode, { toolSelect: opts.toolSelect ?? true })
+      ? buildWorkflowInvestigationPhase(cfg, dynamicMode, { toolSelect: opts.toolSelect ?? true, wrapCallModel: opts.wrapCallModel, onEscalate: opts.onEscalate })
       : undefined;
 
   // Allocator profiling + strategist run BEFORE the investigation phase, from
@@ -248,7 +259,8 @@ async function runAllocatorProfile(
     allocatorsFrom !== 'none' &&
     (allocatorsFrom === 'llm' || analysisMode === AnalysisMode.LLM_ASSISTED);
   if (wantProfile) {
-    const callModel = buildCallModel(toProviderSettings(cfg), () => globalThis.crypto.randomUUID());
+    let callModel = buildCallModel(toProviderSettings(cfg), () => globalThis.crypto.randomUUID());
+    if (opts.wrapCallModel) callModel = opts.wrapCallModel(callModel);
     const notice = opts.quiet ? undefined : (r: string) => process.stderr.write(`  ${r}\n`);
     let profile = await loadOrProfileAllocators(repoPath, callModel, {
       signal: opts.signal,
@@ -320,7 +332,8 @@ async function runAdaptiveStrategy(
   onUsage: (u: { inputTokens: number; outputTokens: number }) => void,
 ): Promise<{ dynamicMode: DynamicMode; dynamicClient: McpClient | undefined }> {
   if (opts.strategy === 'auto' && analysisMode === AnalysisMode.LLM_ASSISTED) {
-    const callModel = buildCallModel(toProviderSettings(cfg), () => globalThis.crypto.randomUUID());
+    let callModel = buildCallModel(toProviderSettings(cfg), () => globalThis.crypto.randomUUID());
+    if (opts.wrapCallModel) callModel = opts.wrapCallModel(callModel);
     const plan = await decideStrategy(repoPath, callModel, {
       profileSummary: extraAllocators?.length ? `${extraAllocators.length} allocators, ${extraDeallocators?.length ?? 0} deallocators` : undefined,
       temperature: cfg.llm.temperature,

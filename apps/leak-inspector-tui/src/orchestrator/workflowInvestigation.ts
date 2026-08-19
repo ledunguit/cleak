@@ -60,9 +60,9 @@ import {
   harnessWorkerSystemPrompt,
   harnessWorkerUserMessage,
 } from '../domain/subAgentPrompts';
-import { judgeBundleWithLlm, shouldEscalate, isBorderline } from '../domain/llmJudge';
+import { judgeBundlesBatched, judgeBundlesConsensusBatched, shouldEscalate, isBorderline, JUDGE_BATCH_SIZE, type BatchJudgeItem } from '../domain/llmJudge';
 import { judgeCacheKey, readJudgeCache, writeJudgeCache } from '../domain/judgeVerdictCache';
-import { judgeByConsensus, type ConsensusVerdict } from '@cleak/common/analysis/consensus-judge';
+import type { ConsensusVerdict } from '@cleak/common/analysis/consensus-judge';
 import { evidenceIndicatesLeak, QuotaExhaustedError } from '@cleak/common/analysis/judge-shared';
 import { needsTargetedDynamic } from '../domain/harnessEscalation';
 import { verifyOwnershipClaims } from '../domain/ownershipVerification';
@@ -106,6 +106,17 @@ export interface WorkflowInvestigationOptions {
    * `enrich`), and Stage B runs the deterministic recipe only (no LLM worker). The
    * LLM-fusion judge (Stage D) runs in both cases — this axis is independent of it. */
   toolSelect?: boolean;
+  /** Debug/observability hook: wraps the investigation's single `CallModel`
+   * instance (drives Stage A/B/C/D — every LLM call including the judge) so a
+   * caller can log/inspect every request+response. Purely additive — no-op
+   * when absent. See `scripts/debug-case-llm-trace.ts`. */
+  wrapCallModel?: (inner: CallModel) => CallModel;
+  /** Debug/observability hook: fired once per bundle that escalates to the LLM
+   * judge (before the call happens), with the heuristic confidence that
+   * triggered escalation — lets a caller measure the borderline-band's real
+   * confidence distribution without paying for any LLM calls. Purely
+   * additive — no-op when absent. See `scripts/debug-case-llm-trace.ts`. */
+  onEscalate?: (info: { bundleId: string; filePath: string; lineNumber: number; functionName?: string; confidence: number; verdict: string }) => void;
 }
 
 // ── Shared mutable state for the investigation workflow ──
@@ -485,9 +496,23 @@ export async function stageHybridJudge(
   callModel: CallModel,
   onNotice: (text: string) => void,
   state: WorkflowMutableState,
+  onEscalate?: (info: { bundleId: string; filePath: string; lineNumber: number; functionName?: string; confidence: number; verdict: string }) => void,
 ): Promise<void> {
   onNotice('Stage D · judge: heuristic for all, LLM for borderline');
   const borderline = allBundles.filter((b) => b.verdict && shouldEscalate(b));
+  if (onEscalate) {
+    for (const b of borderline) {
+      if (!b.verdict) continue;
+      onEscalate({
+        bundleId: b.bundleId,
+        filePath: b.candidate.file_path,
+        lineNumber: b.candidate.line_number,
+        functionName: b.candidate.function_name,
+        confidence: b.verdict.confidence,
+        verdict: b.verdict.verdict,
+      });
+    }
+  }
   // n>1 ⇒ multi-agent consensus (self-consistency); n=1 ⇒ the single-LLM judge
   // (unchanged regression baseline). Both feed the same downstream pipeline.
   const useConsensus = cfg.consensus.n > 1;
@@ -518,60 +543,112 @@ export async function stageHybridJudge(
   };
 
   let cacheHits = 0;
-  await mapWithLimit(borderline, cfg.workflow.judgeConcurrency, async (b) => {
-    if (ctx.abortSignal?.aborted) return;
-    const sctx = staticStore.get(b.bundleId);
+  const cacheKeyFor = (b: LeakBundle): string | null =>
+    cfg.judgeCache.enabled ? judgeCacheKey(b, staticStore.get(b.bundleId), ctx.projectOwnershipNotes, cfg.consensus, ctx.caches?.files) : null;
 
-    // Disk-persisted judge-verdict cache (default on) — a bundle whose evidence
-    // is byte-identical to a previously-judged one skips the LLM entirely,
-    // including every consensus sample. See judgeVerdictCache.ts for why this
-    // caches the final combined decision, not individual consensus samples.
-    const cacheKey = cfg.judgeCache.enabled
-      ? judgeCacheKey(b, sctx, ctx.projectOwnershipNotes, cfg.consensus, ctx.caches?.files)
-      : null;
-    if (cacheKey) {
-      const cached = readJudgeCache(ctx.repoPath, cacheKey);
-      if (cached) {
-        cacheHits++;
-        onNotice(`Stage D · ${b.bundleId} — judge cache hit, skipping LLM`);
-        b.verdict = cached;
+  if (useConsensus) {
+    // Consensus (n>1): batch by ROUND instead of by bundle — sample #k for
+    // every still-active (cache-miss, not-yet-locked) bundle is drawn in one
+    // judgeBundlesConsensusBatched call, repeated for up to cfg.consensus.n
+    // rounds, instead of each bundle independently paying its own n calls.
+    // Draws the exact same samples, in the same order, as the old per-bundle
+    // judgeByConsensus loop would — see judgeBundlesConsensusBatched's doc
+    // comment. Cache-check pass first, same as the single-shot path below.
+    const cacheMisses: LeakBundle[] = [];
+    for (const b of borderline) {
+      const cacheKey = cacheKeyFor(b);
+      if (cacheKey) {
+        const cached = readJudgeCache(ctx.repoPath, cacheKey);
+        if (cached) {
+          cacheHits++;
+          onNotice(`Stage D · ${b.bundleId} — judge cache hit, skipping LLM`);
+          b.verdict = cached;
+          b.updatedAt = new Date().toISOString();
+          recordJudgeDecision(b, cached, 'consensus_judge_cached');
+          continue;
+        }
+      }
+      cacheMisses.push(b);
+    }
+
+    if (cacheMisses.length > 0) {
+      onNotice(`Stage D · consensus×${cfg.consensus.n}: batching ${cacheMisses.length} cache-miss candidate(s) by round (up to ${JUDGE_BATCH_SIZE}/round)`);
+      const items: BatchJudgeItem[] = cacheMisses.map((b) => ({ bundle: b, staticContext: staticStore.get(b.bundleId) }));
+      let results: Map<string, ConsensusVerdict>;
+      try {
+        results = await judgeBundlesConsensusBatched(items, callModel, cfg.consensus, ctx.abortSignal, onNotice, ctx.projectOwnershipNotes, addUsage, ctx.caches?.files);
+      } catch (err) {
+        if (!(err instanceof QuotaExhaustedError)) throw err;
+        // Quota exhaustion is never a legitimate basis for silently keeping the
+        // heuristic verdict — by default, propagate so the caller (the eval
+        // harness's circuit breaker, or the TUI's scan-error surface) stops here
+        // instead of mislabeling a degraded run as LLM-assisted. Opt-out (rare,
+        // e.g. an interactive scan the user wants to finish anyway) via config.
+        if (cfg.llm.pauseOnQuotaExhausted) throw err;
+        onNotice(`Stage D · consensus batch (${cacheMisses.length} candidates) — LLM judge call failed persistently (quota exhaustion or a dead/unreachable gateway); keeping heuristic verdicts (pauseOnQuotaExhausted disabled)`);
+        results = new Map();
+      }
+      for (const b of cacheMisses) {
+        const verdict = results.get(b.bundleId);
+        if (!verdict) continue; // keeps the existing heuristic verdict
+        b.verdict = verdict;
         b.updatedAt = new Date().toISOString();
-        recordJudgeDecision(b, cached, useConsensus ? 'consensus_judge_cached' : 'llm_judge_cached');
+        const cacheKey = cacheKeyFor(b);
+        if (cacheKey) writeJudgeCache(ctx.repoPath, cacheKey, verdict, cfg.judgeCache.maxEntries);
+        recordJudgeDecision(b, verdict, 'consensus_judge_batched');
+      }
+    }
+  } else {
+    // Single-shot (n<=1): batch multiple cache-miss candidates into one LLM
+    // call each — the fixed system-prompt tax is paid once per BATCH instead
+    // of once per bundle. See judgeBundlesBatched's doc comment for why this
+    // is safe (per-item tolerant parsing, per-bundle cache write unchanged).
+    const cacheMisses: LeakBundle[] = [];
+    for (const b of borderline) {
+      const cacheKey = cacheKeyFor(b);
+      if (cacheKey) {
+        const cached = readJudgeCache(ctx.repoPath, cacheKey);
+        if (cached) {
+          cacheHits++;
+          onNotice(`Stage D · ${b.bundleId} — judge cache hit, skipping LLM`);
+          b.verdict = cached;
+          b.updatedAt = new Date().toISOString();
+          recordJudgeDecision(b, cached, 'llm_judge_cached');
+          continue;
+        }
+      }
+      cacheMisses.push(b);
+    }
+
+    const chunks: LeakBundle[][] = [];
+    for (let i = 0; i < cacheMisses.length; i += JUDGE_BATCH_SIZE) chunks.push(cacheMisses.slice(i, i + JUDGE_BATCH_SIZE));
+    if (chunks.length > 0) {
+      onNotice(`Stage D · batching ${cacheMisses.length} cache-miss candidate(s) into ${chunks.length} call(s) of up to ${JUDGE_BATCH_SIZE}`);
+    }
+
+    await mapWithLimit(chunks, cfg.workflow.judgeConcurrency, async (chunk) => {
+      if (ctx.abortSignal?.aborted) return;
+      const items: BatchJudgeItem[] = chunk.map((b) => ({ bundle: b, staticContext: staticStore.get(b.bundleId) }));
+      let results: Map<string, VerdictResult>;
+      try {
+        results = await judgeBundlesBatched(items, callModel, ctx.abortSignal, cfg.llm.judgeTemperature, onNotice, ctx.projectOwnershipNotes, addUsage, ctx.caches?.files);
+      } catch (err) {
+        if (!(err instanceof QuotaExhaustedError)) throw err;
+        if (cfg.llm.pauseOnQuotaExhausted) throw err;
+        onNotice(`Stage D · batch (${chunk.length} candidates) — LLM judge call failed persistently (quota exhaustion or a dead/unreachable gateway); keeping heuristic verdicts (pauseOnQuotaExhausted disabled)`);
         return;
       }
-    }
-
-    let verdict: ConsensusVerdict | Awaited<ReturnType<typeof judgeBundleWithLlm>>;
-    try {
-      if (useConsensus) {
-        // Sample the per-bundle LLM judge N times at the consensus temperature,
-        // then combine + apply the heuristic precision-override (in @cleak/common).
-        verdict = await judgeByConsensus(
-          b,
-          sctx,
-          () => judgeBundleWithLlm(b, sctx, callModel, ctx.abortSignal, cfg.consensus.temperature, onNotice, ctx.projectOwnershipNotes, addUsage, ctx.caches?.files),
-          cfg.consensus,
-        );
-      } else {
-        verdict = await judgeBundleWithLlm(b, sctx, callModel, ctx.abortSignal, cfg.llm.judgeTemperature, onNotice, ctx.projectOwnershipNotes, addUsage, ctx.caches?.files);
+      for (const b of chunk) {
+        const verdict = results.get(b.bundleId);
+        if (!verdict) continue; // keeps the existing heuristic verdict; judgeBundlesBatched already logged why
+        b.verdict = verdict;
+        b.updatedAt = new Date().toISOString();
+        const cacheKey = cacheKeyFor(b);
+        if (cacheKey) writeJudgeCache(ctx.repoPath, cacheKey, verdict, cfg.judgeCache.maxEntries);
+        recordJudgeDecision(b, verdict, 'llm_judge_batched');
       }
-    } catch (err) {
-      if (!(err instanceof QuotaExhaustedError)) throw err;
-      // Quota exhaustion is never a legitimate basis for silently keeping the
-      // heuristic verdict — by default, propagate so the caller (the eval
-      // harness's circuit breaker, or the TUI's scan-error surface) stops here
-      // instead of mislabeling a degraded run as LLM-assisted. Opt-out (rare,
-      // e.g. an interactive scan the user wants to finish anyway) via config.
-      if (cfg.llm.pauseOnQuotaExhausted) throw err;
-      onNotice(`Stage D · ${b.bundleId} — LLM judge call failed persistently (quota exhaustion or a dead/unreachable gateway); keeping heuristic verdict (pauseOnQuotaExhausted disabled)`);
-      return;
-    }
-    if (!verdict) return;
-    b.verdict = verdict;
-    b.updatedAt = new Date().toISOString();
-    if (cacheKey) writeJudgeCache(ctx.repoPath, cacheKey, verdict, cfg.judgeCache.maxEntries);
-    recordJudgeDecision(b, verdict, useConsensus ? 'consensus_judge' : 'llm_judge');
-  });
+    });
+  }
   if (cfg.judgeCache.enabled && borderline.length > 0) {
     onNotice(`Stage D · judge cache: ${cacheHits}/${borderline.length} hit`);
   }
@@ -604,7 +681,8 @@ export function buildWorkflowInvestigationPhase(
       const onTruncation = () => {
         state.truncatedCalls++;
       };
-      const callModel: CallModel = buildCallModel(toProviderSettings(cfg), () => globalThis.crypto.randomUUID(), onNotice, onTruncation);
+      let callModel: CallModel = buildCallModel(toProviderSettings(cfg), () => globalThis.crypto.randomUUID(), onNotice, onTruncation);
+      if (opts.wrapCallModel) callModel = opts.wrapCallModel(callModel);
       const bridge = makeAgentEventHandler(ctx.emitter);
       const toolCtx: ToolCtx = { cwd: ctx.repoPath, requestPermission: ctx.requestPermission, abortSignal: ctx.abortSignal };
 
@@ -659,7 +737,7 @@ export function buildWorkflowInvestigationPhase(
 
       await stageTargetedHarness(allBundles, dynamicRaw, readFileTool, cfg, ctx, state, callModel, bridge, toolCtx, onNotice);
 
-      await stageHybridJudge(allBundles, state.staticStore, cfg, ctx, callModel, onNotice, state);
+      await stageHybridJudge(allBundles, state.staticStore, cfg, ctx, callModel, onNotice, state, opts.onEscalate);
 
       bridge.finishPendingPhases();
       ctx.emitter.emit(ScanEventName.INVESTIGATION_FINISHED, {
