@@ -53,18 +53,27 @@ Tầng judge có **3 cấu hình** so sánh được như-nhau: **heuristic** (t
 
 ## 3. Đóng góp học thuật (tóm tắt)
 
-1. **Consensus judge — hợp nhất static+dynamic + self-consistency.** Một judge bỏ phiếu
-   trên *k* mẫu LLM độc lập, hợp nhất hai trục bằng chứng (static / dynamic) để giảm dao
-   động verdict trên ca biên. Đây là novelty trung tâm.
+1. **Pipeline hybrid tất định-trừ-judge.** Static evidence tất định + recipe
+   build+sanitizer ghim (không LLM) + orchestration do LLM planner gate — đây là cấu
+   hình **mạnh nhất đo được** trên toàn corpus (F1 0.863/MCC 0.790), rẻ hơn hẳn các
+   cấu hình agentic. Đây là novelty trung tâm (thay cho consensus, xem mục 4 bên dưới).
 2. **Giao thức tái lập hai tầng (two-tier reproducibility).** Tier-1: chế độ `no_llm`
    **tất định bit-for-bit** (có gate chống "đậu giả"); Tier-2: `llm_assisted` báo cáo
    trung thực **mean ± CI** + **verdict-stability** (tỉ lệ lật verdict) thay vì giấu dao
    động của LLM.
-3. **Tất định hoá tầng dynamic.** "Recipe" build+run được ghim (không có LLM trong vòng
-   *chạy*) + **capture bằng chứng tất định** + trạng thái `dynamicCoverage` trung thực
-   (`exercised_clean | exercised_leak | not_exercised | dynamic_off`).
-4. **Làm giàu bằng chứng cho judge.** Ownership, cặp alloc→free, đường rò khả thi
-   (feasible-leak-path), và **tương quan** runtime↔ứng viên (LINKED vs file-only).
+3. **Làm giàu bằng chứng cho judge.** Ownership, cặp alloc→free, đường rò khả thi
+   (feasible-leak-path), và **tương quan** runtime↔ứng viên (LINKED vs file-only) — giúp
+   judge tất định "path-aware" mà không cần SMT solver.
+4. **Consensus judge (self-consistency) — đánh giá trung thực, kết quả đảo ngược theo
+   mẫu.** Bỏ phiếu trên *k* mẫu LLM độc lập giúp giảm dao động verdict trên mẫu n=30
+   *không stratify* (vô tình 100% 1 family) — nhưng khi lặp lại đúng thí nghiệm trên mẫu
+   n=50 **stratified** (đại diện đủ 10 family), hiệu ứng **đảo ngược**: single-LLM ổn
+   định hơn (flip 2.0% so với 8.0%) và chính xác hơn (F1 ~0.854 so với ~0.795) trên cả 2
+   campaign độc lập (2026-08-19,
+   `results/consensus-ablation-n50-2026-08-19/`). Đây là phát hiện phương pháp luận quan
+   trọng (stratified sampling ảnh hưởng đến việc đánh giá kỹ thuật LLM-judge, không chỉ
+   đánh giá hệ thống cuối) — báo cáo trung thực thay vì chỉ giữ số liệu thuận lợi. Không
+   khuyến nghị bật consensus mặc định dựa trên bằng chứng hiện tại.
 
 → Chi tiết + bàn luận trung thực (gồm cả kết quả negative): [CONTRIBUTION.md](CONTRIBUTION.md).
 
@@ -78,8 +87,8 @@ Trên **Juliet CWE-401** (corpus **đã validate**, 1658 ca, content-hash `f578c
 | Hạng mục | Kết quả |
 |---|---|
 | **9-baseline ablation** (`configs/baselines/`, stratified n=50) | **B6a** (planner + recipe tất định + LLM judge) thắng: **F1 0.938** (P0.973/R0.906) — vượt B1 static-only (F1 0.792), B3 rule-ensemble (F1 0.857), và các cấu hình agentic B6b/B7 (F1 0.929, tốn ~9× token); xem [EVALUATION §3b](EVALUATION.md) |
-| **Full-corpus (1658 ca, static + heuristic, dynamic off)** | P0.680/R0.556/F1 0.612 — **thấp hơn mẫu n=50**, do 2 family yếu bị mẫu stratified pha loãng: C++ `new`/`delete` (R 16.7% trên 1736 site) và `malloc` (P 36.7%, FP cao); bảng đối chiếu quy mô lớn hơn theo đúng 9 config đang được chạy lại |
-| **Consensus giảm dao động ~2–4×** | tỉ lệ lật verdict **13–27% → 6.7%** (consensus lặp lại y hệt qua 2 đợt; single-LLM tự dao động); xem [EVALUATION §7](EVALUATION.md) |
+| **Full-corpus (1658 ca, static + heuristic, dynamic off)** | P0.680/R0.556/F1 0.612 — **thấp hơn mẫu n=50**, do 2 family yếu bị mẫu stratified pha loãng: C++ `new`/`delete` (R 16.7% trên 1736 site) và `malloc` (P 36.7%, FP cao). Bảng 9-config đầy đủ trên toàn corpus (dynamic bật, 3 lần chạy/config) **đã hoàn thành** (`deepseek-v4-flash`, xem [EVALUATION §3b-bis](EVALUATION.md)) — **B6a thắng: F1 0.863/MCC 0.790**, verify lại được từ artifact local `results/baseline-sweep-2026-08-15T08-28-06/` |
+| **Consensus: kết quả đảo ngược theo cách lấy mẫu** | n=30 không stratify (vô tình 100% 1 family): flip rate 13–27% → 6.7%, có vẻ consensus thắng. n=50 stratified (đại diện 10 family, 2026-08-19): **đảo ngược** — single-LLM ổn định hơn (2.0% vs 8.0%) và chính xác hơn (F1 ~0.854 vs ~0.795); không khuyến nghị bật consensus mặc định. Xem [EVALUATION §7](EVALUATION.md) |
 | **Tier-1 tất định** | hai lần chạy `no_llm` cho **kết quả chấm điểm y hệt** |
 
 > **Lưu ý (đối chiếu 2026-08):** số liệu trước đây trên bản 30-ca (F1 0.853, P0.806/R0.906)

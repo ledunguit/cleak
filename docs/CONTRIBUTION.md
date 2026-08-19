@@ -7,7 +7,73 @@
 
 ---
 
-## C1 — Consensus judge: hợp nhất static+dynamic + self-consistency
+## C1 — Pipeline hybrid tất định-trừ-judge: tất định hoá tầng dynamic
+
+**Vấn đề gốc.** Trong thiết kế cũ, tầng dynamic (Stage B) là một **LLM sub-agent** tự
+quyết chọn sanitizer/build/run và *ghi* evidence theo ý mình → coverage và verdict đổi
+giữa các lần chạy (trong khi tầng static đã tất định).
+
+**Cách làm.**
+- `runDeterministicDynamic` (`apps/leak-inspector-tui/src/domain/dynamicEvidence.ts`):
+  **ghim recipe** build (LeakSanitizer) + run — **không có LLM trong vòng *chạy*** → run
+  tất định → coverage tất định.
+- `withDynamicEvidenceCapture` bọc các tool sanitizer và **ghi MỌI finding** vào store
+  (không có "discretion" của LLM, đối xứng với `withStaticContextCapture`);
+  `reconcileDynamicEvidence` gộp finding vào bundle tương quan nhất (idempotent).
+- `dynamicCoverage` trung thực: `exercised_clean | exercised_leak | not_exercised | dynamic_off`
+  thay cho việc suy diễn từ `evidence.length`.
+
+**Lưu ý trung thực:** ghim tầng dynamic loại bỏ dao động *do dynamic*, nhưng `llm_assisted`
+**vẫn** lật verdict do **judge LLM** (bản chất sampling phía provider) — đó chính là lý do
+tồn tại Tier-2 + consensus (C4), thay vì cố ép LLM tất định. Kết hợp static
+evidence tất định + recipe dynamic ghim + LLM planner chỉ gate luồng chạy (không tự
+ghi verdict) tạo thành pipeline **tất định-trừ-judge** — đây chính là cấu hình đạt
+kết quả full-corpus mạnh nhất (F1 0.863/MCC 0.790, xem [§Kết quả](#kết-quả-đo-được)).
+
+## C2 — Giao thức tái lập hai tầng (two-tier reproducibility)
+
+Một con số chỉ bảo vệ được nếu **tái lập được**. Nhưng hai chế độ có bản chất tất định
+khác nhau, nên luận văn báo cáo mỗi chế độ theo đúng bản chất của nó (chi tiết:
+[EVALUATION.md §7](EVALUATION.md)).
+
+- **Tier-1 — `no_llm` tất định bit-for-bit.** Toàn bộ đường phi-LLM (heuristic judge +
+  recipe dynamic ghim + capture tất định + scoring) cho **kết quả chấm điểm y hệt** giữa
+  hai lần chạy. Được ép bằng gate `scripts/determinism-gate.sh` + `scripts/assert-determinism.ts`.
+  Gate **từ chối hai kiểu "đậu giả"** đã gặp thật: (a) *self-compare* — dấu thời gian
+  giây trùng làm hai lần chạy ghi vào cùng thư mục nên so dir-với-chính-nó; (b) *degenerate*
+  — analyzer mất kết nối làm mọi ca lỗi, hai "đống lỗi" giống nhau bị nhận nhầm là "tất định".
+- **Tier-2 — `llm_assisted` báo cáo dao động, không phải đồng nhất.** Vì không thể đạt
+  đồng nhất bit-for-bit với judge LLM, số liệu được báo cáo dạng phân phối:
+  `evaluate-corpus.ts --runs N` (mean ± std) + `scripts/verdict-stability.ts` (tỉ lệ lật
+  verdict cấp-ca). Điểm mấu chốt: **aggregate có thể trùng do may** trong khi verdict từng
+  ca vẫn dao động — `verdict-stability.ts` phơi bày điều đó thay vì để một tổng "may mắn"
+  che giấu.
+
+## C3 — Làm giàu bằng chứng cho judge
+
+Để judge (và báo cáo) lập luận được, mỗi bundle mang bằng chứng có cấu trúc:
+- **Ownership** (vai trò allocator/caller, lý do), **cặp alloc→free** (paired/unpaired),
+  **feasible-leak-path** (narrative đường rò khả thi + mức rủi ro + reachable).
+- **Tương quan** runtime↔ứng viên: `correlationMethod` phân **LINKED** (file_line_exact/near,
+  function_match — quyết định) vs **file-only** (yếu) vs unlinked; kèm `leakKind`, `allocSite`,
+  `bytesLost`.
+
+Các tín hiệu này được **lưu vào `snapshot.json`** và hiển thị trong báo cáo md/html + trình
+duyệt findings của TUI (verdict card), nên một verdict luôn **truy vết được** về bằng chứng.
+
+## C4 — Consensus judge: hợp nhất static+dynamic + self-consistency (đánh giá trung thực — KHÔNG còn là novelty trung tâm)
+
+> **Cập nhật 2026-08-19:** kết quả headline ban đầu (n=30, flip rate 13-27%→6.7%)
+> đo trên mẫu **vô tình 100% family `char`** (không stratify). Lặp lại đúng thí
+> nghiệm trên mẫu n=50 stratified (đại diện đủ 10 family) cho **kết quả đảo
+> ngược**: single-LLM ổn định hơn (flip 2.0% vs 8.0%) và chính xác hơn (F1 ~0.854
+> vs ~0.795) trên cả 2 campaign độc lập — xem chi tiết đầy đủ ở
+> [EVALUATION.md §7](EVALUATION.md), raw artifact tại
+> `results/consensus-ablation-n50-2026-08-19/`. Đây là lý do novelty trung tâm
+> của luận văn đã chuyển sang **pipeline hybrid tất định-trừ-judge** (C1 ở trên) —
+> consensus vẫn là code thật, đã tối ưu chi phí (batch judging), nhưng được báo cáo
+> như một kỹ thuật đã điều tra với phát hiện phụ thuộc cách lấy mẫu, không phải một
+> cải tiến đã chứng minh. Không khuyến nghị bật mặc định.
 
 **Vấn đề.** Một judge LLM đơn lẻ ở `temperature=0` vẫn **lật verdict giữa các lần chạy**
 trên các ứng viên *biên* (provider không thật sự tất định bit-for-bit). Đồng thời, bằng
@@ -31,57 +97,6 @@ ngay cả khi 0 evidence.
 
 **Kết quả** → xem [§Kết quả](#kết-quả-đo-được).
 
-## C2 — Giao thức tái lập hai tầng (two-tier reproducibility)
-
-Một con số chỉ bảo vệ được nếu **tái lập được**. Nhưng hai chế độ có bản chất tất định
-khác nhau, nên luận văn báo cáo mỗi chế độ theo đúng bản chất của nó (chi tiết:
-[EVALUATION.md §7](EVALUATION.md)).
-
-- **Tier-1 — `no_llm` tất định bit-for-bit.** Toàn bộ đường phi-LLM (heuristic judge +
-  recipe dynamic ghim + capture tất định + scoring) cho **kết quả chấm điểm y hệt** giữa
-  hai lần chạy. Được ép bằng gate `scripts/determinism-gate.sh` + `scripts/assert-determinism.ts`.
-  Gate **từ chối hai kiểu "đậu giả"** đã gặp thật: (a) *self-compare* — dấu thời gian
-  giây trùng làm hai lần chạy ghi vào cùng thư mục nên so dir-với-chính-nó; (b) *degenerate*
-  — analyzer mất kết nối làm mọi ca lỗi, hai "đống lỗi" giống nhau bị nhận nhầm là "tất định".
-- **Tier-2 — `llm_assisted` báo cáo dao động, không phải đồng nhất.** Vì không thể đạt
-  đồng nhất bit-for-bit với judge LLM, số liệu được báo cáo dạng phân phối:
-  `evaluate-corpus.ts --runs N` (mean ± std) + `scripts/verdict-stability.ts` (tỉ lệ lật
-  verdict cấp-ca). Điểm mấu chốt: **aggregate có thể trùng do may** trong khi verdict từng
-  ca vẫn dao động — `verdict-stability.ts` phơi bày điều đó thay vì để một tổng "may mắn"
-  che giấu.
-
-## C3 — Tất định hoá tầng dynamic
-
-**Vấn đề gốc.** Trong thiết kế cũ, tầng dynamic (Stage B) là một **LLM sub-agent** tự
-quyết chọn sanitizer/build/run và *ghi* evidence theo ý mình → coverage và verdict đổi
-giữa các lần chạy (trong khi tầng static đã tất định).
-
-**Cách làm.**
-- `runDeterministicDynamic` (`apps/leak-inspector-tui/src/domain/dynamicEvidence.ts`):
-  **ghim recipe** build (LeakSanitizer) + run — **không có LLM trong vòng *chạy*** → run
-  tất định → coverage tất định.
-- `withDynamicEvidenceCapture` bọc các tool sanitizer và **ghi MỌI finding** vào store
-  (không có "discretion" của LLM, đối xứng với `withStaticContextCapture`);
-  `reconcileDynamicEvidence` gộp finding vào bundle tương quan nhất (idempotent).
-- `dynamicCoverage` trung thực: `exercised_clean | exercised_leak | not_exercised | dynamic_off`
-  thay cho việc suy diễn từ `evidence.length`.
-
-**Lưu ý trung thực:** ghim tầng dynamic loại bỏ dao động *do dynamic*, nhưng `llm_assisted`
-**vẫn** lật verdict do **judge LLM** (bản chất sampling phía provider) — đó chính là lý do
-tồn tại Tier-2 + consensus (C1), thay vì cố ép LLM tất định.
-
-## C4 — Làm giàu bằng chứng cho judge
-
-Để judge (và báo cáo) lập luận được, mỗi bundle mang bằng chứng có cấu trúc:
-- **Ownership** (vai trò allocator/caller, lý do), **cặp alloc→free** (paired/unpaired),
-  **feasible-leak-path** (narrative đường rò khả thi + mức rủi ro + reachable).
-- **Tương quan** runtime↔ứng viên: `correlationMethod` phân **LINKED** (file_line_exact/near,
-  function_match — quyết định) vs **file-only** (yếu) vs unlinked; kèm `leakKind`, `allocSite`,
-  `bytesLost`.
-
-Các tín hiệu này được **lưu vào `snapshot.json`** và hiển thị trong báo cáo md/html + trình
-duyệt findings của TUI (verdict card), nên một verdict luôn **truy vết được** về bằng chứng.
-
 ---
 
 ## Kết quả đo được
@@ -100,16 +115,20 @@ quy trình validate corpus):
 > **Full-corpus (1658 ca, static-only, dynamic off) cho P0.680/R0.556/F1 0.612 — thấp hơn mẫu
 > n=50 ở trên.** Nguyên nhân cụ thể: family C++ `new`/`delete` (1736 site) chỉ recall 16.7%,
 > family `malloc` chỉ precision 36.7% (FP cao) — cả hai bị mẫu stratified (lấy đều theo family)
-> pha loãng nên không hiện rõ ở n=50. Đây là giới hạn thật của hệ ở quy mô lớn, không phải lỗi đo;
-> bảng 9-baseline đang được chạy lại ở quy mô lớn hơn để có số liệu đối chiếu đầy đủ.
+> pha loãng nên không hiện rõ ở n=50. Đây là giới hạn thật của hệ ở quy mô lớn, không phải lỗi đo.
+> **Bảng 9-baseline đầy đủ trên toàn corpus (dynamic bật, 3 lần chạy/config) đã hoàn thành**
+> (`deepseek-v4-flash`, xem [EVALUATION.md §3b-bis](EVALUATION.md)) — **B6a thắng: F1 0.863,
+> MCC 0.790**, verify được từ artifact local `results/baseline-sweep-2026-08-15T08-28-06/`.
 >
 > Heuristic dùng tín hiệu cấu trúc cấp nguồn (định vị missing-free site) làm static evidence,
 > nên `no_llm` thực sự *phát hiện* leak chứ không trả về toàn `uncertain`. Số baseline clang
 > tái tạo qua [BASELINE-COMPARISON.md](BASELINE-COMPARISON.md) (chạy lại live, không phải số bịa).
 
-### Consensus giảm dao động verdict (ablation, headline)
+### Consensus và verdict flip rate — kết quả đảo ngược theo cách lấy mẫu (không còn là headline)
 Cùng 30 ca, cùng analyzer, 2 lần chạy mỗi nhánh; ablation chạy **2 đợt** (A, và B sau khi
-siết tương quan dynamic↔candidate):
+siết tương quan dynamic↔candidate). **Lưu ý ngay: mẫu n=30 này vô tình 100% family
+`char`** (xem cảnh báo chi tiết bên dưới bảng) — không nên đọc bảng này như bằng chứng
+cuối cùng.
 
 | Nhánh judge | đợt | case-stability | **tỉ lệ lật verdict** | modal agreement |
 |---|---|---|---|---|
@@ -127,8 +146,30 @@ consensus ổn định hơn ~2–4×, bội số chính xác phụ thuộc basel
 **Hiệu ứng ghép cặp (McNemar, đợt B, 77 site, single vs consensus):** consensus cao hơn
 (acc 83.1%/F1 0.822 vs single 79.2%/F1 0.784); trong các site bất đồng, 5 nghiêng về consensus,
 2 nghiêng về single (χ²=0.57, **p=0.45**). Tức **có hướng** nghiêng consensus nhưng **chưa có ý
-nghĩa thống kê ở n=30** (quá ít cặp bất đồng) → báo cáo như xu hướng + CI, cần multi-seed / corpus
-khó hơn trước khi khẳng định "thắng" theo paired test. (`scripts/mcnemar-compare.ts <runA> <runB>`.)
+nghĩa thống kê ở n=30** (quá ít cặp bất đồng). (`scripts/mcnemar-compare.ts <runA> <runB>`.)
+
+> **⚠️ n=30 KHÔNG stratify — 100% family `char` (đã kiểm tra `functionalVariant` của cả 30
+> dòng).** Juliet manifest xếp theo family nên lấy N đầu tiên không stratify gần như chắc
+> chắn trúng 1 family. Lặp lại đúng protocol (cùng script, đã thêm cờ `STRATIFY=1`) trên mẫu
+> **n=50 stratified** (6 ca/family × 8 family + 1 ca/family × 2 family nhỏ nhất, 2026-08-19,
+> archive tại `results/consensus-ablation-n50-2026-08-19/`):
+>
+> | Nhánh judge | đợt | case-stability | tỉ lệ lật verdict | modal agreement |
+> |---|---|---|---|---|
+> | single-LLM | A | **98.0%** | **2.0%** (1/50) | **99.0%** |
+> | single-LLM | B | **98.0%** | **2.0%** (1/50) | **99.0%** |
+> | consensus  | A | 92.0% | 8.0% (4/50) | 96.0% |
+> | consensus  | B | 92.0% | 8.0% (4/50) | 96.0% |
+>
+> **Hiệu ứng đảo ngược hoàn toàn**: single-LLM ổn định hơn VÀ chính xác hơn (F1 0.852/0.855
+> so với consensus 0.793/0.796) trên cả 2 đợt độc lập. McNemar (đợt A, 205 site) cũng nghiêng
+> ngược lại: single acc 91.7%/F1 0.852 vs consensus acc 89.0%/F1 0.793, 7/8 cặp bất đồng
+> nghiêng về single, χ²=3.13, p=0.077 (vẫn không có ý nghĩa thống kê, nhưng đổi chiều so với
+> n=30). **Kết luận: báo cáo cả 2 kết quả, không chỉ giữ số thuận lợi.** Cách đọc hợp lý nhất:
+> kết quả n=30 là sản phẩm phụ của việc test trên 1 family dễ, đồng nhất — khi 3 mẫu độc lập
+> gần như luôn đồng ý (câu trả lời không mơ hồ), bỏ phiếu trông như đang "ổn định hoá" thứ chưa
+> từng bất ổn. **Không khuyến nghị bật consensus mặc định** dựa trên bằng chứng hiện tại; vẫn
+> giữ như config opt-in (`consensus.n > 1`) chờ nghiên cứu quy mô lớn hơn, stratified, multi-seed.
 
 ### Tier-1 tất định
 Hai lần chạy `no_llm` (thư mục tách biệt, cùng cấu hình) cho **chấm điểm y hệt**: TP29 FP7
@@ -240,7 +281,7 @@ FN3 TN38. Gate `determinism-gate.sh` chứng nhận; đồng thời từ chối 
 
 | Đóng góp | Cài đặt | Bằng chứng / số liệu |
 |---|---|---|
-| C1 Consensus judge | `packages/common/src/analysis/consensus-judge.ts`; `llmJudge.ts` (`shouldEscalate`) | flip 26.7%→6.7%; ablation `scripts/consensus-ablation.sh` |
+| C1 Pipeline hybrid tất định-trừ-judge | `apps/leak-inspector-tui/src/domain/dynamicEvidence.ts` (`runDeterministicDynamic`, `withDynamicEvidenceCapture`) | F1 0.863/MCC 0.790 full-corpus (B6a); `results/baseline-sweep-2026-08-15T08-28-06/` |
 | C2 Two-tier determinism | `scripts/{determinism-gate.sh,assert-determinism.ts,verdict-stability.ts}` | Tier-1 TP29 FP7 FN3 TN38 y hệt; [EVALUATION.md §7](EVALUATION.md) |
-| C3 Dynamic tất định | `apps/leak-inspector-tui/src/domain/dynamicEvidence.ts` (`runDeterministicDynamic`, `withDynamicEvidenceCapture`) | coverage tất định; recipe ghim |
-| C4 Evidence enrichment | `packages/common` (ownership/pairs/feasible-path/correlation); reporting.ts | `snapshot.json` + verdict card; báo cáo md/html |
+| C3 Evidence enrichment | `packages/common` (ownership/pairs/feasible-path/correlation); reporting.ts | `snapshot.json` + verdict card; báo cáo md/html |
+| C4 Consensus judge (đánh giá trung thực, kết quả đảo ngược theo mẫu) | `packages/common/src/analysis/consensus-judge.ts`; `llmJudge.ts` (`shouldEscalate`) | n=30 (100% 1 family): flip 26.7%→6.7%; n=50 stratified: **đảo ngược** (flip 2.0%→8.0%); `results/consensus-ablation-n50-2026-08-19/` |

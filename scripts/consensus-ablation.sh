@@ -14,10 +14,16 @@
 # consensus arm to show a LOWER verdict flip rate than single-LLM.
 #
 #   K=3 LIMIT=30 scripts/consensus-ablation.sh
+#   K=3 LIMIT=50 STRATIFY=1 OUT=results/consensus-ablation-n50 scripts/consensus-ablation.sh
 #
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"; cd "$ROOT"
 LIMIT="${LIMIT:-30}"; K="${K:-3}"; OUT="${OUT:-/tmp/consensus-ablation}"
+# STRATIFY=1 samples evenly across case families (see run-baselines.ts's own
+# --stratify) instead of taking the corpus's first LIMIT cases in manifest
+# order, which for Juliet is heavily skewed toward one family. Off by default
+# to keep this script's original n=30 behavior reproducible byte-for-byte.
+STRATIFY_FLAG=""; [ "${STRATIFY:-0}" = "1" ] && STRATIFY_FLAG="--stratify"
 export EVAL_STATIC_URL="${EVAL_STATIC_URL:-http://127.0.0.1:50061/mcp}"
 export EVAL_DYNAMIC_URL="${EVAL_DYNAMIC_URL:-http://127.0.0.1:50062/mcp}"
 
@@ -28,7 +34,7 @@ run () { # <subdir> <consensus-n>
   # evidence twice per arm to measure genuine LLM run-to-run variance — the
   # judge-verdict cache (default on) would otherwise make run B just replay
   # run A's cached verdicts verbatim, trivially reporting 0% flip rate.
-  RESULTS_DIR="$OUT/$1" pnpm exec tsx scripts/evaluate-corpus.ts llm_assisted --limit "$LIMIT" --consensus-n "$2" --no-judge-cache
+  RESULTS_DIR="$OUT/$1" pnpm exec tsx scripts/evaluate-corpus.ts llm_assisted --limit "$LIMIT" --consensus-n "$2" --no-judge-cache $STRATIFY_FLAG
 }
 
 echo "############ single-LLM (n=1) — run A ############"; run s1a 1

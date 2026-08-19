@@ -14,8 +14,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { buildCallModel } from '@cleak/agent-core';
-import { loadConfig } from '../apps/leak-inspector-tui/src/config';
-import { toProviderSettings } from '../apps/leak-inspector-tui/src/orchestrator/toolWrappers';
+import { loadConfig, toProviderSettings } from '@cleak/config';
 import { profileAllocators } from '../apps/leak-inspector-tui/src/domain/allocatorProfiler';
 import { PROJECT_ALLOCATORS, PROJECT_DEALLOCATORS } from './lamed/ingest';
 

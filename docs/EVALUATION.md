@@ -452,9 +452,10 @@ pnpm exec tsx scripts/verdict-stability.ts <runA> <runB> [<runC> …]  # case-le
 modal agreement, and the stable-by-luck flag) instead of letting a lucky aggregate
 hide it.
 
-**The consensus judge is the fix.** The thesis novelty — a static+dynamic consensus
-judge that votes over *K* independent samples (self-consistency) — exists precisely
-to damp this run-to-run variance on borderline cases. The headline ablation runs the
+**The consensus judge — investigated, honestly reported, NOT the fix (see the
+n=50 stratified re-run below).** A static+dynamic consensus judge that votes over
+*K* independent samples (self-consistency) was hypothesized to damp run-to-run
+variance on borderline cases. The headline ablation runs the
 same config twice for each judge arm and compares flip rate:
 
 ```bash
@@ -486,11 +487,51 @@ stable; the exact multiple depends on the (noisy) single-LLM baseline.
 scored higher (acc 83.1% / F1 0.822 vs single acc 79.2% / F1 0.784); of the
 discordant sites, 5 favoured consensus and 2 favoured single (χ²=0.57, **p=0.45**).
 So the *direction* favours consensus but it is **not significant at n=30** — too few
-discordant pairs to reject "no difference". Report this as a trend with its CI, and
-run more seeds / a larger or harder corpus before claiming a paired win
-(`scripts/mcnemar-compare.ts <runA> <runB>` reproduces it). (Absolute P/R/F1 still
+discordant pairs to reject "no difference". (Absolute P/R/F1 still
 come with the Tier-2 mean ± CI; this table isolates *stability*, the
 reproducibility axis.)
+
+**⚠️ CRITICAL FOLLOW-UP (2026-08-19): this n=30 sample is NOT stratified — it is
+100% the `char` functional family** (Juliet's manifest orders cases by family, so
+an unstratified first-N slice at this size draws almost entirely from one family;
+confirmed by inspecting `functionalVariant` across the 30 rows). `char` is one of
+the corpus's easier, more homogeneous families — three independent judge samples
+tend to agree trivially there because the answer usually isn't ambiguous, which
+can make voting look like it's "stabilizing" something that was never that
+unstable to begin with.
+
+We re-ran the **identical protocol** — same script (`scripts/consensus-ablation.sh`,
+extended with a `STRATIFY=1` option for this run), same judge, same rule, two
+independent campaigns — on a **family-stratified n=50** sample (6 cases each from 8
+families, 1 each from `destructor`/`virtual`), archived at
+`results/consensus-ablation-n50-2026-08-19/`:
+
+| Judge arm | campaign | case stability | verdict flip rate | modal agreement |
+|---|---|---|---|---|
+| single-LLM (`--consensus-n 1`) | A | **98.0%** | **2.0% (1/50)** | **99.0%** |
+| single-LLM (`--consensus-n 1`) | B | **98.0%** | **2.0% (1/50)** | **99.0%** |
+| consensus (`--consensus-n 3`)  | A | 92.0% | 8.0% (4/50) | 96.0% |
+| consensus (`--consensus-n 3`)  | B | 92.0% | 8.0% (4/50) | 96.0% |
+
+**The effect reverses.** Single-LLM is now the *more* stable arm, and also the more
+accurate one across both its runs (F1 0.852, 0.855) versus consensus (F1 0.793,
+0.796) — consistent in both independent campaigns, not a one-off. Paired McNemar
+(campaign A, 205 sites) leans the same new direction: single acc 91.7%/F1 0.852 vs
+consensus acc 89.0%/F1 0.793, 7 of 8 discordant sites favoring single-LLM,
+χ²=3.13, p=0.077 — again not significant, but now pointing the opposite way from
+the n=30 result above.
+
+**Conclusion: report both, do not cherry-pick the favorable one.** The most
+defensible reading is that the n=30 result was a sampling artifact of testing on
+one easy, homogeneous family. Neither sample size has the statistical power to
+settle the question on its own (McNemar is non-significant either way) — what the
+reversal *does* establish is that consensus's benefit, if real, is not
+sample-composition-independent, and that stratified sampling matters for
+evaluating an LLM-judge technique itself, not only for evaluating the end system.
+**Consensus is not recommended on by default based on current evidence**; it
+remains an opt-in config (`consensus.n > 1`) pending a larger, stratified,
+multi-seed study. `scripts/mcnemar-compare.ts <runA> <runB>` reproduces the
+McNemar numbers for either sample.
 
 ## 8. Corpus integrity — prepare → validate → ingest → validate → lock → gate
 
