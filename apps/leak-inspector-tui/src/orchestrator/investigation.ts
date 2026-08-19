@@ -68,6 +68,10 @@ export interface InvestigationOutcome {
   /** Human-readable step-by-step markdown log (thinking, tool calls, results). */
   stepsLog?: string;
   usage?: { inputTokens: number; outputTokens: number };
+  /** Count of LLM calls (across Stage A/B/C/D) whose response came back truncated
+   * at the token budget (`stopReason === 'max_tokens'`) — a data-quality signal:
+   * a truncated tool call or judge verdict may be incomplete/malformed. */
+  truncatedCalls?: number;
   /** Accumulated per-bundle static context (evidence the judge scores), keyed by bundleId. */
   staticContext?: Record<string, Record<string, any>>;
 }

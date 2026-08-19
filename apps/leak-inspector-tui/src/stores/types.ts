@@ -62,7 +62,7 @@ export interface PendingPermission {
   resolve: (decision: 'allow' | 'deny') => void;
 }
 
-export type EvalCaseStatus = 'pending' | 'running' | 'ok' | 'error' | 'skipped' | 'budget_exceeded' | 'circuit_broken';
+export type EvalCaseStatus = 'pending' | 'running' | 'ok' | 'error' | 'skipped' | 'budget_exceeded' | 'circuit_broken' | 'quota_exhausted';
 
 export interface EvalCaseUi {
   id: string;

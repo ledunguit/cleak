@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import { isBorderline, shouldEscalate, judgeBundleWithLlm, parseVerdict } from '../../src/domain/llmJudge';
 import { InvestigationVerdict, ToolKind, type LeakBundle, type VerdictResult } from '@cleak/common/types';
+import { QuotaExhaustedError } from '@cleak/common/analysis/judge-shared';
 import type { CallModel } from '@cleak/agent-core';
 
 const verdict = (v: InvestigationVerdict, confidence: number): VerdictResult => ({
@@ -145,6 +146,20 @@ describe('judgeBundleWithLlm', () => {
   test('returns null when the model call throws', async () => {
     const callModel: CallModel = async () => {
       throw new Error('gateway down');
+    };
+    expect(await judgeBundleWithLlm(bundle(), {}, callModel)).toBeNull();
+  });
+
+  test('rethrows QuotaExhaustedError on a quota/rate-limit failure, instead of keeping the heuristic', async () => {
+    const callModel: CallModel = async () => {
+      throw Object.assign(new Error('LLM error 429: rate limit exceeded'), { status: 429 });
+    };
+    await expect(judgeBundleWithLlm(bundle(), {}, callModel)).rejects.toBeInstanceOf(QuotaExhaustedError);
+  });
+
+  test('a non-quota error still returns null (regression guard: only quota errors change behavior)', async () => {
+    const callModel: CallModel = async () => {
+      throw Object.assign(new Error('LLM error 500: internal error'), { status: 500 });
     };
     expect(await judgeBundleWithLlm(bundle(), {}, callModel)).toBeNull();
   });

@@ -192,6 +192,7 @@ export function configTemplate(): CleakConfig {
       retries: 2,
       maxTokens: 4096,
       jsonMode: true,
+      pauseOnQuotaExhausted: true,
     },
     compaction: { thresholdTokens: 100000, keepRecentTurns: 3 },
     workflow: {

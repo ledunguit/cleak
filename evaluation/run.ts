@@ -30,6 +30,7 @@ function toEvalOptions(plan: ResolvedPlan): Omit<EvalOptions, 'outDir'> {
     consensusN: plan.consensusN,
     consensusRule: plan.consensusRule,
     judgeCacheEnabled: plan.judgeCacheEnabled,
+    pauseOnQuotaExhausted: plan.pauseOnQuotaExhausted,
     strategy: plan.strategy,
     enrich: plan.enrich,
     toolSelect: plan.toolSelect,

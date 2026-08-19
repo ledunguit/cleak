@@ -11,6 +11,33 @@
 
 import { findEnclosingFunction } from './heuristic-leak-analysis';
 
+/**
+ * Marks a judge-call failure as provider quota/rate-limit exhaustion — distinct
+ * from a generic transient error (network blip, timeout, malformed response),
+ * which recover on retry/next-case and should NOT abort a whole run. Thrown by
+ * both judge paths (single-LLM and per-consensus-sample) instead of silently
+ * falling back to the heuristic verdict, so a caller that cares (the eval
+ * harness's circuit breaker) can stop the run at this exact case rather than
+ * mislabeling a degraded heuristic-only result as LLM-assisted.
+ */
+export class QuotaExhaustedError extends Error {
+  constructor(public readonly cause: unknown) {
+    super(cause instanceof Error ? cause.message : String(cause));
+    this.name = 'QuotaExhaustedError';
+  }
+}
+
+/** True when `err` looks like a provider quota/rate-limit exhaustion, as opposed
+ * to any other call failure. Checks the structured HTTP status first (attached
+ * by `packages/agent-core`'s transport layer on a non-ok response), falling
+ * back to pattern-matching the message text for gateways that report quota
+ * exhaustion via a non-429 status or an embedded body message. */
+export function isQuotaExhaustedError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  if ((err as Error & { status?: number }).status === 429) return true;
+  return /quota|rate.?limit|too many requests|usage limit|insufficient (quota|credit|balance)/i.test(err.message);
+}
+
 /** The five investigation verdicts, as wire strings (matches InvestigationVerdict). */
 export const LEAK_VERDICT_STRINGS = [
   'confirmed_leak',

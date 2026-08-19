@@ -12,7 +12,13 @@ import type { FileContentCache } from './fileContentCache';
 import { THRESHOLDS } from './thresholds';
 import { enrichLeakVerdict } from '@cleak/common/analysis/heuristic-judge';
 import { deriveFusion } from '@cleak/common/analysis/consensus-judge';
-import { enclosingFunctionSnippet, isLeakVerdictString, evidenceIndicatesLeak } from '@cleak/common/analysis/judge-shared';
+import {
+  enclosingFunctionSnippet,
+  isLeakVerdictString,
+  evidenceIndicatesLeak,
+  isQuotaExhaustedError,
+  QuotaExhaustedError,
+} from '@cleak/common/analysis/judge-shared';
 import { InvestigationVerdict, ToolKind, type LeakBundle, type VerdictResult } from '@cleak/common/types';
 import type { CallModel } from '@cleak/agent-core';
 
@@ -244,6 +250,12 @@ export async function judgeBundleWithLlm(
   try {
     resp = await callModel({ systemPrompt: SYSTEM_PROMPT, messages: [{ role: 'user', content: user }], tools: [], signal, temperature });
   } catch (err: unknown) {
+    // Quota/rate-limit exhaustion is never a legitimate "keep the heuristic"
+    // situation — every subsequent call will fail identically until the quota
+    // resets, so silently substituting the heuristic verdict would mislabel a
+    // degraded run as LLM-assisted. Let the caller decide what to do (abort vs.
+    // opt-in fallback), instead of deciding here.
+    if (isQuotaExhaustedError(err)) throw new QuotaExhaustedError(err);
     const msg = err instanceof Error ? err.message : String(err);
     onNotice?.(`judge ${c.file_path}:${c.line_number} — model call failed (${msg}); keeping heuristic`);
     return null;

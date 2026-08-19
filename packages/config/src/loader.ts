@@ -115,7 +115,10 @@ export function resolveProvider(profileName: string, file?: CleakConfig): Provid
   // even if the agentic loop is bumped up for exploration.
   const temperature = pickNum(llm.temperature, 0);
   const judgeTemperature = pickNum(llm.judgeTemperature, 0);
-  const common = { temperature, judgeTemperature, timeoutMs, idleTimeoutMs, connectTimeoutMs, retries, maxTokens };
+  // Default true — fail loud on quota exhaustion rather than silently degrading
+  // to the heuristic (see QuotaExhaustedError in @cleak/common/analysis/judge-shared).
+  const pauseOnQuotaExhausted = pickBool(llm.pauseOnQuotaExhausted, true);
+  const common = { temperature, judgeTemperature, timeoutMs, idleTimeoutMs, connectTimeoutMs, retries, maxTokens, pauseOnQuotaExhausted };
   if (provider === "openai") {
     return {
       provider,

@@ -25,6 +25,10 @@ export interface CliFlags {
   consensusN?: number;
   consensusRule?: 'majority' | 'weighted' | 'unanimous-to-flag';
   judgeCacheEnabled?: boolean;
+  /** Stop the run at a case whose LLM judge call hits quota/rate-limit
+   * exhaustion, instead of silently falling back to the heuristic verdict.
+   * Default (unset) leaves the config value (true). */
+  pauseOnQuotaExhausted?: boolean;
   maxCaseMs?: number;
   maxCaseCostUsd?: number;
   maxConsecutiveErrors?: number;
@@ -118,6 +122,7 @@ export function parseFlags(argv: string[] = process.argv.slice(2)): CliFlags {
     consensusN: consensusNRaw ? Math.max(1, parseInt(consensusNRaw, 10)) : undefined,
     consensusRule: flag(argv, 'consensus-rule') as CliFlags['consensusRule'],
     judgeCacheEnabled: boolFlag(argv, 'judge-cache', 'no-judge-cache'),
+    pauseOnQuotaExhausted: boolFlag(argv, 'pause-on-quota-exhausted', 'no-pause-on-quota-exhausted'),
     maxCaseMs: maxCaseMsRaw ? Math.max(0, parseInt(maxCaseMsRaw, 10)) : undefined,
     maxCaseCostUsd: maxCaseCostUsdRaw ? Math.max(0, parseFloat(maxCaseCostUsdRaw)) : undefined,
     maxConsecutiveErrors: maxConsecutiveErrorsRaw ? Math.max(0, parseInt(maxConsecutiveErrorsRaw, 10)) : undefined,
@@ -174,6 +179,11 @@ LLM / judge:
                            config value, true) — pass --no-judge-cache for any
                            --runs>1 sweep (a cache hit on repeat 2+ would replay
                            repeat 1's verdict, hiding real LLM run-to-run variance)
+  --pause-on-quota-exhausted / --no-pause-on-quota-exhausted
+                           Stop the run at a case whose LLM judge call hits
+                           quota/rate-limit exhaustion instead of silently
+                           falling back to the heuristic verdict (default:
+                           config value, true) — resume later with --resume
   --strategy <auto|off>
   --enrich / --no-enrich
   --tool-select / --no-tool-select

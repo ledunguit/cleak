@@ -66,5 +66,9 @@ export async function callAnthropic(
       },
     },
   );
-  return fallback ?? assembler.finish();
+  const result = fallback ?? assembler.finish();
+  if (result.stopReason === 'max_tokens') {
+    onNotice?.(`LLM response truncated at token budget (maxTokens=${settings.maxTokens}) — output may be incomplete`);
+  }
+  return result;
 }

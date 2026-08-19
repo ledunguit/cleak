@@ -149,7 +149,9 @@ export async function streamWithRetry(url: string, init: RequestInit, opts: Stre
       }
       if (!res.ok) {
         const err = await res.text().catch(() => '');
-        throw new Error(`LLM error ${res.status}: ${err.slice(0, 300)}`);
+        // Structured status alongside the message — lets callers classify the
+        // failure (e.g. 429 quota/rate-limit) without regex-parsing the string.
+        throw Object.assign(new Error(`LLM error ${res.status}: ${err.slice(0, 300)}`), { status: res.status });
       }
 
       const ctype = res.headers.get('content-type') ?? '';

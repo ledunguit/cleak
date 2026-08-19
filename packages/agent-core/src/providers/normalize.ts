@@ -115,8 +115,11 @@ export function parseToolArguments(raw: unknown): Record<string, unknown> {
 }
 
 function mapOpenAiFinish(reason: string | undefined, hasTools: boolean): StopReason {
-  if (hasTools || reason === 'tool_calls') return 'tool_use';
+  // Truncation must win even when a (possibly incomplete) tool call was already
+  // parsed — otherwise a genuinely cut-off response gets mislabeled 'tool_use'
+  // and the truncation signal is lost. Mirrors the Anthropic-side check order.
   if (reason === 'length') return 'max_tokens';
+  if (hasTools || reason === 'tool_calls') return 'tool_use';
   return 'stop';
 }
 

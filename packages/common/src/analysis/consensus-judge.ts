@@ -18,6 +18,7 @@
 
 import { InvestigationVerdict, ToolKind, type LeakBundle, type VerdictResult } from '../types';
 import { judgeHeuristically } from './heuristic-judge';
+import { QuotaExhaustedError } from './judge-shared';
 import { LEAK_POSITIVE_VERDICTS, evidenceIndicatesLeak } from './judge-shared';
 
 export type ConsensusRule = 'majority' | 'weighted' | 'unanimous-to-flag';
@@ -321,6 +322,10 @@ async function sampleAll(
       try {
         out[i] = await sampleJudge(i);
       } catch (err) {
+        // Quota exhaustion invalidates the whole consensus draw (a partial
+        // sample set silently combined into "the answer" would hide that some
+        // samples never ran) — propagate instead of nulling this one slot.
+        if (err instanceof QuotaExhaustedError) throw err;
         console.debug(`consensus sample ${i} failed: ${err instanceof Error ? err.message : String(err)}`);
         out[i] = null;
       }
@@ -353,6 +358,7 @@ async function sampleWithEarlyStop(
         try {
           return await sampleJudge(i);
         } catch (err) {
+          if (err instanceof QuotaExhaustedError) throw err;
           console.debug(`consensus sample ${i} failed: ${err instanceof Error ? err.message : String(err)}`);
           return null;
         }

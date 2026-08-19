@@ -56,6 +56,10 @@ export interface SweepOptions {
    * on repeat 2+ would replay repeat 1's verdict, hiding real LLM run-to-run
    * variance. Default (unset) leaves the global config value (true). */
   judgeCacheEnabled?: boolean;
+  /** Stop the run at a case whose LLM judge call hits quota/rate-limit
+   * exhaustion instead of silently falling back to the heuristic verdict.
+   * Default (unset) leaves the global config value (true). */
+  pauseOnQuotaExhausted?: boolean;
 }
 
 function gitCommit(): string | undefined {
@@ -128,6 +132,7 @@ export async function runBaselineSweep(configs: BaselineConfig[], opts: SweepOpt
       dynamicUrl: opts.dynamicUrl,
       consensusN: plan.consensusN,
       judgeCacheEnabled: opts.judgeCacheEnabled,
+      pauseOnQuotaExhausted: opts.pauseOnQuotaExhausted,
       strategy: plan.strategy,
       enrich: opts.enrichOverride ?? plan.enrich,
       toolSelect: plan.toolSelect,

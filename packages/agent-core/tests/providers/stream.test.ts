@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { createOpenAiStreamAssembler, createAnthropicStreamAssembler } from '../../src/providers/normalize';
+import { createOpenAiStreamAssembler, createAnthropicStreamAssembler, parseOpenAiResponse } from '../../src/providers/normalize';
 
 const uuid = () => 'generated-id';
 
@@ -65,6 +65,17 @@ describe('createOpenAiStreamAssembler', () => {
     a.push(chunk({ content: 'x' }));
     expect(a.finish().text).toBe('x');
   });
+
+  test('truncated mid-tool-call → max_tokens, not masked as tool_use', () => {
+    const a = createOpenAiStreamAssembler(uuid);
+    // A tool call fragment was already parsed when the provider cut the response
+    // off for hitting the token budget — finish_reason 'length' must still win.
+    a.push(chunk(toolDelta(0, { name: 'read_file', arguments: '{"path":' }, 'call_1')));
+    a.push(chunk({}, { finish_reason: 'length' }));
+    const r = a.finish();
+    expect(r.toolUses).toHaveLength(1);
+    expect(r.stopReason).toBe('max_tokens');
+  });
 });
 
 describe('createAnthropicStreamAssembler', () => {
@@ -89,6 +100,36 @@ describe('createAnthropicStreamAssembler', () => {
     expect(r.toolUses[0].input).toEqual({ v: 'leak' });
     // thinkingTokens estimated from the 'hmm' thinking delta (Anthropic folds it into output).
     expect(r.usage).toEqual({ inputTokens: 900, outputTokens: 30, thinkingTokens: 1 });
+    expect(r.stopReason).toBe('tool_use');
+  });
+});
+
+describe('parseOpenAiResponse (non-streamed)', () => {
+  test('truncated response with a parsed tool call → max_tokens, not masked as tool_use', () => {
+    const data = {
+      choices: [
+        {
+          message: { content: '', tool_calls: [{ id: 'call_1', function: { name: 'read_file', arguments: '{"path":"a.c"' } }] },
+          finish_reason: 'length',
+        },
+      ],
+    };
+    const r = parseOpenAiResponse(data, uuid);
+    expect(r.toolUses).toHaveLength(1);
+    expect(r.stopReason).toBe('max_tokens');
+  });
+
+  test('normal tool call without truncation stays tool_use', () => {
+    const data = {
+      choices: [
+        {
+          message: { content: '', tool_calls: [{ id: 'call_1', function: { name: 'read_file', arguments: '{"path":"a.c"}' } }] },
+          finish_reason: 'tool_calls',
+        },
+      ],
+    };
+    const r = parseOpenAiResponse(data, uuid);
+    expect(r.toolUses).toHaveLength(1);
     expect(r.stopReason).toBe('tool_use');
   });
 });

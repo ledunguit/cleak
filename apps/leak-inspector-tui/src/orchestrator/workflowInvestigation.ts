@@ -63,7 +63,7 @@ import {
 import { judgeBundleWithLlm, shouldEscalate, isBorderline } from '../domain/llmJudge';
 import { judgeCacheKey, readJudgeCache, writeJudgeCache } from '../domain/judgeVerdictCache';
 import { judgeByConsensus, type ConsensusVerdict } from '@cleak/common/analysis/consensus-judge';
-import { evidenceIndicatesLeak } from '@cleak/common/analysis/judge-shared';
+import { evidenceIndicatesLeak, QuotaExhaustedError } from '@cleak/common/analysis/judge-shared';
 import { needsTargetedDynamic } from '../domain/harnessEscalation';
 import { verifyOwnershipClaims } from '../domain/ownershipVerification';
 import { withHarnessInputCapture, type HarnessBuildInputCapture } from '../domain/harnessCapture';
@@ -114,6 +114,9 @@ export interface WorkflowMutableState {
   staticStore: StaticContextStore;
   dynStore: DynamicRunStore;
   usage: { inputTokens: number; outputTokens: number };
+  /** Count of LLM calls whose response came back truncated at the token budget
+   * (`stopReason === 'max_tokens'`) — see `InvestigationOutcome.truncatedCalls`. */
+  truncatedCalls: number;
   transcripts: Message[];
   decisions: AgentDecision[];
   stepLog: StepLog;
@@ -474,7 +477,7 @@ async function stageOwnershipVerification(
   }
 }
 
-async function stageHybridJudge(
+export async function stageHybridJudge(
   allBundles: LeakBundle[],
   staticStore: StaticContextStore,
   cfg: RunConfig,
@@ -539,17 +542,29 @@ async function stageHybridJudge(
     }
 
     let verdict: ConsensusVerdict | Awaited<ReturnType<typeof judgeBundleWithLlm>>;
-    if (useConsensus) {
-      // Sample the per-bundle LLM judge N times at the consensus temperature,
-      // then combine + apply the heuristic precision-override (in @cleak/common).
-      verdict = await judgeByConsensus(
-        b,
-        sctx,
-        () => judgeBundleWithLlm(b, sctx, callModel, ctx.abortSignal, cfg.consensus.temperature, onNotice, ctx.projectOwnershipNotes, addUsage, ctx.caches?.files),
-        cfg.consensus,
-      );
-    } else {
-      verdict = await judgeBundleWithLlm(b, sctx, callModel, ctx.abortSignal, cfg.llm.judgeTemperature, onNotice, ctx.projectOwnershipNotes, addUsage, ctx.caches?.files);
+    try {
+      if (useConsensus) {
+        // Sample the per-bundle LLM judge N times at the consensus temperature,
+        // then combine + apply the heuristic precision-override (in @cleak/common).
+        verdict = await judgeByConsensus(
+          b,
+          sctx,
+          () => judgeBundleWithLlm(b, sctx, callModel, ctx.abortSignal, cfg.consensus.temperature, onNotice, ctx.projectOwnershipNotes, addUsage, ctx.caches?.files),
+          cfg.consensus,
+        );
+      } else {
+        verdict = await judgeBundleWithLlm(b, sctx, callModel, ctx.abortSignal, cfg.llm.judgeTemperature, onNotice, ctx.projectOwnershipNotes, addUsage, ctx.caches?.files);
+      }
+    } catch (err) {
+      if (!(err instanceof QuotaExhaustedError)) throw err;
+      // Quota exhaustion is never a legitimate basis for silently keeping the
+      // heuristic verdict — by default, propagate so the caller (the eval
+      // harness's circuit breaker, or the TUI's scan-error surface) stops here
+      // instead of mislabeling a degraded run as LLM-assisted. Opt-out (rare,
+      // e.g. an interactive scan the user wants to finish anyway) via config.
+      if (cfg.llm.pauseOnQuotaExhausted) throw err;
+      onNotice(`Stage D · ${b.bundleId} — LLM quota/rate-limit exhausted; keeping heuristic verdict (pauseOnQuotaExhausted disabled)`);
+      return;
     }
     if (!verdict) return;
     b.verdict = verdict;
@@ -574,6 +589,7 @@ export function buildWorkflowInvestigationPhase(
         staticStore: new Map(),
         dynStore: createDynamicRunStore(),
         usage: { inputTokens: 0, outputTokens: 0 },
+        truncatedCalls: 0,
         transcripts: [],
         decisions: [],
         stepLog: new StepLog(),
@@ -585,7 +601,10 @@ export function buildWorkflowInvestigationPhase(
         ctx.onAgentEvent?.(ev, MAIN);
         state.stepLog.record(ev);
       };
-      const callModel: CallModel = buildCallModel(toProviderSettings(cfg), () => globalThis.crypto.randomUUID(), onNotice);
+      const onTruncation = () => {
+        state.truncatedCalls++;
+      };
+      const callModel: CallModel = buildCallModel(toProviderSettings(cfg), () => globalThis.crypto.randomUUID(), onNotice, onTruncation);
       const bridge = makeAgentEventHandler(ctx.emitter);
       const toolCtx: ToolCtx = { cwd: ctx.repoPath, requestPermission: ctx.requestPermission, abortSignal: ctx.abortSignal };
 
@@ -655,6 +674,7 @@ export function buildWorkflowInvestigationPhase(
         agentDecisions: state.decisions,
         transcript: state.transcripts as unknown[],
         usage: state.usage,
+        truncatedCalls: state.truncatedCalls,
         staticContext: Object.fromEntries(state.staticStore) as Record<string, Record<string, any>>,
         stepsLog: state.stepLog.toMarkdown(),
       };

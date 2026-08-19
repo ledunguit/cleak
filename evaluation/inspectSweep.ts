@@ -37,6 +37,12 @@ export interface RunProgress {
   totalLoc: number;
   fpPerKloc: number;
   totalTokens: number;
+  totalInputTokens: number;
+  totalOutputTokens: number;
+  /** Sum of `CaseRow.truncatedCalls` across every case seen so far (any status) —
+   * a data-quality signal: nonzero means at least one LLM call was cut off at
+   * the token budget, which can silently degrade evidence/verdict quality. */
+  totalTruncatedCalls: number;
 }
 
 const EMPTY_PROGRESS: RunProgress = {
@@ -50,6 +56,9 @@ const EMPTY_PROGRESS: RunProgress = {
   totalLoc: 0,
   fpPerKloc: 0,
   totalTokens: 0,
+  totalInputTokens: 0,
+  totalOutputTokens: 0,
+  totalTruncatedCalls: 0,
 };
 
 /** Sum every `cases/*.json` cache file in `cacheDir` into a live partial
@@ -72,12 +81,15 @@ export function aggregateCaseCache(cacheDir: string): RunProgress {
     for (const [k, v] of Object.entries(row.judgePathCounts ?? {})) {
       agg.judgePathCounts[k] = (agg.judgePathCounts[k] ?? 0) + v;
     }
+    agg.totalTruncatedCalls += row.truncatedCalls ?? 0;
     if (row.status === 'ok') {
       agg.tp += row.tp;
       agg.fp += row.fp;
       agg.fn += row.fn;
       agg.tn += row.tn;
       agg.totalLoc += row.loc;
+      agg.totalInputTokens += row.inputTokens;
+      agg.totalOutputTokens += row.outputTokens;
       agg.totalTokens += row.inputTokens + row.outputTokens;
     }
   }
@@ -183,6 +195,16 @@ export function inspectBaselineDir(id: string, name: string, dir: string, totalR
         .filter((n) => /^run-\d+$/.test(n) && statSync(join(dir, n)).isDirectory())
         .sort((a, b) => Number(a.slice(4)) - Number(b.slice(4)))
     : [];
+
+  // A `--runs` CLI override on the actual sweep can make the real run count
+  // differ from the yaml config's default `runs:` that `totalRuns` was derived
+  // from (main() has no way to know that override) — in that case the directory
+  // is flat (`cases/`, `metrics.json`), not `run-N/`. Detect that shape directly
+  // instead of trusting the caller's totalRuns blindly.
+  if (runDirs.length === 0 && existsSync(join(dir, 'cases'))) {
+    return inspectBaselineDir(id, name, dir, 1);
+  }
+
   const runs: RunState[] = runDirs.map((rd) => ({
     run: Number(rd.slice(4)),
     final: false,

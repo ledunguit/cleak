@@ -32,6 +32,7 @@ function makeRow(over: Partial<CaseRow> = {}): CaseRow {
     inputTokens: 700,
     outputTokens: 300,
     mcpCalls: 10,
+    truncatedCalls: 0,
     ...over,
   };
 }

@@ -86,6 +86,10 @@ export interface HeadlessOptions {
    * re-judge the SAME evidence across repeat runs to measure genuine LLM
    * run-to-run variance, which a cache hit would otherwise mask entirely. */
   judgeCacheEnabled?: boolean;
+  /** Stop the scan when the LLM judge hits quota/rate-limit exhaustion instead
+   * of silently falling back to the heuristic verdict. Default (unset) leaves
+   * the config value (`llm.pauseOnQuotaExhausted`, true). */
+  pauseOnQuotaExhausted?: boolean;
   /** Live ScanEvent stream (used by the eval harness to show per-case phase). */
   onEvent?: (ev: ScanEvent) => void;
   /** Interrupt discovery + the agentic loop (e.g. eval cancel). */
@@ -107,13 +111,17 @@ export interface HeadlessResult extends ScanResult {
    * pre-investigation allocator-profiler/strategist calls, which used to be
    * dropped entirely. */
   usage: { inputTokens: number; outputTokens: number };
+  /** Count of LLM calls during the investigation phase (Stage A/B/C/D) whose
+   * response came back truncated at the token budget (`stopReason ===
+   * 'max_tokens'`) — see `InvestigationOutcome.truncatedCalls`. */
+  truncatedCalls: number;
 }
 
 export async function runHeadless(opts: HeadlessOptions): Promise<HeadlessResult> {
   const nz = (s?: string) => (s && s.trim() ? s : undefined);
   const cfg = loadConfig({
     provider: opts.provider,
-    llm: { baseUrl: nz(opts.baseUrl), model: nz(opts.model), apiKey: nz(opts.apiKey) },
+    llm: { baseUrl: nz(opts.baseUrl), model: nz(opts.model), apiKey: nz(opts.apiKey), pauseOnQuotaExhausted: opts.pauseOnQuotaExhausted },
     ...(opts.staticUrl ? { staticUrl: opts.staticUrl } : {}),
     ...(opts.dynamicUrl ? { dynamicUrl: opts.dynamicUrl } : {}),
     ...(opts.hostRoot ? { hostRoot: opts.hostRoot } : {}),
@@ -445,7 +453,8 @@ async function runScanAndReport(
         `  coverage: ${coverage} · judge: ${judge}\n`,
     );
   }
-  return { ...result, scanId, dir, files, mcpCalls, usage };
+  const truncatedCalls = result.investigation?.truncatedCalls ?? 0;
+  return { ...result, scanId, dir, files, mcpCalls, usage, truncatedCalls };
 }
 
 /** Count occurrences of each value (for the coverage / judge-path distributions). */

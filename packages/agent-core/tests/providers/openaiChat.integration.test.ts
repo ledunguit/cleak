@@ -10,7 +10,7 @@ import type { ProviderSettings } from '../../src/providers/settings';
 import type { CallModelRequest } from '../../src/deps';
 
 let lastBody: any;
-let mode: 'stream' | 'json' = 'stream';
+let mode: 'stream' | 'json' | 'truncated' = 'stream';
 
 const server = createServer(async (req, res) => {
   const chunks: Buffer[] = [];
@@ -20,6 +20,20 @@ const server = createServer(async (req, res) => {
   if (mode === 'json') {
     res.writeHead(200, { 'content-type': 'application/json' });
     res.end(JSON.stringify({ choices: [{ message: { content: 'plain' }, finish_reason: 'stop' }] }));
+    return;
+  }
+  if (mode === 'truncated') {
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end(
+      JSON.stringify({
+        choices: [
+          {
+            message: { content: '', tool_calls: [{ id: 'call_a', function: { name: 'read_file', arguments: '{"path":' } }] },
+            finish_reason: 'length',
+          },
+        ],
+      }),
+    );
     return;
   }
   const lines = [
@@ -72,6 +86,16 @@ describe('callOpenAiChat (streaming)', () => {
     const r = await callOpenAiChat(settings, req, () => 'uuid');
     expect(r.text).toBe('plain');
     expect(r.stopReason).toBe('stop');
+  });
+
+  test('truncated response (finish_reason length) reports max_tokens and fires onNotice', async () => {
+    mode = 'truncated';
+    const notices: string[] = [];
+    const r = await callOpenAiChat(settings, req, () => 'uuid', (text) => notices.push(text));
+    expect(r.stopReason).toBe('max_tokens');
+    expect(notices).toHaveLength(1);
+    expect(notices[0]).toMatch(/truncated at token budget/);
+    expect(notices[0]).toMatch(/maxTokens=256/);
   });
 });
 

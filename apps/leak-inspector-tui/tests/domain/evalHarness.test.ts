@@ -36,6 +36,7 @@ vi.mock('../../src/surfaces/headless', () => ({
 
 import { selectCases } from '../../src/domain/evalHarness';
 import { countSourceLoc } from '@cleak/common/analysis/harness-utils';
+import { QuotaExhaustedError } from '@cleak/common/analysis/judge-shared';
 
 // ── selectCases (migrated from selectCases.test.ts + expanded) ───────
 
@@ -652,6 +653,73 @@ describe('runEval — circuit breaker (maxConsecutiveErrors)', () => {
       expect(result.rows.every((r) => r.status === 'error')).toBe(true);
     } finally {
       rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
+  test('QuotaExhaustedError trips the breaker IMMEDIATELY — not after maxConsecutiveErrors', async () => {
+    const tmp = setupCorpus(5);
+    mockRunHeadless.mockClear();
+    mockRunHeadless.mockImplementation(() => {
+      throw new QuotaExhaustedError(new Error('LLM error 429: rate limit exceeded'));
+    });
+    const { runEval } = await import('../../src/domain/evalHarness');
+    try {
+      const result = await runEval({
+        corpusDir: tmp,
+        mode: 'no_llm',
+        dynamic: 'off',
+        outDir: join(tmp, 'out'),
+        allowUnvalidated: true,
+        concurrency: 1,
+        // A large threshold — if the breaker still only needed 1 case to trip,
+        // this proves quota exhaustion bypasses maxConsecutiveErrors entirely.
+        maxConsecutiveErrors: 10,
+      });
+      expect(result.circuitBroken).toBe(true);
+      expect(result.rows[0].status).toBe('quota_exhausted');
+      expect(result.rows.slice(1).every((r) => r.status === 'circuit_broken')).toBe(true);
+      // Only the ONE case that actually hit quota exhaustion should have run.
+      expect(mockRunHeadless).toHaveBeenCalledTimes(1);
+      // Never cached — a later --resume must re-attempt this exact case.
+      expect(existsSync(join(tmp, 'out', 'cases', 'case-0.json'))).toBe(false);
+    } finally {
+      rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
+  test('--resume re-attempts a quota-exhausted case from scratch instead of skipping it forever', async () => {
+    const tmp = setupCorpus(2);
+    const scanOut = mkdtempSync(join(tmpdir(), 'scanOut-quota-resume-'));
+    writeFileSync(join(scanOut, 'snapshot.json'), JSON.stringify({ findings: [] }));
+    const outDir = join(tmp, 'out');
+    mockRunHeadless.mockClear();
+    mockRunHeadless.mockImplementation(() => {
+      throw new QuotaExhaustedError(new Error('LLM error 429: rate limit exceeded'));
+    });
+    const { runEval } = await import('../../src/domain/evalHarness');
+    try {
+      // Run 1: quota exhausted on the very first case — nothing gets cached.
+      const first = await runEval({ corpusDir: tmp, mode: 'no_llm', dynamic: 'off', outDir, allowUnvalidated: true, concurrency: 1 });
+      expect(first.rows.every((r) => r.status !== 'ok')).toBe(true);
+      expect(existsSync(join(outDir, 'cases', 'case-0.json'))).toBe(false);
+      expect(existsSync(join(outDir, 'cases', 'case-1.json'))).toBe(false);
+
+      // "Quota resets" — the provider now succeeds. Re-run with --resume.
+      mockRunHeadless.mockClear();
+      mockRunHeadless.mockImplementation(() => ({
+        dir: scanOut,
+        scanId: 'mock-resumed',
+        investigation: { usage: { inputTokens: 0, outputTokens: 0 } },
+        mcpCalls: 0,
+        usage: { inputTokens: 0, outputTokens: 0 },
+      }));
+      const second = await runEval({ corpusDir: tmp, mode: 'no_llm', dynamic: 'off', outDir, allowUnvalidated: true, concurrency: 1, resume: true });
+      // Both cases actually ran again — not silently skipped as "already done".
+      expect(mockRunHeadless).toHaveBeenCalledTimes(2);
+      expect(second.rows.map((r) => r.status)).toEqual(['ok', 'ok']);
+    } finally {
+      rmSync(tmp, { recursive: true, force: true });
+      rmSync(scanOut, { recursive: true, force: true });
     }
   });
 });

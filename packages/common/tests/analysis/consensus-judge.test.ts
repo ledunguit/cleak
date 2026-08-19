@@ -7,7 +7,7 @@ import {
   type ConsensusConfig,
   type EvidenceFusion,
 } from '../../src/analysis/consensus-judge';
-import { LEAK_POSITIVE_VERDICTS } from '../../src/analysis/judge-shared';
+import { LEAK_POSITIVE_VERDICTS, QuotaExhaustedError } from '../../src/analysis/judge-shared';
 import { InvestigationVerdict, ToolKind, type LeakBundle, type VerdictResult } from '../../src/types';
 
 /** A scripted sample/heuristic verdict. */
@@ -209,6 +209,25 @@ describe('judgeByConsensus', () => {
     expect(out.agreement).toBe(0);
     expect(out.tool).toBe(ToolKind.HEURISTIC);
   });
+
+  test('a QuotaExhaustedError sample is NOT dropped — it aborts the whole consensus draw', async () => {
+    let calls = 0;
+    await expect(
+      judgeByConsensus(
+        bundle({}),
+        undefined,
+        async (i) => {
+          calls++;
+          if (i === 1) throw new QuotaExhaustedError(new Error('rate limit exceeded'));
+          return v('confirmed_leak');
+        },
+        cfg('majority', 3),
+      ),
+    ).rejects.toBeInstanceOf(QuotaExhaustedError);
+    // A partial/degraded sample set must never be silently combined into "the
+    // answer" — unlike a generic throw, this must not just drop the one slot.
+    expect(calls).toBeLessThanOrEqual(3);
+  });
 });
 
 // ── isDecisionLocked + earlyStop: the guarantee is "identical flag/no-flag call to
@@ -338,5 +357,19 @@ describe('judgeByConsensus — earlyStop actually saves calls when the decision 
       { n: 5, rule: 'unanimous-to-flag', temperature: 0, concurrency: 1 },
     );
     expect(calls).toBe(5);
+  });
+
+  test('QuotaExhaustedError propagates through the earlyStop batch path too', async () => {
+    await expect(
+      judgeByConsensus(
+        bundle({}),
+        undefined,
+        async (i) => {
+          if (i === 0) throw new QuotaExhaustedError(new Error('429'));
+          return v('confirmed_leak');
+        },
+        { n: 5, rule: 'unanimous-to-flag', temperature: 0, concurrency: 2, earlyStop: true },
+      ),
+    ).rejects.toBeInstanceOf(QuotaExhaustedError);
   });
 });

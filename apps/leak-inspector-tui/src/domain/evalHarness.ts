@@ -26,6 +26,7 @@ import {
 } from '@cleak/common/analysis/metrics';
 import { mapWithLimit, buildCallModel } from '@cleak/agent-core';
 import type { ConsensusRule } from '@cleak/common/analysis/consensus-judge';
+import { QuotaExhaustedError } from '@cleak/common/analysis/judge-shared';
 import { countSourceLoc } from '@cleak/common/analysis/harness-utils';
 import { EVENT_PHASE, EVENT_KIND, type ScanEventName } from '@cleak/common/flow/scan-flow-contract';
 import { runHeadless } from '../surfaces/headless';
@@ -99,6 +100,11 @@ export interface EvalOptions {
    * evidence across repeat runs should set this `false` — a cache hit would
    * otherwise mask genuine LLM run-to-run variance entirely. */
   judgeCacheEnabled?: boolean;
+  /** Stop the run at a case whose LLM judge call hits quota/rate-limit
+   * exhaustion instead of silently falling back to the heuristic verdict —
+   * see `QuotaExhaustedError` in `@cleak/common/analysis/judge-shared`.
+   * Default (unset) leaves the config value (`llm.pauseOnQuotaExhausted`, true). */
+  pauseOnQuotaExhausted?: boolean;
   /** Ablation knobs (baseline sweep): the LLM strategist (planner axis) and the
    * deterministic static-enrichment stage. Both off in the standard eval to keep
    * the Juliet baseline reproducible; the sweep sets them per baseline config. */
@@ -167,6 +173,7 @@ const EvalOptionsSchema = z.object({
   consensusRule: z.string().optional(),
   consensusEarlyStop: z.boolean().optional(),
   judgeCacheEnabled: z.boolean().optional(),
+  pauseOnQuotaExhausted: z.boolean().optional(),
   strategy: z.enum(['auto', 'off']).optional(),
   enrich: z.boolean().optional(),
   toolSelect: z.boolean().optional(),
@@ -197,8 +204,14 @@ export interface CaseRow {
    * spent and partial evidence may exist; see `error` for how much/what cap.
    * `circuit_broken`: the run-wide consecutive-error breaker tripped (see
    * `maxConsecutiveErrors`) — this case was cut short or never started because of
-   * OTHER cases' failures, not its own. */
-  status: 'ok' | 'error' | 'skipped' | 'budget_exceeded' | 'circuit_broken';
+   * OTHER cases' failures, not its own.
+   * `quota_exhausted`: THIS case's own LLM judge call hit provider quota/rate-limit
+   * exhaustion (see `QuotaExhaustedError`) — trips the breaker immediately
+   * (bypassing `maxConsecutiveErrors`) since every subsequent call would fail
+   * identically until the quota resets; distinct from `circuit_broken` (a
+   * sibling case's failure) and `error` (any other, potentially-transient
+   * failure that tolerates `maxConsecutiveErrors` retries first). */
+  status: 'ok' | 'error' | 'skipped' | 'budget_exceeded' | 'circuit_broken' | 'quota_exhausted';
   tp: number;
   fp: number;
   fn: number;
@@ -218,6 +231,10 @@ export interface CaseRow {
   outputTokens: number;
   /** Total MCP tool calls (static + dynamic) for this case — efficiency metric. */
   mcpCalls: number;
+  /** Count of LLM calls truncated at the token budget (`stopReason === 'max_tokens'`)
+   * during this case's investigation phase — a data-quality signal, not a
+   * pass/fail one; see `InvestigationOutcome.truncatedCalls`. */
+  truncatedCalls: number;
   scanId?: string;
   error?: string;
 }
@@ -264,6 +281,9 @@ export interface EvalResult {
     /** Total + mean MCP tool calls across ok cases (efficiency metric). */
     totalMcpCalls: number;
     meanMcpCalls: number;
+    /** Sum of `CaseRow.truncatedCalls` across ok cases — nonzero means at least
+     * one LLM call was cut off at the token budget during this run. */
+    totalTruncatedCalls: number;
     /** Total non-blank source lines scored, and false positives per 1k of them
      * (the LAMeD-style FP-density headline). */
     totalLoc: number;
@@ -549,14 +569,15 @@ async function scoreCases(
   const runSignal = mergeSignals(opts.signal, breaker.signal);
   let consecutiveErrors = 0;
   let circuitTripped = false;
-  const tripBreaker = (atCaseId: string) => {
+  const tripBreaker = (atCaseId: string, message?: string) => {
     if (circuitTripped) return;
     circuitTripped = true;
     breaker.abort();
     process.stderr.write(
-      `\n⛔ circuit breaker: ${consecutiveErrors} consecutive case errors (last: ${atCaseId}) — ` +
-        `provider looks dead/exhausted. Aborting remaining cases in this run. ` +
-        `Re-run with --resume once fixed to pick up where this left off.\n`,
+      message ??
+        `\n⛔ circuit breaker: ${consecutiveErrors} consecutive case errors (last: ${atCaseId}) — ` +
+          `provider looks dead/exhausted. Aborting remaining cases in this run. ` +
+          `Re-run with --resume once fixed to pick up where this left off.\n`,
     );
   };
   // Only needed (and only loaded) for a real-time cost cap; report-time cost in
@@ -593,6 +614,7 @@ async function scoreCases(
     inputTokens: 0,
     outputTokens: 0,
     mcpCalls: 0,
+    truncatedCalls: 0,
   });
 
   const scoreOne = async (c: LabeledCase): Promise<CachedCase> => {
@@ -680,6 +702,7 @@ async function scoreCases(
             }
           : {}),
         ...(opts.judgeCacheEnabled !== undefined ? { judgeCacheEnabled: opts.judgeCacheEnabled } : {}),
+        ...(opts.pauseOnQuotaExhausted !== undefined ? { pauseOnQuotaExhausted: opts.pauseOnQuotaExhausted } : {}),
         // Stream phase transitions so the UI can show each case's live progress.
         onEvent: onCasePhase
           ? (ev) => {
@@ -729,6 +752,7 @@ async function scoreCases(
         inputTokens,
         outputTokens,
         mcpCalls: r.mcpCalls,
+        truncatedCalls: r.truncatedCalls,
         scanId: r.scanId,
       };
       const result: CachedCase = { id: c.id, samples, row, findings, extra };
@@ -744,20 +768,25 @@ async function scoreCases(
       // the circuit breaker (this run's OR an in-flight sibling's failures, not this
       // case's own merits) is distinct again. None of the three are cached, so a
       // later --resume re-runs the case.
-      const budgetExceeded = caseController.signal.aborted && !runSignal.aborted;
+      // Checked first and independent of abort-signal state — this case's OWN
+      // judge call is what threw, not some other case/cap tripping a signal.
+      const quotaExhausted = err instanceof QuotaExhaustedError;
+      const budgetExceeded = !quotaExhausted && caseController.signal.aborted && !runSignal.aborted;
       const msg = err instanceof Error ? err.message : String(err);
-      const circuitBrokenAbort = !budgetExceeded && breaker.signal.aborted;
-      const aborted = !budgetExceeded && !circuitBrokenAbort && (opts.signal?.aborted || (err instanceof Error && err.name === 'AbortError'));
+      const circuitBrokenAbort = !quotaExhausted && !budgetExceeded && breaker.signal.aborted;
+      const aborted = !quotaExhausted && !budgetExceeded && !circuitBrokenAbort && (opts.signal?.aborted || (err instanceof Error && err.name === 'AbortError'));
       const partialMcpCalls = err instanceof Error ? (err as Error & { partialMcpCalls?: number }).partialMcpCalls ?? 0 : 0;
       const spentMs = Date.now() - started;
       const spentCostUsd = budgetExceeded ? computeCostUsd(caseUsage.inputTokens, caseUsage.outputTokens, evalCfg.llm.model, pricing).costUsd : undefined;
-      const status: CaseRow['status'] = budgetExceeded
-        ? 'budget_exceeded'
-        : circuitBrokenAbort
-          ? 'circuit_broken'
-          : aborted
-            ? 'skipped'
-            : 'error';
+      const status: CaseRow['status'] = quotaExhausted
+        ? 'quota_exhausted'
+        : budgetExceeded
+          ? 'budget_exceeded'
+          : circuitBrokenAbort
+            ? 'circuit_broken'
+            : aborted
+              ? 'skipped'
+              : 'error';
       const row: CaseRow = {
         id: c.id,
         cwe: c.cwe,
@@ -777,19 +806,22 @@ async function scoreCases(
         inputTokens: budgetExceeded ? caseUsage.inputTokens : 0,
         outputTokens: budgetExceeded ? caseUsage.outputTokens : 0,
         mcpCalls: budgetExceeded ? partialMcpCalls : 0,
-        ...(budgetExceeded
-          ? {
-              error:
-                `budget exceeded: spent ${spentMs}ms` +
-                (spentCostUsd != null ? `/$${spentCostUsd.toFixed(2)}` : '') +
-                ` vs cap ${maxCaseMs}ms` +
-                (maxCaseCostUsd > 0 ? `/$${maxCaseCostUsd}` : ''),
-            }
-          : circuitBrokenAbort
-            ? { error: 'circuit breaker: interrupted mid-flight by another case tripping the run' }
-            : aborted
-              ? {}
-              : { error: msg }),
+        truncatedCalls: 0,
+        ...(quotaExhausted
+          ? { error: `LLM judge quota/rate-limit exhausted: ${msg}` }
+          : budgetExceeded
+            ? {
+                error:
+                  `budget exceeded: spent ${spentMs}ms` +
+                  (spentCostUsd != null ? `/$${spentCostUsd.toFixed(2)}` : '') +
+                  ` vs cap ${maxCaseMs}ms` +
+                  (maxCaseCostUsd > 0 ? `/$${maxCaseCostUsd}` : ''),
+              }
+            : circuitBrokenAbort
+              ? { error: 'circuit breaker: interrupted mid-flight by another case tripping the run' }
+              : aborted
+                ? {}
+                : { error: msg }),
       };
       const result: CachedCase = { id: c.id, samples: [], row, findings: [] };
       emitResult(c, result);
@@ -799,6 +831,18 @@ async function scoreCases(
       if (status === 'error') {
         consecutiveErrors++;
         if (maxConsecutiveErrors > 0 && consecutiveErrors >= maxConsecutiveErrors) tripBreaker(c.id);
+      } else if (status === 'quota_exhausted') {
+        // Immediate, unconditional trip — quota exhaustion isn't a flaky blip
+        // that might self-resolve on the next case; every subsequent judge
+        // call would fail identically until the quota resets, so waiting for
+        // maxConsecutiveErrors would just burn more cases for nothing.
+        tripBreaker(
+          c.id,
+          `\n⛔ LLM judge quota/rate-limit exhausted at case ${c.id} — stopping instead of silently ` +
+            `falling back to the heuristic (would bias this run vs. others). Re-run with --resume ` +
+            `once quota resets. Disable via llm.pauseOnQuotaExhausted=false (or ` +
+            `--no-pause-on-quota-exhausted) to allow silent fallback instead.\n`,
+        );
       }
       return result;
     } finally {
@@ -841,6 +885,7 @@ function aggregateResults(cached: CachedCase[], cases: LabeledCase[], opts: Eval
   const totalDuration = okRows.reduce((a, r) => a + r.durationMs, 0);
   const totalLoc = okRows.reduce((a, r) => a + r.loc, 0);
   const totalMcpCalls = okRows.reduce((a, r) => a + (r.mcpCalls ?? 0), 0);
+  const totalTruncatedCalls = okRows.reduce((a, r) => a + (r.truncatedCalls ?? 0), 0);
 
   // Which judge actually decided the flagged verdicts, across all ok cases.
   const judgePathDistribution: Record<string, number> = {};
@@ -901,6 +946,7 @@ function aggregateResults(cached: CachedCase[], cases: LabeledCase[], opts: Eval
       meanOutputTokens: okRows.length ? Math.round(totalOutputTokens / okRows.length) : 0,
       totalMcpCalls,
       meanMcpCalls: okRows.length ? Math.round(totalMcpCalls / okRows.length) : 0,
+      totalTruncatedCalls,
       totalLoc,
       fpPerKloc: totalLoc > 0 ? (cm.fp / totalLoc) * 1000 : 0,
       ...computeCostUsd(totalInputTokens, totalOutputTokens, provenance.model, pricing),

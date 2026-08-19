@@ -67,6 +67,7 @@ export const CleakConfigSchema = z
         retries: zNum,
         maxTokens: zNum,
         jsonMode: zBool,
+        pauseOnQuotaExhausted: zBool,
       })
       .partial(),
     compaction: z.object({ thresholdTokens: zNum, keepRecentTurns: zNum }).partial(),

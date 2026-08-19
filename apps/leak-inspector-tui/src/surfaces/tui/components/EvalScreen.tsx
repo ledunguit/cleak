@@ -62,6 +62,7 @@ const STATUS_GLYPH: Record<EvalCaseUi['status'], { ch: string; color: string }> 
   skipped: { ch: '⊘', color: color.warning },
   budget_exceeded: { ch: '⏱', color: color.warning },
   circuit_broken: { ch: '⛔', color: color.error },
+  quota_exhausted: { ch: '⛔', color: color.error },
 };
 
 export function EvalScreen({

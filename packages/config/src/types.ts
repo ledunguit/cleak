@@ -47,6 +47,12 @@ export interface ProviderConfig {
   connectTimeoutMs: number;
   retries: number;
   maxTokens: number;
+  /** When a judge call fails because the provider's quota/rate-limit is
+   * exhausted, stop the run at that case instead of silently falling back to
+   * the heuristic verdict (which would mislabel a degraded run as
+   * LLM-assisted). Default true — matches the codebase's existing "fail loud"
+   * posture (see `assertLlmAvailable`/`--allow-heuristic-fallback`). */
+  pauseOnQuotaExhausted: boolean;
 }
 
 export interface BaselinesConfig {

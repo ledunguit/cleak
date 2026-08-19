@@ -38,5 +38,9 @@ export interface ResolvedPlan {
    * regardless of the real number. Default (unset) leaves the global config
    * value (true) — pass `--no-judge-cache` for any variance-measuring sweep. */
   judgeCacheEnabled?: boolean;
+  /** Stop the run at a case whose LLM judge call hits quota/rate-limit
+   * exhaustion instead of silently falling back to the heuristic verdict.
+   * Default (unset) leaves the config value (true). */
+  pauseOnQuotaExhausted?: boolean;
   verbose: boolean;
 }
