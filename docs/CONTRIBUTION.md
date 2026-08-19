@@ -153,6 +153,18 @@ FN3 TN38. Gate `determinism-gate.sh` chứng nhận; đồng thời từ chối 
   cho một thay đổi code.
 - **Baseline mỏng & preprint:** chỉ LAMeD (EASE 2025) là peer-review đầy đủ cho leak C/C++;
   phần còn lại là preprint/tech-report (xem caveat ở [RELATED-WORK.md](RELATED-WORK.md)).
+- **So sánh hiệu năng GIỮA CÁC MODEL không nằm trong phạm vi luận văn.** Hệ thống
+  provider-agnostic (`openai-compat` abstraction, đổi model chỉ qua config — xem
+  [PROMPTS.md §0](PROMPTS.md)), nhưng mọi bảng số formal (§3b/§3d) đều **cố định một model cho
+  cả sweep**, không có thiết kế ablation theo trục "model". Bảng headline B1–B9 được đo trên
+  `mimo/mimo-v2.5-pro`; default sau đó đổi sang `deepseek-v4-flash-0731` (lý do ổn định version,
+  không phải đo được accuracy tốt hơn) — **re-run để kiểm tra số liệu có chuyển sang model mới
+  hay không đã được queue từ 2026-08-14 nhưng CHƯA chạy** (xem [EVALUATION.md](EVALUATION.md),
+  ghi chú "Model default changed"). Các lần chạy `mimo-v2.5` (bản thường, qua `opencode-go-2`,
+  2026-08-19) để verify tính năng batch judging **không được chấm P/R/F1** so với ground-truth —
+  chỉ kiểm tra hành vi số lượng call/format response, nên **không phải bằng chứng accuracy** theo
+  chiều nào. Kết luận: nếu muốn claim "hệ thống hoạt động tốt trên model X" thì phải chạy sweep
+  formal riêng cho model đó; số liệu của một model không tự động suy ra cho model khác.
 - **Quy mô:** corpus chính là Juliet (tổng hợp, 1984 ca) + LAMeD (41 ca thật, 7 dự án,
   positive-only) — không còn corpus tự sinh (`memory_leak_corpus`/`real_projects` đã bị xoá,
   không đủ uy tín để làm căn cứ đánh giá).
