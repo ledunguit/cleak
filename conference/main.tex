@@ -153,7 +153,7 @@ contributions:
 We evaluate CLeak on the NIST Juliet CWE-401 suite (a validated,
 integrity-checked 1{,}658-case subset), on the peer-reviewed LAMeD
 real-world benchmark (41 developer-confirmed leaks across seven C
-projects), and against live re-runs of Clang Static Analyzer and Infer on
+projects), and against a live re-run of Clang Static Analyzer on
 identical scoring. Section~\ref{sec:evaluation} reports a controlled
 five-factor ablation run on the \emph{entire} validated Juliet corpus
 (not a sub-sample), broken down by allocator family to surface where
@@ -289,8 +289,13 @@ literature combines static and dynamic evidence specifically for
 \emph{non-crash} C/C++ memory leaks while also providing a reproducibility
 protocol distinguishing deterministic from LLM-dependent results. CLeak is
 designed to fill exactly this gap. Table~\ref{tab:capability} makes this
-comparison explicit across eleven capability criteria drawn from the
-systems discussed above. No single prior system combines static analysis,
+comparison explicit across eleven capability criteria, adding two further
+systems not discussed above: POM~\cite{pom}, an LLM+SAT pointer-ownership
+enforcement tool from CMU's Software Engineering Institute, and
+SecVulEval~\cite{secvuleval}, a C/C++ vulnerability-detection dataset
+(not a detector), included for contrast: most capability criteria do not
+apply to it, and it is marked accordingly. No single
+prior system combines static analysis,
 dynamic analysis, agentic orchestration, and a verified bit-for-bit
 reproducibility gate the way CLeak does, and CLeak is, to our knowledge,
 the only one of the seven that both exposes an MCP tool transport and
@@ -303,7 +308,7 @@ $\circ$ = partial / conditional, $\bullet$ = present but secondary (not
 the system's focus), --- = not applicable or unpublished. The
 \emph{deterministic core} row is distinct from \emph{bit-for-bit
 reproducibility}: LAMeD's Cooddy backend is itself deterministic, but its
-version is not pinned. MemHint and POM have a deterministic
+version is not pinned. MemHint and POM~\cite{pom} have a deterministic
 symbolic/SAT core, but a non-deterministic LLM labeling step precedes it.
 RepoAudit and FuzzingBrain~V2 are end-to-end agentic pipelines with no
 deterministic tier at all. CLeak is the only system in this comparison
@@ -424,9 +429,10 @@ Judge tuner & Verdict-threshold nudge & Hard clamp to a bounded range & Heuristi
 
 In the benchmark configuration used throughout Section~\ref{sec:evaluation},
 allocators are supplied from a frozen manifest and the strategist/tuner are
-disabled, so there are \emph{zero} non-deterministic LLM calls on the
-evaluation path for the \texttt{no\_llm} mode, and the Juliet baseline
-confusion matrix (TP29/FP7/FN3 at $n{=}30$) is fixed across runs.
+disabled. This means there are \emph{zero} non-deterministic LLM calls on
+the evaluation path for the \texttt{no\_llm} mode. Its full-corpus Juliet
+confusion matrix (B3 in Table~\ref{tab:ablation}: TP1686/FP674/FN892 at
+$n{=}1{,}658$) is therefore fixed across runs.
 
 \subsection{Data model}
 
@@ -693,11 +699,14 @@ ground-truth site (a function in Juliet, a function in LAMeD) is one
 sample, so multiple findings inside the same leaking function collapse to
 a single true positive rather than inflating the count.
 
-\textbf{Baselines.} Clang Static Analyzer and Infer are re-run live on the
+\textbf{Baselines.} Clang Static Analyzer is re-run live on the
 identical corpus and scored with the identical scorer as our own system
-(a fairness discipline we apply throughout). Both are positive-only tools
-themselves (TN$=$0 for their own findings), so specificity/MCC are dropped
-from any table that includes them. MemHint and LAMeD numbers are quoted
+(a fairness discipline we apply throughout). We also attempted to include
+Facebook Infer, but every run failed at the tool-availability check (Infer
+was not installable in our evaluation environment), so no Infer numbers
+appear in this paper. Clang Static Analyzer is a positive-only tool
+itself (TN$=$0 for its own findings), so specificity/MCC are dropped
+from any table that includes it. MemHint and LAMeD numbers are quoted
 from their own publications where we do not re-run them, and are labeled
 accordingly: different corpora and different scoring protocols mean these
 comparisons are directional, not a claim of superiority.
@@ -1223,9 +1232,13 @@ in Section~\ref{sec:eval-lamed}.
 
 \bibitem{magma} A. Hazimeh, A. Herrera, and M. Payer, ``Magma: A Ground-Truth Fuzzing Benchmark,'' \textit{Proc. ACM Meas. Anal. Comput. Syst. (POMACS)}, vol. 4, no. 3, article 49, 2020. arXiv:2009.01120. [Online]. Available: https://hexhive.epfl.ch/magma/
 
+\bibitem{secvuleval} M. B. U. Ahmed, N. S. Harzevili, J. Shin, H. V. Pham, and S. Wang, ``SecVulEval: Benchmarking LLMs for Real-World C/C++ Vulnerability Detection,'' arXiv:2505.19828, 2025. (Submitted to ICLR 2026; withdrawn from review.)
+
 \bibitem{mcp} Anthropic, ``Model Context Protocol (MCP) Specification,'' 2024. [Online]. Available: https://modelcontextprotocol.io/ (originated at Anthropic in Nov.\ 2024. Donated to the vendor-neutral Agentic AI Foundation, Linux Foundation, Dec.\ 2025.)
 
 \bibitem{ownership-model} D. Svoboda, W. Klieber, L. Flynn, R. Martins, and J. Hoskinson, ``A Pointer-Ownership Model for C Inspired by Rust,'' in \textit{Proc. LCTES (ACM SIGPLAN)}, 2026. DOI: 10.1145/3814943.3816182.
+
+\bibitem{pom} D. Svoboda, L. Flynn, W. Klieber, R. Martins, S. Vishnubhatla, and N. Reimer, ``Design of Enhanced Pointer Ownership Model for C,'' Software Engineering Institute, Carnegie Mellon University, Technical Report CMU/SEI-2025-TR-008, Sep. 2025.
 
 \bibitem{semgrep} Semgrep, Inc., ``Semgrep: Lightweight Static Analysis for Many Languages.'' [Online]. Available: https://semgrep.dev
 
