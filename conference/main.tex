@@ -63,14 +63,18 @@ LLM-driven tool selection is $\sim$4$\times$ more expensive in dollar cost
 for \emph{lower} accuracy. Performance varies substantially by allocator
 family (F1 ranges from 0.991 on \texttt{malloc} to 0.584 on \texttt{strdup}
 sites), a heterogeneity a family-balanced sub-sample would average away. On
-seven real-world C projects from the peer-reviewed LAMeD
-benchmark, the deterministic (\texttt{no\_llm}) configuration achieves 100\%
-precision with recall rising from 0.250 to 0.273 as cross-function ownership
-evidence (\texttt{interproceduralFlow}) is added, including one
-previously-unreported cJSON leak caught end-to-end; a separate, not-yet
-re-measured \texttt{llm\_assisted} run on a broader case set showed LOWER
-recall than this deterministic baseline, a gap we report rather than hide
-(Section~\ref{sec:eval-lamed}). We report all of
+seven real-world C projects from the peer-reviewed LAMeD benchmark (50
+scoreable sites after correcting a site-undercounting bug traced to the same
+candidate-deduplication fix discussed below; see
+Section~\ref{sec:eval-lamed}), the deterministic (\texttt{no\_llm})
+configuration achieves 100\% precision at 30.0\% recall; a separately
+re-measured \texttt{llm\_assisted} configuration (mean of 3 independent runs)
+reaches the identical confusion matrix, and adding
+\texttt{interproceduralFlow} makes no measurable difference on this corpus
+today. We traced the latter directly to a path-sensitivity gap in
+\texttt{interproceduralFlow}'s own alloc/free counting, not a wiring defect,
+and report it as an honest correction to an earlier draft's claim rather than
+omit it (Section~\ref{sec:eval-lamed}). We report all of
 this with explicit caveats where the evidence is incomplete or
 inconclusive, in the interest of a reproducible and falsifiable
 contribution.
@@ -679,7 +683,7 @@ it, never specificity, accuracy, or MCC.
 \textbf{Corpus} & \textbf{Size} & \textbf{Type} & \textbf{Notes} \\
 \midrule
 Juliet CWE-401~\cite{juliet} & 1{,}658 validated cases (10 functional families) & Synthetic, function-labeled & NIST SARD; validated by a 5-gate integrity pipeline + lockfile \\
-LAMeD~\cite{lamed-benchmark} & 41 leaks / 44 sites, 7 real C projects & Real-world, function-labeled, positive-only & Peer-reviewed (EASE~2025); TN$=$0 by construction \\
+LAMeD~\cite{lamed-benchmark} & 41 leaks / 50 sites, 7 real C projects & Real-world, function-labeled, positive-only & Peer-reviewed (EASE~2025); TN$=$0 by construction \\
 MemHint-derived & 19 cases, 6 real C projects & Real-world, function-labeled & Self-reconstructed (MemHint's own 54-bug list is unpublished) \\
 \bottomrule
 \end{tabular}
@@ -943,28 +947,80 @@ pending a larger, stratified, multi-seed study.
 \subsection{Real-world validation: LAMeD}
 \label{sec:eval-lamed}
 
-On the 41-leak, 7-project LAMeD benchmark, the deterministic
-\texttt{no\_llm} configuration holds \textbf{100\% precision (zero false
-positives) in every configuration we measured}, with recall rising as
-cross-function evidence is added (Table~\ref{tab:lamed}). Adding
-\texttt{interproceduralFlow}, an allocator-aware, variable-level,
-cross-frame matching tool, catches one additional true positive at zero
-precision cost: a leak in cJSON's \texttt{merge\_patch}, where a parameter
-is freed on some paths but lost on the error path, exactly the
-parameter-ownership pattern of Section~\ref{sec:judging}. We describe this
-as the first real-project leak the system caught fully end-to-end. A
-manual taxonomy of the six confirmed cJSON leaks in this benchmark finds
+On the 41-case, 7-project LAMeD benchmark, the deterministic \texttt{no\_llm}
+configuration holds \textbf{100\% precision (zero false positives) in every
+configuration we measured}, with recall at \textbf{30.0\%} (Table~\ref{tab:lamed}).
+A manual taxonomy of the six confirmed cJSON leaks in this benchmark finds
 they span four structurally distinct difficulty classes (deallocator
 semantics, path-sensitivity, control-flow reordering, and file/test-only
 code) rather than one weak component, consistent with LAMeD's own
 finding that even state-of-the-art tools catch only 5--10 of 43 real leaks
 in their evaluation.
 
+\textbf{Site count correction.} An earlier version of this evaluation
+reported 44 scoreable sites; the corrected count is \textbf{50}. Both
+figures come from the same 41 cases and the same LAMeD manifest --- nothing
+external changed. The difference is a fix to \texttt{computeBundleId}, which
+used a truncating hash that collapsed genuinely distinct candidates into one
+bundle (verified on one project alone to shrink 622 raw candidates to 65
+surviving bundles pre-fix). Because our scorer counts scoreable sites as
+bundles that match a ground-truth leak, not raw manifest entries, the same
+collapsing bug that suppressed recall also \emph{under-counted the
+denominator} on cases with multiple call sites for the same flaw: libsolv
+goes from 6 to 11 sites and cJSON from 6 to 7; the other five projects
+(curl, libssh2, libtiff, libxml2, rabbitmq-c) are unaffected. Every number in
+Table~\ref{tab:lamed} is measured post-fix, on the 50-site denominator, with
+the current container images rebuilt from source. \textbf{The Clang Static
+Analyzer row's 43-site denominator is not an artifact we can fix by
+re-running it.} Our scorer (\texttt{scoreCase}) derives the scoreable-site
+set from whichever tool's own findings are being graded: it groups that
+tool's findings into site-keys, matches them against manifest flaws, and
+adds one synthetic false negative per flaw no finding covers. The site
+count is therefore a property of \emph{each tool's own finding
+granularity}, not a single external ground truth shared across tools ---
+CLeak's count moved from 44 to 50 because \texttt{computeBundleId} changed
+how CLeak's own candidates bundle, which has no bearing on Clang Static
+Analyzer's independently-produced findings. We re-ran Clang Static Analyzer
+under the current harness to confirm this directly: it still scores 43
+sites, TP\,0/FN\,43, unchanged. The CSA and CLeak rows in Table~\ref{tab:lamed}
+are therefore not on a shared site denominator by design, not by omission;
+we report both counts as measured rather than force them into a single
+column that would misstate one of them.
+
+\textbf{\texttt{interproceduralFlow} adds no measurable value on this
+benchmark today.} Unlike an earlier version of this evaluation, which
+credited \texttt{interproceduralFlow} with catching cJSON's
+\texttt{merge\_patch} leak, the default and \texttt{+interproceduralFlow}
+configurations are now byte-identical across all 41 cases
+(Table~\ref{tab:lamed}), including on \texttt{merge\_patch} itself. We
+traced this directly by calling \texttt{interproceduralFlow} on
+\texttt{merge\_patch} in isolation: it reports \texttt{allocCount=1,
+freeCount=2, "balanced"} and \texttt{hasAllocWithoutFree=false}, because it
+counts two \texttt{cJSON\_Delete(target)} call sites reachable from
+\texttt{merge\_patch} and concludes the allocation is freed. It does not
+check whether those two frees are mutually exclusive on different branches
+--- they are: the real bug is a \emph{third} branch, an error path, that
+frees neither. This is not a wiring defect (the tool runs and returns a
+well-formed trace) and not a regression from an unrelated code change; it is
+the same fundamental limitation as the judge's own guard-subset path
+reconciliation (Section~\ref{sec:discussion}) --- alloc/free counting that is
+not path-sensitive --- except here it lives inside
+\texttt{interproceduralFlow}'s own cross-function trace rather than the
+judge layer. We correct the earlier claim rather than let it stand
+uncontested: on this benchmark, as currently implemented,
+\texttt{interproceduralFlow} contributes zero measured recall beyond the
+default static recipe.
+
 \begin{table}[htbp]
 \centering
-\caption{LAMeD real-project results, 44 scoreable sites (positive-only,
-TN$=$0 by construction). Clang Static Analyzer is a live re-run on the
-same corpus with the same scorer.}
+\caption{LAMeD real-project results. \texttt{llm\_assisted} is the mean of 3
+independent runs (temperature 0, \texttt{deepseek-v4-flash}), with zero
+variance across runs (Section~\ref{sec:eval-lamed}). CLeak rows score 50
+scoreable sites (positive-only, TN$=$0 by construction; corrected from an
+earlier reported 44 --- see site-count correction above); the Clang Static
+Analyzer row scores 43 sites under a live re-run with the same scorer ---
+the two counts are tool-dependent by the scorer's own design (see
+discussion above) and are not on a shared denominator.}
 \label{tab:lamed}
 \small
 \begin{tabular}{@{}lccccc@{}}
@@ -972,23 +1028,30 @@ same corpus with the same scorer.}
 \textbf{Configuration} & \textbf{TP} & \textbf{FP} & \textbf{FN} & \textbf{Recall} & \textbf{Precision} \\
 \midrule
 Clang Static Analyzer & 0 & 0 & 43 & 0.0\% & --- \\
-\texttt{no\_llm}, default static evidence & 11 & 0 & 33 & 25.0\% & 100\% \\
-\texttt{no\_llm}, + \texttt{interproceduralFlow} & \textbf{12} & \textbf{0} & \textbf{32} & \textbf{27.3\%} & \textbf{100\%} \\
+\texttt{no\_llm}, default static evidence & 15 & 0 & 35 & 30.0\% & 100\% \\
+\texttt{no\_llm}, + \texttt{interproceduralFlow} & 15 & 0 & 35 & 30.0\% & 100\% \\
+\texttt{llm\_assisted} (mean of 3 runs, std $=$ 0) & 15 & 0 & 35 & 30.0\% & 100\% \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-We flag one number explicitly as \textbf{stale rather than current}: an
-earlier \texttt{llm\_assisted} run on this same benchmark measured recall
-of only 15.9\%, \emph{below} the \texttt{no\_llm} heuristic baseline. That
-run predates a fix to a candidate-deduplication bug
-(\texttt{computeBundleId} used a truncating hash that collapsed distinct
-candidates, verified on one project alone to shrink 622 raw candidates to
-65 surviving bundles pre-fix) that plausibly understated recall by an
-order of magnitude on real, high-candidate-density projects. We report
-this because the fix is real and root-caused, but the corrected
-\texttt{llm\_assisted} LAMeD number has not yet been re-measured at the
-time of writing, and we do not substitute a projection for a measurement.
+\textbf{\texttt{llm\_assisted} re-measurement.} An earlier version of this
+evaluation flagged an \texttt{llm\_assisted} recall of 15.9\% on this
+benchmark as stale, attributing it to the same pre-fix candidate-deduplication
+bug and leaving the corrected number as future work. We have now completed
+that re-measurement (Table~\ref{tab:lamed}): \texttt{llm\_assisted} reaches
+the identical confusion matrix as \texttt{no\_llm} (TP\,15/FP\,0/FN\,35), with
+zero variance across 3 independent runs. Per-run judge-path telemetry shows
+the LLM judge was genuinely invoked (47--149 calls per run on bundles the
+heuristic flagged as borderline) but never flipped a verdict away from the
+heuristic's own decision on this corpus. The fix removed the earlier
+regression --- \texttt{llm\_assisted} no longer under-performs \texttt{no\_llm}
+--- but it does not exceed it either, on this real-project benchmark. This
+is consistent with Section~\ref{sec:eval-ablation}'s Juliet finding that
+dynamic evidence, not LLM judging, is the dominant lever for this class of
+leak; dynamic analysis is not exercised on the LAMeD static-only
+configurations reported here (Section~\ref{sec:related}, real-project
+dynamic needs a per-case harness).
 
 \subsection{Comparison with external tools}
 
@@ -1040,7 +1103,7 @@ MemHint~\cite{memhint} & 8 real projects, 3.6M LOC & 54 leaks found (53 confirme
 LAMeD~\cite{lamed} (annotation) & cJSON, 152 functions & P 0.933 / R 0.583 (28 TP/2 FP/20 FN) & LLM generates AllocSource/FreeSink annotations & Yes \\
 LAMeD~\cite{lamed} (Cooddy) & 6 real projects, 43 leaks & 5$\to$10 detections & Cooddy consumes the LLM annotations & Yes \\
 LAMeD~\cite{lamed} (CodeQL) & 6 real projects, 43 leaks & 5$\to$10 detections & CodeQL consumes the LLM annotations & Yes \\
-\textbf{CLeak (this work)} & LAMeD, 41 cases & 12 TP / 0 FP & LLM orchestration + heuristic & --- \\
+\textbf{CLeak (this work)} & LAMeD, 41 cases (50 sites) & 15 TP / 0 FP & \texttt{no\_llm}/\texttt{llm\_assisted}, identical & --- \\
 \textbf{CLeak (this work)} & Juliet, full corpus ($n{=}1{,}658$) & 2010 TP / 72 FP (B6a) & LLM orchestration + static + dynamic & --- \\
 \bottomrule
 \end{tabular}
@@ -1144,11 +1207,13 @@ functional family can dominate it by manifest ordering alone. We flag
 this as a general methodological point for LLM-judge evaluation
 protocols, not only a limitation of this particular ablation.
 
-\textbf{Incomplete measurements.} We explicitly did not substitute an
-estimate for the pending re-measurement of \texttt{llm\_assisted} LAMeD
-recall (Section~\ref{sec:eval-lamed}); it is reported as open rather than
-assumed favorable. The dynamic-augmented full-corpus run flagged as
-pending in an earlier version of this evaluation is no longer open ---
+\textbf{Measurements closed since an earlier version of this evaluation.}
+Two items previously flagged as open are now reported rather than assumed.
+The \texttt{llm\_assisted} LAMeD re-measurement (Section~\ref{sec:eval-lamed})
+is complete: it matches \texttt{no\_llm} exactly, not the favorable
+projection we might have hoped the dedup fix would produce, and we report
+that flat result rather than the more flattering unmeasured guess. The
+dynamic-augmented full-corpus run is likewise no longer open ---
 Section~\ref{sec:eval-fullcorpus} now reports it, with dynamic evidence
 enabled across all nine capability configurations.
 
@@ -1176,21 +1241,27 @@ reaching F1~0.863/MCC~0.790 at roughly one-quarter the dollar cost of
 unconstrained agentic tool selection, with performance varying by
 allocator family (F1 0.991 on \texttt{malloc} sites down to 0.584 on
 \texttt{strdup} sites, a gap we trace to a concrete dynamic-coverage
-mechanism rather than leaving unexplained); and on the real-world, peer-reviewed
-LAMeD benchmark the system holds 100\% precision while recall improves as
-cross-function ownership evidence is added, including one previously
-unreported cJSON leak caught end-to-end.
+mechanism rather than leaving unexplained); and on the real-world,
+peer-reviewed LAMeD benchmark the system holds 100\% precision at 30.0\%
+recall, identically under \texttt{no\_llm} and a separately re-measured
+\texttt{llm\_assisted} configuration (Section~\ref{sec:eval-lamed}) --- a
+result we report plainly rather than substitute with an earlier, since-corrected
+number that credited \texttt{interproceduralFlow} with a catch it does not,
+on inspection, actually make.
 
-Future work has two concrete, already-identified directions (a third,
-running the dynamic stage on the full 1{,}658-case Juliet corpus, is no
-longer open --- Section~\ref{sec:eval-fullcorpus} now reports it, as noted
-above): evaluating the opt-in targeted-harness
-escalation stage (per-candidate harness synthesis plus a bounded
-fuzzing tier for bundles a whole-binary run leaves borderline) mentioned
-but not measured in this paper; and re-measuring \texttt{llm\_assisted}
-recall on LAMeD under the candidate-deduplication fix described in
-Section~\ref{sec:eval-lamed}, which we expect to raise real-project
-recall materially, though we have not yet confirmed this.
+Future work has one concrete, already-identified direction: evaluating the
+opt-in targeted-harness escalation stage (per-candidate harness synthesis
+plus a bounded fuzzing tier for bundles a whole-binary run leaves borderline)
+mentioned but not measured in this paper. Two items closed during this
+evaluation cycle rather than remaining open: the dynamic stage now runs on
+the full 1{,}658-case Juliet corpus (Section~\ref{sec:eval-fullcorpus}), and
+\texttt{llm\_assisted} recall on LAMeD has been re-measured under the
+candidate-deduplication fix (Section~\ref{sec:eval-lamed}) --- the fix
+removed a prior regression but did not, as we had speculated it might, raise
+real-project recall above the deterministic baseline; \texttt{interproceduralFlow}'s
+path-insensitivity on this same benchmark (Section~\ref{sec:eval-lamed}) is
+a natural next target, since a path-sensitive cross-function trace is a
+smaller lift than a full SMT-based solver.
 
 \begin{thebibliography}{99}
 

@@ -323,13 +323,20 @@ for st in none functionSummary pathConstraints functionSummary,pathConstraints \
   alone suffices — this is the data-backed justification for the default pair. (Reproduces the pre-remediation
   finding; the synergy is robust to the corpus fix.)
 - **`candidateScan` is the mandatory backbone** (discovery; without it there are no candidates).
-- **`interproceduralFlow` is judge-wired (opt-in): Δ=0 on Juliet, +1 TP on LAMeD (FP0).** On Juliet it ran
-  but changed no verdict — leaks are **intra-function**, so `functionSummary` already flags the missing free.
-  Its real lever is **cross-function leaks on real projects**: on **LAMeD** (after an engine upgrade —
-  allocator-aware + variable-level cross-frame matching + a parse cache; see BASELINE-COMPARISON §5b-bis) it
-  lifts **recall 0.250 → 0.273 (+1 TP: cjson `merge_patch`), FP 0, no regression**. A small but clean gain at
-  precision 1.0 — the mechanism works end-to-end on a real project; most remaining misses are path-sensitive
-  (future alias-aware work). Recall-additive wiring ⇒ it never risks the precision.
+- **`interproceduralFlow` is judge-wired (opt-in): Δ=0 on Juliet, Δ=0 on LAMeD (2026-08-20 re-measurement).**
+  On Juliet it ran but changed no verdict — leaks are **intra-function**, so `functionSummary` already flags
+  the missing free. On the current LAMeD harness (post `computeBundleId` dedup fix, 50-site denominator —
+  see below) it is now **byte-identical to the default recipe across all 41 cases**, including on cJSON's
+  `merge_patch`. **Superseded finding, kept for the record:** an earlier measurement on a pre-fix, 44-site
+  denominator credited `interproceduralFlow` with `+1 TP` on `merge_patch` (recall 0.250 → 0.273). We
+  re-verified by calling `interproceduralFlow` on `merge_patch` in isolation: it reports
+  `allocCount=1, freeCount=2, "balanced"` — it counts two `cJSON_Delete(target)` sites reachable from
+  `merge_patch` and concludes the allocation is freed, without checking whether those two frees are
+  mutually exclusive on different branches (they are; the real bug is a third, error, branch that frees
+  neither). This is a genuine path-insensitivity gap in `interproceduralFlow`'s own alloc/free counting —
+  not a wiring defect and not a regression from an unrelated change — the same class of limitation as the
+  judge's own guard-subset reconciliation, just living one layer earlier. See `conference/main.tex`
+  §eval-lamed for the full write-up.
 - **`scanBuild` (Clang scan-build) is judge-wired (opt-in) and now functional end-to-end; on Juliet it
   CORROBORATES (raises confidence) but flips no verdict — the matrix is unchanged, ECE 0.550 → 0.547.**
   Corroboration matches by the LEAKED VARIABLE scan-build names (`…pointed to by 'data'`), not the alloc line

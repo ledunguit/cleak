@@ -167,6 +167,18 @@ L271-288; là đánh giá **30 ca con**, không phải toàn bộ 1984 ca của 
 **LAMeD (positive-only, 41 ca / 44 site, 7 dự án)** — manifest
 `demo/lamed/memleak_benchmark.json` (Zenodo 15089703).
 
+> ⚠️ **Bảng dưới đây dùng số liệu tiền-fix (2026-06-29), đã lỗi thời.** Fix `computeBundleId`
+> (2026-08-10) sửa lại cách đếm site → mẫu số đúng là **50 site**, không phải 44 (libsolv 6→11,
+> cjson 6→7). Số `cleak` hiện tại (2026-08-20, cả `no_llm` và `llm_assisted`): **TP15/FP0/FN35,
+> P100%/R30.0%**. `interproceduralFlow` không còn tạo khác biệt trên corpus này (path-insensitivity
+> đã trace được cơ chế). **clang-analyzer đã re-run trên harness hiện tại (2026-08-20): vẫn ra 43
+> site, không phải 50** — đây KHÔNG phải lỗi đo đạc cần fix, mà là do chính `scoreCase` tính số site
+> từ finding riêng của TỪNG tool (site-key nhóm theo candidate của tool đó + FN cho flaw chưa cover),
+> nên mẫu số vốn dĩ tool-dependent theo thiết kế, không phải một ground-truth chung cố định — 43 (CSA)
+> và 50 (CLeak) không cùng thang, không thể ép về 1 số. Số liệu chi tiết + giải thích đầy đủ:
+> `conference/main.tex` §eval-lamed, `docs/EVALUATION.md` (mục ablation `interproceduralFlow`). Số so
+> sánh với RepoAudit bên dưới **chưa được re-verify** trên mẫu số mới — chỉ dùng để tham khảo lịch sử.
+
 | Hệ / cấu hình | sites | TP | FP | FN | TN | Precision | Recall | **F1** | Notes |
 |---|--:|--:|--:|--:|--:|--:|--:|--:|---|
 | **cleak — no_llm (heuristic, `--enrich`)** | 44 | 13 | 0 | 31 | 0 | 100% | 29.5% | **0.456** | baseline (`docs/DATASETS.md`) |
