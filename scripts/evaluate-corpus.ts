@@ -52,6 +52,9 @@ Options:
   --enrich / --no-enrich  Static enrichment stage
   --strategy <auto|off>   LLM strategist
   --tool-select / --no-tool-select  Agentic tool selection
+  --harness               Enable Stage B2 targeted per-candidate harness synthesis
+                          + sanitizer run (opt-in, experimental; default: off).
+                          Scoped to this run — does not touch the persisted config.
   --static-discovery / --no-static-discovery  Static candidate discovery
   --consensus-n <n>       Consensus samples (default: 1 = single LLM)
   --consensus-rule <rule>  Consensus voting rule
@@ -97,6 +100,7 @@ const CorpusEvalOptionsSchema = z.object({
   enrich: z.boolean().optional(),
   strategy: z.enum(['auto', 'off']).optional(),
   toolSelect: z.boolean().optional(),
+  harness: z.boolean().optional(),
   staticDiscovery: z.boolean().optional(),
   dryRun: z.boolean().default(false),
   verbose: z.boolean().optional(),
@@ -165,6 +169,8 @@ function parseCorpusArgs(): CorpusEvalOptions {
     : process.argv.includes('--no-tool-select') ? false
     : undefined;
 
+  const harness = process.argv.includes('--harness');
+
   const staticDiscovery = process.argv.includes('--static-discovery') ? true
     : process.argv.includes('--no-static-discovery') ? false
     : undefined;
@@ -179,7 +185,7 @@ function parseCorpusArgs(): CorpusEvalOptions {
     mode, limit, runs, dynamic, corpusDir, staticUrl, dynamicUrl,
     consensusN, consensusRule, consensusEarlyStop, judgeCacheEnabled, allowUnvalidated, stratify,
     resume, concurrency, staticTools, enrich, strategy,
-    toolSelect, staticDiscovery, dryRun, verbose,
+    toolSelect, harness, staticDiscovery, dryRun, verbose,
     maxCaseMs, maxCaseCostUsd,
   });
 
@@ -219,6 +225,7 @@ export async function main(): Promise<void> {
     console.log(`  enrich: ${opts.enrich ?? 'default'}`);
     console.log(`  strategy: ${opts.strategy ?? 'default'}`);
     console.log(`  toolSelect: ${opts.toolSelect ?? 'default'}`);
+    console.log(`  harness (Stage B2): ${opts.harness ?? false}`);
     console.log(`  staticDiscovery: ${opts.staticDiscovery ?? 'default'}`);
     console.log(`  outDir: ${opts.outDir}`);
     console.log(`  verbose: ${opts.verbose}`);
@@ -226,7 +233,7 @@ export async function main(): Promise<void> {
     process.exit(0);
   }
 
-  const baseOpts = { corpusDir: opts.corpusDir, mode: opts.mode, dynamic: opts.dynamic, limit: opts.limit, concurrency: opts.concurrency, resume: opts.resume, stratify: opts.stratify, staticUrl: opts.staticUrl, dynamicUrl: opts.dynamicUrl, consensusN: opts.consensusN, consensusRule: opts.consensusRule, consensusEarlyStop: opts.consensusEarlyStop, judgeCacheEnabled: opts.judgeCacheEnabled, allowUnvalidated: opts.allowUnvalidated, staticTools: opts.staticTools, enrich: opts.enrich, strategy: opts.strategy, toolSelect: opts.toolSelect, staticDiscovery: opts.staticDiscovery, maxCaseMs: opts.maxCaseMs, maxCaseCostUsd: opts.maxCaseCostUsd };
+  const baseOpts = { corpusDir: opts.corpusDir, mode: opts.mode, dynamic: opts.dynamic, limit: opts.limit, concurrency: opts.concurrency, resume: opts.resume, stratify: opts.stratify, staticUrl: opts.staticUrl, dynamicUrl: opts.dynamicUrl, consensusN: opts.consensusN, consensusRule: opts.consensusRule, consensusEarlyStop: opts.consensusEarlyStop, judgeCacheEnabled: opts.judgeCacheEnabled, allowUnvalidated: opts.allowUnvalidated, staticTools: opts.staticTools, enrich: opts.enrich, strategy: opts.strategy, toolSelect: opts.toolSelect, harness: opts.harness, staticDiscovery: opts.staticDiscovery, maxCaseMs: opts.maxCaseMs, maxCaseCostUsd: opts.maxCaseCostUsd };
   const pct = (x: number) => `${(x * 100).toFixed(1)}%`;
 
   let runningTP = 0, runningFP = 0, runningFN = 0, runningTN = 0;

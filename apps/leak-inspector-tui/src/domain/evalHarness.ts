@@ -113,6 +113,12 @@ export interface EvalOptions {
   /** Agentic tool selection (ablation `tool_selector` axis). Default true (current
    * llm_assisted behaviour); false ⇒ deterministic static enrichment + dynamic recipe. */
   toolSelect?: boolean;
+  /** Stage B2 opt-in escalation: per-candidate targeted harness synthesis + sanitizer
+   * run (and bounded fuzz escalation) for bundles static evidence alone leaves
+   * borderline. Overrides the saved config's `workflow.targetedHarness.enabled` to
+   * true for this run — mirrors `cli.ts`'s single-scan `--harness` flag, scoped to
+   * this eval run rather than the global persisted config. Default false (off). */
+  harness?: boolean;
   /** Static candidate discovery (ablation `static` axis). Default true; false ⇒
    * dynamic-only discovery (build + LSan → synthesize sites). */
   staticDiscovery?: boolean;
@@ -177,6 +183,7 @@ const EvalOptionsSchema = z.object({
   strategy: z.enum(['auto', 'off']).optional(),
   enrich: z.boolean().optional(),
   toolSelect: z.boolean().optional(),
+  harness: z.boolean().optional(),
   staticDiscovery: z.boolean().optional(),
   staticTools: z.array(z.string()).optional(),
   provider: z.any().optional(),
@@ -693,6 +700,7 @@ async function scoreCases(
         ...(opts.strategy ? { strategy: opts.strategy } : {}),
         ...(opts.enrich !== undefined ? { enrich: opts.enrich } : {}),
         ...(opts.toolSelect !== undefined ? { toolSelect: opts.toolSelect } : {}),
+        ...(opts.harness ? { harness: opts.harness } : {}),
         ...(opts.staticDiscovery !== undefined ? { staticDiscovery: opts.staticDiscovery } : {}),
         ...(opts.staticTools ? { staticTools: opts.staticTools } : {}),
         ...(opts.provider ? { provider: opts.provider } : {}),
