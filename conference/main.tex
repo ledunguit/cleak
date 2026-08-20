@@ -64,17 +64,12 @@ for \emph{lower} accuracy. Performance varies substantially by allocator
 family (F1 ranges from 0.991 on \texttt{malloc} to 0.584 on \texttt{strdup}
 sites), a heterogeneity a family-balanced sub-sample would average away. On
 seven real-world C projects from the peer-reviewed LAMeD benchmark (50
-scoreable sites after correcting a site-undercounting bug traced to the same
-candidate-deduplication fix discussed below; see
-Section~\ref{sec:eval-lamed}), the deterministic (\texttt{no\_llm})
-configuration achieves 100\% precision at 30.0\% recall; a separately
-re-measured \texttt{llm\_assisted} configuration (mean of 3 independent runs)
-reaches the identical confusion matrix, and adding
-\texttt{interproceduralFlow} makes no measurable difference on this corpus
-today. We traced the latter directly to a path-sensitivity gap in
-\texttt{interproceduralFlow}'s own alloc/free counting, not a wiring defect,
-and report it as an honest correction to an earlier draft's claim rather than
-omit it (Section~\ref{sec:eval-lamed}). We report all of
+scoreable sites), the deterministic (\texttt{no\_llm}) configuration
+achieves 100\% precision at 30.0\% recall, matched exactly by a separately
+measured \texttt{llm\_assisted} configuration (mean of 3 independent runs);
+adding \texttt{interproceduralFlow} makes no measurable difference on this
+benchmark, a path-sensitivity gap in its own alloc/free counting
+(Section~\ref{sec:eval-lamed}). We report all of
 this with explicit caveats where the evidence is incomplete or
 inconclusive, in the interest of a reproducible and falsifiable
 contribution.
@@ -145,16 +140,15 @@ contributions:
   runtime$\leftrightarrow$candidate correlation, that together make the
   purely deterministic heuristic judge path-aware without invoking an SMT
   solver (Section~\ref{sec:judging}).
-\item[C4: A self-consistency consensus judge, honestly evaluated.] A
-  judging layer that fuses static and dynamic evidence and, only for
-  genuinely borderline bundles, resamples the LLM judge $K$ times at
-  nonzero temperature, combining the votes by a self-consistency rule. We
-  report this as an \emph{investigated technique with a
-  sample-composition-dependent finding} rather than a proven win: it
-  reduces verdict flip rate on a small, accidentally family-homogeneous
-  sample, but that advantage reverses on a properly family-stratified
-  sample of comparable size, a methodological lesson we report in full
-  rather than keep only the favorable number (Section~\ref{sec:eval-consensus}).
+\item[C4: A self-consistency consensus judge, evaluated against single-LLM
+  judging.] A judging layer that fuses static and dynamic evidence and,
+  only for genuinely borderline bundles, resamples the LLM judge $K$ times
+  at nonzero temperature, combining the votes by a self-consistency rule.
+  On a family-stratified sample representative of the corpus's difficulty
+  spread, single-LLM judging is both more stable (verdict flip rate 2.0\%
+  vs.\ 8.0\%) and more accurate (F1 0.852--0.855 vs.\ 0.793--0.796) than
+  $K{=}3$ consensus; we do not recommend enabling consensus judging by
+  default (Section~\ref{sec:eval-consensus}).
 \end{description}
 
 We evaluate CLeak on the NIST Juliet CWE-401 suite (a validated,
@@ -849,58 +843,19 @@ traces to a single Juliet flow variant whose leak is guarded by
 \texttt{rand()} and therefore fires on only $\sim$50\% of runs, a
 genuine dynamic-analysis coverage limit of the corpus rather than a system defect.
 
-\subsection{Consensus judge: stability and significance --- an honest, reversed finding}
+\subsection{Consensus judge: stability and significance}
 \label{sec:eval-consensus}
 
 Table~\ref{tab:consensus} compares single-LLM ($K{=}1$) against consensus
-($K{=}3$) judging across two independent campaigns of an $n{=}30$
-configuration. Consensus voting cuts case-level verdict flip rate by
-2--4$\times$ relative to a single sample. Unlike the single-LLM
-arm, whose own flip rate varied between the two campaigns (26.7\% vs.\
-13.3\%), the consensus arm reproduced its result \emph{exactly} across
-both.
+($K{=}3$) judging on a family-stratified $n{=}50$ sample (6 cases each from
+8 families, 1 each from the 2 smallest), representative of the corpus's
+difficulty spread, across two independent campaigns.
 
 \begin{table}[htbp]
 \centering
-\caption{Consensus-judge stability ablation, two independent campaigns,
-$n{=}30$ (sample composition below).}
+\caption{Consensus-judge stability ablation, family-stratified $n{=}50$,
+two independent campaigns.}
 \label{tab:consensus}
-\small
-\begin{tabular}{@{}llccc@{}}
-\toprule
-\textbf{Judge arm} & \textbf{Campaign} & \textbf{Case stability} & \textbf{Flip rate} & \textbf{Modal agreement} \\
-\midrule
-Single-LLM ($K{=}1$) & A & 73.3\% & 26.7\% & 86.7\% \\
-Single-LLM ($K{=}1$) & B & 86.7\% & 13.3\% & 93.3\% \\
-Consensus ($K{=}3$) & A & \textbf{93.3\%} & \textbf{6.7\%} & \textbf{96.7\%} \\
-Consensus ($K{=}3$) & B & \textbf{93.3\%} & \textbf{6.7\%} & \textbf{96.7\%} \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-We also ran a paired McNemar test (campaign B, 77 sites) between the
-single-LLM and consensus arms: consensus reaches accuracy 83.1\%/F1~0.822
-against single-LLM's 79.2\%/0.784, with 5 of 7 discordant sites favoring
-consensus, but $\chi^2 = 0.57$, $p = 0.45$: not significant at
-this sample size.
-
-\textbf{This $n{=}30$ sample is not family-stratified.} Juliet's manifest
-orders cases by functional family, so an unstratified first-$N$ slice at
-this size draws almost entirely from a single family; we confirmed this
-sample is 100\% \texttt{char}-family cases, one of the corpus's
-easier, more homogeneous families (Table~\ref{tab:family}). To test
-whether the stability advantage above survives on a sample that actually
-represents the corpus's difficulty spread, we repeated the identical
-protocol --- same script, same judge, same rule, two independent
-campaigns --- on a family-\emph{stratified} $n{=}50$ sample (6 cases each
-from 8 families, 1 each from the 2 smallest), archived at
-\texttt{results/consensus-ablation-n50-2026-08-19/}.
-
-\begin{table}[htbp]
-\centering
-\caption{Same protocol, family-stratified $n{=}50$: the stability advantage
-\emph{reverses}.}
-\label{tab:consensus-n50}
 \small
 \begin{tabular}{@{}llccc@{}}
 \toprule
@@ -914,113 +869,67 @@ Consensus ($K{=}3$) & B & 92.0\% & 8.0\% & 96.0\% \\
 \end{tabular}
 \end{table}
 
-On the stratified sample, single-LLM is now the \emph{more} stable arm
-(flip rate 2.0\% vs.\ consensus's 8.0\%) and the more accurate one (F1
-0.852--0.855 across its two campaigns vs.\ consensus's 0.793--0.796,
-consistently in both). The paired McNemar test (campaign A, 205 sites)
-leans the same direction --- single-LLM accuracy 91.7\%/F1~0.852 vs.\
+Single-LLM is the more stable arm (flip rate 2.0\% vs.\ consensus's 8.0\%)
+and the more accurate one (F1 0.852--0.855 across its two campaigns vs.\
+consensus's 0.793--0.796, consistently in both). A paired McNemar test
+(campaign A, 205 sites) agrees: single-LLM accuracy 91.7\%/F1~0.852 vs.\
 consensus 89.0\%/F1~0.793, 7 of 8 discordant sites favoring single-LLM,
-$\chi^2 = 3.13$, $p = 0.077$ --- again not significant at this sample
-size, but now pointing the opposite way from the $n{=}30$ result above.
-
-\textbf{We report both results in full rather than keep only the
-favorable one.} The most defensible reading is that the $n{=}30$ result
-is a sampling artifact: on a corpus slice drawn from one easy, homogeneous
-family, three independent judge samples usually agree trivially (the
-correct answer is unambiguous), so voting looks like it is "stabilizing"
-what was never unstable to begin with; averaged across a difficulty
-spread that includes genuinely borderline families (e.g.\
-\texttt{strdup}, Table~\ref{tab:family}), three independent samples of an
-\emph{uncertain} judgment can converge on a shared systematic error just
-as easily as they converge on the correct answer, which self-consistency
-voting cannot distinguish from converging on truth. Neither $n{=}30$ nor
-$n{=}50$ has the statistical power to settle this on its own (McNemar is
-not significant either way); what the reversal \emph{does} establish is
-that consensus judging's benefit, if real, is not sample-composition-independent, and that C4's contribution is best read as this
-methodological finding --- family-stratified sampling matters for
-evaluating an LLM-judge technique, not just for evaluating the end system
---- rather than as a validated accuracy or stability improvement. We do
+$\chi^2 = 3.13$, $p = 0.077$ --- not significant at this sample size. We do
 not recommend enabling consensus judging by default on this evidence; it
 remains available as an opt-in configuration (\texttt{consensus.n~>~1})
-pending a larger, stratified, multi-seed study.
+pending a larger, multi-seed study.
 
 \subsection{Real-world validation: LAMeD}
 \label{sec:eval-lamed}
 
-On the 41-case, 7-project LAMeD benchmark, the deterministic \texttt{no\_llm}
-configuration holds \textbf{100\% precision (zero false positives) in every
-configuration we measured}, with recall at \textbf{30.0\%} (Table~\ref{tab:lamed}).
-A manual taxonomy of the six confirmed cJSON leaks in this benchmark finds
-they span four structurally distinct difficulty classes (deallocator
-semantics, path-sensitivity, control-flow reordering, and file/test-only
-code) rather than one weak component, consistent with LAMeD's own
-finding that even state-of-the-art tools catch only 5--10 of 43 real leaks
-in their evaluation.
+On the 41-case, 7-project LAMeD benchmark (50 scoreable sites), the
+deterministic \texttt{no\_llm} configuration holds \textbf{100\% precision
+(zero false positives) in every configuration we measured}, with recall at
+\textbf{30.0\%} (Table~\ref{tab:lamed}). A manual taxonomy of the six
+confirmed cJSON leaks in this benchmark finds they span four structurally
+distinct difficulty classes (deallocator semantics, path-sensitivity,
+control-flow reordering, and file/test-only code) rather than one weak
+component, consistent with LAMeD's own finding that even state-of-the-art
+tools catch only 5--10 of 43 real leaks in their evaluation.
 
-\textbf{Site count correction.} An earlier version of this evaluation
-reported 44 scoreable sites; the corrected count is \textbf{50}. Both
-figures come from the same 41 cases and the same LAMeD manifest --- nothing
-external changed. The difference is a fix to \texttt{computeBundleId}, which
-used a truncating hash that collapsed genuinely distinct candidates into one
-bundle (verified on one project alone to shrink 622 raw candidates to 65
-surviving bundles pre-fix). Because our scorer counts scoreable sites as
-bundles that match a ground-truth leak, not raw manifest entries, the same
-collapsing bug that suppressed recall also \emph{under-counted the
-denominator} on cases with multiple call sites for the same flaw: libsolv
-goes from 6 to 11 sites and cJSON from 6 to 7; the other five projects
-(curl, libssh2, libtiff, libxml2, rabbitmq-c) are unaffected. Every number in
-Table~\ref{tab:lamed} is measured post-fix, on the 50-site denominator, with
-the current container images rebuilt from source. \textbf{The Clang Static
-Analyzer row's 43-site denominator is not an artifact we can fix by
-re-running it.} Our scorer (\texttt{scoreCase}) derives the scoreable-site
-set from whichever tool's own findings are being graded: it groups that
-tool's findings into site-keys, matches them against manifest flaws, and
-adds one synthetic false negative per flaw no finding covers. The site
-count is therefore a property of \emph{each tool's own finding
-granularity}, not a single external ground truth shared across tools ---
-CLeak's count moved from 44 to 50 because \texttt{computeBundleId} changed
-how CLeak's own candidates bundle, which has no bearing on Clang Static
-Analyzer's independently-produced findings. We re-ran Clang Static Analyzer
-under the current harness to confirm this directly: it still scores 43
-sites, TP\,0/FN\,43, unchanged. The CSA and CLeak rows in Table~\ref{tab:lamed}
-are therefore not on a shared site denominator by design, not by omission;
-we report both counts as measured rather than force them into a single
-column that would misstate one of them.
+\textbf{Site counts are tool-dependent by the scorer's design.} Table~\ref{tab:lamed}'s
+Clang Static Analyzer row scores 43 sites; the CLeak rows score 50. This is
+not an inconsistency to reconcile: our scorer (\texttt{scoreCase}) derives
+the scoreable-site set from whichever tool's own findings are being graded
+--- it groups that tool's findings into site-keys, matches them against
+manifest flaws, and adds one synthetic false negative per flaw no finding
+covers. The site count is therefore a property of each tool's own finding
+granularity, not a single external ground truth shared across tools, so the
+CSA and CLeak rows are not on a shared denominator by design; we report both
+counts as measured rather than force them into a single column that would
+misstate one of them.
 
 \textbf{\texttt{interproceduralFlow} adds no measurable value on this
-benchmark today.} Unlike an earlier version of this evaluation, which
-credited \texttt{interproceduralFlow} with catching cJSON's
-\texttt{merge\_patch} leak, the default and \texttt{+interproceduralFlow}
-configurations are now byte-identical across all 41 cases
-(Table~\ref{tab:lamed}), including on \texttt{merge\_patch} itself. We
-traced this directly by calling \texttt{interproceduralFlow} on
-\texttt{merge\_patch} in isolation: it reports \texttt{allocCount=1,
-freeCount=2, "balanced"} and \texttt{hasAllocWithoutFree=false}, because it
-counts two \texttt{cJSON\_Delete(target)} call sites reachable from
-\texttt{merge\_patch} and concludes the allocation is freed. It does not
-check whether those two frees are mutually exclusive on different branches
---- they are: the real bug is a \emph{third} branch, an error path, that
-frees neither. This is not a wiring defect (the tool runs and returns a
-well-formed trace) and not a regression from an unrelated code change; it is
-the same fundamental limitation as the judge's own guard-subset path
-reconciliation (Section~\ref{sec:discussion}) --- alloc/free counting that is
-not path-sensitive --- except here it lives inside
-\texttt{interproceduralFlow}'s own cross-function trace rather than the
-judge layer. We correct the earlier claim rather than let it stand
-uncontested: on this benchmark, as currently implemented,
-\texttt{interproceduralFlow} contributes zero measured recall beyond the
-default static recipe.
+benchmark.} The default and \texttt{+interproceduralFlow} configurations
+are byte-identical across all 41 cases (Table~\ref{tab:lamed}), including on
+cJSON's \texttt{merge\_patch} leak. Calling \texttt{interproceduralFlow} on
+\texttt{merge\_patch} in isolation shows why: it reports
+\texttt{allocCount=1, freeCount=2, "balanced"}, because it counts two
+\texttt{cJSON\_Delete(target)} call sites reachable from \texttt{merge\_patch}
+and concludes the allocation is freed, without checking whether those two
+frees are mutually exclusive on different branches --- they are: the real
+bug is a third branch, an error path, that frees neither. This is the same
+fundamental limitation as the judge's own guard-subset path reconciliation
+(Section~\ref{sec:discussion}) --- alloc/free counting that is not
+path-sensitive --- living inside \texttt{interproceduralFlow}'s own
+cross-function trace rather than the judge layer: on this benchmark, as
+currently implemented, \texttt{interproceduralFlow} contributes zero
+measured recall beyond the default static recipe.
 
 \begin{table}[htbp]
 \centering
 \caption{LAMeD real-project results. \texttt{llm\_assisted} is the mean of 3
 independent runs (temperature 0, \texttt{deepseek-v4-flash}), with zero
-variance across runs (Section~\ref{sec:eval-lamed}). CLeak rows score 50
-scoreable sites (positive-only, TN$=$0 by construction; corrected from an
-earlier reported 44 --- see site-count correction above); the Clang Static
-Analyzer row scores 43 sites under a live re-run with the same scorer ---
-the two counts are tool-dependent by the scorer's own design (see
-discussion above) and are not on a shared denominator.}
+variance across runs. CLeak rows score 50 scoreable sites (positive-only,
+TN$=$0 by construction); the Clang Static Analyzer row scores 43 sites under
+a live re-run with the same scorer --- the two counts are tool-dependent by
+the scorer's design (see discussion above) and are not on a shared
+denominator.}
 \label{tab:lamed}
 \small
 \begin{tabular}{@{}lccccc@{}}
@@ -1035,19 +944,14 @@ Clang Static Analyzer & 0 & 0 & 43 & 0.0\% & --- \\
 \end{tabular}
 \end{table}
 
-\textbf{\texttt{llm\_assisted} re-measurement.} An earlier version of this
-evaluation flagged an \texttt{llm\_assisted} recall of 15.9\% on this
-benchmark as stale, attributing it to the same pre-fix candidate-deduplication
-bug and leaving the corrected number as future work. We have now completed
-that re-measurement (Table~\ref{tab:lamed}): \texttt{llm\_assisted} reaches
-the identical confusion matrix as \texttt{no\_llm} (TP\,15/FP\,0/FN\,35), with
+\textbf{\texttt{llm\_assisted} reaches the same result as \texttt{no\_llm}
+on this benchmark.} \texttt{llm\_assisted} scores the identical confusion
+matrix as \texttt{no\_llm} (TP\,15/FP\,0/FN\,35, Table~\ref{tab:lamed}), with
 zero variance across 3 independent runs. Per-run judge-path telemetry shows
 the LLM judge was genuinely invoked (47--149 calls per run on bundles the
 heuristic flagged as borderline) but never flipped a verdict away from the
-heuristic's own decision on this corpus. The fix removed the earlier
-regression --- \texttt{llm\_assisted} no longer under-performs \texttt{no\_llm}
---- but it does not exceed it either, on this real-project benchmark. This
-is consistent with Section~\ref{sec:eval-ablation}'s Juliet finding that
+heuristic's own decision on this corpus. This is consistent with
+Section~\ref{sec:eval-ablation}'s Juliet finding that
 dynamic evidence, not LLM judging, is the dominant lever for this class of
 leak; dynamic analysis is not exercised on the LAMeD static-only
 configurations reported here (Section~\ref{sec:related}, real-project
@@ -1071,11 +975,7 @@ across those 30 cases (each case can contain multiple sites), not a second
 case count. Clang Static Analyzer's own output (warnings only, no explicit
 per-site clearance) yields a smaller, non-identical site set and a
 structural TN of 0, consistent with how positive-only tools are scored
-elsewhere in this paper (Table~\ref{tab:lamed}). This is the SAME
-unstratified, family-homogeneous $n{=}30$ sample discussed in
-Section~\ref{sec:eval-consensus} --- the Consensus row's favorable numbers
-here should be read together with that section's honest, reversed finding
-on a stratified sample, not in isolation.}
+elsewhere in this paper (Table~\ref{tab:lamed}).}
 \label{tab:external}
 \small
 \begin{tabular}{@{}lcccccccc@{}}
@@ -1083,7 +983,6 @@ on a stratified sample, not in isolation.}
 \textbf{System} & \textbf{Sites} & \textbf{TP} & \textbf{FP} & \textbf{FN} & \textbf{TN} & \textbf{P} & \textbf{R} & \textbf{F1} \\
 \midrule
 \texttt{no\_llm} (heuristic) & 77 & 29 & 7 & 3 & 38 & 0.806 & 0.906 & \textbf{0.853} \\
-Consensus ($K{=}3$) & 77 & 30 & 10 & 2 & 35 & 0.750 & 0.938 & 0.833 \\
 Clang Static Analyzer & 44 & 27 & 12 & 5 & 0 & 0.692 & 0.844 & 0.761 \\
 \bottomrule
 \end{tabular}
@@ -1197,25 +1096,13 @@ rather than obscured by reporting only aggregate metrics from a single
 run.
 
 \textbf{Sample stratification matters for evaluating an LLM-judge
-technique, not just for evaluating the end system.} Section~\ref{sec:eval-consensus}'s
-reversal --- consensus voting stabilizes verdicts on an unstratified,
-family-homogeneous $n{=}30$ sample but not on a family-stratified $n{=}50$
-sample of comparable size --- is, to our knowledge, not a result specific
-to our consensus mechanism; it is a caution about evaluating any
-self-consistency technique on a sample small enough that a single
-functional family can dominate it by manifest ordering alone. We flag
-this as a general methodological point for LLM-judge evaluation
-protocols, not only a limitation of this particular ablation.
-
-\textbf{Measurements closed since an earlier version of this evaluation.}
-Two items previously flagged as open are now reported rather than assumed.
-The \texttt{llm\_assisted} LAMeD re-measurement (Section~\ref{sec:eval-lamed})
-is complete: it matches \texttt{no\_llm} exactly, not the favorable
-projection we might have hoped the dedup fix would produce, and we report
-that flat result rather than the more flattering unmeasured guess. The
-dynamic-augmented full-corpus run is likewise no longer open ---
-Section~\ref{sec:eval-fullcorpus} now reports it, with dynamic evidence
-enabled across all nine capability configurations.
+technique, not just for evaluating the end system.} A self-consistency
+technique's apparent benefit can depend heavily on whether the evaluation
+sample represents the corpus's full difficulty spread or draws
+disproportionately from its easier, more homogeneous families; we flag this
+as a general methodological point for LLM-judge evaluation protocols, which
+is why Section~\ref{sec:eval-consensus}'s consensus result is measured on a
+family-stratified sample rather than an unstratified one.
 
 \section{Conclusion and Future Work}
 
@@ -1230,38 +1117,30 @@ protocol reports what is and is not reproducible rather than claiming
 uniform determinism; structured, guard-subset-reconciled evidence
 enrichment lets even the purely deterministic judge catch path-sensitive
 and parameter-ownership leaks without an SMT solver; and a self-consistency
-consensus judge, evaluated honestly rather than assumed to help, stabilizes
-borderline verdicts on a small, family-homogeneous sample but does not
-replicate that advantage on a family-stratified sample of comparable
-size --- a methodological finding about LLM-judge evaluation we report
-in full rather than the cleaner, favorable half of it. A controlled five-factor
-ablation on the full validated Juliet corpus (1{,}658 cases, not a
-sub-sample) isolates a deterministic static+dynamic+planner configuration
+consensus judge, evaluated against single-LLM judging on a family-stratified
+sample representative of the corpus's difficulty spread, does not improve
+verdict stability or accuracy over the single-LLM baseline. A controlled
+five-factor ablation on the full validated Juliet corpus (1{,}658 cases, not
+a sub-sample) isolates a deterministic static+dynamic+planner configuration
 reaching F1~0.863/MCC~0.790 at roughly one-quarter the dollar cost of
 unconstrained agentic tool selection, with performance varying by
 allocator family (F1 0.991 on \texttt{malloc} sites down to 0.584 on
 \texttt{strdup} sites, a gap we trace to a concrete dynamic-coverage
 mechanism rather than leaving unexplained); and on the real-world,
 peer-reviewed LAMeD benchmark the system holds 100\% precision at 30.0\%
-recall, identically under \texttt{no\_llm} and a separately re-measured
-\texttt{llm\_assisted} configuration (Section~\ref{sec:eval-lamed}) --- a
-result we report plainly rather than substitute with an earlier, since-corrected
-number that credited \texttt{interproceduralFlow} with a catch it does not,
-on inspection, actually make.
+recall under both \texttt{no\_llm} and \texttt{llm\_assisted}
+configurations, with \texttt{interproceduralFlow}'s alloc/free counting
+contributing no measured recall on this benchmark due to a path-sensitivity
+gap (Section~\ref{sec:eval-lamed}).
 
-Future work has one concrete, already-identified direction: evaluating the
-opt-in targeted-harness escalation stage (per-candidate harness synthesis
-plus a bounded fuzzing tier for bundles a whole-binary run leaves borderline)
-mentioned but not measured in this paper. Two items closed during this
-evaluation cycle rather than remaining open: the dynamic stage now runs on
-the full 1{,}658-case Juliet corpus (Section~\ref{sec:eval-fullcorpus}), and
-\texttt{llm\_assisted} recall on LAMeD has been re-measured under the
-candidate-deduplication fix (Section~\ref{sec:eval-lamed}) --- the fix
-removed a prior regression but did not, as we had speculated it might, raise
-real-project recall above the deterministic baseline; \texttt{interproceduralFlow}'s
-path-insensitivity on this same benchmark (Section~\ref{sec:eval-lamed}) is
-a natural next target, since a path-sensitive cross-function trace is a
-smaller lift than a full SMT-based solver.
+Future work has two concrete directions: evaluating the opt-in
+targeted-harness escalation stage (per-candidate harness synthesis plus a
+bounded fuzzing tier for bundles a whole-binary run leaves borderline) on
+the LAMeD benchmark specifically, where whole-project dynamic evidence is
+often unavailable; and making \texttt{interproceduralFlow}'s cross-function
+trace path-sensitive, since a lighter path-sensitive analysis is a smaller
+lift than a full SMT-based solver and directly targets the gap identified
+in Section~\ref{sec:eval-lamed}.
 
 \begin{thebibliography}{99}
 
