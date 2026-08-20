@@ -29,7 +29,7 @@ for C/C++ Memory Leak Detection}
 
 \begin{abstract}
 Memory leaks (CWE-401) in C/C++ remain hard to find with either static or
-dynamic analysis alone: static tools are noisy and cannot prove a leak
+dynamic analysis alone. Static tools are noisy and cannot prove a leak
 actually occurs at runtime, while dynamic tools only see the paths a test
 run happens to exercise. Large language models (LLMs) can bridge this gap by
 reading code and reasoning about ownership the way a human auditor would,
@@ -46,33 +46,32 @@ deterministic static/dynamic engine that never consults the LLM on the
 measured evaluation path. A four-stage HYBRID pipeline fans out static
 sub-agents to gather evidence, runs a pinned build-and-sanitize dynamic
 recipe in parallel, and reserves the LLM judge for genuinely borderline
-verdicts; the strongest evaluated configuration is entirely deterministic
+verdicts. The strongest evaluated configuration is entirely deterministic
 apart from that borderline-only judge call. We separately investigate a
 self-consistency \emph{consensus judge} that fuses $K$ independent judge
 samples and report an honest, sample-composition-dependent finding on it
 rather than a clean win (Section~\ref{sec:eval-consensus}). A
 two-tier reproducibility protocol reports bitwise-deterministic results for
-the non-agentic configuration and honest mean$\pm$std / verdict-stability
-statistics for the LLM-assisted configuration, rather than claiming
+the non-agentic configuration, and honest mean$\pm$std / verdict-stability
+statistics for the LLM-assisted configuration, instead of claiming a
 determinism the latter cannot have. A controlled ablation over five
 orchestration factors, run on the full validated NIST Juliet CWE-401
 corpus (1{,}658 cases, not a sub-sample), isolates a deterministic
 static+dynamic+planner configuration that reaches Precision~96.5\%,
 Recall~78.0\%, F1~0.863, MCC~0.790, while showing that unconstrained
-LLM-driven tool selection is $\sim$4$\times$ more expensive in dollar cost
+LLM-driven tool selection costs about 4$\times$ more in dollar terms
 for \emph{lower} accuracy. Performance varies substantially by allocator
 family (F1 ranges from 0.991 on \texttt{malloc} to 0.584 on \texttt{strdup}
-sites), a heterogeneity a family-balanced sub-sample would average away. On
+sites), a swing that a family-balanced sub-sample would average away. On
 seven real-world C projects from the peer-reviewed LAMeD benchmark (50
 scoreable sites), the deterministic (\texttt{no\_llm}) configuration
 achieves 100\% precision at 30.0\% recall, matched exactly by a separately
-measured \texttt{llm\_assisted} configuration (mean of 3 independent runs);
-adding \texttt{interproceduralFlow} makes no measurable difference on this
+measured \texttt{llm\_assisted} configuration (mean of 3 independent runs).
+Adding \texttt{interproceduralFlow} makes no measurable difference on this
 benchmark, a path-sensitivity gap in its own alloc/free counting
 (Section~\ref{sec:eval-lamed}). We report all of
 this with explicit caveats where the evidence is incomplete or
-inconclusive, in the interest of a reproducible and falsifiable
-contribution.
+inconclusive, so the contribution stays reproducible and falsifiable.
 \end{abstract}
 
 \section{Introduction}
@@ -83,8 +82,8 @@ CWE-401, is one of the oldest and most persistent classes of software defects in
 C++, the two languages in which manual memory management remains the norm
 across operating-system kernels, browsers, databases, and embedded
 firmware. Unlike a crash-inducing memory-safety bug (a buffer overflow or
-use-after-free), a leak rarely terminates the process that causes it; it
-manifests instead as slow resource exhaustion, degraded availability, or a
+use-after-free), a leak rarely terminates the process that causes it.
+Instead, it manifests as slow resource exhaustion, degraded availability, or a
 denial-of-service condition that is difficult to reproduce and expensive to
 diagnose in production. The engineering cost of finding leaks has
 historically been split between two incompatible tool families.
@@ -104,7 +103,7 @@ Large language models offer a third analytical mode: reading a function's
 source and its calling context and reasoning about ownership the way a
 human code reviewer would, including project-specific conventions no
 generic tool is aware of (a wrapper such as \texttt{cJSON\_Duplicate} is an
-allocator; a parameter freed on the success path but not on an error path
+allocator, and a parameter freed on the success path but not on an error path
 is a leak on that path). The naive way to exploit this, giving an LLM
 agent unrestricted tool access to a codebase and letting it decide what to
 investigate, introduces exactly the property a controlled scientific
@@ -123,7 +122,7 @@ contributions:
 \item[C1: A deterministic-except-judge hybrid pipeline.] A pinned
   build-and-sanitize recipe runs LeakSanitizer with zero LLM involvement
   whenever a project's build command is known, isolating dynamic evidence
-  capture from LLM non-determinism; combined with deterministic static
+  capture from LLM non-determinism. Combined with deterministic static
   evidence and an LLM-planner-gated orchestration, this configuration is
   the system's \emph{strongest measured result} on the full validated
   Juliet corpus (F1~0.863, MCC~0.790, Section~\ref{sec:evaluation}) at a
@@ -147,7 +146,7 @@ contributions:
   On a family-stratified sample representative of the corpus's difficulty
   spread, single-LLM judging is both more stable (verdict flip rate 2.0\%
   vs.\ 8.0\%) and more accurate (F1 0.852--0.855 vs.\ 0.793--0.796) than
-  $K{=}3$ consensus; we do not recommend enabling consensus judging by
+  $K{=}3$ consensus. We do not recommend enabling consensus judging by
   default (Section~\ref{sec:eval-consensus}).
 \end{description}
 
@@ -191,14 +190,14 @@ callers reuse the summary rather than re-deriving it~\cite{infer-verification}.
 Exposing the engine as small, stateless, independently-callable MCP
 services (Section~\ref{sec:arch}) mirrors the shardable-microservice
 architecture Google's Tricorder uses to run hundreds of analyzers across
-hundreds of thousands of changes per day~\cite{tricorder}; the same source
+hundreds of thousands of changes per day~\cite{tricorder}. The same source
 also motivates our deterministic-engine-first, LLM-reserved-for-borderline-cases
 triage (Section~\ref{sec:judging}), which is a version of Tricorder's
 continuous false-positive-rate discipline applied to a leak-specific
 judge rather than a general lint ecosystem. Semgrep's direct AST-pattern
 matching without an intermediate database~\cite{semgrep} is the same
 DB-free principle our engine applies in place of CodeQL's queryable-database
-approach; and where CLeak does rely on across-run reuse to avoid redundant
+approach. Where CLeak does rely on across-run reuse to avoid redundant
 work (the dynamic analyzer's compiler-cache-backed rebuilds,
 Section~\ref{sec:arch}), the motivating principle mirrors the incremental
 reuse CodeQL itself has since adopted in production to avoid re-analyzing
@@ -214,8 +213,8 @@ accelerators such as AirTaint~\cite{airtaint}) improves detection speed and
 precision for related memory-safety classes but does not address dynamic
 analysis's coverage ceiling. A direct empirical comparison of fuzzers
 against static analyzers for memory-unsafety detection~\cite{fuzzer-vs-sa}
-finds the two tool families' true-positive sets are largely disjoint ---
-motivating the hybrid design in Section~\ref{sec:pipeline} rather than a
+finds the two tool families' true-positive sets are largely disjoint,
+which motivates the hybrid design in Section~\ref{sec:pipeline} rather than a
 choice between them. AddressWatcher~\cite{addresswatcher} localizes leak
 \emph{fixes} from sanitizer output, a complementary problem to detection.
 
@@ -223,11 +222,11 @@ choice between them. AddressWatcher~\cite{addresswatcher} localizes leak
 Early empirical work established that LLMs can identify security
 vulnerabilities from source alone with meaningful but bounded
 accuracy~\cite{llm-vuln-eval}. IRIS~\cite{iris} couples an LLM with static
-analysis for vulnerability detection; a complementary line of work asks
+analysis for vulnerability detection. A complementary line of work asks
 whether LLM prompting alone, with the right prompting strategy, can
-substitute for a static analyzer's reasoning~\cite{llm-proxy-static} and
+substitute for a static analyzer's reasoning~\cite{llm-proxy-static}, and
 reports that it can \emph{exceed} a static-analyzer baseline on their
-benchmark --- a result CLeak's own architecture does not contest, since
+benchmark. This does not contradict CLeak's own architecture, since
 CLeak still grounds the LLM in tool output (static/dynamic evidence) rather
 than relying on prompting alone, and targets a different failure mode
 (judge instability, not analyzer substitution). VulnLLM-R~\cite{vulnllmr}
@@ -240,10 +239,10 @@ neuro-symbolic-augmented static pipeline (LLM + Z3 + CodeQL/Infer) reporting
 54 leaks detected (53 confirmed/fixed) across 8 real projects (3.6M LOC),
 and
 \textbf{LAMeD}~\cite{lamed}, which uses an LLM purely to \emph{annotate}
-source for a classical analyzer (Cooddy or CodeQL) to then consume ---
-notably \emph{not} an agentic architecture, and the origin of the
-real-world benchmark we evaluate against in
-Section~\ref{sec:eval-lamed}. LAMeD does not report an F1 score; we quote
+source for a classical analyzer (Cooddy or CodeQL) to then consume.
+Notably, this is \emph{not} an agentic architecture, and it is the origin of
+the real-world benchmark we evaluate against in
+Section~\ref{sec:eval-lamed}. LAMeD does not report an F1 score, so we quote
 its own published precision/recall where we compare against it.
 A related but distinct line targets kernel-level memory-management
 intention inconsistencies~\cite{kernel-memmgmt}.
@@ -276,12 +275,12 @@ than a raw accuracy delta.
 \paragraph{Benchmarks and protocols.}
 We use the NIST Juliet Test Suite~\cite{juliet} as our synthetic
 ground-truth corpus and the LAMeD benchmark~\cite{lamed-benchmark} as our
-real-world, peer-reviewed corpus; DiverseVul~\cite{diversevul},
+real-world, peer-reviewed corpus. DiverseVul~\cite{diversevul},
 SV-COMP Memsafety~\cite{svcomp}, and Magma~\cite{magma} are related
-vulnerability/memory-safety benchmarks we do not use directly but position
+vulnerability/memory-safety benchmarks we do not use directly, but position
 against in corpus design. The Model Context Protocol~\cite{mcp} is the
 tool-invocation transport between our orchestrator and analyzers
-(Section~\ref{sec:arch}); a pointer-ownership model for
+(Section~\ref{sec:arch}). A pointer-ownership model for
 C~\cite{ownership-model} informs the ownership-transfer vocabulary used by
 our heuristic judge.
 
@@ -291,7 +290,7 @@ literature combines static and dynamic evidence specifically for
 protocol distinguishing deterministic from LLM-dependent results. CLeak is
 designed to fill exactly this gap. Table~\ref{tab:capability} makes this
 comparison explicit across eleven capability criteria drawn from the
-systems discussed above; no single prior system combines static analysis,
+systems discussed above. No single prior system combines static analysis,
 dynamic analysis, agentic orchestration, and a verified bit-for-bit
 reproducibility gate the way CLeak does, and CLeak is, to our knowledge,
 the only one of the seven that both exposes an MCP tool transport and
@@ -303,9 +302,9 @@ generates a source-anchored repair diff alongside its verdicts.
 $\circ$ = partial / conditional, $\bullet$ = present but secondary (not
 the system's focus), --- = not applicable or unpublished. The
 \emph{deterministic core} row is distinct from \emph{bit-for-bit
-reproducibility}: LAMeD's Cooddy backend is itself deterministic but its
-version is not pinned; MemHint and POM have a deterministic
-symbolic/SAT core but a non-deterministic LLM labeling step precedes it;
+reproducibility}: LAMeD's Cooddy backend is itself deterministic, but its
+version is not pinned. MemHint and POM have a deterministic
+symbolic/SAT core, but a non-deterministic LLM labeling step precedes it.
 RepoAudit and FuzzingBrain~V2 are end-to-end agentic pipelines with no
 deterministic tier at all. CLeak is the only system in this comparison
 verified, by a dedicated gate, to reproduce byte-identical scoring across
@@ -337,12 +336,12 @@ Peer-reviewed & \checkmark (EASE'25) & $\times$ (arXiv) & $\circ$ (poster) & $\t
 \subsection{Component overview}
 
 CLeak is a standalone CLI/TUI scanner, \texttt{leak-inspector-tui}, acting
-as the sole orchestrator; it drives two analyzer services and an LLM
+as the sole orchestrator. It drives two analyzer services and an LLM
 provider over well-defined protocols, with no shared database and no
 persistent server-side state beyond per-run artifacts on disk. All
 inter-service communication uses the Model Context Protocol (MCP) over
 Streamable-HTTP (JSON-RPC~2.0). Table~\ref{tab:components} summarizes
-the four components; Figure~\ref{fig:topology} shows their connectivity.
+the four components, and Figure~\ref{fig:topology} shows their connectivity.
 
 \begin{table}[htbp]
 \centering
@@ -356,7 +355,7 @@ the four components; Figure~\ref{fig:topology} shows their connectivity.
 leak-inspector-tui & TypeScript + Ink (Node), native tool-calling & headless & Orchestrator: MCP client, agentic loop, report writer \\
 static-analyzer & NestJS + tree-sitter & 50061 & 11 MCP tools: candidate scan, AST/call-graph, function summary, path constraints, ownership, Clang \texttt{scan-build} \\
 dynamic-analyzer & NestJS + Valgrind/ASan/LSan & 50062 & 11 MCP tools: sanitizer build/run, targeted-harness synthesis (opt-in) \\
-agent-core / common (libraries) & TypeScript & --- & Tool-calling loop, MCP client, multi-provider LLM adapters; shared types, heuristic/consensus judge, report renderers \\
+agent-core / common (libraries) & TypeScript & --- & Tool-calling loop, MCP client, multi-provider LLM adapters, plus shared types, heuristic/consensus judge, report renderers \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -380,7 +379,7 @@ agent-core / common (libraries) & TypeScript & --- & Tool-calling loop, MCP clie
   \draw (tui) -- node[right, font=\scriptsize] {file I/O} (results);
 \end{tikzpicture}
 \caption{System topology. The orchestrator is the sole client of both
-analyzer services and the LLM gateway; the two analyzers never communicate
+analyzer services and the LLM gateway. The two analyzers never communicate
 directly with each other or with the LLM.}
 \label{fig:topology}
 \end{figure}
@@ -399,10 +398,10 @@ benchmarking. The engine itself (tree-sitter parsing, control-flow
 construction, alloc$\to$free pairing, heuristic scoring, and consensus
 aggregation) executes deterministically and never depends on the LLM on
 the measured evaluation path. Three host-side modules implement this
-pattern (Table~\ref{tab:policy}); onboarding a new project therefore
+pattern (Table~\ref{tab:policy}). Onboarding a new project therefore
 requires zero lines of new code. Within the engine itself, parsed
 structure is memoized by a hash of file content rather than recomputed
-per call site --- content-addressed memoization of this kind is the
+per call site. Content-addressed memoization of this kind is the
 standard technique for avoiding redundant work in a deterministic
 analysis core~\cite{infer-verification}.
 
@@ -418,7 +417,7 @@ analysis core~\cite{infer-verification}.
 \midrule
 Allocator profiler & Project alloc/dealloc API names + ownership notes & Identifier must literally appear in source (grep) & \texttt{extraAllocators} / \texttt{Deallocators}, ownership notes \\
 Strategist & \{runDynamic, judge mode, staticDepth\} & Rule-based deterministic fallback on failure & Gates the dynamic stage / fan-out \\
-Judge tuner & Verdict-threshold nudge & Hard clamp to a bounded range & Heuristic judge thresholds (production only; eval uses frozen defaults) \\
+Judge tuner & Verdict-threshold nudge & Hard clamp to a bounded range & Heuristic judge thresholds (production only, eval uses frozen defaults) \\
 \bottomrule
 \end{tabular}}
 \end{table}
@@ -442,7 +441,7 @@ LLM can only cause a verdict change through the two well-defined
 interfaces of Sections~\ref{sec:judging}. All artifacts for a run
 (\texttt{report.json/md/html}, a cross-run-comparable
 \texttt{snapshot.json}, an append-only event log, and a metrics summary)
-are written to \texttt{results/\textlangle scanId\textrangle/} on disk; there is no
+are written to \texttt{results/\textlangle scanId\textrangle/} on disk. There is no
 database.
 
 \subsection{MCP tool surface}
@@ -451,8 +450,8 @@ The static and dynamic analyzers together expose 22 MCP tools, but only
 five are given directly to the LLM sub-agent of Stage~A
 (Section~\ref{sec:pipeline}): \texttt{candidateScan}, \texttt{astScan},
 \texttt{functionSummary}, \texttt{pathConstraints}, and
-\texttt{ownershipConventions}. These are the \emph{content-capable} tools
---- they accept inline source content rather than requiring a shared
+\texttt{ownershipConventions}. These are the \emph{content-capable} tools:
+they accept inline source content rather than requiring a shared
 filesystem mount, which keeps both analyzer services stateless and
 independently deployable, the same shardable-service property Google's
 Tricorder relies on to scale program analysis across hundreds of
@@ -489,7 +488,7 @@ four stages, shown in Figure~\ref{fig:pipeline}.
   \node[font=\scriptsize, above=0.05cm of b] {parallel};
 \end{tikzpicture}
 \caption{The four-stage HYBRID pipeline. Stages A and B run concurrently
-over the same candidate bundles; Stage C performs no LLM reasoning; Stage
+over the same candidate bundles. Stage C performs no LLM reasoning. Stage
 D escalates to the LLM only for borderline bundles (Section~\ref{sec:judging}).}
 \label{fig:pipeline}
 \end{figure}
@@ -513,7 +512,7 @@ whatsoever (part of contribution C1). This is what makes the \texttt{no\_llm}
 configuration's dynamic evidence reproducible bit-for-bit. Only when no
 build command is known does control fall back to an LLM dynamic worker
 that reads the project's build system and attempts its own sanitizer
-build; this worker is restricted to the eleven dynamic tools plus
+build. This worker is restricted to the eleven dynamic tools plus
 \texttt{read\_file} and runs concurrently with Stage~A.
 
 \textbf{Stage C: synthesis.} A purely deterministic merge of static
@@ -536,7 +535,7 @@ CLeak's judging layer has three interchangeable configurations, evaluated
 head-to-head throughout Section~\ref{sec:evaluation}: a purely
 \textbf{heuristic judge}, a \textbf{single-LLM judge}, and a
 \textbf{consensus judge}. The heuristic judge always runs first and scores
-every bundle; only bundles it leaves \emph{borderline} are escalated.
+every bundle. Only bundles it leaves \emph{borderline} are escalated.
 
 \subsection{Heuristic judge: deterministic, path-sensitive}
 
@@ -550,9 +549,9 @@ ownership-transfer penalty when the allocation is legitimately handed to a
 caller. It then bands the total score against fixed thresholds,
 $\mathit{confirmed}=0.7$ and $\mathit{likely}=0.4$, frozen for every
 evaluation run reported in this paper. Three precision gates can override
-the additive score outright: a callee-freed allocation with no correlated
-runtime leak is forced to \texttt{likely\_false\_positive}; a clean dynamic
-run with no decisive static evidence exculpates a candidate; and any
+the additive score outright. A callee-freed allocation with no correlated
+runtime leak is forced to \texttt{likely\_false\_positive}. A clean dynamic
+run with no decisive static evidence exculpates a candidate. And any
 ``flagged'' verdict lacking at least one \emph{strong} signal (a correlated
 runtime leak, a high-confidence structural pattern, an unpaired
 allocation, a path-sensitive leak, or an ownership issue) is downgraded to
@@ -589,12 +588,12 @@ dynamic findings tagged by correlation strength
 (\texttt{LINKED} / same-file-different-site / \texttt{CLEAN}), and, when
 available, the project's LLM-discovered ownership conventions. It returns
 one of five labels with a confidence and an explanation, following an
-explicit priority rubric: a linked runtime leak is decisive; ownership
-transfer is decisive for false positives; the same path-sensitive and
-parameter-ownership rules used by the heuristic judge apply; and
+explicit priority rubric. A linked runtime leak is decisive. Ownership
+transfer is decisive for false positives. The same path-sensitive and
+parameter-ownership rules used by the heuristic judge apply. And
 \texttt{uncertain} is reserved for genuinely insufficient evidence, not a
 default. No native tool-calling is exposed at this stage (output is
-constrained to JSON); a parse failure of any kind silently falls back to
+constrained to JSON). A parse failure of any kind silently falls back to
 the heuristic verdict.
 
 \subsection{Consensus judge: self-consistency voting (C4)}
@@ -609,7 +608,7 @@ ensures asymmetry: a strong heuristic exculpation (a
 confidence $\geq 0.75$) can only \emph{remove} a flag from the consensus
 outcome, never add one, so the veto is asymmetric by design. Whether
 voting over $K$ samples actually reduces case-level instability in
-practice is not something we assume --- Section~\ref{sec:eval-consensus}
+practice is not something we assume. Section~\ref{sec:eval-consensus}
 evaluates it directly and reports a sample-composition-dependent finding,
 not a clean win.
 
@@ -645,9 +644,9 @@ not change across runs, the flip rate, and modal agreement. We surface an
 explicit \textbf{stable-by-luck} phenomenon we observed directly: two
 independent 30-case runs produced an \emph{identical} aggregate confusion
 matrix (27~TP/8~FP/5~FN/37~TN) while only 73.3\% of individual case
-verdicts were actually stable (a 26.7\% flip rate); flips in opposite
+verdicts were actually stable (a 26.7\% flip rate). Flips in opposite
 directions cancelled out in the aggregate. Reporting only the aggregate
-matrix would have concealed this; reporting case-level stability does not.
+matrix would have concealed this. Reporting case-level stability does not.
 
 \section{Evaluation}
 \label{sec:evaluation}
@@ -658,12 +657,12 @@ matrix would have concealed this; reporting case-level stability does not.
 The Juliet corpus is passed through a five-gate integrity pipeline (Zod
 schema validation, \texttt{\#include} resolution, per-translation-unit
 \texttt{clang -fsyntax-only}, label-overlap checking, and a content-hash
-lock) before any evaluation run is permitted against it; an earlier,
+lock) before any evaluation run is permitted against it. An earlier,
 unvalidated ingest had silently dropped 21\% of C++ multi-file class
 variants from the confusion matrix, and all headline numbers in this
 paper are measured on the corrected, validated 1{,}658-case corpus. LAMeD
 is \emph{positive-only} at the function level (no line numbers, no
-negative/clean labels), so true negatives are zero by construction; we
+negative/clean labels), so true negatives are zero by construction. We
 therefore report only recall, precision, and false positives per KLOC for
 it, never specificity, accuracy, or MCC.
 
@@ -676,8 +675,8 @@ it, never specificity, accuracy, or MCC.
 \toprule
 \textbf{Corpus} & \textbf{Size} & \textbf{Type} & \textbf{Notes} \\
 \midrule
-Juliet CWE-401~\cite{juliet} & 1{,}658 validated cases (10 functional families) & Synthetic, function-labeled & NIST SARD; validated by a 5-gate integrity pipeline + lockfile \\
-LAMeD~\cite{lamed-benchmark} & 41 leaks / 50 sites, 7 real C projects & Real-world, function-labeled, positive-only & Peer-reviewed (EASE~2025); TN$=$0 by construction \\
+Juliet CWE-401~\cite{juliet} & 1{,}658 validated cases (10 functional families) & Synthetic, function-labeled & NIST SARD, validated by a 5-gate integrity pipeline + lockfile \\
+LAMeD~\cite{lamed-benchmark} & 41 leaks / 50 sites, 7 real C projects & Real-world, function-labeled, positive-only & Peer-reviewed (EASE~2025), TN$=$0 by construction \\
 MemHint-derived & 19 cases, 6 real C projects & Real-world, function-labeled & Self-reconstructed (MemHint's own 54-bug list is unpublished) \\
 \bottomrule
 \end{tabular}
@@ -696,7 +695,7 @@ a single true positive rather than inflating the count.
 
 \textbf{Baselines.} Clang Static Analyzer and Infer are re-run live on the
 identical corpus and scored with the identical scorer as our own system
-(a fairness discipline we apply throughout); both are positive-only tools
+(a fairness discipline we apply throughout). Both are positive-only tools
 themselves (TN$=$0 for their own findings), so specificity/MCC are dropped
 from any table that includes them. MemHint and LAMeD numbers are quoted
 from their own publications where we do not re-run them, and are labeled
@@ -708,15 +707,15 @@ comparisons are directional, not a claim of superiority.
 
 Unlike an earlier measurement that covered only a family-stratified
 sub-sample, all nine capability configurations below (Section~\ref{sec:eval-ablation})
-were run on the \emph{entire} validated corpus --- 1{,}658 cases, not a
-sample --- with static evidence, dynamic evidence, and the LLM judge all
+were run on the \emph{entire} validated corpus (1{,}658 cases, not a
+sample), with static evidence, dynamic evidence, and the LLM judge all
 enabled where the configuration calls for them. The best end-to-end result
 is the deterministic static+dynamic+planner configuration, B6a: Precision
 96.5\%, Recall 78.0\%, F1~0.863, MCC~0.790 (Table~\ref{tab:ablation}), a
 substantial improvement over the static-only \texttt{no\_llm} baseline
 (F1~0.612, MCC~0.375) it is measured against. Because this is the full
 corpus rather than a family-balanced sample, per-family performance is not
-uniform (Table~\ref{tab:family}); we report the full distribution rather
+uniform (Table~\ref{tab:family}), so we report the full distribution rather
 than only the aggregate.
 
 \subsection{Capability ablation: five orchestration factors}
@@ -735,9 +734,9 @@ cost (at DeepSeek's published per-token rate).
 \centering
 \caption{Nine-baseline capability ablation, FULL Juliet corpus
 ($n{=}1{,}658$, not a sub-sample). B6a is the deterministic
-static+dynamic+planner configuration (no agentic tool selection); B6b/B7
+static+dynamic+planner configuration (no agentic tool selection). B6b/B7
 add agentic tool selection at $\sim$4$\times$ the dollar cost for
-\emph{lower} F1. B4--B7 are the mean of 3 runs; std $\le 0.005$ on F1
+\emph{lower} F1. B4--B7 are the mean of 3 runs, with std $\le 0.005$ on F1
 throughout. MCC is computed directly from each row's own TP/FP/FN/TN.}
 \label{tab:ablation}
 \resizebox{\textwidth}{!}{%
@@ -775,13 +774,13 @@ agentic tool-selection loop ($\sim$31K tokens/case, $\sim$4$\times$ the
 dollar cost each) on F1 (0.863 vs.\ 0.858/0.856) \emph{and} on false-positive
 density (FP/KLOC 0.133 vs.\ 0.192/0.186). The LLM planner chooses well
 when constrained to \emph{when} to run static or dynamic analysis, but
-adds cost without benefit --- and slightly \emph{more} noise --- when also
+adds cost without benefit, and slightly \emph{more} noise, when also
 given latitude over \emph{which} tool to call next.
 
 \textbf{Performance is not uniform across allocator families.}
 Table~\ref{tab:family} breaks B6a's full-corpus result down by Juliet's ten
 functional variants. \texttt{malloc}-family sites (realloc-augmented
-allocations, $n{=}294$) are nearly solved (F1~0.991); \texttt{strdup}-family
+allocations, $n{=}294$) are nearly solved (F1~0.991). \texttt{strdup}-family
 sites ($n{=}348$ sites across 96 test cases) are the weakest (F1~0.584),
 driven by low recall (41.3\%) rather than false positives (precision
 remains 100\%). We traced
@@ -790,13 +789,13 @@ flow-variant 12) to a concrete mechanism: the case's true leak is guarded
 by two \emph{independent} randomized branches (one selecting a heap
 allocation via \texttt{strdup} vs.\ a stack allocation via \texttt{alloca},
 one selecting whether \texttt{free} executes), so a single dynamic run
-exercises only one random path; when that path is non-leaking, the
+exercises only one random path. When that path is non-leaking, the
 heuristic judge combines the resulting \texttt{exercised\_clean} dynamic
 signal with a coarse (not fully guard-reconciled) static alloc/free pairing
 to reach a confident (0.8) false-positive verdict without escalating to
 the LLM judge at all. A structurally identical \texttt{malloc}-family case
 did escalate and was judged correctly, so the mechanism is not specific to
-\texttt{strdup} as an allocator; we regard it as one verified contributor
+\texttt{strdup} as an allocator. We regard it as one verified contributor
 to the family's low recall, not an exhaustive account of all 59 affected
 cases, and note that the two smallest families (\texttt{destructor},
 \texttt{virtual}, $n{=}3$ and $n{=}5$ cases respectively) are too small in
@@ -805,7 +804,7 @@ this corpus for their F1 to be statistically meaningful on their own.
 \begin{table}[htbp]
 \centering
 \caption{B6a full-corpus result by Juliet functional family (sites, not
-cases; one case can score multiple sites). \texttt{destructor}/\texttt{virtual}
+cases, since one case can score multiple sites). \texttt{destructor}/\texttt{virtual}
 are shown for completeness but are too small ($n\le5$) to be reliable.}
 \label{tab:family}
 \small
@@ -836,7 +835,7 @@ vs.\ \texttt{llm\_assisted} comparison alone conflates. On this smaller,
 less-borderline-dense sample the LLM judge does not move the numbers at
 all (TP29/FP7/FN3, P0.806/R0.906, identical in both the \texttt{no\_llm}
 and \texttt{llm\_assisted} static-only cells) because the heuristic judge
-already finalizes every non-borderline bundle; enabling dynamic evidence
+already finalizes every non-borderline bundle. Enabling dynamic evidence
 adds one true positive (FN 3$\to$2) with false positives unchanged at 7 in
 every cell. The remaining oscillation between 29 and 30 true positives
 traces to a single Juliet flow variant whose leak is guarded by
@@ -874,8 +873,8 @@ and the more accurate one (F1 0.852--0.855 across its two campaigns vs.\
 consensus's 0.793--0.796, consistently in both). A paired McNemar test
 (campaign A, 205 sites) agrees: single-LLM accuracy 91.7\%/F1~0.852 vs.\
 consensus 89.0\%/F1~0.793, 7 of 8 discordant sites favoring single-LLM,
-$\chi^2 = 3.13$, $p = 0.077$ --- not significant at this sample size. We do
-not recommend enabling consensus judging by default on this evidence; it
+$\chi^2 = 3.13$, $p = 0.077$, not significant at this sample size. We do
+not recommend enabling consensus judging by default on this evidence. It
 remains available as an opt-in configuration (\texttt{consensus.n~>~1})
 pending a larger, multi-seed study.
 
@@ -893,15 +892,15 @@ component, consistent with LAMeD's own finding that even state-of-the-art
 tools catch only 5--10 of 43 real leaks in their evaluation.
 
 \textbf{Site counts are tool-dependent by the scorer's design.} Table~\ref{tab:lamed}'s
-Clang Static Analyzer row scores 43 sites; the CLeak rows score 50. This is
+Clang Static Analyzer row scores 43 sites, while the CLeak rows score 50. This is
 not an inconsistency to reconcile: our scorer (\texttt{scoreCase}) derives
-the scoreable-site set from whichever tool's own findings are being graded
---- it groups that tool's findings into site-keys, matches them against
+the scoreable-site set from whichever tool's own findings are being graded.
+It groups that tool's findings into site-keys, matches them against
 manifest flaws, and adds one synthetic false negative per flaw no finding
 covers. The site count is therefore a property of each tool's own finding
 granularity, not a single external ground truth shared across tools, so the
-CSA and CLeak rows are not on a shared denominator by design; we report both
-counts as measured rather than force them into a single column that would
+CSA and CLeak rows are not on a shared denominator by design. We report both
+counts as measured, rather than force them into a single column that would
 misstate one of them.
 
 \textbf{\texttt{interproceduralFlow} adds no measurable value on this
@@ -912,12 +911,12 @@ cJSON's \texttt{merge\_patch} leak. Calling \texttt{interproceduralFlow} on
 \texttt{allocCount=1, freeCount=2, "balanced"}, because it counts two
 \texttt{cJSON\_Delete(target)} call sites reachable from \texttt{merge\_patch}
 and concludes the allocation is freed, without checking whether those two
-frees are mutually exclusive on different branches --- they are: the real
+frees are mutually exclusive on different branches. They are: the real
 bug is a third branch, an error path, that frees neither. This is the same
 fundamental limitation as the judge's own guard-subset path reconciliation
-(Section~\ref{sec:discussion}) --- alloc/free counting that is not
-path-sensitive --- living inside \texttt{interproceduralFlow}'s own
-cross-function trace rather than the judge layer: on this benchmark, as
+(Section~\ref{sec:discussion}), alloc/free counting that is not
+path-sensitive, but living inside \texttt{interproceduralFlow}'s own
+cross-function trace rather than the judge layer. On this benchmark, as
 currently implemented, \texttt{interproceduralFlow} contributes zero
 measured recall beyond the default static recipe.
 
@@ -926,8 +925,8 @@ measured recall beyond the default static recipe.
 \caption{LAMeD real-project results. \texttt{llm\_assisted} is the mean of 3
 independent runs (temperature 0, \texttt{deepseek-v4-flash}), with zero
 variance across runs. CLeak rows score 50 scoreable sites (positive-only,
-TN$=$0 by construction); the Clang Static Analyzer row scores 43 sites under
-a live re-run with the same scorer --- the two counts are tool-dependent by
+TN$=$0 by construction). The Clang Static Analyzer row scores 43 sites under
+a live re-run with the same scorer. The two counts are tool-dependent by
 the scorer's design (see discussion above) and are not on a shared
 denominator.}
 \label{tab:lamed}
@@ -953,14 +952,14 @@ heuristic flagged as borderline) but never flipped a verdict away from the
 heuristic's own decision on this corpus. This is consistent with
 Section~\ref{sec:eval-ablation}'s Juliet finding that
 dynamic evidence, not LLM judging, is the dominant lever for this class of
-leak; dynamic analysis is not exercised on the LAMeD static-only
+leak. Dynamic analysis is not exercised on the LAMeD static-only
 configurations reported here (Section~\ref{sec:related}, real-project
 dynamic needs a per-case harness).
 
 \subsection{Comparison with external tools}
 
 Table~\ref{tab:external} compares our system against live re-runs of Clang
-Static Analyzer on Juliet ($n{=}30$); both configurations of our own judge
+Static Analyzer on Juliet ($n{=}30$). Both configurations of our own judge
 beat Clang on F1 and on false-positive density.
 Table~\ref{tab:literature} places our results alongside literature numbers
 for MemHint and LAMeD, with the explicit caveat, carried over from our own
@@ -1015,7 +1014,7 @@ call, we validate it independently of the leak-detection evaluation,
 against a frozen, hand-written ground-truth allocator/deallocator list for
 cJSON, so that its own non-determinism never contaminates the
 deterministic corpus scoring above. It reaches \textbf{85\% allocator
-recall and 100\% deallocator recall}; manual inspection of its apparent
+recall and 100\% deallocator recall}. Manual inspection of its apparent
 false positives found most were in fact allocators the hand-written list
 had simply missed (e.g.\ \texttt{cJSON\_Parse}, \texttt{cJSON\_Print}),
 suggesting the profiler is, if anything, more complete than the ground
@@ -1030,14 +1029,14 @@ functional families: \texttt{malloc} sites are nearly solved (F1~0.991)
 while \texttt{strdup} sites lag (F1~0.584, recall-limited, not
 precision-limited). We traced this to a concrete, verified mechanism
 (Section~\ref{sec:eval-ablation}) rather than reporting the gap without
-explanation, and flag that a single aggregate F1 --- ours or any other
-system's --- can obscure large family-level swings that matter for
+explanation, and flag that a single aggregate F1, ours or any other
+system's, can obscure large family-level swings that matter for
 practical deployment on a codebase dominated by one allocation pattern.
 
 \textbf{Dynamic evidence dominates precision.} Every ablation in
 Section~\ref{sec:evaluation} agrees that adding dynamic evidence is the
 single most effective lever for eliminating false positives, more so than
-any LLM-side intervention; this argues for prioritizing dynamic-analysis
+any LLM-side intervention. This argues for prioritizing dynamic-analysis
 coverage (e.g.\ the opt-in targeted-harness Stage described briefly in
 Section~\ref{sec:pipeline} but not evaluated in this paper) over further
 LLM-judge sophistication in future iterations.
@@ -1056,7 +1055,7 @@ agentic tool-selection costs real money for no accuracy gain is
 corpus-specific (Juliet's leak patterns are largely intraprocedural and
 well-served by a fixed evidence-gathering recipe): at full-corpus scale,
 B6b/B7 spend $\sim$5$\times$ the tokens of B6a but $\sim$4$\times$ the
-dollar cost (\$26--27 vs.\ \$6.63) --- the token and dollar multiples are
+dollar cost (\$26--27 vs.\ \$6.63). The token and dollar multiples are
 close but not identical, a distinction worth stating precisely rather than
 assuming one ratio implies the other. We would expect the balance to
 shift toward agentic tool selection on corpora with more structurally
@@ -1067,30 +1066,30 @@ a settled one.
 Section~\ref{sec:related} situates CLeak's engine relative to compositional
 analysis~\cite{infer-verification}, shardable stateless
 services~\cite{tricorder}, and incremental reuse~\cite{codeql-incremental,
-semgrep}; two of those principles are now backed by a direct measurement
+semgrep}. Two of those principles are now backed by a direct measurement
 rather than only an architectural claim. The AST memoization cache was
 generalized from process-local to disk-persisted (content-hash-keyed, so a
 fresh process reuses a prior process's parses instead of repeating them)
-and rebounded from an entry-count budget to a byte-size budget --- closing
+and rebounded from an entry-count budget to a byte-size budget, closing
 an out-of-memory failure mode a real-world corpus in this evaluation (LAMeD)
 reproduced directly during development. On a controlled single-case
 measurement (a 143-file real checkout, LAMeD's \texttt{libxml2} case,
 \texttt{no\_llm} mode), a repeat scan against an already-warmed cache
-completed in 3.0s at 266MiB peak service memory versus 54.0s at 1.03GiB
-cold --- an $\sim$18$\times$ wall-clock reduction and $\sim$74\% lower peak
+completed in 3.0s at 266MiB peak service memory, versus 54.0s at 1.03GiB
+cold: an $\sim$18$\times$ wall-clock reduction and $\sim$74\% lower peak
 memory for exactly the re-scan pattern a baseline sweep performs many times
 over the same unchanged checkout. A second, smaller fix removed a literal
 duplicate full-project parse pass inside call-graph extraction
-(Section~\ref{sec:arch}). Both changes are mechanical --- neither touches
+(Section~\ref{sec:arch}). Both changes are mechanical: neither touches
 judge logic or evidence content, and the cached representation is a
-JSON-safe plain data structure with no lossy round-trip --- so we expect,
+JSON-safe plain data structure with no lossy round-trip. So we expect,
 but did not re-run the full ablation sweep to confirm, that no
 precision/recall/F1 number in Section~\ref{sec:evaluation} changes as a
-result; we report this as an assumption grounded in the cache's semantics,
+result. We report this as an assumption grounded in the cache's semantics,
 not an independently measured invariant.
 
 \textbf{LLM-as-judge is fundamentally non-deterministic.} We do not treat
-this as fixable; the two-tier protocol of Section~\ref{sec:reproducibility}
+this as fixable. The two-tier protocol of Section~\ref{sec:reproducibility}
 exists specifically so that this non-determinism is measured and reported
 rather than obscured by reporting only aggregate metrics from a single
 run.
@@ -1099,7 +1098,7 @@ run.
 technique, not just for evaluating the end system.} A self-consistency
 technique's apparent benefit can depend heavily on whether the evaluation
 sample represents the corpus's full difficulty spread or draws
-disproportionately from its easier, more homogeneous families; we flag this
+disproportionately from its easier, more homogeneous families. We flag this
 as a general methodological point for LLM-judge evaluation protocols, which
 is why Section~\ref{sec:eval-consensus}'s consensus result is measured on a
 family-stratified sample rather than an unstratified one.
@@ -1112,32 +1111,34 @@ owns mechanism. This lets an LLM contribute project-specific reasoning
 without inheriting its non-determinism on the measured evaluation path. A
 deterministic-except-judge hybrid pipeline (static evidence, a pinned
 build-and-sanitize dynamic recipe, and an LLM-planner-gated orchestration)
-is the strongest configuration we measured; a two-tier reproducibility
-protocol reports what is and is not reproducible rather than claiming
-uniform determinism; structured, guard-subset-reconciled evidence
+is the strongest configuration we measured. A two-tier reproducibility
+protocol reports what is and is not reproducible, rather than claiming
+uniform determinism. Structured, guard-subset-reconciled evidence
 enrichment lets even the purely deterministic judge catch path-sensitive
-and parameter-ownership leaks without an SMT solver; and a self-consistency
+and parameter-ownership leaks without an SMT solver. A self-consistency
 consensus judge, evaluated against single-LLM judging on a family-stratified
 sample representative of the corpus's difficulty spread, does not improve
-verdict stability or accuracy over the single-LLM baseline. A controlled
+verdict stability or accuracy over the single-LLM baseline.
+
+A controlled
 five-factor ablation on the full validated Juliet corpus (1{,}658 cases, not
 a sub-sample) isolates a deterministic static+dynamic+planner configuration
 reaching F1~0.863/MCC~0.790 at roughly one-quarter the dollar cost of
 unconstrained agentic tool selection, with performance varying by
 allocator family (F1 0.991 on \texttt{malloc} sites down to 0.584 on
 \texttt{strdup} sites, a gap we trace to a concrete dynamic-coverage
-mechanism rather than leaving unexplained); and on the real-world,
-peer-reviewed LAMeD benchmark the system holds 100\% precision at 30.0\%
+mechanism rather than leaving unexplained). On the real-world,
+peer-reviewed LAMeD benchmark, the system holds 100\% precision at 30.0\%
 recall under both \texttt{no\_llm} and \texttt{llm\_assisted}
 configurations, with \texttt{interproceduralFlow}'s alloc/free counting
 contributing no measured recall on this benchmark due to a path-sensitivity
 gap (Section~\ref{sec:eval-lamed}).
 
-Future work has two concrete directions: evaluating the opt-in
+Future work has two concrete directions. First, evaluating the opt-in
 targeted-harness escalation stage (per-candidate harness synthesis plus a
 bounded fuzzing tier for bundles a whole-binary run leaves borderline) on
 the LAMeD benchmark specifically, where whole-project dynamic evidence is
-often unavailable; and making \texttt{interproceduralFlow}'s cross-function
+often unavailable. Second, making \texttt{interproceduralFlow}'s cross-function
 trace path-sensitive, since a lighter path-sensitive analysis is a smaller
 lift than a full SMT-based solver and directly targets the gap identified
 in Section~\ref{sec:eval-lamed}.
@@ -1222,7 +1223,7 @@ in Section~\ref{sec:eval-lamed}.
 
 \bibitem{magma} A. Hazimeh, A. Herrera, and M. Payer, ``Magma: A Ground-Truth Fuzzing Benchmark,'' \textit{Proc. ACM Meas. Anal. Comput. Syst. (POMACS)}, vol. 4, no. 3, article 49, 2020. arXiv:2009.01120. [Online]. Available: https://hexhive.epfl.ch/magma/
 
-\bibitem{mcp} Anthropic, ``Model Context Protocol (MCP) Specification,'' 2024. [Online]. Available: https://modelcontextprotocol.io/ (originated at Anthropic in Nov.\ 2024; donated to the vendor-neutral Agentic AI Foundation, Linux Foundation, Dec.\ 2025.)
+\bibitem{mcp} Anthropic, ``Model Context Protocol (MCP) Specification,'' 2024. [Online]. Available: https://modelcontextprotocol.io/ (originated at Anthropic in Nov.\ 2024. Donated to the vendor-neutral Agentic AI Foundation, Linux Foundation, Dec.\ 2025.)
 
 \bibitem{ownership-model} D. Svoboda, W. Klieber, L. Flynn, R. Martins, and J. Hoskinson, ``A Pointer-Ownership Model for C Inspired by Rust,'' in \textit{Proc. LCTES (ACM SIGPLAN)}, 2026. DOI: 10.1145/3814943.3816182.
 
