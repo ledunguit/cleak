@@ -1,6 +1,9 @@
 # Current Status
 
-_Last updated: 2026-08-11 (return-value ownership + multi-hop + STL container ownership-correlation fix, same day later session + re-verified full Juliet no_llm run)_
+_Last updated: 2026-08-28 (pending-list reconciled against on-disk results:
+LAMeD re-run + Juliet llm_assisted full + consensus gate all CLOSED — see
+"Pending / next steps"; MemHint runs launched on thesis-wsl2. Defense
+roadmap: `docs/DEFENSE-PLAN.md`.)_
 
 ## Standing goal (verbatim, from the user)
 
@@ -329,20 +332,58 @@ model), and split tokens + cost surfaced in `report.md`/`metrics.csv`/
 
 ## Pending / next steps
 
-1. **Re-run LAMeD full 41-case `llm_assisted` with the `computeBundleId` fix**
-   — the current 15.9% recall number predates it and is very likely stale
-   (understated). This is the highest-value next run.
-2. **MemHint Bước 4/5** (see task tracker): the 19-case audit is done for
-   `no_llm`; `llm_assisted` full run + docs write-up (`docs/DATASETS.md`,
-   `paper/de-cuong.md`) still pending.
-3. **Juliet `llm_assisted` full run** not yet done. A PRIOR attempt
-   (`results/eval-llm_assisted-juliet-full/`, ~165/1658 cached across two
-   pause points) was paused twice — first for bug #8 (parameter ownership),
-   then again for bug #10 (return-value/multi-hop/container ownership) — that
-   cache predates BOTH fixes and must NOT be resumed (it would just merge
-   stale wrong verdicts with correct new ones); delete it and start a fresh
-   run. Still expensive (1658 LLM calls), worth scoping with the user before
-   launching.
+1. ~~Re-run LAMeD full 41-case `llm_assisted` with the `computeBundleId` fix~~
+   **DONE 2026-08-20** — `results/lamed-llm_assisted-2026-08-20/` (3 runs,
+   deepseek-v4-flash, commit `c5826bc6`): TP15/FP0/FN35, P100%/R30.0% on the
+   corrected **50-site** denominator, std=0. Full narrative (site-count
+   44→50, `interproceduralFlow` Δ=0, Clang 43-site by scorer design):
+   `results/lamed-correction-2026-08-20-README.md`.
+2. **MemHint Bước 4/5** — NOT YET COMPLETE, driver script ready. Attempted
+   2026-08-28 on thesis-wsl2 (corpus ingested 19/19 from `memhint_bugs.json`
+   fresh clones; analyzers running natively — no Docker on that host). Two
+   runs (`no_llm --enrich`, `llm_assisted ×3`) were launched but the
+   static-analyzer was **OOM-killed by the Linux kernel twice** while parsing
+   the `redis` case (2235 files) — `dmesg`: `Killed process ... anon-rss:
+   ~14126508kB`, both times, even after halving `STATIC_PARSER_WORKERS`
+   (8→4) and capping the main thread's V8 heap (`--max-old-space-size`).
+   Root cause: almost certainly **native memory** (tree-sitter's C parse
+   trees live outside the V8 heap, so `--max-old-space-size` can't bound
+   them) not being reclaimed across a long-lived process handling many large
+   files — a real, unfixed limitation of the static-analyzer under
+   sustained large-repo load, not a config mistake. Not chasing the actual
+   leak down mid-thesis-crunch; mitigated instead via
+   **`scripts/memhint-eval-driver.sh`** (committed, executable, self-
+   documenting): serializes eval (`--concurrency 1`), starts a **fresh**
+   static-analyzer process before every attempt (clean process = memory
+   reset), and retries up to 8x per run via `--resume` (per-case disk cache,
+   so a crash only re-does the ONE case that was mid-flight). Also fixed
+   along the way and folded into the script: `analyzerRoot` config pointing
+   at the Docker-only `/workspace` default on a native host (would have
+   silently zeroed out dynamic-stage candidates — same failure class as the
+   VPS bug in `docs/EXPERIMENT-LOG-2026-08-15-wsl2-juliet-sweep.md`), the
+   dynamic-analyzer's ESM/CommonJS main-thread crash on a native (non-Docker)
+   host (root package.json's `"type": "module"` misdetects the webpack
+   bundle — static-analyzer's own webpack config already works around this
+   for itself, dynamic-analyzer's doesn't), and a corpus-hash drift between
+   machines (Mac's committed `demo/memhint.lock.json` was hashed against a
+   corpus tree that had already absorbed build-generated files from a prior
+   `no_llm` run — e.g. `redis/src/release.h`, jemalloc generated headers — a
+   pristine fresh clone on the PC hashes differently until the same build
+   step runs once; the script re-validates + re-writes the lock after Run 1
+   for exactly this reason). **To run: `tmux new-session -d -s driver
+   "bash -ilc $(pwd)/scripts/memhint-eval-driver.sh"` on thesis-wsl2**, after
+   confirming `cleak config get` shows `analyzerRoot` = the repo's absolute
+   path and `provider` = a profile with a real API key (see the script's own
+   header comment for the one-time config prerequisites). Docs write-up
+   (`docs/DATASETS.md`, chapter 4 of the thesis) pending after the runs
+   finish clean.
+3. ~~Juliet `llm_assisted` full run~~ **DONE** —
+   `results/eval-llm_assisted-juliet-full/` (report generated 2026-08-11,
+   1658/1658, 0 errors): P77.9%/R77.3%/F1 0.776/MCC 0.610, $12.66. NOTE:
+   this run predates the 2026-08-12 reference-out-param/virtual-dispatch/RAII
+   fix — for cross-config comparisons use the same-commit 9-baseline
+   full-corpus sweep (`results/baseline-sweep-2026-08-15T08-28-06/`, commit
+   `5eec8b1`, table in `docs/EVALUATION.md` §3b-bis), not this run.
 3a. **Known, deliberately-deferred limitations** (all found + root-caused this
    session, none fixed): flow-variant 43-45/62-68 (C++ reference-parameter
    `Type &data` output/passing shapes — `pointerParams()` got a narrow regex
@@ -358,13 +399,13 @@ model), and split tokens + cost surfaced in `report.md`/`metrics.csv`/
    pure pass-throughs, as a "flaw") — a real precision-vs-ground-truth-matching
    trade-off, not a bug; revisit only if thesis scoring needs literal
    per-hop matching.
-4. **Consensus gate decision (LAMeD, from the earlier session): still open.**
-   Gate rule fired (`recall_llm_assisted=0.159 <= 0.295`) but launch was
-   never started, pending a user choice between (A) borderline-band-only
-   (~21k tokens, cheap), (B) full-corpus ×3 (~3.5M tokens, multi-hour), or
-   (C) skip. This decision predates the `computeBundleId` fix, so it may be
-   worth re-evaluating after LAMeD is re-run with the fix (recall/borderline
-   share will likely change).
+4. ~~Consensus gate decision (LAMeD)~~ **CLOSED by the n=50 stratified
+   ablation (2026-08-19)** — `results/consensus-ablation-n50-2026-08-19/`
+   (+ `.log`): single-LLM flip 2.0% / F1 0.852 BEATS consensus K=3 flip
+   8.0% / F1 0.793; McNemar 205 paired sites χ²=3.13, p=0.077 (lean single,
+   not significant). Consensus is reported honestly as a reversed result;
+   not recommended as default. See `docs/THESIS.md` contribution 4 /
+   `docs/CONTRIBUTION.md` C4.
 5. **Docker resource limits**: still no `deploy.resources.limits` — needs
    real RSS profiling under load before attempting one again (see bug #7).
 
