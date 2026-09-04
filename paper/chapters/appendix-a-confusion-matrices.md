@@ -52,15 +52,61 @@
 | + interproceduralFlow | 50 | 13 | 3 | 146 | 0.794 | 0.943 | 0.862 | 0.554 |
 | + scanBuild | 50 | 13 | 3 | 146 | 0.794 | 0.943 | 0.862 | 0.547 |
 
-## A.5. LAMeD results (41 cases)
+## A.5. LAMeD — bộ run 2026-08-20 trên mẫu đã sửa (50 site)
+
+Bộ bốn run chốt của luận văn trên corpus LAMeD (41 ca / 7 dự án), chấm trên
+mẫu 50 site đã sửa (số 44 site cũ sai do lỗi `computeBundleId` gộp nhầm các
+candidate, đã fix ở commit `41bf1ec`: libsolv 6→11 site, cJSON 6→7). Điểm số
+theo quy ước positive-only: recall và số FP là hai số liệu so sánh được,
+precision chỉ mang tính thông tin (TN = 0 theo cấu trúc corpus nên specificity
+và MCC không định nghĩa được).
 
 | Cấu hình | Sites | TP | FP | FN | Recall | Precision |
 |---|--:|--:|--:|--:|--:|--:|
-| default 2-tool | 44 | 11 | 0 | 33 | 0.250 | 1.000 |
-| + interproceduralFlow | 44 | 12 | 0 | 32 | 0.273 | 1.000 |
+| `no_llm` mặc định | 50 | 15 | 0 | 35 | 0.300 | 1.000 |
+| `no_llm` + `interproceduralFlow` | 50 | 15 | 0 | 35 | 0.300 | 1.000 |
+| `llm_assisted` (mean 3 runs, std = 0) | 50 | 15 | 0 | 35 | 0.300 | 1.000 |
 | Clang SA baseline | 43 | 0 | 0 | 43 | 0.000 | — |
 
+Ghi chú:
+
+- Hai run `no_llm` (mặc định so với +`interproceduralFlow`) cho kết quả
+  byte-identical trên cả 41 ca: thêm `interproceduralFlow` không đổi gì
+  (Δ = 0). Chi tiết phân tích nguyên nhân ở
+  `results/lamed-correction-2026-08-20-README.md` mục 2.
+- `llm_assisted` chạy 3 run độc lập (std = 0), cho kết quả trùng khớp
+  `no_llm`: judge LLM được gọi thật 47–149 lần mỗi run nhưng không lật verdict
+  nào trên corpus này.
+- Clang SA chấm trên 43 site riêng của nó (TP0/FN43). Số site 43 so với 50
+  không cùng một mẫu số, đây là thiết kế của scorer (mỗi tool bị chấm theo
+  chính tập finding của nó), không phải lỗi chưa fix: xem
+  `results/lamed-correction-2026-08-20-README.md` mục 4.
+
 ## A.6. Consensus ablation — verdict stability
+
+### A.6.1. Kết quả chốt: n=50 stratified (kết quả đảo chiều)
+
+Đo lại trên mẫu stratified n=50 round-robin (2 runs mỗi nhánh, model
+`deepseek-v4-flash`, commit `f0d371c`, 2026-08-19), 205 site chấm được. Kết
+quả đảo chiều so với thí nghiệm n=30 ban đầu: single-LLM ổn định hơn và
+chính xác hơn consensus.
+
+| Judge arm | Flip rate | F1 |
+|---|---|---|
+| single-LLM (K=1) | **2.0%** | **0.852** |
+| consensus (K=3) | 8.0% | 0.793 |
+
+McNemar paired trên 205 site: trong các site bất đồng, đa số nghiêng về
+single-LLM; χ² = 3.13, p = 0.077, xu hướng lean single nhưng chưa đạt ngưỡng
+ý nghĩa thống kê ở quy mô này. Kết luận chính thức: consensus không được
+khuyến nghị làm mặc định (kết quả âm tính có chủ đích, xem mục 4.6).
+
+### A.6.2. Thí nghiệm ban đầu n=30 (giữ làm dữ liệu lịch sử có chú thích)
+
+Thí nghiệm consensus đầu tiên chạy trên n=30 (100% family `char`), 2 campaign
+độc lập A/B, 2 runs mỗi nhánh. Là thí nghiệm sớm trên mẫu đơn-family lệch dễ:
+kết quả bên dưới không dùng làm số liệu chốt của luận văn, giữ lại để kể
+trung thực trình tự thí nghiệm (phân tích nguyên nhân đảo chiều ở mục 4.6.3).
 
 | Judge arm | Campaign | Case stability | Flip rate | Modal agreement |
 |---|---|---|---|---|
@@ -83,3 +129,16 @@
 | B7 | Recall | 0.906 | 0.019 | 0.887 | 0.925 |
 | B7 | F1 | 0.938 | 0.015 | 0.922 | 0.951 |
 | B7 | ECE | 0.125 | 0.004 | 0.121 | 0.127 |
+
+## A.8. MemHint (19 ca / 6 dự án thực) — chờ run hoàn tất
+
+Bộ run MemHint trên corpus 19 ca tự tái lập (6 dự án thực), hai cấu hình theo
+protocol hai-công-đoạn giống LAMeD: `no_llm --enrich` ×1 và `llm_assisted` ×3.
+Chấm theo quy ước positive-only (recall + FP; TN = 0 nên precision/specificity
+không định nghĩa được).
+
+**[PENDING — MemHint run, todo-3]**
+
+*Mục này sẽ điền sau khi MemHint driver chạy xong trên thesis-wsl2 và artifacts
+được sync về `results/memhint-no_llm-<date>/` + `results/memhint-llm_assisted-<date>/`
+(số liệu nguồn: hàng 10 của `docs/RESULTS-FREEZE.md`, viết vào bởi todo-3).*
