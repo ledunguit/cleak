@@ -187,49 +187,49 @@ Li và cộng sự [16] xây dựng IRIS, hệ thống kết hợp LLM với sta
 
 Trên CWE-Bench-Java (120 lỗ hổng đã xác minh), CodeQL phát hiện 27 lỗ hổng; IRIS với GPT-4 phát hiện 55 — tăng 28 lỗ hổng. Đặc biệt, IRIS tìm được 4 lỗ hổng mới mà không công cụ nào khác phát hiện. Đây là minh chứng mạnh mẽ cho hướng LLM-augmented static analysis.
 
-### 1.4.3. Prompting như proxy cho static analysis
+### 1.4.4. Prompting như proxy cho static analysis
 
 Ceka và cộng sự [17] đặt câu hỏi táo bạo: liệu LLM prompting có thể thay thế static analysis không? Họ đề xuất kỹ thuật kết hợp hướng dẫn vulnerability bằng ngôn ngữ tự nhiên với chain-of-thought reasoning sử dụng mẫu đối chiếu (contrastive samples).
 
 Kết quả: security-aware prompting vượt baseline static analysis, cải thiện accuracy lên 31.6%, F1 lên 71.7%, và giảm false negative rate 37.6%. Nghiên cứu này cho thấy prompting chiến lược có thể khai thác khả năng reasoning của LLM mà không cần fine-tuning.
 
-### 1.4.4. VulnLLM-R — LLM chuyên biệt cho vulnerability detection
+### 1.4.5. VulnLLM-R — LLM chuyên biệt cho vulnerability detection
 
 Nie và cộng sự [18] huấn luyện model 7B chuyên biệt cho vulnerability detection, nhấn mạnh reasoning về trạng thái chương trình. Quy trình bao gồm chọn lọc dữ liệu, tạo dữ liệu reasoning, và tối ưu hoá test-time.
 
 VulnLLM-R vượt cả CodeQL và AFL++ trên các dự án thực, phát hiện zero-day trong các repository đang hoạt động. Điều đáng chú ý là model nhỏ (7B parameter) nhưng được huấn luyện đúng cách có thể cạnh tranh với model lớn hơn nhiều.
 
-### 1.4.5. SemTaint — multi-agent taint specification
+### 1.4.6. SemTaint — multi-agent taint specification
 
 Ghebremichael và cộng sự [19] xây dựng SemTaint, hệ thống multi-agent kết hợp LLM với static analysis để trích xuất taint specification. Hệ thống sử dụng static analysis để tính call graph, sau đó giao cho LLM phân loại source, sink, và xác định các call edge không giải quyết được.
 
 Tích hợp với CodeQL, SemTaint phát hiện 106 trong 162 lỗ hổng mà CodeQL không thể phát hiện, và tìm được 4 lỗ hổng mới trong các npm package phổ biến. Dù nghiên cứu tập trung vào JavaScript, kỹ thuật này có thể áp dụng cho C/C++.
 
-### 1.4.6. MemHint — neuro-symbolic cho memory leak
+### 1.4.7. MemHint — neuro-symbolic cho memory leak
 
 Huang và cộng sự [20] xây dựng MemHint, hệ thống kết hợp LLM với Z3 SMT solver để phát hiện memory leak trong C/C++. Pipeline gồm ba bước: (1) LLM phân loại hàm thành allocator, deallocator, hoặc neither; (2) Z3 xác minh tính khả thi của leak path dựa trên CFG; (3) LLM xác nhận kết quả cuối cùng.
 
 Trên 8 dự án thực (3.6M+ dòng code), MemHint phát hiện 54 leak (53 đã được xác nhận và sửa), với chi phí khoảng $1.70 mỗi leak phát hiện. So sánh: CodeQL tìm 19, Infer tìm 3. Đây là kết quả ấn tượng, nhưng MemHint chưa được peer-review (arXiv preprint).
 
-### 1.4.7. LAMeD — LLM annotation cho analyzer cổ điển
+### 1.4.8. LAMeD — LLM annotation cho analyzer cổ điển
 
 Shemetova và cộng sự [21] đề xuất hướng tiếp cận khác: thay vì dùng LLM trực tiếp phát hiện lỗi, dùng LLM để tạo annotation cho analyzer cổ điển. LLM sinh metadata về hàm nào là allocator, hàm nào là deallocator, sau đó feed vào CodeQL, Infer, hoặc Cooddy.
 
 Đây là baseline peer-reviewed duy nhất (EASE 2025, CORE-A) cho leak C/C++. Trên benchmark cJSON, LAMeD đạt P=0.933, R=0.583 (28 TP, 2 FP, 20 FN). Kết quả cho thấy đánh đổi kinh điển: recall tăng thì FP cũng tăng.
 
-### 1.4.8. Revelio — agentic với sanitizer proof
+### 1.4.9. Revelio — agentic với sanitizer proof
 
 Hou và cộng sự [23] xây dựng Revelio, hệ thống agentic phát hiện memory safety vulnerability ở quy mô repository. Điểm độc đáo: Revelio chỉ báo cáo lỗ hổng có thể tái hiện bằng sanitizer — giảm hallucination bằng cách yêu cầu "bằng chứng thực thi" (executable proof-of-vulnerability).
 
 Trên 7 dự án production (đã fuzz 5–8 năm), Revelio phát hiện 19 lỗ hổng mới, tổng chi phí $300. Hệ thống vượt các frontier coding agent ở cùng chi phí token.
 
-### 1.4.9. SAILOR — symbolic execution với LLM
+### 1.4.10. SAILOR — symbolic execution với LLM
 
 Shafiuzzaman và cộng sự [24] kết hợp static analysis với LLM để tự động xây dựng harness cho symbolic execution. Ba giai đoạn: static analysis → LLM orchestration (với iterative refinement) → concrete replay xác nhận.
 
 Trên 10 dự án C/C++ (6.8M dòng code), SAILOR phát hiện 379 lỗ hổng memory safety mới, xác nhận 421 crash. Baseline mạnh nhất (Claude Code với agentic vulnerability detection) chỉ tìm được 12. Khi bỏ static analysis, số lỗ hổng giảm 12.2 lần; khi bỏ iterative LLM synthesis, giảm xuống 0.
 
-### 1.4.10. Hệ thống multi-agent cho software engineering
+### 1.4.11. Hệ thống multi-agent cho software engineering
 
 Bên cạnh các hệ thống đơn agent, một hướng nghiên cứu khác là phối hợp nhiều agent cùng làm việc. Guo và cộng sự [33] tổng hợp toàn cảnh: từ ChatDev (mô phỏng công ty phần mềm với agent CEO/CTO/programmer/tester), MetaGPT (SOP encoded vào prompt, assembly-line paradigm), đến Mixture-of-Agents (layered architecture, mỗi layer tổng hợp output từ layer trước).
 
