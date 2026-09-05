@@ -166,11 +166,14 @@ Ghi chú:
 - `llm_assisted` chạy 3 run độc lập (model `deepseek-v4-flash`, temp 0): cả
   3 run cho cùng một confusion matrix (12, 0, 14), std = 0 trên cả ba số
   P 1.000±0.000 / R 0.462±0.000 / F1 0.632±0.000.
-- Judge LLM không được gọi lần nào trên corpus này (0 verdict LLM/consensus;
-  judge paths {heuristic:17106}). Không có bundle nào borderline nên theo
-  thiết kế judge lai (LLM chỉ chạy trên bundle BORDERLINE), `llm_assisted`
-  cho kết quả trùng khớp `no_llm`. Công đoạn LLM vẫn chạy ở giai đoạn thu
-  thập bằng chứng tĩnh, song không lật verdict nào.
+- Judge heuristic quyết định ~17.1k flagged verdict mỗi run; judge LLM chỉ
+  được gọi ở 1 trong 3 run, trên đúng 2 site (run 2: 2 flagged verdict trong
+  `freerdp_9fc23ad2`, judge paths {heuristic:17154, llm:2}; run 1/3: chỉ
+  heuristic, {heuristic:17157} / {heuristic:17106}). Không site nào borderline
+  đủ để làm đổi confusion matrix nên theo thiết kế judge lai (LLM chỉ chạy
+  trên bundle BORDERLINE), `llm_assisted` cho kết quả trùng khớp `no_llm`.
+  Công đoạn LLM vẫn chạy ở giai đoạn thu thập bằng chứng tĩnh, song không
+  lật verdict nào.
 - FP = 0 và P = 1.000 là tính chất của cách chấm positive-only trên corpus
   chỉ gồm site dương (TN = 0), không phải kết quả của một phép phân loại
   đầy đủ; recall và số FP mới là số liệu so sánh được, precision chỉ mang
