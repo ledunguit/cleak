@@ -130,15 +130,56 @@ trung thực trình tự thí nghiệm (phân tích nguyên nhân đảo chiều
 | B7 | F1 | 0.938 | 0.015 | 0.922 | 0.951 |
 | B7 | ECE | 0.125 | 0.004 | 0.121 | 0.127 |
 
-## A.8. MemHint (19 ca / 6 dự án thực) — chờ run hoàn tất
+## A.8. MemHint (19 ca / 6 dự án thực)
 
 Bộ run MemHint trên corpus 19 ca tự tái lập (6 dự án thực), hai cấu hình theo
 protocol hai-công-đoạn giống LAMeD: `no_llm --enrich` ×1 và `llm_assisted` ×3.
 Chấm theo quy ước positive-only (recall + FP; TN = 0 nên precision/specificity
-không định nghĩa được).
+không định nghĩa được). Corpus gồm 6 dự án: tmux, curl, openssl, redis, vim,
+freerdp, tức 6/8 dự án trong tập mục tiêu của MemHint (arXiv:2603.27224), tái lập
+độc lập theo `demo/memhint/memhint_bugs.json`. Run chốt 2026-09-05, commit
+`30e04cb1c`, hash corpus `442de35d6410bdd03d30b665b5f0f912`; artifacts tại
+`results/memhint-no_llm-2026-08-28/` + `results/memhint-llm_assisted-2026-08-28/`.
 
-**[PENDING — MemHint run, todo-3]**
+| Cấu hình | Sites | TP | FP | FN | Recall | Precision | F1 |
+|---|--:|--:|--:|--:|--:|--:|--:|
+| `no_llm --enrich` ×1 | 26 | 12 | 0 | 14 | 0.462 | 1.000 | 0.632 |
+| `llm_assisted` (mean 3 runs, std = 0) | 26 | 12 | 0 | 14 | 0.462 | 1.000 | 0.632 |
 
-*Mục này sẽ điền sau khi MemHint driver chạy xong trên thesis-wsl2 và artifacts
-được sync về `results/memhint-no_llm-<date>/` + `results/memhint-llm_assisted-<date>/`
-(số liệu nguồn: hàng 10 của `docs/RESULTS-FREEZE.md`, viết vào bởi todo-3).*
+Phân bổ TP/FN theo dự án (giống hệt nhau ở mọi run):
+
+| Dự án | TP | FN | Sites |
+|---|--:|--:|--:|
+| tmux | 3 | 1 | 4 |
+| curl | 1 | 2 | 3 |
+| openssl | 1 | 2 | 3 |
+| redis | 3 | 3 | 6 |
+| vim | 0 | 6 | 6 |
+| freerdp | 4 | 0 | 4 |
+| **Tổng** | **12** | **14** | **26** |
+
+vim là khối FN tập trung nhất (0/6, mọi site đều bỏ sót); freerdp thì ngược
+lại, toàn TP (4/4).
+
+Ghi chú:
+
+- `llm_assisted` chạy 3 run độc lập (model `deepseek-v4-flash`, temp 0): cả
+  3 run cho cùng một confusion matrix (12, 0, 14), std = 0 trên cả ba số
+  P 1.000±0.000 / R 0.462±0.000 / F1 0.632±0.000.
+- Judge LLM không được gọi lần nào trên corpus này (0 verdict LLM/consensus;
+  judge paths {heuristic:17106}). Không có bundle nào borderline nên theo
+  thiết kế judge lai (LLM chỉ chạy trên bundle BORDERLINE), `llm_assisted`
+  cho kết quả trùng khớp `no_llm`. Công đoạn LLM vẫn chạy ở giai đoạn thu
+  thập bằng chứng tĩnh, song không lật verdict nào.
+- FP = 0 và P = 1.000 là tính chất của cách chấm positive-only trên corpus
+  chỉ gồm site dương (TN = 0), không phải kết quả của một phép phân loại
+  đầy đủ; recall và số FP mới là số liệu so sánh được, precision chỉ mang
+  tính thông tin.
+- Đối chiếu với anchor từng phần 2026-08-28 (R 42.3% = 11/26, 8 ca mất do
+  static-analyzer OOM): số chốt R 46.2% (12/26) chênh đúng +1 TP, đến từ các
+  ca được phục hồi. Vì `no_llm` bitwise-deterministic, 11 ca đã chấm trước
+  đó phải cho kết quả cũ nên TP cộng thêm chỉ có thể nằm trong 8 ca chưa
+  chấm (chi tiết ở `docs/CURRENT_STATUS.md` §Pending #2).
+- Run hoàn tất ở lần thử thứ 3/8 của driver; lần thử 1 mất do VM reboot giữa
+  run và được khôi phục bằng cơ chế `--resume`, artifacts sha256-verified
+  byte-identical qua lần reboot.
