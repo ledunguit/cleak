@@ -1,6 +1,6 @@
 # Chương 4: Đánh giá kết quả
 
-Mọi thiết kế đều là giả thuyết cho đến khi được kiểm chứng bằng thực nghiệm. Chương này trình bày kết quả đánh giá trên hai corpus — Juliet CWE-401 (corpus synthetic, 1658 ca) và LAMeD benchmark (corpus dự án thực, 41 ca) — với các ablation study phân rã đóng góp từng thành phần. Số liệu được báo cáo trung thực, kể cả khi chúng không như kỳ vọng.
+Mọi thiết kế đều là giả thuyết cho đến khi được kiểm chứng bằng thực nghiệm. Chương này trình bày kết quả đánh giá trên ba corpus: Juliet CWE-401 (corpus synthetic, 1658 ca), LAMeD benchmark (corpus dự án thực, 41 ca) và MemHint (corpus dự án thực tự tái lập, 19 ca), với các ablation study phân rã đóng góp từng thành phần. Số liệu được báo cáo trung thực, kể cả khi chúng không như kỳ vọng.
 
 ---
 
@@ -282,7 +282,44 @@ Tuy nhiên, gộp trên cả 7 dự án thì số liệu thấp hơn hẳn: allo
 
 ---
 
-## 4.10. Tổng hợp chương
+## 4.10. Đánh giá trên corpus MemHint
+
+MemHint [20] là baseline rò rỉ bộ nhớ C/C++ trực tiếp nhất trong related work: phân tích tĩnh neuro-symbolic kết hợp Z3 và bước xác nhận LLM, đo trên tập dự án thực. Danh sách leak từng ca của paper không được công bố, nên ground truth của họ không thể tái dùng trực tiếp. Chúng tôi vì thế tự dựng lại corpus: 19 ca rò rỉ từ 6 dự án thực (tmux, curl, openssl, redis, vim, freerdp), trùng 6 trong 7 dự án mục tiêu mà [20] liệt kê (thiếu FFmpeg). Mỗi ca gắn `github_url` trỏ đúng commit sửa lỗi, lưu trong `demo/memhint/memhint_bugs.json` để kiểm chứng độc lập. Corpus là positive-only như LAMeD: 26 site rò trên 19 ca, không có nhãn site sạch, vì thế recall và số FP là hai đại lượng chấm được (mục 4.1.5). Toàn bộ chạy trên WSL2 qua driver `scripts/memhint-eval-driver.sh`, commit `30e04cb1c`, lockfile `442de35d`, môi trường clang 14.0.0 và valgrind 3.18.1; artifacts nằm tại `results/memhint-no_llm-2026-08-28/` và `results/memhint-llm_assisted-2026-08-28/`.
+
+### 4.10.1. Kết quả
+
+Hai cấu hình được đo: `no_llm --enrich` (1 run) và `llm_assisted` (3 runs, model `deepseek-v4-flash` qua openai-compat, temp 0). Hệ chạy ở cấu hình đề xuất `llm_assisted` (nhóm fusion-B6 trong ablation, mục 4.2): planner và tool-selector là hai trục chỉ được bật trên Juliet, còn lệnh trên corpus này dùng `--strategy off` và `--no-tool-select`.
+
+| Cấu hình | TP | FP | FN | Recall | Precision |
+|---|--:|--:|--:|--:|--:|
+| `no_llm --enrich` (1 run) | 12 | 0 | 14 | 0.462 | 1.000 |
+| `llm_assisted` (mean 3 runs, std = 0) | 12 | 0 | 14 | 0.462 | 1.000 |
+
+Hệ bắt 12 trên 26 site rò, không tạo FP nào; ba run `llm_assisted` cho confusion matrix giống hệt nhau {(12, 0, 14)}, tức P 1.000±0.000 / R 0.462±0.000 / F1 0.632±0.000. Sự đồng nhất này có nguyên nhân đo đếm được chứ không phải trùng hợp. Judge hybrid chỉ gọi LLM trên các bundle heuristic đánh dấu borderline, mà judge heuristic tự quyết khoảng 17,1 nghìn flagged verdict mỗi run; LLM judge chỉ can thiệp trên 2 site trong đúng 1/3 run (run 2, ca `freerdp_9fc23ad2`, judge paths {heuristic: 17154, llm: 2}), hai run còn lại đi thuần nhánh heuristic. Không một verdict nào bị lật. `llm_assisted` vì thế ≡ `no_llm` trên corpus này, cùng mẫu null với LAMeD (mục 4.5.1): LLM judging chỉ thêm giá trị khi bundle borderline thực sự tồn tại. Token vẫn tiêu, khoảng 44,3 triệu cho ba run llm (vào khoảng 26,5 triệu, ra khoảng 17,8 triệu), nhưng đổ vào allocator profiling và static fan-out chứ không tác động tới verdict.
+
+### 4.10.2. Đối chiếu với số liệu MemHint tự báo
+
+Trên tập dự án đầy đủ của mình, MemHint [20] tự báo 52-54 leak trên 7 dự án thực (3.4M+ SLOC), 49 ca confirmed/fixed, 4 CVE; cùng thiết lập đó, CodeQL tìm 19 và Infer 3. Corpus ở mục này chỉ là tập con 19 ca tự tái lập trên 6/7 dự án đó, chấm theo site với ground truth tự dựng, nên hai tập số không nằm trên cùng một mẫu số. So sánh vì thế chỉ mang tính định hướng: điểm dùng được là hệ đạt FP=0 với recall 46.2% trên lớp dự án thực tương tự, chứ không phải xác nhận hay bác bỏ con số của [20]. Paper này cũng chưa qua peer-review tại thời điểm viết.
+
+### 4.10.3. Vì sao không chạy đủ 9 baseline trên corpus này
+
+Protocol trên corpus MemHint chỉ gồm `no_llm` và `llm_assisted`, không lặp ablation 9 baseline như trên Juliet. Quyết định này có ba căn cứ, xếp theo sức mạnh tăng dần.
+
+Thứ nhất, sức mạnh thống kê. Corpus positive-only 19 ca với 26 bug: TN=0 nên MCC không định nghĩa, và hiệu ứng có thể đo được giữa hai cấu hình là chênh 1-2 TP, tương đương 3.8-7.7 điểm recall trên mẫu số 26 site, nằm trong vùng nhiễu. Ablation 9 cấu hình chỉ có ý nghĩa trên corpus có nhóm đối chứng đủ lớn; Juliet 1658 ca với hơn 3.000 TN là nơi duy nhất trong luận văn thoả điều kiện đó.
+
+Thứ hai, nhất quán protocol với LAMeD. Benchmark dự án thực trước đó (50 site, mục 4.5) cũng chỉ chạy hai công đoạn: `no_llm` mặc định, một biến thể `interproceduralFlow`, và `llm_assisted` ×3; 9 baseline không hề được chạy trên đó. MemHint theo đúng giao thức này.
+
+Thứ ba, chi phí cộng precedent null. Dynamic stage trên repo thật chạy serialize với concurrency 1 (ca redis gồm 2235 files), mỗi cấu hình thêm khoảng 0.5-1 ngày build và sanitizer run, đủ 9 cấu hình tốn cỡ một tuần máy. LAMeD đã chỉ ra `llm_assisted` ≡ `no_llm` trên dự án thực, nên các biến thể LLM còn lại (B4-B7) gần như chắc chắn tái tạo null đó. Run MemHint này vừa xác nhận thêm bằng chứng: LLM judge chỉ can thiệp 2 site trên khoảng 17,1 nghìn quyết định verdict, không lật verdict nào.
+
+### 4.10.4. Threats to validity
+
+Áp lực bộ nhớ là giới hạn vận hành lớn nhất. Ca redis đẩy static analyzer vào dải OOM (khoảng 14GB RSS), nên driver phải thiết kế 8 lần retry với `--resume`; một lần VM reboot giữa run làm mất attempt đầu tiên, run chốt hoàn tất ở attempt 3/8 và artifacts được sha256-verify byte-identical qua reboot. Lần chạy đầu (2026-08-28) vì thế chỉ chấm được 11 ca, để lại anchor recall 42.3% (11/26) với 8 ca mất vì OOM; run chốt khôi phục đủ 19/19 và recall lên 46.2% (12/26). Vì `no_llm` bitwise deterministic, 11 ca đã chấm trước đó phải cho kết quả y hệt, nên +1 TP chắc chắn đến từ các ca recovered chứ không phải thay đổi code; thư mục kết quả vẫn giữ tên mốc 2026-08-28 của lần chạy đầu.
+
+Phân bố FN cũng lệch: khối lớn nhất nằm ở vim, 3 ca với 2 FN mỗi ca trên tổng 14 FN. Cuối cùng, ground truth là tập tự tái lập 19 ca, không phủ toàn bộ tập leak của 7 dự án mà [20] nhắm tới; kết quả ở mục này đo hệ thống trên lớp dự án thực tương tự, không phải tái lập đánh giá của paper.
+
+---
+
+## 4.11. Tổng hợp chương
 
 ### Bảng tổng hợp toàn bộ kết quả
 
@@ -291,13 +328,16 @@ Tuy nhiên, gộp trên cả 7 dự án thì số liệu thấp hơn hẳn: allo
 | Juliet full 1658 ca | B6a | 0.863 | 0.965 | 0.780 | MCC 0.790, $6.63; sweep 9 baseline |
 | Juliet n=50 stratified (thí nghiệm đầu, model cũ) | B6a | 0.938 | 0.973 | 0.906 | Phụ: ablation cấu phần, mẫu cân bằng family |
 | LAMeD (50 site, positive-only) | no_llm = llm_assisted | — | 1.000 | 0.300 | TP15/FP0; Clang 0/43 site |
+| MemHint (26 site, positive-only) | no_llm = llm_assisted | 0.632 | 1.000 | 0.462 | TP12/FP0; 19 ca tự tái lập, 6 dự án thực |
 | Consensus K=3 (n=50 stratified) | không khuyến nghị | 0.793 | — | — | Thua single (F1 0.852, flip 2.0% vs 8.0%), p=0.077 |
 
 Hai kết luận nổi lên từ bảng. Dynamic evidence là "FP killer" ở mọi quy mô: thêm dynamic giảm FP từ 470 xuống 74 trên full corpus (B4→B6), hiệu ứng này tái lập đúng mẫu 18→1 FP ở n=50. Ngược lại, consensus là kết quả âm tính có phương pháp luận: cơ chế chỉ thắng trên mẫu đơn-family lệch dễ, và thua trên mẫu đại diện, một phát hiện về hiệu ứng sampling mà nghiên cứu LLM-judge trước đó ít để ý.
 
+Hai corpus dự án thực nói cùng một điều và nói theo cùng cách: trên LAMeD lẫn MemHint, ba cấu hình của hệ hội tụ về đúng kết quả no_llm, LLM judge được gọi nhưng không lật verdict nào, và recall dừng ở mức tầng allocator profiling cho phép (30.0% so với 46.2%). Null result lặp lại trên hai corpus độc lập là dữ kiện mạnh hơn một null result đơn lẻ: giá trị của LLM orchestration trước hết nằm ở tầng discovery và enrichment, còn judging chỉ hoạt động khi bundle borderline thật sự tồn tại, như trên Juliet full corpus.
+
 ### Điều kiện nào LLM orchestration có lợi?
 
-Từ kết quả trên hai corpus, có thể rút ra ba điều kiện:
+Từ kết quả trên ba corpus, có thể rút ra ba điều kiện:
 
 **Corpus khó, bundle borderline, nhưng còn phụ thuộc lớp allocator profiling.** Trên Juliet, heuristic finalize phần lớn bundle, nên judge LLM làm việc chủ yếu ở tầng đánh giá; cấu hình LLM tốt nhất (B6a 0.863) hơn static-only (B1 0.612) nhờ enrichment cộng judge đúng chỗ. Trên LAMeD, mọi cấu hình LLM hội tụ về đúng kết quả no_llm (LLM được gọi từ 47 đến 149 lần mỗi run, không lật verdict nào): khi tầng discovery đã bỏ sót site (recall profiling thấp trên dự án thực), judge không thể cứu những gì không bao giờ thành bundle. LLM orchestration có lợi trước hết khi candidate đúng đã vào pipeline.
 
