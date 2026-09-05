@@ -57,8 +57,10 @@ chỉ cần `clang` trên PATH (hoặc `CLANG_BIN`).
 > ⚠️ **Corpus tiền-remediation — số dưới đây đã bị EVALUATION.md §3a/§8 tuyên bố superseded.**
 > 30 ca này được chạy trên bản Juliet **trước khi sửa lỗi corpus** (422/1984 ca C++ không build
 > được bị loại âm thầm khỏi confusion matrix). Số hiện hành trên corpus đã validate (1658 ca):
-> xem [EVALUATION.md §3b](EVALUATION.md) (ablation 9-baseline, stratified n=50, B6a F1 0.938)
-> và [CONTRIBUTION.md](CONTRIBUTION.md) (full-corpus F1 0.612 + phân rã theo family). Bảng dưới
+> xem [EVALUATION.md §3b-bis](EVALUATION.md) (full 9-baseline sweep, B6a F1 0.863±0.001/MCC 0.790
+> so với B1 0.612 trong cùng sweep); bảng stratified n=50 (§3b, B6a F1 0.938) là ablation cấu
+> phần trên mẫu cân bằng family, không phải headline. Phân rã family yếu `new`/`malloc` ở
+> [CONTRIBUTION.md](CONTRIBUTION.md). Bảng dưới
 > giữ lại chỉ để minh hoạ cách chạy `compare-baselines.ts`, không dùng làm số liệu báo cáo.
 
 Chạy thật trong dự án (analyzer Docker; Infer không cài → bỏ qua):
@@ -104,6 +106,14 @@ phải F1.
 | **leak-investigator** `no_llm` (static) | 44 | **7** | 0 | 37 | **0.159** | **1.000** | **0.000** |
 | clang-analyzer (`unix.Malloc`) | 43 | 0 | 0 | 43 | 0.000 | — | 0.000 |
 
+> ⚠️ **Số trên là run tiền-fix (trước 2026-08-10) và đã được thay thế.** Run chốt trên mẫu số đã
+> sửa (50 site, 2026-08-20, commit `c5826bc`): `no_llm` **TP15/FP0/FN35, R 30.0%** — và `llm_assisted`
+> ×3 cho kết quả y hệt từng ca (std=0). Clang re-run trên harness hiện tại vẫn 43 site với TP0;
+> 43 và 50 không cùng thang vì `scoreCase` chấm mỗi hệ trên finding granularity của chính nó
+> (by design, không phải lỗi đo). Chi tiết: `results/lamed-correction-2026-08-20-README.md`,
+> [EVALUATION.md](EVALUATION.md), `docs/RESULTS-FREEZE.md` group 4. Hai bullet dưới đây tường
+> thuật run tiền-fix, giữ làm lịch sử runbook.
+
 - **7 leak thật bắt được, clang bắt 0, với FP = 0** (precision 1.0). Phân bố: **curl 5/16, libtiff 1/7,
   rabbitmq-c 1/2** (cjson/libsolv/libxml2/libssh2 = 0 ở cấu hình static mặc định).
 - Nằm trong **dải LAMeD tự báo** cho công cụ *có annotation* (5–10/43) nhưng đạt ở **FP0** nhờ allocator
@@ -140,7 +150,15 @@ per-case từ manifest; analyzer Docker + `EVAL_STATIC_PATH_MAP`):**
 | default (functionSummary + pathConstraints) | 44 | 11 | 0 | 33 | 0.250 | 1.000 |
 | **+ interproceduralFlow** | 44 | **12** | **0** | 32 | **0.273** | **1.000** |
 
-- **+1 TP (recall 0.250 → 0.273), FP = 0, KHÔNG ca nào regress.** Ca bắt thêm = `cjson merge_patch`
+> ⚠️ **Kết quả +1 TP này đã bị bác bỏ khi re-measure (2026-08-20, mẫu số 50 site đã fix
+> `computeBundleId`): `interproceduralFlow` giờ byte-identical với default recipe trên cả 41 ca,
+> Δ=0** — kể cả trên `cjson merge_patch`. Nguyên nhân của claim cũ là path-insensitivity trong
+> chính cách đếm alloc/free của tool (đếm 2 `cJSON_Delete` ở hai nhánh loại nhau và kết luận
+> "balanced"). Chi tiết đầy đủ: [EVALUATION.md](EVALUATION.md) (ablation `interproceduralFlow`),
+> `conference/main.tex` §eval-lamed. Bảng trên giữ làm lịch sử runbook.
+
+- **+1 TP (recall 0.250 → 0.273), FP = 0, KHÔNG ca nào regress.** *(Claim tiền-fix — xem cảnh báo
+  phía trên: trên run chốt 2026-08-20 Δ=0.)* Ca bắt thêm = `cjson merge_patch`
   (`cjson_f50dafc7`) — leak vắt qua biên hàm mà 2-tool default bỏ sót: bằng chứng cơ chế interprocedural
   hoạt động end-to-end trên dự án thật, **ở precision 1.0** (không đánh đổi FP).
 - **Trung thực về biên độ:** gain nhỏ (1 ca). 32 FN còn lại phần lớn **không phải** dạng "alloc never-freed-
@@ -148,7 +166,9 @@ per-case từ manifest; analyzer Docker + `EVAL_STATIC_PATH_MAP`):**
   interprocedural hiện tại. Đây là hướng future work (alias-aware interprocedural dataflow), không phải bế tắc.
 - **Determinism giữ nguyên:** interproceduralFlow là **opt-in** (`--static-tools …,interproceduralFlow`); default
   2-tool không gọi nó ⇒ `no_llm` vẫn bitwise (determinism-gate PASS sau nâng cấp). Trên **Juliet** (intra-function)
-  nó Δ0 — đúng kỳ vọng; payoff chỉ xuất hiện trên corpus cross-function thật (LAMeD).
+  nó Δ0, đúng kỳ vọng; trên LAMeD, run chốt trên mẫu 50-site đã sửa (2026-08-20) cũng cho **Δ=0**
+  (byte-identical trên cả 41 ca) — trong phạm vi số liệu chốt của luận văn, công cụ này chưa tạo
+  payoff đo được (chi tiết §5b-bis và cảnh báo phía trên).
 
 Đây *biện minh* định vị luận văn: cần allocator profile (LLM khám phá động, ≈ LAMeD AllocSource) +
 judging path-sensitive/interprocedural — đúng hướng LAMeD, và lớp đầu (discovery + static recall ở FP0)

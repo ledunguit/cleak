@@ -64,16 +64,20 @@ Every scan must deliver all five of the following:
   research contribution is detailed in [CONTRIBUTION.md](CONTRIBUTION.md).
 - **How to run** evals + baseline comparison + reproducibility gates: [OPERATIONS.md](OPERATIONS.md)
   and [BASELINE-COMPARISON.md](BASELINE-COMPARISON.md).
-- **Current reproducible result** (Juliet CWE-401, **validated** 1658-case corpus): the
-  9-baseline ablation (`configs/baselines/`, stratified n=50) has **B6a** (planner + deterministic
-  recipe + LLM judge) on top at **F1 0.938** (P0.973/R0.906), ahead of static-only B1 (F1 0.792)
-  and Clang Static Analyzer (F1 ≈0.76) on the same corpus + scorer — see
-  [EVALUATION.md §3b](EVALUATION.md). At **full-corpus scale (1658 cases, static-only)** F1 drops
-  to 0.612 (two weak families, `new`/C++ and `malloc`, dilute out of the n=50 stratified sample —
-  see [CONTRIBUTION.md](CONTRIBUTION.md)). The consensus judge cuts the run-to-run verdict flip
-  rate **~2–4× (single-LLM 13–27% → consensus 6.7%, replicated across two ablation campaigns)**.
-  (The older 30-case P0.806/R0.906/F1 0.853 number was measured on a pre-remediation corpus
-  defect and is superseded — do not cite it.)
+- **Current reproducible result** (Juliet CWE-401, **validated** 1658-case corpus): the full
+  9-baseline sweep (single commit `5eec8b1`, `deepseek-v4-flash`, dynamic on, 3 runs/config) has
+  **B6a** (planner + deterministic recipe + LLM judge) on top at **F1 0.863±0.001** (P0.965/R0.780,
+  MCC 0.790), ahead of static-only B1 (F1 0.612) in the same sweep: see
+  [EVALUATION.md §3b-bis](EVALUATION.md). The stratified n=50 ablation (`configs/baselines/`) also
+  has B6a on top (F1 0.938, P0.973/R0.906, ahead of B1 0.792 and Clang ≈0.76), but that number is
+  the component-ablation result on a family-balanced sample, not the whole-corpus headline: two
+  weak families (`new`/C++ and `malloc`) dilute out of the stratified sample and pull the
+  full-corpus score down (reconciliation in [CONTRIBUTION.md](CONTRIBUTION.md)). The consensus
+  claim reversed on the n=50 stratified re-run: the single-LLM judge is both more stable (flip
+  2.0% vs 8.0%) and more accurate (F1 0.852 vs 0.793), and McNemar over 205 paired sites leans
+  single without statistical significance (χ²=3.13, p=0.077), so consensus is not recommended as
+  the default (see [EVALUATION.md §7](EVALUATION.md)). (The older 30-case P0.806/R0.906/F1 0.853
+  number was measured on a pre-remediation corpus defect and is superseded — do not cite it.)
 - **`llm_assisted` needs a reachable LLM endpoint to diverge.** Without a key for a cloud
   provider the run fails loudly (no silent fallback to the heuristic). Provider/endpoint is
   selectable (`local | openai | anthropic | openai-compat`) — see [OPERATIONS.md](OPERATIONS.md).

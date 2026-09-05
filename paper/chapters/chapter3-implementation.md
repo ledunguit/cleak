@@ -200,7 +200,7 @@ Budget nudge tối đa là `maxStopNudges` (mặc định 3). Counter reset mỗ
 
 Hệ thống hỗ trợ 4 loại provider, được chọn qua config `provider`:
 
-- **`local`:** OpenAI-compatible endpoint (mặc định `http://localhost:20128/v1`, model `mimo/mimo-v2.5-pro`). Đây là cấu hình chính cho thực nghiệm.
+- **`local`:** OpenAI-compatible endpoint (mặc định `http://localhost:20128/v1`, model `mimo/mimo-v2.5-pro`). Đây là cấu hình của thí nghiệm đầu (mục 4.2.3, 2026-06); các sweep chốt của luận văn chạy trên `openai-compat` với model `deepseek-v4-flash` (mục 4.2.2, Phụ lục C.3).
 - **`openai`:** OpenAI API trực tiếp.
 - **`anthropic`:** Anthropic Messages API — cần adapter riêng vì format khác OpenAI.
 - **`openai-compat`:** Bất kỳ endpoint nào tuân thủ OpenAI Chat Completions API.
@@ -442,4 +442,4 @@ Thứ hai, cơ chế threading `extraAllocators`/`extraDeallocators` xuyên su�
 
 Thứ ba, deterministic evidence capture (Stage B wrapper) là yếu tố then chốt cho reproducibility. Bằng cách loại bỏ LLM discretion khỏi quá trình ghi nhận finding, hệ thống đảm bảo rằng cùng một sanitizer run luôn produce cùng một evidence — dù LLM quyết định tool nào gọi.
 
-Phần tiếp theo (Chương 4) sẽ đánh giá hệ thống đã cài đặt này trên hai corpus (Juliet 1658 ca và LAMeD 41 ca), so sánh với Clang Static Analyzer, và phân tích đóng góp của từng thành phần qua ablation study.
+Phần tiếp theo (Chương 4) sẽ đánh giá hệ thống đã cài đặt này trên ba corpus (Juliet 1658 ca, LAMeD 41 ca và MemHint 19 ca), so sánh với Clang Static Analyzer, và phân tích đóng góp của từng thành phần qua ablation study.

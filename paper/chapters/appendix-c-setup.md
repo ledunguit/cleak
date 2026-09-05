@@ -37,11 +37,18 @@ curl -s http://localhost:50062/mcp  # dynamic-analyzer
 Tạo file `.env` ở root hoặc `apps/leak-inspector-tui/.env`:
 
 ```bash
-# Local gateway (mặc định)
-LLM_PROVIDER=local
-LLM_BASE_URL=http://localhost:20128/v1
-LLM_API_KEY=not-needed
-LLM_MODEL=mimo/mimo-v2.5-pro
+# openai-compat gateway — cấu hình của các run chốt trong FREEZE (deepseek-v4-flash, temp 0)
+LLM_PROVIDER=openai-compat
+LLM_BASE_URL=https://api.deepseek.com/v1
+LLM_API_KEY=sk-...
+LLM_MODEL=deepseek-v4-flash
+
+# Local gateway (thí nghiệm đầu 2026-06, mục 4.2.3; model mimo/mimo-v2.5-pro — cấu hình cũ,
+# không phải cấu hình của các run chốt)
+# LLM_PROVIDER=local
+# LLM_BASE_URL=http://localhost:20128/v1
+# LLM_API_KEY=not-needed
+# LLM_MODEL=mimo/mimo-v2.5-pro
 
 # Hoặc OpenAI
 # LLM_PROVIDER=openai

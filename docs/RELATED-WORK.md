@@ -141,15 +141,18 @@ hệ của luận văn, cột cuối). Ô của cleak đối chiếu kiến trú
 > phải có con số đã báo; (2) cách ly nguyên nhân — vì cell `no_llm + dynamic` tất định, mọi thay
 > đổi hiệu năng khi bật LLM judge là do LLM gây ra, không phải bởi nhiễu; (3) baseline công bằng
 > trên cùng scorer + cùng corpus version. Vì LLM judge không bit-tất định kể cả `temperature=0`,
-> `llm_assisted` được báo theo distribution + consensus (k=3 cắt lật verdict 26.7% → 6.7%, xem
-> EVALUATION.md §7).
+> `llm_assisted` được báo theo distribution + consensus (k=3 cắt lật verdict 26.7% → 6.7% trên
+> mẫu n=30 đầu, 1 family; **kết quả đảo ngược** trên n=50 stratified: single-LLM ổn định hơn
+> và chính xác hơn, flip 2.0% so với 8.0%, F1 0.852 so với 0.793, xem EVALUATION.md §7).
 
 ## 6b. So sánh kết quả thực nghiệm theo dataset
 
 > ⚠️ **Bảng 30-ca dưới đây đo trên corpus tiền-remediation (đã superseded, xem EVALUATION.md
-> §3a/§8).** Số hiện hành: [EVALUATION.md §3b](EVALUATION.md) (9-baseline ablation, stratified
-> n=50, corpus đã validate 1658 ca, B6a F1 0.938) và [CONTRIBUTION.md](CONTRIBUTION.md)
-> (full-corpus F1 0.612 + phân rã theo family yếu `new`/`malloc`).
+> §3a/§8).** Số hiện hành: [EVALUATION.md §3b-bis](EVALUATION.md) (full-corpus 1658 ca, B6a
+> F1 0.863/MCC 0.790) và [EVALUATION.md §3b](EVALUATION.md) (9-baseline ablation, stratified
+> n=50, B6a F1 0.938 — ablation cấu phần trên mẫu cân bằng family, không phải headline toàn
+> corpus) cùng [CONTRIBUTION.md](CONTRIBUTION.md) (full-corpus static-only F1 0.612 + phân rã
+> theo family yếu `new`/`malloc`).
 
 **Juliet CWE-401 (30 ca, function-mode, analyzer qua MCP Docker)** — nguồn `paper/de-cuong.md`
 L271-288; là đánh giá **30 ca con**, không phải toàn bộ 1984 ca của NIST Juliet.
@@ -164,7 +167,7 @@ L271-288; là đánh giá **30 ca con**, không phải toàn bộ 1984 ca của 
 > consensus (n=3) 93.3% / **6.7%** (2/30) → bỏ phiếu k=3 cắt lật verdict ~4×. **Tier-1:** hai
 > lần chạy `no_llm` cho chấm điểm y hệt (TP29/FP7/FN3/TN38).
 
-**LAMeD (positive-only, 41 ca / 44 site, 7 dự án)** — manifest
+**LAMeD (positive-only, 41 ca / 50 site sau fix `computeBundleId` 2026-08-10, 7 dự án)** — manifest
 `demo/lamed/memleak_benchmark.json` (Zenodo 15089703).
 
 > ⚠️ **Bảng dưới đây dùng số liệu tiền-fix (2026-06-29), đã lỗi thời.** Fix `computeBundleId`
@@ -200,6 +203,20 @@ L271-288; là đánh giá **30 ca con**, không phải toàn bộ 1984 ca của 
 > CodeQL **5→10**, Cooddy **5→10** nhưng warnings CodeQL **139→653**, Cooddy **86→391**; paper
 > **không báo F1** (chỉ thể hiện recall↑/FP↑). **RepoAudit** P=78.4% (40 TP/11 FP) là **đa
 > defect (ML+UAF+NPD)**, không leak-only → không so trực tiếp được.
+
+**MemHint (positive-only, 19 ca / 26 site, 6/7 dự án mục tiêu của MemHint — thiếu FFmpeg)** —
+tái lập độc lập theo `demo/memhint/memhint_bugs.json`; run chốt 2026-09-05, commit `30e04cb1c`
+(số liệu: `docs/RESULTS-FREEZE.md` row 10).
+
+| Hệ / cấu hình | sites | TP | FP | FN | Recall | Notes |
+|---|--:|--:|--:|--:|--:|---|
+| **cleak — no_llm (heuristic, `--enrich`)** | 26 | 12 | 0 | 14 | **46.2%** | tất định |
+| **cleak — llm_assisted (3 runs, std = 0)** | 26 | 12 | 0 | 14 | **46.2%** | F1 0.632±0.000; judge LLM chỉ can thiệp 2 site trong 1/3 run, 0 lật verdict → ≡ `no_llm` |
+
+> Cùng mẫu null với LAMeD trên corpus thực thứ hai: `llm_assisted` ≡ `no_llm` theo thiết kế judge
+> lai (không bundle borderline nào đủ để đổi confusion matrix). Số MemHint tự báo trong §3 đã
+> kiểm chứng v3 (7 dự án, 3.4M+ SLOC, 52–54 leak, 49 confirmed); chi tiết đầy đủ ở
+> `paper/chapters/chapter4-evaluation.md` mục 4.10.
 
 ## 7. Research gap & định vị
 

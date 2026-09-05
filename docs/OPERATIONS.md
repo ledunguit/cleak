@@ -146,11 +146,13 @@ pnpm exec tsx scripts/verdict-stability.ts <runA> <runB>                      # 
 # Báo: case-level stability, verdict flip rate, modal agreement, cờ "stable-by-luck"
 ```
 
-**Headline ablation — consensus giảm dao động:**
+**Ablation consensus — kết quả đảo ngược theo cách lấy mẫu:**
 ```bash
 K=3 LIMIT=30 bash scripts/consensus-ablation.sh
 # single-LLM (n=1) ×2 vs consensus (n=3) ×2 → so flip rate
-# Kỳ vọng: single ~26.7% → consensus ~6.7% (giảm ~4×)
+# Kỳ vọng n=30 đầu (vô tình 1 family): single ~26.7% → consensus ~6.7%;
+# n=50 stratified (2026-08-19) ĐẢO NGƯỢC: single 2.0% vs consensus 8.0%
+# (F1 0.852 vs 0.793, McNemar p=0.077, không có ý nghĩa thống kê) — xem EVALUATION.md §7
 ```
 
 **So sánh với baseline (clang-analyzer/infer):** xem [BASELINE-COMPARISON.md](BASELINE-COMPARISON.md).
@@ -160,7 +162,7 @@ K=3 LIMIT=30 bash scripts/consensus-ablation.sh
 docker compose up --build -d
 export EVAL_STATIC_URL=http://127.0.0.1:50061/mcp EVAL_DYNAMIC_URL=http://127.0.0.1:50062/mcp
 bash scripts/determinism-gate.sh                       # (1) Tier-1 tất định
-K=3 LIMIT=30 bash scripts/consensus-ablation.sh        # (2) headline consensus 4×
+K=3 LIMIT=30 bash scripts/consensus-ablation.sh        # (2) consensus ablation (kết quả đảo ngược theo mẫu, xem EVALUATION §7)
 pnpm exec tsx scripts/compare-baselines.ts --corpus demo/juliet_cwe401 --limit 30 --out results/baseline  # (3) vs clang
 ```
 

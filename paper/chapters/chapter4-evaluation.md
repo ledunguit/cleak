@@ -242,14 +242,14 @@ Bảng sau so leak-count với các hệ thống dùng LLM cho leak C/C++. Lưu 
 
 | Hệ thống | Corpus | Kết quả | Phương pháp | Peer-review |
 |---|---|---|---|:--:|
-| MemHint [20] | 8 dự án thực, 3.6M LOC | 54 leak tìm thấy (53 confirmed) | LLM + Z3 + CodeQL/Infer | Không |
+| MemHint [20] | 7 dự án thực, 3.4M+ SLOC | 52–54 leak tìm thấy (49 confirmed/fixed, 4 CVE) | LLM + Z3 + CodeQL/Infer | Không |
 | LAMeD [21] (annotation) | cJSON, 152 hàm | P 0.933 / R 0.583 (28 TP / 2 FP / 20 FN) | LLM sinh AllocSource/FreeSink annotation | Có |
 | LAMeD [21] (Cooddy) | 6 dự án thực, 43 leak | 5→10 phát hiện | Cooddy tiêu thụ annotation | Có |
 | LAMeD [21] (CodeQL) | 6 dự án thực, 43 leak | 5→10 phát hiện | CodeQL tiêu thụ annotation | Có |
 | Hệ thống luận văn | LAMeD, 41 ca (50 site) | 15 TP / 0 FP | `no_llm` và `llm_assisted` cho kết quả như nhau | — |
 | Hệ thống luận văn | Juliet, full corpus 1658 ca | 2010 TP / 72 FP (B6a) | LLM orchestration + static + dynamic | — |
 
-MemHint [20] đạt leak-count cao nhất (54, 53 confirmed) nhưng trên corpus lớn hơn nhiều (8 dự án, 3.6M LOC) và chưa qua peer-review. Điểm chung đáng nói: cả MemHint và hệ thống này đều cần LLM khám phá allocator, MemHint dùng LLM phân loại hàm, còn luận văn dùng LLM profiler với grep-verify (độ chính xác đo ở mục 4.9).
+MemHint [20] đạt leak-count cao nhất (52–54, 49 confirmed/fixed) nhưng trên corpus lớn hơn nhiều (7 dự án, 3.4M+ SLOC) và chưa qua peer-review. Bảng dùng số tự báo bản v3 của paper (7 dự án, 3.4M+ SLOC, 52–54 leak, 49 confirmed — kiểm chứng trong `researchs/04`); bộ số "8 dự án / 3.6M LOC / 54 leak, 53 confirmed" thuộc bản arXiv đầu và đã bị bác bỏ. Điểm chung đáng nói: cả MemHint và hệ thống này đều cần LLM khám phá allocator, MemHint dùng LLM phân loại hàm, còn luận văn dùng LLM profiler với grep-verify (độ chính xác đo ở mục 4.9).
 
 Với LAMeD [21] trên cJSON: Cooddy + annotation đạt P=0.933 / R=0.583. Khoảng cách với kết quả của hệ thống trên benchmark LAMeD chủ yếu do Cooddy có annotation function-level chi tiết hơn (AllocSource/FreeSink) so với allocator set đơn giản hơn của hệ thống. Đây chính là động lực cho tầng LLM allocator profiler, và là lý do cJSON được chọn làm scope validation của tầng đó.
 

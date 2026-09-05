@@ -207,8 +207,13 @@ FN3 TN38. Gate `determinism-gate.sh` chứng nhận; đồng thời từ chối 
   chiều nào. Kết luận: nếu muốn claim "hệ thống hoạt động tốt trên model X" thì phải chạy sweep
   formal riêng cho model đó; số liệu của một model không tự động suy ra cho model khác.
 - **Quy mô:** corpus chính là Juliet (tổng hợp, 1984 ca) + LAMeD (41 ca thật, 7 dự án,
-  positive-only) — không còn corpus tự sinh (`memory_leak_corpus`/`real_projects` đã bị xoá,
-  không đủ uy tín để làm căn cứ đánh giá).
+  positive-only) + corpus MemHint tự tái lập (19 ca / 6 dự án thực, positive-only) — không còn
+  corpus tự sinh (`memory_leak_corpus`/`real_projects` đã bị xoá,
+  không đủ uy tín để làm căn cứ đánh giá). Trên corpus MemHint (run chốt 2026-09-05,
+  `results/memhint-llm_assisted-2026-08-28/`, FREEZE row 10): `llm_assisted` ×3 cho confusion
+  matrix y hệt `no_llm` (TP12/FP0/FN14, R 46.2%, F1 0.632±0.000); judge LLM chỉ can thiệp trên
+  2 site trong 1/3 run và không lật verdict nào — cùng mẫu null với LAMeD, tức bằng chứng nhất
+  quán trên hai corpus thực rằng LLM judging chỉ thêm giá trị khi bundle borderline thực sự tồn tại.
 - **PHÁT HIỆN QUAN TRỌNG trên LAMeD thật (cjson 6 ca, materialize + chạy live cả 4 cấu hình).**
   **recall = 0% ở MỌI cấu hình**: `no_llm` và `llm_assisted`, *trước* và *sau* khi sửa discovery.
   Đây là kết quả phân-tầng, trung thực:

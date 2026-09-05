@@ -136,7 +136,7 @@ Bộ run MemHint trên corpus 19 ca tự tái lập (6 dự án thực), hai c�
 protocol hai-công-đoạn giống LAMeD: `no_llm --enrich` ×1 và `llm_assisted` ×3.
 Chấm theo quy ước positive-only (recall + FP; TN = 0 nên precision/specificity
 không định nghĩa được). Corpus gồm 6 dự án: tmux, curl, openssl, redis, vim,
-freerdp, tức 6/8 dự án trong tập mục tiêu của MemHint (arXiv:2603.27224), tái lập
+freerdp, tức 6 trong 7 dự án mục tiêu của MemHint (arXiv:2603.27224, bản v3), tái lập
 độc lập theo `demo/memhint/memhint_bugs.json`. Run chốt 2026-09-05, commit
 `30e04cb1c`, hash corpus `442de35d6410bdd03d30b665b5f0f912`; artifacts tại
 `results/memhint-no_llm-2026-08-28/` + `results/memhint-llm_assisted-2026-08-28/`.
