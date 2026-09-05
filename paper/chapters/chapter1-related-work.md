@@ -209,7 +209,7 @@ Tích hợp với CodeQL, SemTaint phát hiện 106 trong 162 lỗ hổng mà Co
 
 Huang và cộng sự [20] xây dựng MemHint, hệ thống kết hợp LLM với Z3 SMT solver để phát hiện memory leak trong C/C++. Pipeline gồm ba bước: (1) LLM phân loại hàm thành allocator, deallocator, hoặc neither; (2) Z3 xác minh tính khả thi của leak path dựa trên CFG; (3) LLM xác nhận kết quả cuối cùng.
 
-Trên 8 dự án thực (3.6M+ dòng code), MemHint phát hiện 54 leak (53 đã được xác nhận và sửa), với chi phí khoảng $1.70 mỗi leak phát hiện. So sánh: CodeQL tìm 19, Infer tìm 3. Đây là kết quả ấn tượng, nhưng MemHint chưa được peer-review (arXiv preprint).
+Trên 7 dự án thực (3.4M+ SLOC), MemHint tự báo 52–54 leak tìm thấy (49 đã được xác nhận và sửa, kèm 4 CVE); cùng thiết lập đó, CodeQL tìm 19 và Infer tìm 3. Đây là kết quả ấn tượng, nhưng MemHint chưa được peer-review (arXiv preprint).
 
 ### 1.4.8. LAMeD — LLM annotation cho analyzer cổ điển
 
