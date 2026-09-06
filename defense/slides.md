@@ -48,7 +48,7 @@ Note: RQ1, RQ4 trả lời bằng số; RQ2 bằng giao thức hai tầng; RQ3 c
 
 ## Kiến trúc HYBRID 4 tầng
 
-![Kiến trúc HYBRID](../.omo/evidence/thesis-completion-next-steps/figures/fig-arch-academic.png)
+![Kiến trúc HYBRID](figures/fig-arch-academic.png)
 
 *Hình 1. Orchestrator điều phối hai analyzer qua MCP; judge là tầng duy nhất còn LLM sampling*
 
