@@ -110,6 +110,8 @@ independent replications (A/B):
 | Single-LLM (k=1) | 13.3–26.7% | 86.7–93.3% |
 | **Consensus (k=3)** | **6.7%** (identical across both replications) | **96.7%** |
 
+> Update (n=50 stratified, 2026-08-19): the result reverses — single-LLM is both more stable (2.0% vs 8.0% flips) and more accurate (F1 0.852 vs 0.793); consensus is not recommended as default. See FREEZE group 5 / CONTRIBUTION C4.
+
 **Tier-1 determinism.** Two independent `no_llm` runs (separate output directories,
 identical config) score byte-for-byte identically (TP29 FP7 FN3 TN38), enforced by
 `scripts/determinism-gate.sh`.

@@ -166,6 +166,7 @@ L271-288; là đánh giá **30 ca con**, không phải toàn bộ 1984 ca của 
 > **Ablation judge:** single-LLM (n=1) case-stability 73.3%, lật verdict **26.7%** (8/30);
 > consensus (n=3) 93.3% / **6.7%** (2/30) → bỏ phiếu k=3 cắt lật verdict ~4×. **Tier-1:** hai
 > lần chạy `no_llm` cho chấm điểm y hệt (TP29/FP7/FN3/TN38).
+> Cập nhật n=50 stratified (2026-08-19): đảo ngược — single 2,0%/F1 0,852 vs consensus 8,0%/0,793 (McNemar 205 site, p=0,077); xem FREEZE nhóm 5 / CONTRIBUTION C4.
 
 **LAMeD (positive-only, 41 ca / 50 site sau fix `computeBundleId` 2026-08-10, 7 dự án)** — manifest
 `demo/lamed/memleak_benchmark.json` (Zenodo 15089703).

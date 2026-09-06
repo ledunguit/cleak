@@ -106,6 +106,8 @@ Mọi số liệu dưới đây là kết quả chạy thật — lệnh tái l�
 | Single-LLM (k=1) | 13,3–26,7% | 86,7–93,3% |
 | **Consensus (k=3)** | **6,7%** (giống hệt qua cả 2 đợt) | **96,7%** |
 
+> Cập nhật n=50 stratified (2026-08-19): kết quả đảo ngược — single-LLM ổn định hơn (2,0% vs 8,0% flips) và chính xác hơn (F1 0,852 vs 0,793); consensus không khuyến nghị mặc định (FREEZE nhóm 5 / CONTRIBUTION C4).
+
 **Tất định Tier-1.** Hai lần chạy `no_llm` độc lập (thư mục output tách biệt, cùng
 cấu hình) cho điểm số y hệt bit-for-bit (TP29 FP7 FN3 TN38), được ép bằng
 `scripts/determinism-gate.sh`.
