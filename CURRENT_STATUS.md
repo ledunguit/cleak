@@ -1,9 +1,9 @@
 # Current Status
 
-_Last updated: 2026-08-28 (pending-list reconciled against on-disk results:
-LAMeD re-run + Juliet llm_assisted full + consensus gate all CLOSED — see
-"Pending / next steps"; MemHint runs launched on thesis-wsl2. Defense
-roadmap: `docs/DEFENSE-PLAN.md`.)_
+_Last updated: 2026-09-06 (thesis-completion plan `thesis-completion-next-steps`
+executed: MemHint runs complete — RESULTS-FREEZE row 10 filled, thesis .docx +
+PDF built, defense pack done; see "Thesis completion status" and "Pending /
+next steps". Defense roadmap: `docs/DEFENSE-PLAN.md`.)_
 
 ## Standing goal (verbatim, from the user)
 
@@ -148,6 +148,50 @@ a high-level index into it, not a duplicate.
 - A single-case proof (historical, libtiff) confirmed the full HYBRID
   pipeline (Stages A→B→B2→C→D) finds a real leak end-to-end through the
   LLM-orchestrated path, not just the static-only path.
+
+## Thesis completion status (2026-09-06)
+
+All work-plan todos (1–15, 17) are done with per-todo evidence under
+`.omo/evidence/thesis-completion-next-steps/`; the consolidated ledger +
+invariant re-verification is `task-16-final-verification.md` in that directory.
+
+- **MemHint: COMPLETE.** `docs/RESULTS-FREEZE.md` row 10 is filled (no more
+  `[PENDING — wave 1]`): no_llm ×1 + llm_assisted ×3 via
+  `scripts/memhint-eval-driver.sh` on thesis-wsl2 (survived a VM reboot via
+  `--resume`, attempt 3 of 8). All 4 runs identical: TP12/FP0/FN14 —
+  P 1.000±0.000 / R 0.462±0.000 / F1 0.632±0.000. The hybrid judge decided
+  ~17.1k flagged verdicts per run heuristically; the LLM judge fired on only
+  2 sites in one run (run 2: freerdp_9fc23ad2, judge paths {heuristic:17154,
+  llm:2}) and flipped nothing — llm_assisted ≡ no_llm on this real-project
+  corpus, matching the LAMeD pattern. Artifacts:
+  `results/memhint-no_llm-2026-08-28/` + `results/memhint-llm_assisted-2026-08-28/`.
+- **Standing goal proven for real projects**: the full flow (discovery →
+  static enrichment → agentic investigation → hybrid judging → reports) ran
+  end-to-end on 6 real projects / 19 cases and found real leaks (12 TP, 0 FP)
+  — see the standing-goal quote above.
+- **Thesis artifacts built** (committed):
+  - `paper/Luan van Thac si - Le Dang Dung - CLeak.docx` — A4, lề 3-3-2-2,
+    TNR 13/1.5, TOC field, 15 H1 sections, 6 embedded figures (≥300 DPI) with
+    "Hình x.y" captions + Danh mục hình vẽ, IEEE bibliography [1]–[47],
+    Phụ lục A–D.
+  - `paper/Luan van Thac si - Le Dang Dung - CLeak.pdf` — 104 pages, TOC
+    populated (9/9 entries match body pages, Δ=0), machine self-check passed
+    (task-12 evidence).
+  - Defense pack: `defense/slides.md` (20 slides, ~22 min),
+    `defense/demo-script.md` (live cjson walkthrough + video checklist),
+    `defense/qa-bank.md` (12 Q&A with FREEZE-sourced numbers), plus Tóm tắt
+    (VN) / Abstract (EN) filled into the book.
+- **Exploratory glm-5.3-flash sweep (out of thesis)**: partial 5/9 configs
+  (B1–B5 valid; VM died mid-B6 → B6/B6a/B6b/B7 error rows). Skip-rule
+  activated per plan; artifacts on Mac:
+  `results/exploratory-glm53-9baseline-2026-09-05/` (B1 F1 0.612
+  byte-identical vs the deepseek sweep — cross-codegen canary green; B4
+  0.716±0.0006). NOT in FREEZE/chapters/slides (boundary respected).
+- **Remaining user actions**: (1) fill Lời cảm ơn in the .docx — still
+  `[Điền sau — todo-16]` placeholder (personal content, intentionally left);
+  (2) optional: finish B6a-glm on the Mac per the open option in
+  `task-17-glm53-exploratory.md` (~2–4h, few $); (3) send the book to GVHD
+  and iterate.
 
 ## Real bugs found & fixed (all committed — see `git log` for exact diffs)
 
@@ -338,45 +382,20 @@ model), and split tokens + cost surfaced in `report.md`/`metrics.csv`/
    corrected **50-site** denominator, std=0. Full narrative (site-count
    44→50, `interproceduralFlow` Δ=0, Clang 43-site by scorer design):
    `results/lamed-correction-2026-08-20-README.md`.
-2. **MemHint Bước 4/5** — NOT YET COMPLETE, driver script ready. Attempted
-   2026-08-28 on thesis-wsl2 (corpus ingested 19/19 from `memhint_bugs.json`
-   fresh clones; analyzers running natively — no Docker on that host). Two
-   runs (`no_llm --enrich`, `llm_assisted ×3`) were launched but the
-   static-analyzer was **OOM-killed by the Linux kernel twice** while parsing
-   the `redis` case (2235 files) — `dmesg`: `Killed process ... anon-rss:
-   ~14126508kB`, both times, even after halving `STATIC_PARSER_WORKERS`
-   (8→4) and capping the main thread's V8 heap (`--max-old-space-size`).
-   Root cause: almost certainly **native memory** (tree-sitter's C parse
-   trees live outside the V8 heap, so `--max-old-space-size` can't bound
-   them) not being reclaimed across a long-lived process handling many large
-   files — a real, unfixed limitation of the static-analyzer under
-   sustained large-repo load, not a config mistake. Not chasing the actual
-   leak down mid-thesis-crunch; mitigated instead via
-   **`scripts/memhint-eval-driver.sh`** (committed, executable, self-
-   documenting): serializes eval (`--concurrency 1`), starts a **fresh**
-   static-analyzer process before every attempt (clean process = memory
-   reset), and retries up to 8x per run via `--resume` (per-case disk cache,
-   so a crash only re-does the ONE case that was mid-flight). Also fixed
-   along the way and folded into the script: `analyzerRoot` config pointing
-   at the Docker-only `/workspace` default on a native host (would have
-   silently zeroed out dynamic-stage candidates — same failure class as the
-   VPS bug in `docs/EXPERIMENT-LOG-2026-08-15-wsl2-juliet-sweep.md`), the
-   dynamic-analyzer's ESM/CommonJS main-thread crash on a native (non-Docker)
-   host (root package.json's `"type": "module"` misdetects the webpack
-   bundle — static-analyzer's own webpack config already works around this
-   for itself, dynamic-analyzer's doesn't), and a corpus-hash drift between
-   machines (Mac's committed `demo/memhint.lock.json` was hashed against a
-   corpus tree that had already absorbed build-generated files from a prior
-   `no_llm` run — e.g. `redis/src/release.h`, jemalloc generated headers — a
-   pristine fresh clone on the PC hashes differently until the same build
-   step runs once; the script re-validates + re-writes the lock after Run 1
-   for exactly this reason). **To run: `tmux new-session -d -s driver
-   "bash -ilc $(pwd)/scripts/memhint-eval-driver.sh"` on thesis-wsl2**, after
-   confirming `cleak config get` shows `analyzerRoot` = the repo's absolute
-   path and `provider` = a profile with a real API key (see the script's own
-   header comment for the one-time config prerequisites). Docs write-up
-   (`docs/DATASETS.md`, chapter 4 of the thesis) pending after the runs
-   finish clean.
+2. ~~**MemHint Bước 4/5**~~ **DONE 2026-09-05** — driver completed
+   (`"Run2 llm_assisted complete on attempt 3"` + `"ALL DONE"`), artifacts
+   synced to Mac, **RESULTS-FREEZE row 10 filled and independently
+   re-verified** (commit `978e1f5`): no_llm TP12/FP0/FN14 R 46.2%;
+   llm_assisted ×3 identical matrix — P 1.000±0.000 / R 0.462±0.000 /
+   F1 0.632±0.000; LLM judge fired 2× in run 2 only (freerdp_9fc23ad2), 0
+   verdict flips; corpus hash `442de35d6410bdd03d30b665b5f0f912`, wsl2 commit
+   `30e04cb1c`. Anchor reconciliation vs the 08-28 partial R 42.3% (11/26,
+   8 OOM-lost cases): +1 TP from the recovered cases (artifact lost — anchor
+   flagged `[VERIFY]` in FREEZE, not a code-generation delta). Chapters
+   (§4.10), appendix (A.8), slides/Q&A all carry these numbers 1-1 with
+   FREEZE. See "Thesis completion status" above. The OOM mitigation below
+   (fresh process per attempt + 8× `--resume`) is what carried the runs
+   through.
 3. ~~Juliet `llm_assisted` full run~~ **DONE** —
    `results/eval-llm_assisted-juliet-full/` (report generated 2026-08-11,
    1658/1658, 0 errors): P77.9%/R77.3%/F1 0.776/MCC 0.610, $12.66. NOTE:
@@ -408,6 +427,19 @@ model), and split tokens + cost surfaced in `report.md`/`metrics.csv`/
    `docs/CONTRIBUTION.md` C4.
 5. **Docker resource limits**: still no `deploy.resources.limits` — needs
    real RSS profiling under load before attempting one again (see bug #7).
+6. **Exploratory glm-5.3-flash sweep (out of thesis, non-blocking)**:
+   partial 5/9 (B1–B5 ok, B6+ error — wsl2 VM died mid-B6; user directed
+   compute off wsl2). Skip-rule active per plan; evidence + the optional
+   B6a-on-Mac completion are in
+   `.omo/evidence/thesis-completion-next-steps/task-17-glm53-exploratory.md`.
+7. **Post-review**: F1–F4 reviewer wave (plan compliance / code quality /
+   real manual QA / scope fidelity) runs after this todo; the consolidated
+   evidence ledger + invariant results they consume live in
+   `.omo/evidence/thesis-completion-next-steps/task-16-final-verification.md`.
+   One known gap for F1: `task-13-slides.md` evidence file was never written
+   (the slides product itself, `defense/slides.md`, is committed in `f1b6bf8`
+   and its numbers re-verified against FREEZE — see the ledger's findings
+   section).
 
 ## Source of truth
 
