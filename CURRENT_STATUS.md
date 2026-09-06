@@ -181,17 +181,9 @@ invariant re-verification is `task-16-final-verification.md` in that directory.
     `defense/demo-script.md` (live cjson walkthrough + video checklist),
     `defense/qa-bank.md` (12 Q&A with FREEZE-sourced numbers), plus Tóm tắt
     (VN) / Abstract (EN) filled into the book.
-- **Exploratory glm-5.3-flash sweep (out of thesis)**: partial 5/9 configs
-  (B1–B5 valid; VM died mid-B6 → B6/B6a/B6b/B7 error rows). Skip-rule
-  activated per plan; artifacts on Mac:
-  `results/exploratory-glm53-9baseline-2026-09-05/` (B1 F1 0.612
-  byte-identical vs the deepseek sweep — cross-codegen canary green; B4
-  0.716±0.0006). NOT in FREEZE/chapters/slides (boundary respected).
 - **Remaining user actions**: (1) fill Lời cảm ơn in the .docx — still
   `[Điền sau — todo-16]` placeholder (personal content, intentionally left);
-  (2) optional: finish B6a-glm on the Mac per the open option in
-  `task-17-glm53-exploratory.md` (~2–4h, few $); (3) send the book to GVHD
-  and iterate.
+  (2) send the book to GVHD and iterate.
 
 ## Real bugs found & fixed (all committed — see `git log` for exact diffs)
 
@@ -427,12 +419,7 @@ model), and split tokens + cost surfaced in `report.md`/`metrics.csv`/
    `docs/CONTRIBUTION.md` C4.
 5. **Docker resource limits**: still no `deploy.resources.limits` — needs
    real RSS profiling under load before attempting one again (see bug #7).
-6. **Exploratory glm-5.3-flash sweep (out of thesis, non-blocking)**:
-   partial 5/9 (B1–B5 ok, B6+ error — wsl2 VM died mid-B6; user directed
-   compute off wsl2). Skip-rule active per plan; evidence + the optional
-   B6a-on-Mac completion are in
-   `.omo/evidence/thesis-completion-next-steps/task-17-glm53-exploratory.md`.
-7. **Post-review**: F1–F4 reviewer wave (plan compliance / code quality /
+6. **Post-review**: F1–F4 reviewer wave (plan compliance / code quality /
    real manual QA / scope fidelity) runs after this todo; the consolidated
    evidence ledger + invariant results they consume live in
    `.omo/evidence/thesis-completion-next-steps/task-16-final-verification.md`.
