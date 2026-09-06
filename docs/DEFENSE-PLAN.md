@@ -158,7 +158,7 @@ judge, C4 = consensus negative-result).
    `paper/scaffold.md` + đề cương .docx). Nếu không có template file, dựng
    theo quy định định dạng chuẩn LVThS (khổ A4, lề, font, đánh số) và khung
    scaffold.
-2. Dựng quyển bằng word-document-server MCP, cấu trúc theo `paper/OUTLINE.md`
+2. Dựng quyển bằng word-document-server MCP
    (ước lượng ch1 ~25tr, ch2 ~30tr, ch3 ~20tr, ch4 ~30tr, ch5 ~15tr):
    - Front matter: bìa, lời cam đoan, lời cảm ơn, tóm tắt Việt/Anh, mục lục,
      danh mục hình/bảng/viết tắt (nguồn viết tắt: `docs/GLOSSARY.md`).

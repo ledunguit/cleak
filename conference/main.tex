@@ -236,7 +236,7 @@ taint-specification extractor for vulnerability classes broader than
 leaks. Two systems target C/C++ memory leaks directly and are the closest
 prior work to CLeak: \textbf{MemHint}~\cite{memhint}, a
 neuro-symbolic-augmented static pipeline (LLM + Z3 + CodeQL/Infer) reporting
-54 leaks detected (53 confirmed/fixed) across 8 real projects (3.6M LOC),
+52--54 leaks detected (49 confirmed/fixed) across 7 real projects (3.4M+ LOC),
 and
 \textbf{LAMeD}~\cite{lamed}, which uses an LLM purely to \emph{annotate}
 source for a classical analyzer (Cooddy or CodeQL) to then consume.
@@ -1006,7 +1006,8 @@ different scoring protocols mean this is not a superiority claim).}
 \toprule
 \textbf{System} & \textbf{Corpus} & \textbf{Result} & \textbf{Method} & \textbf{Peer-rev.} \\
 \midrule
-MemHint~\cite{memhint} & 8 real projects, 3.6M LOC & 54 leaks found (53 confirmed) & LLM + Z3 + CodeQL/Infer & No \\
+% MemHint figures corrected per arXiv v3 (repo: researchs/04-nguon-va-kiem-chung.md)
+MemHint~\cite{memhint} & 7 real projects, 3.4M+ LOC & 52--54 leaks found (49 confirmed) & LLM + Z3 + CodeQL/Infer & No \\
 LAMeD~\cite{lamed} (annotation) & cJSON, 152 functions & P 0.933 / R 0.583 (28 TP/2 FP/20 FN) & LLM generates AllocSource/FreeSink annotations & Yes \\
 LAMeD~\cite{lamed} (Cooddy) & 6 real projects, 43 leaks & 5$\to$10 detections & Cooddy consumes the LLM annotations & Yes \\
 LAMeD~\cite{lamed} (CodeQL) & 6 real projects, 43 leaks & 5$\to$10 detections & CodeQL consumes the LLM annotations & Yes \\
