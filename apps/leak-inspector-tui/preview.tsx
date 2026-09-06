@@ -29,7 +29,7 @@ const cwd = '/Users/zed/Master/leak-investigator';
 
 {
   const store = new TuiStore({ provider: 'local', model: 'deepseek-v4-flash-0731', mode: 'llm_assisted', dynamic: 'off' });
-  store.addUserMessage('/scan demo/memory_leak_corpus/early_return_leak');
+  store.addUserMessage('/scan tests/fixtures/simple-leak');
   store.beginRun('scan_demo_x', 'llm_assisted');
   store.applyScanEvent({ seq: 0, ts: 0, name: ScanEventName.DISCOVERY_STARTED });
   store.applyScanEvent({ seq: 1, ts: 0, name: ScanEventName.DISCOVERY_FINISHED });
@@ -51,7 +51,7 @@ const cwd = '/Users/zed/Master/leak-investigator';
 
 {
   const store = new TuiStore({ provider: 'local', model: 'deepseek-v4-flash-0731', mode: 'llm_assisted', dynamic: 'off' });
-  store.addUserMessage('/scan demo/memory_leak_corpus/array_leak');
+  store.addUserMessage('/scan tests/fixtures/simple-leak');
   store.beginRun('scan_demo_x', 'llm_assisted');
   store.applyScanEvent({ seq: 0, ts: 0, name: ScanEventName.INVESTIGATION_STARTED });
   store.applyAgentEvent({ type: 'tool_use', id: 'a', name: 'functionSummary', input: { functionName: 'cleanup_partial' }, isReadOnly: true });
