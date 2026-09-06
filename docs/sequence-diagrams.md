@@ -48,7 +48,7 @@ sequenceDiagram
     participant CLI as cli.ts
     participant Scan as ScanController.runScan
     participant Phase as buildInvestigationPhase
-    participant Loop as agent-core queryLoop
+    participant QLoop as agent-core queryLoop
     participant LLM as callModel (LLM)
     participant Domain as Domain tools<br/>(list/read/record/finalize)
     participant Static as static-analyzer (MCP)
@@ -66,7 +66,7 @@ sequenceDiagram
 
     rect rgb(236,250,240)
     Note right of Scan: DISCOVERY (deterministic)
-    Scan->>Static: candidateScan (content + allocators; C/C++ routed)
+    Scan->>Static: candidateScan (content, allocators) - C/C++ routed
     Static-->>Scan: candidates (libc+factory+new+param-ownership) → CandidateManager
     end
 
@@ -83,26 +83,26 @@ sequenceDiagram
     Phase-->>Scan: InvestigationPhase (tools, systemPrompt)
 
     rect rgb(255,248,236)
-    Note right of Loop: INVESTIGATION (native tool-calling)
-    Scan->>Loop: queryLoop(systemPrompt, messages, tools, maxTurns)
+    Note right of QLoop: INVESTIGATION (native tool-calling)
+    Scan->>QLoop: queryLoop(systemPrompt, messages, tools, maxTurns)
     loop until finalize_report or maxTurns
-        Loop->>LLM: callModel(history, tools)
-        LLM-->>Loop: assistant text + tool_use[]
+        QLoop->>LLM: callModel(history, tools)
+        LLM-->>QLoop: assistant text + tool_use[]
         par concurrent-safe tools (parallel, cap 10)
-            Loop->>Domain: list_candidates / read_file
-            Domain-->>Loop: tool_result
-            Loop->>Static: astScan / callGraph / ... (content injected)
-            Static-->>Loop: tool_result
+            QLoop->>Domain: list_candidates / read_file
+            Domain-->>QLoop: tool_result
+            QLoop->>Static: astScan / callGraph / ... (content injected)
+            Static-->>QLoop: tool_result
         and dynamic / sequential tools
-            Loop->>Dynamic: build + asan/lsan/valgrind (path mapped)
-            Dynamic-->>Loop: tool_result
-            Loop->>Domain: record_verdict / record_evidence
-            Domain-->>Loop: bundle updated
+            QLoop->>Dynamic: build + asan/lsan/valgrind (path mapped)
+            Dynamic-->>QLoop: tool_result
+            QLoop->>Domain: record_verdict / record_evidence
+            Domain-->>QLoop: bundle updated
         end
-        Loop-->>CLI: AgentEvent (turn_start, text, tool_use, tool_result)
+        QLoop-->>CLI: AgentEvent (turn_start, text, tool_use, tool_result)
         Note over CLI: TUI renders live
     end
-    Loop-->>Scan: { reason, turns, decisions, transcript, usage }
+    QLoop-->>Scan: { reason, turns, decisions, transcript, usage }
     end
 
     rect rgb(245,238,255)

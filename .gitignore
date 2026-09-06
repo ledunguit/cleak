@@ -91,3 +91,6 @@ demo/**/corpus_validation_report.md
 # ad hoc smoke-test corpora created while exercising evaluation/cli.ts's ingest flow
 /demo/*-smoke-test/
 /demo/*-smoke-test.lock.json
+
+# drawio-export docker output (thesis figures staged to .omo/evidence/.../figures/)
+/diagrams/export/
