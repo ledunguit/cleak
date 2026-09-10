@@ -24,27 +24,26 @@ for C/C++ Memory Leak Detection}
 
 \begin{abstract}
 Memory leaks (CWE-401) in C/C++ are hard to find with static analysis
-alone (noisy, unable to prove runtime behavior) or with dynamic
-analysis alone (limited to the paths a test run exercises). We present
-\textbf{CLeak}, a memory-leak investigation system built on one principle:
-\emph{the LLM owns policy, the deterministic engine owns mechanism}.
-Project-specific knowledge is discovered once by an LLM, verified against
-source text, frozen into a cached profile, and fed into a deterministic
-static/dynamic engine that never consults the LLM; the LLM judge runs
-only on borderline verdicts. A two-tier protocol reports
-bitwise-deterministic results for the non-agentic configuration and
-measured variance for the LLM-assisted one, and the consensus judge as
-sample-composition-dependent rather than a clean win.
-On the validated NIST Juliet CWE-401 corpus (1{,}658 cases), a
-five-factor ablation isolates a deterministic static+dynamic+planner
-configuration reaching Precision~96.5\%, Recall~78.0\%, F1~0.863,
-MCC~0.790, while unconstrained LLM tool selection costs about 4$\times$
-more for \emph{lower} accuracy. Performance varies by allocator family
-(F1 0.991 on \texttt{malloc} sites, 0.584 on \texttt{strdup} sites). On
-LAMeD the deterministic configuration holds 100\% precision at 30.0\%
-recall; on an independently reconstructed MemHint-project corpus, 100\%
-precision at 46.2\% recall. Caveats are stated wherever evidence is
-incomplete.
+alone (noisy, unable to prove runtime behavior) or dynamic analysis
+alone (limited to exercised paths). We present \textbf{CLeak}, a
+memory-leak investigation system built on one principle: \emph{the LLM
+owns policy, the deterministic engine owns mechanism}. An LLM discovers
+project-specific knowledge once, verifies it against source text, and
+freezes it into a cached profile for a deterministic static/dynamic
+engine that never consults the LLM; the LLM judge runs only on
+borderline verdicts. A two-tier protocol reports
+bitwise-deterministic results for the non-agentic configuration,
+variance for the LLM-assisted one, and the consensus judge as
+sample-composition-dependent rather than a clean win. On the validated
+NIST Juliet CWE-401 corpus (1{,}658 cases), a five-factor ablation
+isolates a deterministic static+dynamic+planner configuration at
+Precision~96.5\%, Recall~78.0\%, F1~0.863, MCC~0.790; unconstrained LLM
+tool selection costs about 4$\times$ more for \emph{lower} accuracy.
+Performance varies by allocator family (F1 0.991 on \texttt{malloc}
+sites, 0.584 on \texttt{strdup} sites); on LAMeD the deterministic
+configuration holds 100\% precision at 30.0\% recall, and 100\% at
+46.2\% on an independently reconstructed MemHint-project corpus.
+Caveats are stated wherever evidence is incomplete.
 \end{abstract}
 
 \maketitle
@@ -52,226 +51,196 @@ incomplete.
 \section{Introduction}
 \label{sec:intro}
 
-Missing release of memory after its effective lifetime, catalogued as
-CWE-401, is one of the oldest and most persistent classes of software defects in C and
-C++, the two languages in which manual memory management remains the norm
-across operating-system kernels, browsers, databases, and embedded
-firmware. Unlike a crash-inducing memory-safety bug (a buffer overflow or
-use-after-free), a leak rarely terminates the process that causes it.
-Instead, it manifests as slow resource exhaustion, degraded availability, or a
-denial-of-service condition that is difficult to reproduce and expensive to
-diagnose in production. The engineering cost of finding leaks has
-historically been split between two incompatible tool families.
-\textbf{Static analyzers} (Clang Static Analyzer, Facebook Infer, CodeQL)
-reason about all paths through a program without executing it, which gives
-them coverage but also a structurally high false-positive rate: without
-running the program, a static tool cannot distinguish a genuine leak from
-an allocation whose ownership was legitimately transferred to a caller.
+The missing release of memory after its effective lifetime, catalogued
+as CWE-401, is a longstanding defect class in C and C++, where manual
+memory management remains the norm in kernels, browsers, databases, and
+firmware. Unlike a crash-inducing bug (a buffer overflow or
+use-after-free), a leak rarely terminates its host process: it surfaces
+as slow resource exhaustion, degraded availability, or denial of
+service, hard to reproduce and costly to diagnose in production.
+Finding leaks has meant two incompatible tool families.
+\textbf{Static analyzers} (Clang Static Analyzer, Infer, CodeQL) reason
+about all paths without running the program: coverage plus a
+structurally high false-positive rate, since they cannot tell a genuine
+leak from an allocation whose ownership legitimately moved to a caller.
 \textbf{Dynamic analyzers} (Valgrind Memcheck, AddressSanitizer,
-LeakSanitizer) instrument and run the actual binary, which gives them
-near-zero false positives on the code paths they exercise, but zero
-visibility into the (often much larger) set of paths a given test run does
-not reach. Neither family alone is sufficient, and simple concatenation of
-their findings does not resolve the disagreement between them.
+LeakSanitizer) instrument and run the actual binary: near-zero false
+positives on exercised paths, zero visibility into the often much larger
+unexercised set. Neither family suffices, and concatenating their
+findings does not resolve their disagreement.
 
-Large language models offer a third analytical mode: reading a function's
-source and its calling context and reasoning about ownership the way a
-human code reviewer would, including project-specific conventions no
-generic tool is aware of (a wrapper such as \texttt{cJSON\_Duplicate} is an
-allocator, and a parameter freed on the success path but not on an error path
-is a leak on that path). The naive way to exploit this, giving an LLM
-agent unrestricted tool access to a codebase and letting it decide what to
-investigate, introduces exactly the property a controlled scientific
-evaluation cannot tolerate: run-to-run non-determinism, even at
-temperature~0, from provider-side batching and scheduling effects, together
-with unconstrained and expensive tool-calling behavior that is hard to
-audit or bound in cost.
+Large language models offer a third mode: reading a function's source
+and calling context and reasoning about ownership like a human reviewer,
+including project-specific conventions no generic tool knows (a wrapper
+like \texttt{cJSON\_Duplicate} is an allocator; a parameter freed on the
+success path but not an error path leaks there). The naive alternative,
+an LLM agent with unrestricted tool access that decides what to
+investigate, brings what a controlled scientific evaluation
+cannot tolerate: run-to-run non-determinism, even at temperature~0, from
+provider-side batching and scheduling, plus unconstrained, expensive
+tool calls that are hard to audit or bound in cost.
 
-CLeak's contribution is an architecture that captures the diagnostic value
-of an LLM without inheriting its instability, organized around the design
-principle stated in Section~\ref{sec:policy-mechanism}: \emph{the LLM owns
-policy, the engine owns mechanism}. Concretely, this paper makes four
-contributions: Section~\ref{sec:contributions} returns to these
-contributions with the measured results in hand.
+CLeak's contribution is an architecture that captures an LLM's
+diagnostic value without its instability, built on the principle of
+Section~\ref{sec:policy-mechanism}: \emph{the LLM owns policy, the
+engine owns mechanism}. This paper makes four contributions;
+Section~\ref{sec:contributions} returns to them with measured results.
 
 \begin{description}
 \item[C1: A deterministic-except-judge hybrid pipeline.] A pinned
-  build-and-sanitize recipe runs LeakSanitizer with zero LLM involvement
-  whenever a project's build command is known, isolating dynamic evidence
-  capture from LLM non-determinism. Combined with deterministic static
-  evidence and an LLM-planner-gated orchestration, this configuration is
-  the system's \emph{strongest measured result} on the full validated
-  Juliet corpus (F1~0.863, MCC~0.790, Section~\ref{sec:evaluation}) at a
-  fraction of the dollar cost of agentic alternatives
-  (Section~\ref{sec:pipeline}).
+  build-and-sanitize recipe runs LeakSanitizer without LLM involvement
+  whenever the build command is known, keeping dynamic evidence
+  deterministic. With deterministic static evidence and
+  LLM-planner-gated orchestration, it is the system's \emph{strongest
+  measured result} on the full validated Juliet corpus (F1~0.863,
+  MCC~0.790; Section~\ref{sec:evaluation}) at a fraction of agentic
+  alternatives' cost (Section~\ref{sec:pipeline}).
 \item[C2: Two-tier reproducibility protocol.] A deterministic
-  (\texttt{no\_llm}) configuration that is proven bitwise-reproducible by a
-  dedicated determinism gate, and an LLM-assisted
-  (\texttt{llm\_assisted}) configuration whose variance is measured and
-  reported rather than hidden (Section~\ref{sec:reproducibility}).
+  (\texttt{no\_llm}) configuration proven bitwise-reproducible by a
+  dedicated determinism gate, and an LLM-assisted (\texttt{llm\_assisted})
+  one whose variance is measured and reported rather than hidden
+  (Section~\ref{sec:reproducibility}).
 \item[C3: Structured evidence enrichment.] Ownership-transfer tracking,
   alloc$\to$free pairing with guard-subset path reconciliation (a free
-  reconciles an allocation only if its guard condition set is a subset of
+  reconciles an allocation only if its guard conditions are a subset of
   the exit path's), path-sensitive and parameter-ownership leak detection
-  (a leak that appears only on some control-flow paths, or only when a
-  parameter is freed on some branches but not others), and
-  runtime$\leftrightarrow$candidate correlation, that together make the
-  purely deterministic heuristic judge path-aware without invoking an SMT
-  solver (Section~\ref{sec:judging}).
+  (a leak on only some control-flow paths, or only when a parameter is
+  freed on some branches), and
+  runtime$\leftrightarrow$candidate correlation, which together make the
+  deterministic heuristic judge path-aware without an SMT solver
+  (Section~\ref{sec:judging}).
 \item[C4: A self-consistency consensus judge, evaluated against single-LLM
   judging.] A judging layer that fuses static and dynamic evidence and,
   only for genuinely borderline bundles (heuristic verdict
   \texttt{likely\_leak} or \texttt{uncertain}, or confidence in
-  $[0.35, 0.7]$), resamples the LLM judge $K$ times
-  at nonzero temperature, combining the votes by a self-consistency rule.
-  On a family-stratified sample representative of the corpus's difficulty
-  spread, single-LLM judging is both more stable (verdict flip rate 2.0\%
-  vs.\ 8.0\%) and more accurate (F1 0.852--0.855 vs.\ 0.793--0.796) than
-  $K{=}3$ consensus. We do not recommend enabling consensus judging by
-  default (Section~\ref{sec:eval-consensus}).
+  $[0.35, 0.7]$), resamples the LLM judge $K$ times at nonzero
+  temperature and combines votes by self-consistency. On a
+  family-stratified sample spanning the corpus's difficulty spread,
+  single-LLM judging is both more stable (2.0\% vs.\ 8.0\% verdict
+  flips) and more accurate (F1 0.852 to 0.855 vs.\ 0.793 to 0.796) than
+  $K{=}3$ consensus. We do not recommend consensus judging by default
+  (Section~\ref{sec:eval-consensus}).
 \end{description}
 
 We evaluate CLeak on the NIST Juliet CWE-401 suite (a validated,
-integrity-checked 1{,}658-case subset), on the peer-reviewed LAMeD
-real-world benchmark (41 developer-confirmed leaks across seven C
-projects), on an independently reconstructed MemHint-project corpus (19
-real leak-fix commits across six of the MemHint paper's target projects,
-since MemHint's own per-bug list is unpublished), and against a live
-re-run of Clang Static Analyzer on identical scoring.
-Section~\ref{sec:evaluation} reports a controlled five-factor ablation run
-on the \emph{entire} validated Juliet corpus (not a sub-sample), broken
-down by allocator family to surface where performance varies, together
-with a set of results we report as inconclusive or partially superseded
-rather than omit.
+integrity-checked 1{,}658-case subset), the peer-reviewed LAMeD
+benchmark (41 developer-confirmed leaks, seven C projects), an
+independently reconstructed MemHint-project corpus (19 leak-fix commits
+across six MemHint target projects, since its own per-bug list is
+unpublished), and a live Clang Static Analyzer re-run under identical
+scoring. Section~\ref{sec:evaluation} reports a controlled five-factor
+ablation over the \emph{entire} validated corpus (not a sub-sample), by
+allocator family, alongside results we report as inconclusive or
+partially superseded rather than omit.
 
 \section{Related Work}
 \label{sec:related}
 
 \paragraph{Static analysis for memory leaks.}
-Clang Static Analyzer~\cite{clangsa} uses path-sensitive symbolic execution
-over an intraprocedural or bounded interprocedural scope, Facebook
-Infer~\cite{infer} scales instead via compositional bi-abduction over
-per-procedure separation-logic summaries so it need not bound its
-interprocedural scope, and CodeQL~\cite{codeql} expresses leak patterns as
-queries over a database built from the program's AST/CFG/data-flow graph.
-All three inherit the fundamental limitation of static reasoning about
-memory: without a concrete execution, ownership transfer and conditional
-deallocation are ambiguous, which drives false-positive rates up in
-practice. Tree-sitter~\cite{treesitter} is not a leak detector but the
-incremental-parsing substrate we and several of the systems below build on
-for structural analysis. Neuro-symbolic hybrids such as
-NESA~\cite{nesa} and general advances in scaling symbolic execution to
-large codebases~\cite{symexec-scaling} point toward combining
-learned and symbolic reasoning, a direction CLeak takes with an LLM instead
-of a learned model.
+Clang Static Analyzer~\cite{clangsa} performs path-sensitive symbolic
+execution over bounded scopes; Facebook Infer~\cite{infer} scales via
+compositional bi-abduction over separation-logic summaries; CodeQL~\cite{codeql}
+expresses leak patterns as queries over an AST/CFG/data-flow database.
+All three inherit the same limitation: without execution, ownership
+transfer and conditional deallocation stay ambiguous, so false positives
+rise in practice.
+Tree-sitter~\cite{treesitter}, no leak detector itself, is the
+incremental-parsing substrate we and several systems below use.
+Neuro-symbolic hybrids like NESA~\cite{nesa} and scaling symbolic
+execution to large codebases~\cite{symexec-scaling} point toward
+combining learned and symbolic reasoning; CLeak takes that direction
+with an LLM rather than a learned model.
 
-Independent of leak-detection capability, CLeak's engine follows
-architectural precedent from industrial-scale analysis platforms:
-content-hash-keyed memoization of parsed structure
-(Section~\ref{sec:arch}) mirrors the compositional summaries that let
-Infer scale to million-line codebases~\cite{infer-verification}, and its
-stateless, independently-callable MCP services mirror the shardable
-architecture of Google's Tricorder~\cite{tricorder}, whose
-false-positive-rate discipline also motivates our
-deterministic-engine-first triage; CodeQL's own incremental
-reuse~\cite{codeql-incremental} similarly motivates the dynamic
-analyzer's compiler-cache-backed rebuilds.
+CLeak's engine also follows architectural precedent: content-hash-keyed
+parse memoization (Section~\ref{sec:arch}) mirrors the compositional
+summaries behind Infer's million-line
+scale~\cite{infer-verification}; its stateless, independently-callable
+MCP services mirror Google's shardable Tricorder~\cite{tricorder},
+whose false-positive discipline also motivates our
+deterministic-engine-first triage; and CodeQL's incremental
+reuse~\cite{codeql-incremental} motivates the dynamic analyzer's
+compiler-cache-backed rebuilds.
 
 \paragraph{Dynamic analysis for memory leaks.}
 Valgrind Memcheck~\cite{valgrind} and
 AddressSanitizer / LeakSanitizer~\cite{asan} instrument and run a binary
-directly, giving near-perfect precision on exercised paths at the cost of
-path coverage. Recent sanitizer research (RangeSanitizer~\cite{rangesan},
+directly: near-perfect precision on exercised paths at the cost of
+coverage. Recent sanitizer work (RangeSanitizer~\cite{rangesan},
 QMSan~\cite{qmsan}, CombiSan~\cite{combisan}, and taint-analysis
-accelerators such as AirTaint~\cite{airtaint}) improves detection speed and
-precision for related memory-safety classes but does not address dynamic
-analysis's coverage ceiling. A direct empirical comparison of fuzzers
-against static analyzers for memory-unsafety detection~\cite{fuzzer-vs-sa}
-finds the two tool families' true-positive sets are largely disjoint,
-which motivates the hybrid design in Section~\ref{sec:pipeline} rather than a
-choice between them. AddressWatcher~\cite{addresswatcher} localizes leak
-\emph{fixes} from sanitizer output, a complementary problem to detection.
+accelerators like AirTaint~\cite{airtaint}) improves speed and precision
+for related memory-safety classes but not the coverage ceiling. An
+empirical comparison of fuzzers against static analyzers for memory
+unsafety~\cite{fuzzer-vs-sa} finds their true-positive sets largely
+disjoint, which motivates a hybrid rather than a choice between them
+(Section~\ref{sec:pipeline}).
+AddressWatcher~\cite{addresswatcher} localizes leak \emph{fixes} from
+sanitizer output, a complementary problem.
 
 \paragraph{LLMs for software defect detection.}
-Early empirical work established that LLMs can identify security
-vulnerabilities from source alone with meaningful but bounded
-accuracy~\cite{llm-vuln-eval}. IRIS~\cite{iris} couples an LLM with static
-analysis for vulnerability detection. A complementary line of work asks
-whether LLM prompting alone, with the right prompting strategy, can
-substitute for a static analyzer's reasoning~\cite{llm-proxy-static}, and
-reports that it can \emph{exceed} a static-analyzer baseline on their
-benchmark. This does not contradict CLeak's own architecture, since
-CLeak still grounds the LLM in tool output (static/dynamic evidence) rather
-than relying on prompting alone, and targets a different failure mode
-(judge instability, not analyzer substitution). VulnLLM-R~\cite{vulnllmr}
-and SemTaint~\cite{semtaint}
-represent, respectively, a reasoning-specialized model and a multi-agent
-taint-specification extractor for vulnerability classes broader than
-leaks. Two systems target C/C++ memory leaks directly and are the closest
-prior work to CLeak: \textbf{MemHint}~\cite{memhint}, a
-neuro-symbolic-augmented static pipeline (LLM + Z3 + CodeQL/Infer) reporting
-52--54 leaks detected (49 confirmed/fixed) across 7 real projects (3.4M+ LOC),
-and
-\textbf{LAMeD}~\cite{lamed}, which uses an LLM purely to \emph{annotate}
-source for a classical analyzer (Cooddy or CodeQL) to then consume.
-Notably, this is \emph{not} an agentic architecture, and it is the origin of
-the real-world benchmark we evaluate against in
-Section~\ref{sec:eval-lamed}. LAMeD does not report an F1 score, so we quote
-its own published precision/recall where we compare against it.
+Early empirical work found LLMs can identify vulnerabilities from source
+alone with meaningful but bounded accuracy~\cite{llm-vuln-eval};
+IRIS~\cite{iris} couples an LLM with static analysis. A complementary
+line asks whether prompting alone, with the right strategy, can
+substitute for a static analyzer's reasoning and reports that it can
+\emph{exceed} it on its benchmark~\cite{llm-proxy-static}, a finding
+compatible with CLeak, which grounds the LLM in static/dynamic tool
+output rather than prompting alone and targets judge instability, not
+analyzer substitution. VulnLLM-R~\cite{vulnllmr} and
+SemTaint~\cite{semtaint} address broader vulnerability classes
+(reasoning-specialized model; multi-agent taint-specification
+extractor). The closest prior work targets C/C++ memory leaks directly:
+\textbf{MemHint}~\cite{memhint}, a neuro-symbolic-augmented static
+pipeline (LLM + Z3 + CodeQL/Infer) that reports 52 to 54 leaks found
+(49 confirmed/fixed) across 7 projects (3.4M+ LOC), and
+\textbf{LAMeD}~\cite{lamed}, whose LLM only \emph{annotates} source for
+a classical analyzer (Cooddy or CodeQL).
+LAMeD is \emph{not} an agentic architecture, reports no F1 (we quote its
+published precision/recall), and supplies our real-world benchmark
+corpus (Section~\ref{sec:eval-lamed}).
 A related but distinct line targets kernel-level memory-management
 intention inconsistencies~\cite{kernel-memmgmt}.
-Agentic multi-agent systems for repository-scale auditing, including
-RepoAudit~\cite{repoaudit}, Revelio~\cite{revelio}, SAILOR~\cite{sailor},
-and crash-oriented systems such as FuzzingBrain~V2~\cite{fuzzingbrainv2}
-and ATLANTIS~\cite{atlantis} (an AIxCC Cyber Reasoning System), are
-architectural analogues we draw on for agent design, but target
-multi-defect classes (use-after-free, null-pointer dereference, or
-crash-reproducing exploits generally) rather than non-crash leaks
-specifically, and RepoAudit's own reported P=78.4\% spans several defect
-types, not leaks alone, so we do not treat it as a leak-specific baseline.
-Foundational agent-design work, including ReAct~\cite{react},
+Repository-scale agentic auditors (RepoAudit~\cite{repoaudit},
+Revelio~\cite{revelio}, SAILOR~\cite{sailor}) and crash-oriented systems
+(FuzzingBrain~V2~\cite{fuzzingbrainv2} and the AIxCC Cyber Reasoning
+System ATLANTIS~\cite{atlantis}) are our architectural analogues but
+target multi-defect classes (use-after-free, null dereference,
+crash-reproducing exploits) rather than non-crash leaks; RepoAudit's
+reported P=78.4\% spans several defect types, so we do not treat it as a
+leak-specific baseline. Agent-design foundations (ReAct~\cite{react},
 Reflexion~\cite{reflexion}, Tree-of-Thoughts~\cite{tot}, and the
-SE-specific agent scaffolds SWE-agent~\cite{sweagent} and
-Agentless~\cite{agentless}, informs the hard tool-partitioning and
-completion-nudge mechanisms of our Stage~A/B sub-agents
-(Section~\ref{sec:pipeline}).
+SE-specific SWE-agent~\cite{sweagent} and Agentless~\cite{agentless})
+shape the hard tool-partitioning and completion-nudge mechanisms of our
+Stage~A/B sub-agents (Section~\ref{sec:pipeline}).
 
 \paragraph{Reducing LLM variance and LLM-as-judge.}
-Self-consistency decoding~\cite{selfconsistency}, which samples multiple
-reasoning chains at nonzero temperature and aggregates them by vote, is the
-mechanism our consensus judge (C4) applies to leak verdicts rather than
-chain-of-thought answers. Zheng et al.'s study of LLM-as-a-judge
-calibration and disagreement~\cite{llmjudge} motivates why we treat a
-single LLM sample as insufficiently stable to trust unconditionally and
-report McNemar-test significance (Section~\ref{sec:eval-consensus}) rather
-than a raw accuracy delta.
+Self-consistency decoding~\cite{selfconsistency} samples multiple
+reasoning chains at nonzero temperature and votes among them; our
+consensus judge (C4) applies it to leak verdicts, not chain-of-thought
+answers. Zheng et al.'s LLM-as-a-judge calibration study~\cite{llmjudge}
+motivates treating a single LLM sample as too unstable to trust
+unconditionally and reporting McNemar-test significance
+(Section~\ref{sec:eval-consensus}) rather than a raw accuracy delta.
 
 \paragraph{Benchmarks and protocols.}
-We use the NIST Juliet Test Suite~\cite{juliet} as our synthetic
-ground-truth corpus and the LAMeD benchmark~\cite{lamed-benchmark} as our
-real-world, peer-reviewed corpus. DiverseVul~\cite{diversevul},
+Beyond our evaluation corpora Juliet~\cite{juliet} and
+LAMeD~\cite{lamed-benchmark}, DiverseVul~\cite{diversevul},
 SV-COMP Memsafety~\cite{svcomp}, and Magma~\cite{magma} are related
-vulnerability/memory-safety benchmarks we do not use directly, but position
-against in corpus design. The Model Context Protocol~\cite{mcp} is the
-tool-invocation transport between our orchestrator and analyzers
-(Section~\ref{sec:arch}). A pointer-ownership model for
-C~\cite{ownership-model} informs the ownership-transfer vocabulary used by
-our heuristic judge.
+benchmarks we position against but do not use. The Model Context
+Protocol~\cite{mcp} connects our orchestrator to the analyzers
+(Section~\ref{sec:arch}); a pointer-ownership model for
+C~\cite{ownership-model} informs our heuristic judge's
+ownership-transfer vocabulary.
 
-\paragraph{Positioning.} To our knowledge, no system in the 2025--2026
-literature combines static and dynamic evidence specifically for
-\emph{non-crash} C/C++ memory leaks while also providing a reproducibility
-protocol distinguishing deterministic from LLM-dependent results. CLeak is
-designed to fill exactly this gap. Two further systems round out this
-comparison: POM~\cite{pom}, an LLM+SAT pointer-ownership enforcement tool
-from CMU's Software Engineering Institute, and SecVulEval~\cite{secvuleval},
-a C/C++ vulnerability-detection dataset (not a detector), included for
-contrast. No single
-prior system combines static analysis,
-dynamic analysis, agentic orchestration, and a verified bit-for-bit
-reproducibility gate the way CLeak does, and CLeak is, to our knowledge,
-the only one of these systems that both exposes an MCP tool transport and
-generates a source-anchored repair diff alongside its verdicts.
+\paragraph{Positioning.} To our knowledge, no system in the 2025 to
+2026 literature combines static and dynamic evidence specifically for
+\emph{non-crash} C/C++ memory leaks with agentic orchestration and a
+reproducibility protocol separating deterministic from LLM-dependent
+results; CLeak targets this gap, and of these systems only
+it exposes an MCP tool transport and generates a source-anchored repair
+diff alongside its verdicts. Two further systems, POM~\cite{pom} (an
+LLM+SAT pointer-ownership enforcement tool from CMU's Software
+Engineering Institute) and SecVulEval~\cite{secvuleval} (a C/C++
+vulnerability dataset, not a detector), complete the contrast.
 
 \section{System Architecture}
 \label{sec:arch}
