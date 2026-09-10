@@ -91,7 +91,8 @@ CLeak's contribution is an architecture that captures the diagnostic value
 of an LLM without inheriting its instability, organized around the design
 principle stated in Section~\ref{sec:policy-mechanism}: \emph{the LLM owns
 policy, the engine owns mechanism}. Concretely, this paper makes four
-contributions:
+contributions: Section~\ref{sec:contributions} returns to these
+contributions with the measured results in hand.
 
 \begin{description}
 \item[C1: A deterministic-except-judge hybrid pipeline.] A pinned
@@ -109,14 +110,19 @@ contributions:
   (\texttt{llm\_assisted}) configuration whose variance is measured and
   reported rather than hidden (Section~\ref{sec:reproducibility}).
 \item[C3: Structured evidence enrichment.] Ownership-transfer tracking,
-  alloc$\to$free pairing with guard-subset path reconciliation,
-  path-sensitive and parameter-ownership leak detection, and
+  alloc$\to$free pairing with guard-subset path reconciliation (a free
+  reconciles an allocation only if its guard condition set is a subset of
+  the exit path's), path-sensitive and parameter-ownership leak detection
+  (a leak that appears only on some control-flow paths, or only when a
+  parameter is freed on some branches but not others), and
   runtime$\leftrightarrow$candidate correlation, that together make the
   purely deterministic heuristic judge path-aware without invoking an SMT
   solver (Section~\ref{sec:judging}).
 \item[C4: A self-consistency consensus judge, evaluated against single-LLM
   judging.] A judging layer that fuses static and dynamic evidence and,
-  only for genuinely borderline bundles, resamples the LLM judge $K$ times
+  only for genuinely borderline bundles (heuristic verdict
+  \texttt{likely\_leak} or \texttt{uncertain}, or confidence in
+  $[0.35, 0.7]$), resamples the LLM judge $K$ times
   at nonzero temperature, combining the votes by a self-consistency rule.
   On a family-stratified sample representative of the corpus's difficulty
   spread, single-LLM judging is both more stable (verdict flip rate 2.0\%
@@ -952,8 +958,84 @@ validates per-project allocator knowledge only where a project exposes a
 small, conventional allocation API, and does not generalize to every real
 project as-is.
 
-\section{Discussion and Threats to Validity}
+\section{Contributions}
+\label{sec:contributions}
+
+\textbf{C1: A deterministic-except-judge hybrid pipeline.} Pinning the
+dynamic stage to a fixed build-and-sanitize recipe and gating the
+orchestration behind an LLM planner yields the system's strongest measured
+configuration on the full validated Juliet corpus: Precision 96.5\%,
+Recall 78.0\%, F1 0.863, and MCC 0.790, against F1 0.612 for the
+static-only baseline, at about \$6.63 versus \$26 to \$27 for the agentic
+alternatives (B6b/B7).
+
+\textbf{C2: A two-tier reproducibility protocol.} The
+\texttt{no\_llm} configuration is proven bitwise-reproducible by a
+dedicated determinism gate, and the \texttt{llm\_assisted} configuration's
+variance is measured and reported rather than hidden. The gate explicitly
+rejects the two false-pass modes observed during development: a
+self-comparison through a timestamp collision, and a degenerate all-error
+run that would otherwise register as spurious determinism.
+
+\textbf{C3: Structured evidence enrichment.} Guard-subset reconciliation
+of alloc$\to$free pairing lets the purely deterministic heuristic judge
+detect path-sensitive and parameter-ownership leaks without invoking an
+SMT solver.
+
+\textbf{C4: The consensus verdict.} On a family-stratified sample
+representative of the corpus's difficulty spread, single-LLM judging is
+more stable (verdict flip rate 2.0\% vs.\ 8.0\%) and more accurate
+(F1 0.852 to 0.855 vs.\ 0.793 to 0.796) than $K{=}3$ consensus, so we do
+not recommend enabling consensus judging by default.
+
+\section{Discussion, Open Problems, and Threats to Validity}
 \label{sec:discussion}
+
+\subsection{Open Problems}
+\label{sec:openproblems}
+
+Six issues remain open at the end of this investigation. Each is analyzed
+where it is measured in the evaluation; we restate them compactly here as
+the standing agenda this work leaves behind.
+
+\begin{itemize}
+\item \textbf{\texttt{strdup}-family recall.} \texttt{strdup} is the
+  weakest Juliet family for B6a (F1 0.584, recall-limited at 100\%
+  precision), and the traced two-branch dynamic-coverage mechanism is one
+  verified contributor, not an exhaustive account of all 59 affected
+  cases.
+\item \textbf{\texttt{interproceduralFlow} adds no measured recall.} Its
+  alloc/free counting is not path-sensitive: on cJSON's
+  \texttt{merge\_patch} leak it counts two mutually exclusive
+  \texttt{cJSON\_Delete(target)} frees as covering the allocation and
+  misses the never-freed error path, so the
+  \texttt{+interproceduralFlow} configuration is byte-identical to the
+  default on all 41 LAMeD cases.
+\item \textbf{Allocator-profiler discovery does not generalize.}
+  Aggregated over all seven LAMeD projects, allocator and deallocator
+  discovery drops to F1 0.22 and 0.17; the protocol validates
+  per-project allocator knowledge only where a project exposes a small,
+  conventional allocation API.
+\item \textbf{Consensus judging is not recommended by default.}
+  Single-LLM judging was more stable and more accurate than $K{=}3$
+  consensus on the family-stratified sample; consensus remains an opt-in
+  configuration pending a larger, multi-seed study.
+\item \textbf{The agentic tool-selection cost finding is
+  corpus-specific.} Section~\ref{sec:eval-ablation}'s finding that
+  agentic tool-selection costs real money for no accuracy gain holds on
+  Juliet, whose leak patterns are largely intraprocedural and
+  well-served by a fixed evidence-gathering recipe: at full-corpus
+  scale, B6b/B7 spend $\sim$5$\times$ the tokens of B6a but
+  $\sim$4$\times$ the dollar cost (\$26--27 vs.\ \$6.63). We would
+  expect the balance to shift toward agentic tool selection on corpora
+  with more structurally diverse investigation needs.
+\item \textbf{The smallest families are statistically meaningless.}
+  \texttt{destructor} and \texttt{virtual} have $n{=}3$ and $n{=}5$
+  cases in this corpus, so their F1 values are reported for completeness
+  and are not statistically meaningful on their own.
+\end{itemize}
+
+\subsection{Discussion and Threats to Validity}
 
 \textbf{Aggregate F1 hides real per-family variation, and dynamic evidence
 dominates precision.} Table~\ref{tab:family} shows B6a's full-corpus F1
@@ -971,7 +1053,7 @@ prioritizing dynamic-analysis coverage (e.g.\ the opt-in targeted-harness
 stage described briefly in Section~\ref{sec:pipeline} but not evaluated in
 this paper) over further LLM-judge sophistication in future iterations.
 
-\textbf{Heuristic path-sensitivity vs.\ SMT, and token economics.}
+\textbf{Heuristic path-sensitivity vs.\ SMT.}
 Guard-subset reconciliation (Section~\ref{sec:judging}) is strictly less
 complete than an SMT-based feasibility check would be: it cannot reason
 about numeric constraints, only guard containment. CLeak adopts it
@@ -979,15 +1061,6 @@ deliberately for reliability at scale, since it is unconditionally
 available on every function with no solver-timeout or memory-ceiling
 failure mode; we do not claim it subsumes SMT-based path feasibility, only
 that it recovers most of its practical value without that risk.
-Section~\ref{sec:eval-ablation}'s finding that agentic tool-selection
-costs real money for no accuracy gain is corpus-specific (Juliet's leak
-patterns are largely intraprocedural and well-served by a fixed
-evidence-gathering recipe): at full-corpus scale, B6b/B7 spend
-$\sim$5$\times$ the tokens of B6a but $\sim$4$\times$ the dollar cost
-(\$26--27 vs.\ \$6.63). We would expect the balance to shift toward
-agentic tool selection on corpora with more structurally diverse
-investigation needs, and flag this as an open question rather than a
-settled one.
 
 \textbf{Architectural alignment with industry practice, measured.}
 Section~\ref{sec:related} situates CLeak's engine relative to compositional
