@@ -1,4 +1,4 @@
-\documentclass[11pt,a4paper]{article}
+\documentclass[a4paper]{llncs}
 
 \usepackage[T1]{fontenc}
 \usepackage[utf8]{inputenc}
@@ -8,24 +8,19 @@
 \usepackage{amssymb}
 \usepackage{xcolor}
 \usepackage{hyperref}
-\usepackage{multirow}
-\usepackage{array}
-\usepackage{caption}
 \usepackage{tikz}
-\usepackage[margin=1in]{geometry}
 \usetikzlibrary{arrows.meta, positioning, fit, shapes.geometric}
 
 \hypersetup{colorlinks=true, linkcolor=blue, citecolor=blue, urlcolor=blue}
 
 \title{CLeak: LLM-Orchestrated Unified Static and Dynamic Analysis\\
 for C/C++ Memory Leak Detection}
-\author{Dung Le Dang \\
-\textit{Ho Chi Minh University of Information Technology}}
-\date{}
+\titlerunning{CLeak: LLM-Orchestrated Static and Dynamic Analysis for C/C++ Memory Leak Detection}
+\author{Anonymous Submission}
+\authorrunning{Anonymous Submission}
+\institute{}
 
 \begin{document}
-
-\maketitle
 
 \begin{abstract}
 Memory leaks (CWE-401) in C/C++ remain hard to find with either static or
@@ -69,10 +64,16 @@ achieves 100\% precision at 30.0\% recall, matched exactly by a separately
 measured \texttt{llm\_assisted} configuration (mean of 3 independent runs).
 Adding \texttt{interproceduralFlow} makes no measurable difference on this
 benchmark, a path-sensitivity gap in its own alloc/free counting
-(Section~\ref{sec:eval-lamed}). We report all of
+(Section~\ref{sec:eval-lamed}). On a second, independently reconstructed
+real-project corpus (19 cases across 6 of the MemHint paper's target
+projects, 26 scoreable sites), both configurations converge again: 100\%
+precision at 46.2\% recall, with the LLM judge flipping no verdict across
+three independent runs (Section~\ref{sec:eval-memhint}). We report all of
 this with explicit caveats where the evidence is incomplete or
 inconclusive, so the contribution stays reproducible and falsifiable.
 \end{abstract}
+
+\maketitle
 
 \section{Introduction}
 \label{sec:intro}
@@ -153,12 +154,15 @@ contributions:
 We evaluate CLeak on the NIST Juliet CWE-401 suite (a validated,
 integrity-checked 1{,}658-case subset), on the peer-reviewed LAMeD
 real-world benchmark (41 developer-confirmed leaks across seven C
-projects), and against a live re-run of Clang Static Analyzer on
-identical scoring. Section~\ref{sec:evaluation} reports a controlled
-five-factor ablation run on the \emph{entire} validated Juliet corpus
-(not a sub-sample), broken down by allocator family to surface where
-performance varies, together with a set of results we report as
-inconclusive or partially superseded rather than omit.
+projects), on an independently reconstructed MemHint-project corpus (19
+real leak-fix commits across six of the MemHint paper's target projects,
+since MemHint's own per-bug list is unpublished), and against a live
+re-run of Clang Static Analyzer on identical scoring.
+Section~\ref{sec:evaluation} reports a controlled five-factor ablation run
+on the \emph{entire} validated Juliet corpus (not a sub-sample), broken
+down by allocator family to surface where performance varies, together
+with a set of results we report as inconclusive or partially superseded
+rather than omit.
 
 \section{Related Work}
 \label{sec:related}
@@ -786,6 +790,15 @@ when constrained to \emph{when} to run static or dynamic analysis, but
 adds cost without benefit, and slightly \emph{more} noise, when also
 given latitude over \emph{which} tool to call next.
 
+\textbf{The B6a configuration is not model-specific.} Re-running the full
+1{,}658-case B6a configuration end-to-end on two further providers ---
+mimo-v2.5 (F1~0.737, P~0.880 / R~0.633, MCC~0.611, \$2.11) and GLM-5.2
+(F1~0.774, P~0.763 / R~0.786; single complete run) --- shows the
+configuration's advantage over the static-only baseline (F1~0.612) holds
+across models, though absolute numbers track each model's reasoning
+profile. These runs use the same frozen corpus hash and scorer as
+Table~\ref{tab:ablation}.
+
 \textbf{Performance is not uniform across allocator families.}
 Table~\ref{tab:family} breaks B6a's full-corpus result down by Juliet's ten
 functional variants. \texttt{malloc}-family sites (realloc-augmented
@@ -965,6 +978,48 @@ leak. Dynamic analysis is not exercised on the LAMeD static-only
 configurations reported here (Section~\ref{sec:related}, real-project
 dynamic needs a per-case harness).
 
+\subsection{Second real-project corpus: MemHint-derived}
+\label{sec:eval-memhint}
+
+MemHint~\cite{memhint} does not publish its per-bug list, so we evaluate
+on an \emph{independently reconstructed} corpus instead: 19 cases across 6
+of MemHint's own target projects (Vim, tmux, Redis, curl, OpenSSL,
+FreeRDP), each anchored to a real, GitHub-verifiable leak-fix commit,
+materialized at the parent commit so the leak is still live in the scanned
+tree, and scored positive-only over 26 sites. This is a deliberately
+harder setting than Juliet: whole real repositories, real build systems,
+and project-specific allocator APIs supplied from the frozen per-project
+profile.
+
+The result mirrors the LAMeD pattern on an independent corpus.
+\texttt{no\_llm} flags 12 of the 26 sites with zero false positives
+(recall 46.2\%). Three independent \texttt{llm\_assisted} runs produce an
+identical confusion matrix \{TP~12, FP~0, FN~14\} --- P~1.000$\pm$0.000,
+R~0.462$\pm$0.000, F1~0.632$\pm$0.000 --- so \texttt{llm\_assisted} is
+again indistinguishable from \texttt{no\_llm}. Judge-path telemetry
+explains why rather than leaving the null result unexplained: the
+heuristic judge finalizes $\sim$17.1k flagged verdicts per run, and the
+LLM judge fires on only 2 sites in one of the three runs
+(\{heuristic:~17,154, llm:~2\}; the other two runs are heuristic-only).
+No bundle on this corpus is borderline enough for an LLM verdict to
+matter. Token cost is real but lands elsewhere: $\approx$44.3M tokens
+across the three \texttt{llm\_assisted} runs ($\approx$26.5M in / 17.8M
+out) are spent on allocator profiling and static evidence gathering, not
+on verdicts.
+
+Two operational notes from running this corpus. First, an earlier partial
+run lost 8 of 19 cases to memory-pressure failures on the largest project
+(redis drove the static analyzer to $\sim$14GB RSS); the recovered full
+run found exactly one additional true positive (recall 42.3\%$\to$46.2\%),
+and that is the only possible delta, because \texttt{no\_llm} is
+bitwise-deterministic: the 11 cases scored before the failure are
+guaranteed to score identically after recovery. Second, the comparison to
+MemHint's own headline numbers (52--54 leaks across 7 projects,
+Table~\ref{tab:literature}) remains directional: their per-bug list is
+unpublished and the denominators differ, so the reportable fact here is
+zero false positives at 46.2\% recall on an independently verified
+real-fix-commit corpus, not a confirmation or refutation of their counts.
+
 \subsection{Comparison with external tools}
 
 Table~\ref{tab:external} compares our system against live re-runs of Clang
@@ -1012,6 +1067,7 @@ LAMeD~\cite{lamed} (annotation) & cJSON, 152 functions & P 0.933 / R 0.583 (28 T
 LAMeD~\cite{lamed} (Cooddy) & 6 real projects, 43 leaks & 5$\to$10 detections & Cooddy consumes the LLM annotations & Yes \\
 LAMeD~\cite{lamed} (CodeQL) & 6 real projects, 43 leaks & 5$\to$10 detections & CodeQL consumes the LLM annotations & Yes \\
 \textbf{CLeak (this work)} & LAMeD, 41 cases (50 sites) & 15 TP / 0 FP & \texttt{no\_llm}/\texttt{llm\_assisted}, identical & --- \\
+\textbf{CLeak (this work)} & MemHint-derived, 19 cases (26 sites) & 12 TP / 0 FP & \texttt{no\_llm}/\texttt{llm\_assisted}, identical & --- \\
 \textbf{CLeak (this work)} & Juliet, full corpus ($n{=}1{,}658$) & 2010 TP / 72 FP (B6a) & LLM orchestration + static + dynamic & --- \\
 \bottomrule
 \end{tabular}
@@ -1023,12 +1079,21 @@ Because the allocator profiler (Table~\ref{tab:policy}) is itself an LLM
 call, we validate it independently of the leak-detection evaluation,
 against a frozen, hand-written ground-truth allocator/deallocator list for
 cJSON, so that its own non-determinism never contaminates the
-deterministic corpus scoring above. It reaches \textbf{85\% allocator
-recall and 100\% deallocator recall}. Manual inspection of its apparent
-false positives found most were in fact allocators the hand-written list
-had simply missed (e.g.\ \texttt{cJSON\_Parse}, \texttt{cJSON\_Print}),
-suggesting the profiler is, if anything, more complete than the ground
-truth it is scored against.
+deterministic corpus scoring above. On cJSON's allocator API (the scope
+the MemHint paper itself cites), the profiler reaches \textbf{92\%
+allocator recall and 100\% deallocator recall}, at 35\%/67\% precision
+respectively --- the recall agreement corroborates the MemHint paper's
+claim that project-specific allocator knowledge is discoverable, while the
+precision side shows the hand-written ground truth under-detects. Manual
+inspection of its apparent false positives found most were in fact
+allocators the hand-written list had simply missed (e.g.\
+\texttt{cJSON\_Parse}, \texttt{cJSON\_Print}), suggesting the profiler is,
+if anything, more complete than the ground truth it is scored against.
+Aggregated over all seven LAMeD projects rather than cJSON alone, discovery
+quality drops substantially (allocator F1 0.22, deallocator F1 0.17): the
+paper's allocator-verification protocol validates per-project allocator
+knowledge only where a project exposes a small, conventional allocation
+API, and does not generalize to every real project as-is.
 
 \section{Discussion and Threats to Validity}
 \label{sec:discussion}
@@ -1075,8 +1140,8 @@ a settled one.
 \textbf{Architectural alignment with industry practice, measured.}
 Section~\ref{sec:related} situates CLeak's engine relative to compositional
 analysis~\cite{infer-verification}, shardable stateless
-services~\cite{tricorder}, and incremental reuse~\cite{codeql-incremental,
-semgrep}. Two of those principles are now backed by a direct measurement
+services~\cite{tricorder}, and incremental reuse~\cite{codeql-incremental,semgrep}.
+Two of those principles are now backed by a direct measurement
 rather than only an architectural claim. The AST memoization cache was
 generalized from process-local to disk-persisted (content-hash-keyed, so a
 fresh process reuses a prior process's parses instead of repeating them)
@@ -1142,16 +1207,29 @@ peer-reviewed LAMeD benchmark, the system holds 100\% precision at 30.0\%
 recall under both \texttt{no\_llm} and \texttt{llm\_assisted}
 configurations, with \texttt{interproceduralFlow}'s alloc/free counting
 contributing no measured recall on this benchmark due to a path-sensitivity
-gap (Section~\ref{sec:eval-lamed}).
+gap (Section~\ref{sec:eval-lamed}). On a second, independently
+reconstructed real-project corpus (MemHint's target projects, 26
+scoreable sites), the same convergence recurs: 100\% precision at 46.2\%
+recall, the LLM judge firing on 2 of $\sim$17k verdicts and flipping
+none, and the null result explained by the hybrid judge's borderline-only
+escalation rather than left unexplained (Section~\ref{sec:eval-memhint}).
 
-Future work has two concrete directions. First, evaluating the opt-in
+Future work has three concrete directions. First, evaluating the opt-in
 targeted-harness escalation stage (per-candidate harness synthesis plus a
 bounded fuzzing tier for bundles a whole-binary run leaves borderline) on
-the LAMeD benchmark specifically, where whole-project dynamic evidence is
-often unavailable. Second, making \texttt{interproceduralFlow}'s cross-function
+the LAMeD and MemHint-derived benchmarks specifically, where whole-project
+dynamic evidence is often unavailable. Second, making
+\texttt{interproceduralFlow}'s cross-function
 trace path-sensitive, since a lighter path-sensitive analysis is a smaller
 lift than a full SMT-based solver and directly targets the gap identified
-in Section~\ref{sec:eval-lamed}.
+in Section~\ref{sec:eval-lamed}. Third, bounding the static evidence
+stage's cost: on the MemHint-derived corpus the LLM judge itself was
+nearly free ($\sim$17k heuristic verdicts per run, 2 LLM escalations),
+but the static sub-agent fan-out spent $\approx$44M tokens across three
+runs at $\sim$4.7k MCP calls per case --- a gate that escalates to LLM
+sub-agents only for candidates the deterministic evidence leaves ambiguous
+would make the cost scale with the corpus's genuine ambiguity rather than
+with its size.
 
 \begin{thebibliography}{99}
 
