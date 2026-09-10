@@ -247,13 +247,13 @@ vulnerability dataset, not a detector), complete the contrast.
 
 \subsection{Component overview}
 
-CLeak is a standalone CLI/TUI scanner, \texttt{leak-inspector-tui}, acting
-as the sole orchestrator. It drives two analyzer services and an LLM
-provider over well-defined protocols, with no shared database and no
-persistent server-side state beyond per-run artifacts on disk. All
-inter-service communication uses the Model Context Protocol (MCP) over
-Streamable-HTTP (JSON-RPC~2.0). Table~\ref{tab:components} summarizes
-the four components, and Figure~\ref{fig:topology} shows their connectivity.
+CLeak is a standalone CLI/TUI scanner, \texttt{leak-inspector-tui}, the
+sole orchestrator. It drives two analyzer services and an LLM provider,
+with no shared database and no server-side
+state beyond per-run artifacts on disk. All inter-service traffic uses
+the Model Context Protocol (MCP) over Streamable-HTTP (JSON-RPC~2.0);
+Table~\ref{tab:components} lists the four components and
+Figure~\ref{fig:topology} their connectivity.
 
 \begin{table}[htbp]
 \centering
@@ -291,35 +291,32 @@ agent-core / common (libraries) & TypeScript & --- & Tool-calling loop, MCP clie
   \draw (tui) -- node[right, font=\scriptsize] {file I/O} (results);
 \end{tikzpicture}
 \caption{System topology. The orchestrator is the sole client of both
-analyzer services and the LLM gateway. The two analyzers never communicate
-directly with each other or with the LLM.}
+analyzers and the LLM gateway; the analyzers never communicate
+with each other or with the LLM.}
 \label{fig:topology}
 \end{figure}
 
 \subsection{Policy versus mechanism}
 \label{sec:policy-mechanism}
 
-The architecture's organizing principle is that \emph{the LLM owns
-policy, the engine owns mechanism}. Anything that varies per project
-(which functions allocate memory, what the project's ownership conventions
-are, how aggressively to run dynamic analysis, how to calibrate verdict
-thresholds) is discovered once by an LLM, exported as a structured
-profile, \emph{verified} against the source text it was derived from (a
-grep-based anti-hallucination check), cached to disk, and then frozen for
-benchmarking. The engine itself (tree-sitter parsing, control-flow
-construction, alloc$\to$free pairing, heuristic scoring, and consensus
-aggregation) executes deterministically and never depends on the LLM on
-the measured evaluation path. Three host-side modules implement this
-pattern (Table~\ref{tab:policy}). Onboarding a new project therefore
-requires zero lines of new code. Within the engine itself, parsed
-structure is memoized by a hash of file content rather than recomputed
-per call site. Content-addressed memoization of this kind is the
-standard technique for avoiding redundant work in a deterministic
-analysis core~\cite{infer-verification}.
+The architecture follows one principle: \emph{the LLM owns
+policy, the engine owns mechanism}. Per-project variation (which functions
+allocate memory, ownership conventions, dynamic-analysis aggressiveness,
+verdict-threshold calibration) is discovered once by an
+LLM, exported as a structured profile, \emph{verified} against its source
+(a grep-based anti-hallucination check), cached to disk, and frozen for
+benchmarking. The engine (tree-sitter parsing, control-flow construction,
+alloc$\to$free pairing, heuristic scoring, consensus aggregation) executes
+deterministically and never depends on the LLM on the measured evaluation
+path; three host-side modules implement the pattern
+(Table~\ref{tab:policy}), so onboarding a new project requires zero
+lines of new code. Parsed structure is memoized by content hash rather
+than recomputed per call site, standard practice in deterministic
+analysis cores~\cite{infer-verification}.
 
 \begin{table}[htbp]
 \centering
-\caption{The three POLICY modules and what they decide.}
+\caption{The three POLICY modules and their decisions.}
 \label{tab:policy}
 \small
 \resizebox{\textwidth}{!}{%
@@ -335,50 +332,48 @@ Judge tuner & Verdict-threshold nudge & Hard clamp to a bounded range & Heuristi
 \end{table}
 
 In the benchmark configuration used throughout Section~\ref{sec:evaluation},
-allocators are supplied from a frozen manifest and the strategist/tuner are
-disabled. This means there are \emph{zero} non-deterministic LLM calls on
-the evaluation path for the \texttt{no\_llm} mode. Its full-corpus Juliet
-confusion matrix (B3 in Table~\ref{tab:ablation}: TP1686/FP674/FN892 at
-$n{=}1{,}658$) is therefore fixed across runs.
+allocators come from a frozen manifest and the strategist/tuner are
+disabled; \texttt{no\_llm} thus makes \emph{zero} non-deterministic LLM
+calls on the evaluation path, and its full-corpus Juliet confusion matrix
+(B3 in Table~\ref{tab:ablation}: TP1686/FP674/FN892 at $n{=}1{,}658$) is
+fixed across runs.
 
 \subsection{Data model}
 
-Findings from every analysis tool converge on a common structure:
+Findings from every tool converge on one structure:
 a \texttt{LeakCandidate} (an allocation site) accumulates \texttt{Evidence}
 entries (Valgrind/ASan/LSan/\texttt{scan-build}/heuristic) into a
-\texttt{LeakBundle}, which the judging layer (Section~\ref{sec:judging})
-resolves into a \texttt{VerdictResult}: a verdict label, a confidence
-score, a natural-language explanation, a root cause, and a source-anchored
-repair diff. Verdicts are written by code, never by free-form LLM text: an
-LLM can only cause a verdict change through the two well-defined
-interfaces of Sections~\ref{sec:judging}. All artifacts for a run
+\texttt{LeakBundle} that the judging layer (Section~\ref{sec:judging})
+resolves into a \texttt{VerdictResult}: verdict label, confidence
+score, natural-language explanation, root cause, and a source-anchored
+repair diff. Verdicts are written by code, never by free-form LLM text; the
+LLM can act only through the two well-defined interfaces of
+Section~\ref{sec:judging}. All run artifacts
 (\texttt{report.json/md/html}, a cross-run-comparable
-\texttt{snapshot.json}, an append-only event log, and a metrics summary)
-are written to \texttt{results/\textlangle scanId\textrangle/} on disk. There is no
+\texttt{snapshot.json}, an append-only event log, a metrics summary) go
+to \texttt{results/\textlangle scanId\textrangle/} on disk; there is no
 database.
 
 \subsection{MCP tool surface}
 
-The static and dynamic analyzers expose 22 MCP tools, but only five are
-given directly to the LLM sub-agent of Stage~A
-(Section~\ref{sec:pipeline}): \texttt{candidateScan}, \texttt{astScan},
-\texttt{functionSummary}, \texttt{pathConstraints}, and
-\texttt{ownershipConventions}. These \emph{content-capable} tools accept
-inline source content rather than requiring a shared filesystem mount,
-keeping both analyzer services stateless and independently
-deployable~\cite{tricorder}. The remaining tools (indexing,
-call-graph extraction, \texttt{scan-build} orchestration, and all dynamic
-build/sanitizer tools) are driven directly by the orchestrator, because
-they either require filesystem access the analyzer does not have or are
-part of the deterministic Stage~B recipe described next.
+The analyzers expose 22 MCP tools, but only five reach the LLM sub-agent
+of Stage~A (Section~\ref{sec:pipeline}): \texttt{candidateScan},
+\texttt{astScan}, \texttt{functionSummary}, \texttt{pathConstraints},
+\texttt{ownershipConventions}. These \emph{content-capable} tools take
+inline source content instead of a shared filesystem mount, so both
+services stay stateless and independently deployable~\cite{tricorder}. The
+remaining tools (indexing, call-graph extraction, \texttt{scan-build}
+orchestration, dynamic build/sanitizer tools) are orchestrator-driven:
+they need filesystem access the analyzer lacks or belong to the
+deterministic Stage~B recipe described next.
 
 \section{The HYBRID Investigation Pipeline}
 \label{sec:pipeline}
 
-Once static candidates are discovered (a deterministic
-\texttt{candidateScan} over allocation sites, using the project's frozen
-allocator profile), each candidate is bundled and investigated through
-four stages, shown in Figure~\ref{fig:pipeline}.
+Static candidates come from a deterministic \texttt{candidateScan} over
+allocation sites using the project's frozen allocator profile; each is
+bundled and investigated through the four stages of
+Figure~\ref{fig:pipeline}.
 
 \begin{figure}[htbp]
 \centering
@@ -398,7 +393,7 @@ four stages, shown in Figure~\ref{fig:pipeline}.
   \node[font=\scriptsize, above=0.05cm of b] {parallel};
 \end{tikzpicture}
 \caption{The four-stage HYBRID pipeline. Stages A and B run concurrently
-over the same candidate bundles. Stage C performs no LLM reasoning. Stage
+over the same candidate bundles; Stage C performs no LLM reasoning; Stage
 D escalates to the LLM only for borderline bundles (Section~\ref{sec:judging}).}
 \label{fig:pipeline}
 \end{figure}
@@ -406,33 +401,33 @@ D escalates to the LLM only for borderline bundles (Section~\ref{sec:judging}).}
 \textbf{Stage A: static fan-out.} Candidates are grouped by file
 affinity into small batches, each assigned to an independent LLM sub-agent
 restricted to the five content-capable static tools of
-Section~\ref{sec:arch} plus a \texttt{read\_file} tool. The sub-agent
+Section~\ref{sec:arch} plus \texttt{read\_file}. The sub-agent
 gathers structural evidence (ownership conventions, path constraints,
 function-level alloc/free pairing) but is explicitly instructed, and
 architecturally unable by tool partitioning, to record a verdict.
-Evidence is captured automatically by code wrapping each tool call, not
-self-reported by the model, which removes one common source of agent
+Evidence is captured by code wrapping each tool call, not
+self-reported by the model; this removes one common source of agent
 hallucination from the evaluation path.
 
-\textbf{Stage B: dynamic evidence.} Whenever the case carries a known
+\textbf{Stage B: dynamic evidence.} When the case carries a known
 build command (as Juliet cases do, by NIST's own convention), Stage~B runs
-a \emph{fixed, deterministic} recipe: \texttt{buildTarget} with
+a \emph{fixed, deterministic} recipe, \texttt{buildTarget} with
 sanitizer flags followed by \texttt{lsanRun}, with no LLM call
-whatsoever (part of contribution C1). This is what makes the \texttt{no\_llm}
-configuration's dynamic evidence reproducible bit-for-bit. Only when no
-build command is known does control fall back to an LLM dynamic worker
-that reads the project's build system and attempts its own sanitizer
-build. This worker is restricted to the eleven dynamic tools plus
-\texttt{read\_file} and runs concurrently with Stage~A.
+whatsoever (part of contribution C1); this is what makes the \texttt{no\_llm}
+configuration's dynamic evidence reproducible bit-for-bit. Only without a
+known build command does an LLM dynamic worker take over: it reads the
+project's build system and attempts its own sanitizer build, restricted to
+the eleven dynamic tools plus \texttt{read\_file}, and runs concurrently
+with Stage~A.
 
-\textbf{Stage C: synthesis.} A purely deterministic merge of static
+\textbf{Stage C: synthesis.} A deterministic merge of static
 context and dynamic evidence into each bundle, stamping a
 \texttt{dynamicCoverage} state (\texttt{exercised\_clean},
 \texttt{exercised\_leak}, \texttt{not\_exercised}, or \texttt{dynamic\_off})
-that the judging layer treats as ground truth about what was actually
-observed at runtime. No LLM call occurs in this stage.
+that the judging layer treats as ground truth about what was observed at
+runtime. No LLM call occurs here.
 
-\textbf{Stage D: hybrid judging} is described in full in
+\textbf{Stage D: hybrid judging} is described in
 Section~\ref{sec:judging}. Any model-call or parse failure at any stage
 falls back to the deterministic heuristic verdict, so the system is
 architecturally biased toward being no worse than its deterministic core,
@@ -445,7 +440,7 @@ CLeak's judging layer has three interchangeable configurations, evaluated
 head-to-head throughout Section~\ref{sec:evaluation}: a purely
 \textbf{heuristic judge}, a \textbf{single-LLM judge}, and a
 \textbf{consensus judge}. The heuristic judge always runs first and scores
-every bundle. Only bundles it leaves \emph{borderline} are escalated.
+every bundle; only \emph{borderline} bundles are escalated.
 
 \subsection{Heuristic judge: deterministic, path-sensitive}
 
@@ -453,35 +448,35 @@ The heuristic judge (contribution C3) sums a fixed table of weighted
 evidence signals per bundle: correlated runtime leaks (weighted by
 sanitizer leak kind: \texttt{definitely\_lost}/\texttt{asan\_leak} weigh
 most, \texttt{possibly\_lost} least), structural missing-free patterns,
-unpaired or conditionally-freed allocations, a \emph{path-sensitive leak}
-signal, a \emph{parameter-ownership leak} signal, and an
+unpaired or conditionally-freed allocations, \emph{path-sensitive} and
+\emph{parameter-ownership} leak signals, and an
 ownership-transfer penalty when the allocation is legitimately handed to a
-caller. It then bands the total score against fixed thresholds,
+caller. It bands the total against fixed thresholds,
 $\mathit{confirmed}=0.7$ and $\mathit{likely}=0.4$, frozen for every
 evaluation run reported in this paper. Three precision gates can override
-the additive score outright. A callee-freed allocation with no correlated
-runtime leak is forced to \texttt{likely\_false\_positive}. A clean dynamic
-run with no decisive static evidence exculpates a candidate. And any
-``flagged'' verdict lacking at least one \emph{strong} signal (a correlated
-runtime leak, a high-confidence structural pattern, an unpaired
+the additive score outright: a callee-freed allocation with no correlated
+runtime leak is forced to \texttt{likely\_false\_positive}; a clean
+dynamic run with no decisive static evidence exculpates a candidate; and
+any ``flagged'' verdict lacking at least one \emph{strong} signal (a
+correlated runtime leak, a high-confidence structural pattern, an unpaired
 allocation, a path-sensitive leak, or an ownership issue) is downgraded to
 \texttt{uncertain} rather than reported as a leak.
 
 \textbf{Path sensitivity without an SMT solver.} CLeak computes path
 feasibility with a lightweight heuristic rather than an SMT solver, so
-guard analysis is unconditionally available on every function it analyzes
-with no solver-timeout or memory-ceiling failure mode. This mechanism,
-\emph{guard-subset reconciliation}, works as follows: a free on one control-flow path
+guard analysis is available on every function with no solver-timeout or
+memory-ceiling failure mode. The mechanism is \emph{guard-subset
+reconciliation}: a free on one control-flow path
 reconciles an allocation only if that free's guard condition set is a
-\emph{subset} of the exit path's guard set: a free reachable under
+\emph{subset} of the exit path's guard set; a free reachable under
 a strictly narrower condition than the corresponding leak exit does not
-count as covering it. This heuristic CFG analysis, combined with
+count as covering it. This CFG heuristic, combined with
 conservative dead-code reachability (dropping exit paths that follow an
-unconditional terminator in the same block), is what lets even the
-deterministic \texttt{no\_llm} judge catch leaks such as a pointer freed on
+unconditional terminator in the same block), lets even the
+deterministic \texttt{no\_llm} judge catch a pointer freed on
 a function's success path but lost on its error path (a
-\emph{path-sensitive leak}) or a parameter freed on some branches but not
-others (a \emph{parameter-ownership leak}). This is the exact pattern behind
+\emph{path-sensitive leak}), or a parameter freed on some branches but not
+others (a \emph{parameter-ownership leak}): the exact pattern behind
 cJSON's \texttt{merge\_patch} case study in
 Section~\ref{sec:eval-lamed}.
 
@@ -489,38 +484,37 @@ Section~\ref{sec:eval-lamed}.
 
 A bundle escalates to the LLM judge when the heuristic verdict is
 \emph{borderline} (\texttt{likely\_leak} or \texttt{uncertain}, or
-confidence in $[0.35, 0.7]$) \emph{or} there is an explicit contradiction
-between the heuristic verdict and dynamic evidence (e.g.\ flagged as a leak
-but a correlated sanitizer run came back clean). The LLM sees the
+confidence in $[0.35, 0.7]$) \emph{or} the heuristic verdict contradicts
+dynamic evidence (e.g.\ flagged as a leak while a correlated sanitizer run
+came back clean). The LLM sees the
 candidate's enclosing function source (labels stripped from any comments
-to avoid leaking benchmark ground truth), a summary of static evidence,
+to avoid leaking benchmark ground truth), a static-evidence summary,
 dynamic findings tagged by correlation strength
 (\texttt{LINKED} / same-file-different-site / \texttt{CLEAN}), and, when
 available, the project's LLM-discovered ownership conventions. It returns
-one of five labels with a confidence and an explanation, following an
-explicit priority rubric. A linked runtime leak is decisive. Ownership
-transfer is decisive for false positives. The same path-sensitive and
-parameter-ownership rules used by the heuristic judge apply. And
-\texttt{uncertain} is reserved for genuinely insufficient evidence, not a
-default. No native tool-calling is exposed at this stage (output is
-constrained to JSON). A parse failure of any kind silently falls back to
+one of five labels with a confidence and an explanation under an
+explicit priority rubric: a linked runtime leak is decisive; ownership
+transfer is decisive for false positives; the heuristic judge's
+path-sensitive and parameter-ownership rules apply; and
+\texttt{uncertain} is reserved for genuinely insufficient evidence, never a
+default. No native tool-calling is exposed here (output is
+constrained to JSON); any parse failure silently falls back to
 the heuristic verdict.
 
 \subsection{Consensus judge: self-consistency voting (C4)}
 
 When enabled ($K>1$), the same LLM-judge call is resampled $K$ times at a
-nonzero consensus temperature and the results merged by one of three rules:
-majority, a confidence-weighted vote (with dynamic-contradicting votes
+nonzero consensus temperature and merged by one of three rules:
+majority, a confidence-weighted vote (dynamic-contradicting votes
 down-weighted $\times 0.3$), or unanimous-to-flag, with the final label
-taken as the modal verdict within the flagging cluster. A veto rule
-ensures asymmetry: a strong heuristic exculpation (a
+the modal verdict within the flagging cluster. A veto rule
+adds asymmetry by design: a strong heuristic exculpation (a
 \texttt{false\_positive}/\texttt{likely\_false\_positive} verdict at
 confidence $\geq 0.75$) can only \emph{remove} a flag from the consensus
-outcome, never add one, so the veto is asymmetric by design. Whether
-voting over $K$ samples actually reduces case-level instability in
-practice is not something we assume. Section~\ref{sec:eval-consensus}
-evaluates it directly and reports a sample-composition-dependent finding,
-not a clean win.
+outcome, never add one. We do not assume voting
+over $K$ samples reduces case-level instability in practice:
+Section~\ref{sec:eval-consensus} evaluates it directly and reports a
+sample-composition-dependent finding, not a clean win.
 
 \section{Reproducibility Protocol}
 \label{sec:reproducibility}
@@ -533,30 +527,29 @@ and is not deterministic.
 \textbf{Tier 1: \texttt{no\_llm}, bitwise-deterministic.} With the
 strategist/tuner disabled and allocators supplied from a frozen manifest,
 the heuristic judge, the deterministic Stage~B recipe, and the scoring
-pipeline together produce byte-identical output across runs. This is
-enforced, not merely claimed: a dedicated determinism gate runs the same
-configuration twice into distinct output directories and asserts an
+pipeline produce byte-identical output across runs. A dedicated
+determinism gate enforces this, running the same
+configuration twice into distinct output directories and asserting an
 identical confusion matrix, per-variant metrics, per-case rows, and
-judge-path distribution. During development, the gate caught and now
-explicitly rejects two \emph{false-pass} modes: a coarse-grained timestamp
-collision that caused the tool to compare a run against itself, and a
+judge-path distribution. During development the gate caught, and now
+explicitly rejects, two \emph{false-pass} modes: a coarse-grained timestamp
+collision that made the tool compare a run against itself, and a
 degenerate run in which an unreachable analyzer made every case error out
-\emph{identically}, which would otherwise register as spurious
-determinism.
+\emph{identically}, registering as spurious determinism.
 
 \textbf{Tier 2: \texttt{llm\_assisted}, reported variance.} Because
 even temperature-0 LLM calls are not bit-identical across runs (provider
-batching, floating-point non-associativity, and scheduling effects), we
+batching, floating-point non-associativity, scheduling effects), we
 run each \texttt{llm\_assisted} configuration $N$ times and report
-mean$\pm$std for every metric, together with a \emph{case-level
-verdict-stability} analysis: the percentage of cases whose verdict does
-not change across runs, the flip rate, and modal agreement. We surface an
-explicit \textbf{stable-by-luck} phenomenon we observed directly: two
+mean$\pm$std for every metric, plus a \emph{case-level
+verdict-stability} analysis: the percentage of case verdicts stable
+across runs, the flip rate, and modal agreement. We surface a
+\textbf{stable-by-luck} phenomenon observed directly: two
 independent 30-case runs produced an \emph{identical} aggregate confusion
-matrix (27~TP/8~FP/5~FN/37~TN) while only 73.3\% of individual case
-verdicts were actually stable (a 26.7\% flip rate). Flips in opposite
-directions cancelled out in the aggregate. Reporting only the aggregate
-matrix would have concealed this. Reporting case-level stability does not.
+matrix (27~TP/8~FP/5~FN/37~TN) while only 73.3\% of individual
+verdicts were stable (a 26.7\% flip rate). Opposite-direction
+flips cancelled in the aggregate; reporting only that matrix would have
+concealed them, and reporting case-level stability does not.
 
 \section{Evaluation}
 \label{sec:evaluation}
