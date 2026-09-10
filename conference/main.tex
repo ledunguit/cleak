@@ -883,7 +883,6 @@ different scoring protocols mean this is not a superiority claim).}
 \toprule
 \textbf{System} & \textbf{Corpus} & \textbf{Result} & \textbf{Method} & \textbf{Peer-rev.} \\
 \midrule
-% MemHint figures corrected per arXiv v3 (repo: researchs/04-nguon-va-kiem-chung.md)
 MemHint~\cite{memhint} & 7 real projects, 3.4M+ LOC & 52--54 leaks found (49 confirmed) & LLM + Z3 + CodeQL/Infer & No \\
 LAMeD~\cite{lamed} (annotation) & cJSON, 152 functions & P 0.933 / R 0.583 (28 TP/2 FP/20 FN) & LLM generates AllocSource/FreeSink annotations & Yes \\
 LAMeD~\cite{lamed} (Cooddy) & 6 real projects, 43 leaks & 5$\to$10 detections & Cooddy consumes the LLM annotations & Yes \\
@@ -947,156 +946,137 @@ not recommend enabling consensus judging by default.
 \subsection{Open Problems}
 \label{sec:openproblems}
 
-Six issues remain open at the end of this investigation. Each is analyzed
-where it is measured in the evaluation; we restate them compactly here as
-the standing agenda this work leaves behind.
+Six issues remain open, analyzed in the evaluation where each is
+measured; we restate them as the standing agenda.
 
 \begin{itemize}
-\item \textbf{\texttt{strdup}-family recall.} \texttt{strdup} is the
-  weakest Juliet family for B6a (F1 0.584, recall-limited at 100\%
-  precision), and the traced two-branch dynamic-coverage mechanism is one
-  verified contributor, not an exhaustive account of all 59 affected
-  cases.
-\item \textbf{\texttt{interproceduralFlow} adds no measured recall.} Its
-  alloc/free counting is not path-sensitive: on cJSON's
+\item \textbf{\texttt{strdup}-family recall.} The weakest Juliet family
+  for B6a (F1 0.584, recall-limited at 100\% precision); the verified
+  two-branch dynamic-coverage mechanism does not account for all 59
+  affected cases.
+\item \textbf{\texttt{interproceduralFlow} adds no measured recall.}
+  Alloc/free counting is not path-sensitive: on cJSON's
   \texttt{merge\_patch} leak it counts two mutually exclusive
   \texttt{cJSON\_Delete(target)} frees as covering the allocation and
-  misses the never-freed error path, so the
-  \texttt{+interproceduralFlow} configuration is byte-identical to the
-  default on all 41 LAMeD cases.
+  misses the never-freed error path, leaving
+  \texttt{+interproceduralFlow} byte-identical to the default on all 41
+  LAMeD cases.
 \item \textbf{Allocator-profiler discovery does not generalize.}
-  Aggregated over all seven LAMeD projects, allocator and deallocator
-  discovery drops to F1 0.22 and 0.17; the protocol validates
-  per-project allocator knowledge only where a project exposes a small,
-  conventional allocation API.
+  Aggregated over the seven LAMeD projects, allocator and deallocator
+  discovery drops to F1 0.22 and 0.17; per-project allocator knowledge validates
+  only where a project exposes a small, conventional API.
 \item \textbf{Consensus judging is not recommended by default.}
   Single-LLM judging was more stable and more accurate than $K{=}3$
-  consensus on the family-stratified sample; consensus remains an opt-in
-  configuration pending a larger, multi-seed study.
-\item \textbf{The agentic tool-selection cost finding is
-  corpus-specific.} Section~\ref{sec:eval-ablation}'s finding that
-  agentic tool-selection costs real money for no accuracy gain holds on
-  Juliet, whose leak patterns are largely intraprocedural and
-  well-served by a fixed evidence-gathering recipe: at full-corpus
-  scale, B6b/B7 spend $\sim$5$\times$ the tokens of B6a but
-  $\sim$4$\times$ the dollar cost (\$26--27 vs.\ \$6.63). We would
-  expect the balance to shift toward agentic tool selection on corpora
-  with more structurally diverse investigation needs.
+  consensus on the family-stratified sample; consensus stays opt-in
+  pending a larger, multi-seed study.
+\item \textbf{The agentic cost finding is corpus-specific.}
+  Section~\ref{sec:eval-ablation} shows agentic tool selection costs
+  real money for no accuracy gain on Juliet, whose leak patterns are
+  largely intraprocedural and well served by a fixed recipe: at
+  full-corpus scale, B6b/B7 spend $\sim$5$\times$ the tokens of B6a but
+  $\sim$4$\times$ the dollar cost (\$26 to \$27 vs.\ \$6.63). More
+  diverse corpora should shift the balance toward agentic selection.
 \item \textbf{The smallest families are statistically meaningless.}
   \texttt{destructor} and \texttt{virtual} have $n{=}3$ and $n{=}5$
-  cases in this corpus, so their F1 values are reported for completeness
-  and are not statistically meaningful on their own.
+  cases, so their F1 values are reported for completeness only.
 \end{itemize}
 
 \subsection{Discussion and Threats to Validity}
 
-\textbf{Aggregate F1 hides real per-family variation, and dynamic evidence
-dominates precision.} Table~\ref{tab:family} shows B6a's full-corpus F1
-(0.863) is not uniform across Juliet's ten functional families:
-\texttt{malloc} sites are nearly solved (F1~0.991) while \texttt{strdup}
-sites lag (F1~0.584, recall-limited, not precision-limited); we traced
-this to a concrete, verified mechanism (Section~\ref{sec:eval-ablation})
-rather than reporting the gap without explanation, and a single aggregate
-F1, ours or any other system's, can obscure large family-level swings that
-matter for practical deployment on a codebase dominated by one allocation
-pattern. Every ablation in Section~\ref{sec:evaluation} also agrees that
-adding dynamic evidence is the single most effective lever for eliminating
-false positives, more so than any LLM-side intervention, which argues for
-prioritizing dynamic-analysis coverage (e.g.\ the opt-in targeted-harness
-stage described briefly in Section~\ref{sec:pipeline} but not evaluated in
-this paper) over further LLM-judge sophistication in future iterations.
+\textbf{Aggregate F1 hides per-family variation; dynamic evidence
+dominates precision.} B6a's full-corpus F1 (0.863) is not uniform
+across Juliet's ten functional families (Table~\ref{tab:family}):
+\texttt{malloc} is nearly solved (F1~0.991), \texttt{strdup} lags
+(F1~0.584, recall-limited), a gap we traced to a verified mechanism
+(Section~\ref{sec:eval-ablation}). An aggregate F1, ours or any
+system's, can hide swings that matter when one allocation pattern dominates. Every ablation in Section~\ref{sec:evaluation}
+agrees dynamic evidence is the most effective lever against false
+positives, more than any LLM-side intervention; future iterations
+should prioritize dynamic-analysis coverage (e.g.\ the opt-in
+targeted-harness stage of Section~\ref{sec:pipeline}, not evaluated
+here) over LLM-judge sophistication.
 
 \textbf{Heuristic path-sensitivity vs.\ SMT.}
-Guard-subset reconciliation (Section~\ref{sec:judging}) is strictly less
-complete than an SMT-based feasibility check would be: it cannot reason
-about numeric constraints, only guard containment. CLeak adopts it
-deliberately for reliability at scale, since it is unconditionally
-available on every function with no solver-timeout or memory-ceiling
-failure mode; we do not claim it subsumes SMT-based path feasibility, only
-that it recovers most of its practical value without that risk.
+Guard-subset reconciliation (Section~\ref{sec:judging}) is strictly
+less complete than SMT feasibility: it reasons about guard containment,
+not numeric constraints. CLeak adopts it deliberately for reliability
+at scale: unconditionally available on every function, without
+solver-timeout or memory-ceiling failure modes. We do not claim it
+subsumes SMT feasibility, only that it recovers most of its practical
+value without that risk.
 
-\textbf{Architectural alignment with industry practice, measured.}
-Section~\ref{sec:related} situates CLeak's engine relative to compositional
+\textbf{Architectural precedent, measured.}
+Section~\ref{sec:related} aligns CLeak's engine with compositional
 analysis~\cite{infer-verification}, shardable stateless
-services~\cite{tricorder}, and incremental reuse~\cite{codeql-incremental,semgrep}.
-Two of those principles are now backed by a direct measurement rather than
-only an architectural claim. The AST memoization cache was generalized to
-disk-persisted (content-hash-keyed, so a fresh process reuses a prior
-process's parses) and rebounded to a byte-size budget, closing an
-out-of-memory failure mode a real-world corpus in this evaluation (LAMeD)
-reproduced directly during development. On a controlled single-case
-measurement (a 143-file real checkout, LAMeD's \texttt{libxml2} case,
-\texttt{no\_llm} mode), a repeat scan against an already-warmed cache
-completed in 3.0s at 266MiB peak service memory, versus 54.0s at 1.03GiB
-cold: an $\sim$18$\times$ wall-clock reduction and $\sim$74\% lower peak
-memory for exactly the re-scan pattern a baseline sweep performs many times
-over the same unchanged checkout. Both changes are mechanical: neither
-touches judge logic or evidence content. So we expect, but did not re-run
-the full ablation sweep to confirm, that no precision/recall/F1 number in
-Section~\ref{sec:evaluation} changes as a result. We report this as an
-assumption grounded in the cache's semantics, not an independently
-measured invariant.
+services~\cite{tricorder}, and incremental
+reuse~\cite{codeql-incremental,semgrep}; two now have direct
+measurements. The AST memoization cache is now disk-persisted
+(content-hash-keyed, so a fresh process reuses prior parses) and
+byte-bounded, closing an out-of-memory failure mode LAMeD reproduced in development. In one controlled run (a 143-file checkout of
+LAMeD's \texttt{libxml2} case, \texttt{no\_llm} mode), a warm repeat
+scan took 3.0s at 266MiB peak memory versus 54.0s at 1.03GiB cold:
+$\sim$18$\times$ less wall clock and $\sim$74\% less peak memory,
+exactly the pattern a baseline sweep repeats over an unchanged
+checkout. Both changes are mechanical, touching neither judge logic nor evidence
+content; we expect no precision/recall/F1 number in
+Section~\ref{sec:evaluation} to change but did not re-run the sweep;
+this is an assumption grounded in the cache's semantics, not
+a measured invariant.
 
-\textbf{LLM-as-judge is fundamentally non-deterministic, and sample
-stratification matters for evaluating an LLM-judge technique.} We do not
-treat LLM-judge non-determinism as fixable: the two-tier protocol of
-Section~\ref{sec:reproducibility} exists specifically so that this
-non-determinism is measured and reported rather than obscured by reporting
-only aggregate metrics from a single run. A self-consistency technique's
-apparent benefit can also depend heavily on whether the evaluation sample
-represents the corpus's full difficulty spread or draws disproportionately
-from its easier, more homogeneous families, which is why
-Section~\ref{sec:eval-consensus}'s consensus result is measured on a
-family-stratified sample rather than an unstratified one; we flag this as
-a general methodological point for LLM-judge evaluation protocols.
+\textbf{LLM-as-judge non-determinism and sample stratification.} We do
+not treat LLM-judge non-determinism as fixable; the two-tier protocol
+of Section~\ref{sec:reproducibility} exists to measure and report it, not
+obscure it behind single-run aggregates. A self-consistency
+technique's apparent benefit depends on whether the sample spans
+the corpus's difficulty spread or draws disproportionately from easier,
+homogeneous families; Section~\ref{sec:eval-consensus}'s consensus
+result is therefore family-stratified, a general point for LLM-judge
+evaluation.
 
 \section{Conclusion and Future Work}
 
 We presented CLeak, a memory-leak investigation system for C/C++ built
-around a single organizing principle: the LLM owns policy, and the engine
-owns mechanism. This lets an LLM contribute project-specific reasoning
-without inheriting its non-determinism on the measured evaluation path. A
-deterministic-except-judge hybrid pipeline (static evidence, a pinned
-build-and-sanitize dynamic recipe, and an LLM-planner-gated orchestration)
-is the strongest configuration we measured. A two-tier reproducibility
-protocol reports what is and is not reproducible, rather than claiming
-uniform determinism. Structured, guard-subset-reconciled evidence
-enrichment lets even the purely deterministic judge catch path-sensitive
-and parameter-ownership leaks without an SMT solver. A self-consistency
-consensus judge, evaluated against single-LLM judging on a family-stratified
-sample representative of the corpus's difficulty spread, does not improve
-verdict stability or accuracy over the single-LLM baseline.
+on one organizing principle: the LLM owns policy, the engine owns
+mechanism, so the LLM contributes project-specific reasoning without
+inheriting its non-determinism on the measured evaluation path. Our
+strongest configuration is a deterministic-except-judge hybrid
+pipeline (static evidence, a pinned build-and-sanitize dynamic recipe,
+LLM-planner-gated orchestration); a two-tier reproducibility protocol
+reports what is and is not reproducible rather than claiming uniform
+determinism. Structured, guard-subset-reconciled evidence lets even the
+deterministic judge catch path-sensitive and parameter-ownership leaks
+without an SMT solver. Evaluated against single-LLM on a
+family-stratified sample spanning the corpus's difficulty spread, the
+self-consistency consensus judge does not improve verdict stability or
+accuracy.
 
-A controlled five-factor ablation on the full validated Juliet corpus
+A controlled five-factor ablation on the validated Juliet corpus
 (1{,}658 cases) isolates a deterministic static+dynamic+planner
-configuration reaching F1~0.863/MCC~0.790 at roughly one-quarter the
-dollar cost of agentic tool selection, with family-level variation from
-F1 0.991 (\texttt{malloc}) down to 0.584 (\texttt{strdup}), traced to a
-concrete dynamic-coverage mechanism. On the peer-reviewed LAMeD benchmark
-the system holds 100\% precision at 30.0\% recall under both
-configurations, with \texttt{interproceduralFlow} contributing no
-measured recall due to a path-sensitivity gap
-(Section~\ref{sec:eval-lamed}). On the reconstructed MemHint-project
-corpus the convergence recurs: 100\% precision at 46.2\% recall, the LLM
-judge firing on 2 of $\sim$17k verdicts and flipping none
-(Section~\ref{sec:eval-memhint}).
+configuration reaching F1~0.863/MCC~0.790 at roughly one-quarter
+agentic tool selection's dollar cost; family-level F1 runs from 0.991
+(\texttt{malloc}) to 0.584 (\texttt{strdup}), traced to a concrete
+dynamic-coverage mechanism. On the peer-reviewed LAMeD benchmark it
+holds 100\% precision at 30.0\% recall under both configurations;
+\texttt{interproceduralFlow} adds no measured recall (a
+path-sensitivity gap, Section~\ref{sec:eval-lamed}). On the
+reconstructed MemHint-project corpus the pattern recurs: 100\%
+precision at 46.2\% recall, the LLM judge firing on 2 of $\sim$17k
+verdicts and flipping none (Section~\ref{sec:eval-memhint}).
 
-Future work has three concrete directions. First, evaluating the opt-in
-targeted-harness escalation stage (per-candidate harness synthesis plus a
-bounded fuzzing tier for bundles a whole-binary run leaves borderline) on
-the LAMeD and MemHint-derived benchmarks specifically, where whole-project
+Future work has three directions. First, evaluating the opt-in
+targeted-harness escalation stage (per-candidate harness synthesis plus
+a bounded fuzzing tier for bundles a whole-binary run leaves borderline)
+on the LAMeD and MemHint-derived benchmarks, where whole-project
 dynamic evidence is often unavailable. Second, making
-\texttt{interproceduralFlow}'s cross-function
-trace path-sensitive, since a lighter path-sensitive analysis is a smaller
-lift than a full SMT-based solver and directly targets the gap identified
-in Section~\ref{sec:eval-lamed}. Third, bounding the static evidence
-stage's cost: on the MemHint-derived corpus the LLM judge itself was
+\texttt{interproceduralFlow}'s cross-function trace path-sensitive: a
+smaller lift than full SMT, it directly targets the
+Section~\ref{sec:eval-lamed} gap. Third, bounding the static
+evidence stage's cost: on the MemHint-derived corpus the LLM judge was
 nearly free ($\sim$17k heuristic verdicts per run, 2 LLM escalations),
 but the static sub-agent fan-out spent $\approx$44M tokens across three
-runs at $\sim$4.7k MCP calls per case --- a gate that escalates to LLM
-sub-agents only for candidates the deterministic evidence leaves ambiguous
-would make the cost scale with the corpus's genuine ambiguity rather than
-with its size.
+runs at $\sim$4.7k MCP calls per case. A gate that escalates to LLM
+sub-agents only for candidates the deterministic evidence leaves
+ambiguous would make cost scale with genuine ambiguity, not corpus size.
 
 \begin{thebibliography}{99}
 
