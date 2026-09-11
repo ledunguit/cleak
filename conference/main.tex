@@ -25,18 +25,18 @@ for C/C++ Memory Leak Detection}
 \begin{abstract}
 Memory leaks (CWE-401) in C/C++ are hard to find: static analysis is
 noisy; dynamic analysis covers only exercised paths. We present
-\textbf{CLeak}: \emph{the LLM owns policy, the deterministic engine
-owns mechanism}. The LLM discovers, verifies, and freezes
-project-specific knowledge into a cached profile and judges only
+\textbf{CLeak}: \emph{the LLM owns policy, the engine
+owns mechanism}. The LLM discovers and freezes project-specific
+knowledge into a cached profile, judging only
 borderline verdicts; a two-tier protocol separates deterministic from
-LLM-assisted variance. On the validated Juliet CWE-401 corpus
+LLM-assisted variance. On the validated Juliet corpus
 (1{,}658 cases), an ablation isolates a deterministic
 static+dynamic+planner configuration at Precision~96.5\%,
 Recall~78.0\%, F1~0.863, MCC~0.790; unconstrained LLM tool selection
 costs 4$\times$ more for \emph{lower} accuracy (F1 0.991 on
 \texttt{malloc}, 0.584 on \texttt{strdup} sites). On LAMeD it holds
-100\% precision at 30.0\% recall, and 100\% at 46.2\% on an
-independently reconstructed MemHint-project corpus. Caveats are stated
+100\% precision at 30.0\% recall, and 100\% at 46.2\% on a
+reconstructed MemHint-project corpus. Caveats are stated
 wherever evidence is incomplete.
 \end{abstract}
 
@@ -139,12 +139,11 @@ transfer and conditional deallocation stay ambiguous, so false
 positives rise. Tree-sitter~\cite{treesitter} is the incremental-parsing
 substrate below; NESA~\cite{nesa} and scaling symbolic
 execution~\cite{symexec-scaling} point toward combining learned and
-symbolic reasoning, a direction CLeak takes with an LLM.
-
-CLeak's engine follows architectural precedent: content-hash-keyed
-parse memoization (Section~\ref{sec:arch}) mirrors Infer's
-compositional summaries~\cite{infer-verification}, its stateless,
-independently-callable MCP services mirror Google's shardable
+symbolic reasoning, a direction CLeak takes with an LLM. The engine
+itself follows architectural precedent: content-hash-keyed parse
+memoization (Section~\ref{sec:arch}) mirrors Infer's compositional
+summaries~\cite{infer-verification}, its stateless, independently
+callable MCP services mirror Google's shardable
 Tricorder~\cite{tricorder}, and CodeQL's incremental
 reuse~\cite{codeql-incremental} motivates the dynamic analyzer's
 compiler-cache-backed rebuilds.
@@ -165,10 +164,10 @@ complementary problem.
 \paragraph{LLMs for software defect detection.}
 Early empirical work found LLMs can identify vulnerabilities from
 source alone with bounded accuracy~\cite{llm-vuln-eval};
-IRIS~\cite{iris} couples an LLM with static analysis, and prompting
+IRIS~\cite{iris} couples an LLM with static analysis; prompting
 alone can \emph{exceed} a static analyzer on its
 benchmark~\cite{llm-proxy-static}, a finding compatible with CLeak,
-which grounds the LLM in tool output rather than prompting alone;
+which grounds the LLM in tool output;
 VulnLLM-R~\cite{vulnllmr} and SemTaint~\cite{semtaint} address broader
 vulnerability classes. The closest prior work targets C/C++ memory
 leaks directly: \textbf{MemHint}~\cite{memhint}, a neuro-symbolic
@@ -490,9 +489,8 @@ deterministic static+dynamic+planner configuration B6a: Precision
 96.5\%, Recall 78.0\%, F1~0.863, MCC~0.790 (Table~\ref{tab:ablation}), a
 substantial improvement over the static-only \texttt{no\_llm} baseline
 (F1~0.612, MCC~0.375) it is measured against. Because the corpus is full
-rather than family-balanced, per-family performance is not uniform
-(Table~\ref{tab:family}); we report the full distribution, not just the
-aggregate.
+rather than family-balanced, per-family performance is not uniform; we
+report the full distribution, not just the aggregate.
 
 \subsection{Capability ablation: five orchestration factors}
 \label{sec:eval-ablation}
@@ -538,20 +536,18 @@ dominant false-positive suppressor: adding it to the
 LLM-judge-plus-static configuration (B4$\to$B6) drops false positives
 from 470 to 74 (an $\sim$85\% reduction) while raising F1 from 0.801 to
 0.862. Second, the static-evidence tools \texttt{functionSummary} and
-\texttt{pathConstraints} are synergistic rather than additive: a separate
-$n{=}50$ stratified ablation, orthogonal to the full-corpus sweep above,
-shows that enabling either alone leaves the confusion matrix identical to
-candidate-scan-only, and only both together lift recall
-0.792$\to$0.943 ($+8$ true positives). Third, and most actionable for
-system design, unconstrained agentic tool selection is
-counter-productive here, at full-corpus scale, in real dollars: B6a
-(6{,}155 tokens/case, \$6.63 total) beats B6b/B7's agentic loop
-($\sim$31K tokens/case, $\sim$4$\times$ the dollar cost each) on F1
-(0.863 vs.\ 0.858/0.856) and on false-positive density (FP/KLOC 0.133
-vs.\ 0.192/0.186). The LLM planner chooses well when constrained to
-\emph{when} to run static or dynamic analysis; given latitude over
-\emph{which} tool to call next, it adds cost without benefit and slightly
-more noise.
+\texttt{pathConstraints} are synergistic rather than additive: a
+separate $n{=}50$ stratified ablation shows that enabling either alone
+leaves the confusion matrix identical to candidate-scan-only, and only
+both together lift recall 0.792$\to$0.943 ($+8$ true positives). Third,
+unconstrained agentic tool selection is counter-productive at
+full-corpus scale: B6a (6{,}155 tokens/case, \$6.63 total) beats
+B6b/B7's agentic loop ($\sim$31K tokens/case, $\sim$4$\times$ the
+dollar cost each) on F1 (0.863 vs.\ 0.858/0.856) and on false-positive
+density (FP/KLOC 0.133 vs.\ 0.192/0.186). The LLM planner chooses well
+when constrained to \emph{when} to run static or dynamic analysis;
+given latitude over \emph{which} tool to call next, it adds cost
+without benefit.
 
 The B6a configuration is not model-specific: re-running the full
 1{,}658-case B6a configuration end-to-end on two further providers,
@@ -561,14 +557,14 @@ over the static-only baseline (F1~0.612) intact, though absolute numbers
 track each model's reasoning profile. These runs use the same frozen
 corpus hash and scorer as Table~\ref{tab:ablation}.
 
-Performance is not uniform across allocator families: Table~\ref{tab:family}
-breaks B6a's full-corpus result down by Juliet's ten functional variants.
-\texttt{malloc}-family sites (realloc-augmented allocations, $n{=}294$)
-are nearly solved (F1~0.991); \texttt{strdup}-family sites ($n{=}348$
-sites across 96 test cases) are the weakest (F1~0.584), driven by low
-recall (41.3\%) rather than false positives (precision remains 100\%).
-One representative miss (\texttt{CWE401\_Memory\_Leak\_\_strdup\_char\_12},
-flow-variant 12) pinpoints a concrete mechanism: the case's true leak
+Performance is not uniform across allocator families: family-level F1
+runs from 0.991 (\texttt{malloc}-family sites, realloc-augmented
+allocations, $n{=}294$) to 0.584 (\texttt{strdup}-family, $n{=}348$
+sites across 96 test cases), the latter driven by low recall (41.3\%)
+rather than false positives (precision remains 100\%), with the
+intermediate families between 0.85 and 0.89. One representative miss
+(\texttt{CWE401\_Memory\_Leak\_\_strdup\_char\_12}, flow-variant 12)
+pinpoints a concrete mechanism: the case's true leak
 sits behind two \emph{independent} randomized branches (a heap allocation
 via \texttt{strdup} vs.\ a stack allocation via \texttt{alloca}, and
 whether \texttt{free} executes), so a single dynamic run exercises only
@@ -583,31 +579,6 @@ to the family's low recall, not an exhaustive account of all 59 affected
 cases; the two smallest families (\texttt{destructor},
 \texttt{virtual}, $n{=}3$ and $n{=}5$ cases respectively) are too small
 here for their own F1 to be statistically meaningful.
-
-\begin{table}[htbp]
-\centering
-\caption{B6a full-corpus result by Juliet functional family (sites, not
-cases, since one case can score multiple sites). \texttt{destructor}/\texttt{virtual}
-are shown for completeness but are too small ($n\le5$) to be reliable.}
-\label{tab:family}
-\small
-\begin{tabular}{@{}lrccc@{}}
-\toprule
-\textbf{Family} & \textbf{n} & \textbf{P} & \textbf{R} & \textbf{F1} \\
-\midrule
-\texttt{malloc} (+realloc) & 294 & 0.991 & 0.991 & \textbf{0.991} \\
-\texttt{wchar} & 609 & 0.984 & 0.810 & 0.888 \\
-\texttt{twoIntsStruct} & 609 & 0.989 & 0.801 & 0.885 \\
-\texttt{char} & 609 & 0.979 & 0.805 & 0.884 \\
-\texttt{int} & 1{,}218 & 0.969 & 0.803 & 0.878 \\
-\texttt{struct} & 611 & 0.969 & 0.801 & 0.877 \\
-\texttt{new} & 1{,}736 & 0.949 & 0.784 & 0.858 \\
-\texttt{strdup} & 348 & 1.000 & 0.413 & 0.584 \\
-\texttt{destructor}$^{\ast}$ & 3 & 1.000 & 0.500 & 0.667 \\
-\texttt{virtual}$^{\ast}$ & 5 & 1.000 & 0.333 & 0.500 \\
-\bottomrule
-\end{tabular}
-\end{table}
 
 A separate small-sample $2\times2$ ablation crossing LLM orchestration
 against dynamic evidence, on a subset of Juliet cases, agreed with these
@@ -631,56 +602,28 @@ remains available as an opt-in configuration
 \subsection{Real-world validation: LAMeD and MemHint-derived}
 \label{sec:eval-lamed}
 
-On the 41-case, 7-project LAMeD benchmark (50 scoreable sites), the
-deterministic \texttt{no\_llm} configuration holds 100\% precision (zero
-false positives) in every configuration we measured, with recall at
-30.0\% (TP~15/FP~0/FN~35; Table~\ref{tab:lamed}); dynamic analysis is
-not exercised on these static-only configurations, and
-\texttt{llm\_assisted} reproduces the identical matrix with zero
+On the 41-case, 7-project LAMeD benchmark (50 scoreable sites; dynamic
+analysis is not exercised on these static-only configurations), the
+deterministic \texttt{no\_llm} configuration holds 100\% precision
+(TP~15/FP~0/FN~35) at 30.0\% recall in every configuration we measured,
+with \texttt{llm\_assisted} reproducing the identical matrix with zero
 variance across 3 independent runs. A manual taxonomy of the six
 confirmed cJSON leaks finds four structurally distinct difficulty
-classes (deallocator semantics, path-sensitivity, control-flow
-reordering, file/test-only code), consistent with LAMeD's own finding
-that even state-of-the-art tools catch only 5 to 10 of 43 real leaks.
-\texttt{interproceduralFlow} adds no measurable value on this benchmark:
-its alloc/free counting is not path-sensitive, so on cJSON's
-\texttt{merge\_patch} leak it counts two mutually exclusive
-\texttt{cJSON\_Delete(target)} frees as covering the allocation and
-misses the never-freed error path, leaving the
-\texttt{+interproceduralFlow} configuration byte-identical to the
-default across all 41 cases (Table~\ref{tab:lamed}).
-
-\begin{table}[htbp]
-\centering
-\caption{LAMeD real-project results. \texttt{llm\_assisted} is the mean of 3
-independent runs (temperature 0, \texttt{deepseek-v4-flash}), with zero
-variance across runs. CLeak rows score 50 scoreable sites (positive-only,
-TN$=$0 by construction). The Clang Static Analyzer row scores 43 sites under
-a live re-run with the same scorer. The two counts are tool-dependent by
-the scorer's design (see discussion above) and are not on a shared
-denominator.}
-\label{tab:lamed}
-\small
-\begin{tabular}{@{}lccccc@{}}
-\toprule
-\textbf{Configuration} & \textbf{TP} & \textbf{FP} & \textbf{FN} & \textbf{Recall} & \textbf{Precision} \\
-\midrule
-Clang Static Analyzer & 0 & 0 & 43 & 0.0\% & --- \\
-\texttt{no\_llm}, default static evidence & 15 & 0 & 35 & 30.0\% & 100\% \\
-\texttt{no\_llm}, + \texttt{interproceduralFlow} & 15 & 0 & 35 & 30.0\% & 100\% \\
-\texttt{llm\_assisted} (mean of 3 runs, std $=$ 0) & 15 & 0 & 35 & 30.0\% & 100\% \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-MemHint~\cite{memhint} publishes no per-bug list, so we evaluate on an
-\emph{independently reconstructed} corpus of 19 cases across 6 of
-MemHint's target projects (scored positive-only over 26 sites):
-\texttt{no\_llm} reaches 100\% precision (12 of 26 sites, zero false
-positives) at 46.2\% recall, three \texttt{llm\_assisted} runs are
-identical to it and to each other (P~1.000$\pm$0.000,
-R~0.462$\pm$0.000, F1~0.632$\pm$0.000), and the comparison to
-MemHint's own headline numbers (52 to 54 leaks across 7 projects,
+classes, consistent with LAMeD's own finding that even
+state-of-the-art tools catch only 5 to 10 of 43 real leaks.
+\texttt{interproceduralFlow} adds no measurable value: its alloc/free
+counting is not path-sensitive, so on cJSON's \texttt{merge\_patch}
+leak it counts two mutually exclusive \texttt{cJSON\_Delete(target)}
+frees as covering the allocation and misses the never-freed error path,
+leaving the \texttt{+interproceduralFlow} configuration byte-identical
+to the default across all 41 cases. MemHint~\cite{memhint} publishes no
+per-bug list, so we evaluate on an \emph{independently reconstructed}
+corpus of 19 cases across 6 of MemHint's target projects (26 sites,
+positive-only): \texttt{no\_llm} reaches 100\% precision (12 of 26
+sites) at 46.2\% recall, three \texttt{llm\_assisted} runs are identical
+to it and to each other (P~1.000$\pm$0.000, R~0.462$\pm$0.000,
+F1~0.632$\pm$0.000), and the comparison to MemHint's own headline
+numbers (52 to 54 leaks across 7 projects,
 Table~\ref{tab:literature}) remains directional, the denominators
 differing.
 
@@ -755,8 +698,8 @@ default.
 \subsection{Open Problems}
 \label{sec:openproblems}
 
-Three issues remain open, analyzed in the evaluation where each is
-measured; we restate them as the standing agenda.
+Three issues remain open, each analyzed where it is measured; we
+restate them as the standing agenda.
 
 \begin{itemize}
 \item \textbf{\texttt{strdup}-family recall; smallest families.} The
@@ -792,9 +735,9 @@ measured; we restate them as the standing agenda.
 
 \textbf{Per-family variation, path-sensitivity without SMT,
 architectural precedent, and judge non-determinism.} B6a's full-corpus
-F1 (0.863) is not uniform across Juliet's ten functional families
-(Table~\ref{tab:family}): \texttt{malloc} is nearly solved (F1~0.991),
-\texttt{strdup} lags (F1~0.584, recall-limited), a gap we traced to a
+F1 (0.863) is not uniform across Juliet's ten functional families:
+\texttt{malloc} is nearly solved (F1~0.991),
+\texttt{strdup} lags (F1~0.584, recall-limited), a gap traced to a
 verified mechanism (Section~\ref{sec:eval-ablation}); every ablation in
 Section~\ref{sec:evaluation} agrees dynamic evidence is the most
 effective lever against false positives, more than any LLM-side
@@ -804,13 +747,12 @@ Section~\ref{sec:pipeline}, not evaluated here) over LLM-judge
 sophistication. Guard-subset reconciliation (Section~\ref{sec:judging})
 reasons about guard containment, not numeric constraints, and is
 strictly less complete than SMT feasibility, adopted deliberately for
-reliability at scale, unconditionally available on every function
-without solver-timeout or memory-ceiling failure modes.
+reliability at scale.
 Section~\ref{sec:related} aligns CLeak's engine with compositional
 analysis~\cite{infer-verification}, shardable stateless
 services~\cite{tricorder}, and incremental
-reuse~\cite{codeql-incremental,semgrep}; the AST memoization cache is
-now disk-persisted and byte-bounded, and in one controlled run (a
+reuse~\cite{codeql-incremental,semgrep}. The AST memoization cache is
+now disk-persisted and byte-bounded; in one controlled run (a
 143-file checkout of LAMeD's \texttt{libxml2} case, \texttt{no\_llm}
 mode) a warm repeat scan took 3.0s at 266MiB peak memory versus 54.0s
 at 1.03GiB cold ($\sim$18$\times$ less wall clock, $\sim$74\% less
@@ -853,7 +795,7 @@ MemHint-project corpus the pattern recurs at 100\% precision and
 
 Future work has three directions. First, evaluating the opt-in
 targeted-harness escalation stage (per-candidate harness synthesis plus
-a bounded fuzzing tier for bundles a whole-binary run leaves borderline)
+a bounded fuzzing tier)
 on the LAMeD and MemHint-derived benchmarks, where whole-project
 dynamic evidence is often unavailable. Second, making
 \texttt{interproceduralFlow}'s cross-function trace path-sensitive: a
@@ -865,6 +807,8 @@ but the static sub-agent fan-out spent $\approx$44M tokens across three
 runs at $\sim$4.7k MCP calls per case. A gate that escalates to LLM
 sub-agents only for candidates the deterministic evidence leaves
 ambiguous would make cost scale with genuine ambiguity, not corpus size.
+
+\label{page:lastcontent}
 
 \begin{thebibliography}{99}
 
