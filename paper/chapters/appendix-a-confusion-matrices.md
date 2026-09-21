@@ -1,5 +1,7 @@
 # Phụ lục A: Bảng kết quả chi tiết
 
+> Đồng bộ theo `docs/RESULTS-FREEZE.md` (2026-09).
+
 ## A.1. Full confusion matrices — 9-baseline ablation (Juliet n=50, stratified)
 
 | ID | Baseline | TP | FP | FN | TN | P | R | F1 | Acc | MCC | ECE | FP/KLOC | Token |

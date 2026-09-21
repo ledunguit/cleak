@@ -12,6 +12,19 @@
 | Valgrind | ≥ 3.18 (chỉ Linux, optional) |
 | LLM Gateway | OpenAI-compatible endpoint (mặc định: localhost:20128) |
 
+Phiên bản đo được trên môi trường của run chốt MemHint (WSL2, mục 4.10): clang 14.0.0, valgrind 3.18.1 — cụ thể hơn ngưỡng tối thiểu của bảng trên.
+
+**Ma trận môi trường theo nhóm run** (đồng bộ theo `docs/RESULTS-FREEZE.md`; ô không được ghi trong freeze hoặc chương 4 để trống chữ "(không ghi trong freeze)" — không phỏng đoán):
+
+| Nhóm run | Môi trường | clang | valgrind | model/gateway |
+|---|---|---|---|---|
+| Juliet full sweep 1658 ca, 9 baseline (FREEZE nhóm 1; mục 4.2.2) | WSL2 | (không ghi trong freeze) | (không ghi trong freeze) | `deepseek-v4-flash`, openai-compat (mục 4.1.6) |
+| Juliet n=50 stratified, thí nghiệm đầu 2026-06 (FREEZE nhóm 7; mục 4.2.3) | (không ghi trong freeze) | (không ghi trong freeze) | (không ghi trong freeze) | `mimo/mimo-v2.5-pro`, local gateway :20128 (Phụ lục C.3) |
+| Hai sweep phụ B6a second/third-model (FREEZE nhóm 8, 9; mục 4.1.6) | (không ghi trong freeze) | (không ghi trong freeze) | (không ghi trong freeze) | `mimo-v2.5` / `glm-5.2` (z-ai) |
+| LAMeD bộ 4 run 2026-08-20 (FREEZE nhóm 4; mục 4.5) | (không ghi trong freeze) | (không ghi trong freeze) | (không ghi trong freeze) | `deepseek-v4-flash`, openai-compat — chỉ run `llm_assisted` cần model |
+| Consensus n=50 + validation allocator-profile (FREEZE nhóm 5, 6; mục 4.6, 4.9) | (không ghi trong freeze) | (không ghi trong freeze) | (không ghi trong freeze) | `deepseek-v4-flash`, openai-compat (mục 4.1.6) |
+| MemHint run chốt 2026-09-05 (FREEZE nhóm 10; mục 4.10) | WSL2 (thesis-wsl2) | 14.0.0 | 3.18.1 | `deepseek-v4-flash`, openai-compat @ api.deepseek.com, temp 0 |
+
 ## C.2. Cài đặt
 
 ```bash
