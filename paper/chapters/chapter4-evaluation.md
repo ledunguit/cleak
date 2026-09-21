@@ -55,16 +55,18 @@ Sweep 9 baseline trên toàn bộ corpus 1658 ca, commit `5eec8b1`, model `deeps
 | ID | Baseline | TP | FP | FN | TN | P | R | F1 | F1 (95% CI) | tok/case | Chi phí |
 |---|---|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|
 | B1 | Static only | 1433 | 674 | 1145 | 2785 | 0.680 | 0.556 | 0.612 | 0.612 [0.596, 0.628] | 0 | — |
-| B2 | Dynamic only | 735 | 0 | 2283 | 0 | 1.000 | 0.244 | 0.392 | 0.392 [0.372, 0.410] | 0 | — |
+| B2 | Dynamic only | 735 | 0 | 2283 | 0 | —* | 0.244 | 0.392 | 0.392 [0.372, 0.410] | 0 | — |
 | B3 | Rule-based ensemble | 1686 | 674 | 892 | 2785 | 0.714 | 0.654 | 0.683 | 0.683 [0.668, 0.698] | 0 | — |
 | B4 | LLM + static | 2035 | 470 | 543 | 2989 | 0.812 | 0.789 | 0.801 ± 0.001 | 0.800 [0.789, 0.812] | 9.947 | $9.69 |
-| B5 | LLM + dynamic | 735 | 0 | 2282 | 0 | 1.000 | 0.244 | 0.392 ± 0.005 | 0.393 [0.373, 0.412] | 303 | $0.26 |
+| B5 | LLM + dynamic | 735 | 0 | 2282 | 0 | —* | 0.244 | 0.392 ± 0.005 | 0.393 [0.373, 0.412] | 303 | $0.26 |
 | B6 | LLM + all (no planner/sel) | 2009 | 74 | 569 | 3390 | 0.964 | 0.779 | 0.862 ± 0.001 | 0.862 [0.852, 0.872] | 5.513 | $5.99 |
 | B6a | + planner only | 2010 | 72 | 568 | 3392 | 0.965 | 0.780 | **0.863 ± 0.001** | 0.864 [0.854, 0.874] | 6.155 | $6.63 |
 | B6b | + tool_selector only | 2017 | 104 | 561 | 3360 | 0.951 | 0.782 | 0.858 ± 0.003 | 0.855 [0.844, 0.865] | 30.590 | $26.07 |
 | B7 | Full adaptive | 2004 | 101 | 574 | 3363 | 0.952 | 0.777 | 0.856 ± 0.002 | 0.856 [0.845, 0.866] | 32.004 | $27.14 |
 
 Khoảng tin cậy 95% của F1 tính bằng site-level percentile bootstrap trên per-site samples (1.000 resamples, seed `0xc0ffee`); cấu hình đa-run lấy run-1. Riêng B6b: điểm CI run-1 (0.855) thấp hơn trung bình 3-run đang in (0.858 ± 0.003) một khoảng ≈1 độ lệch run-to-run — ghi rõ để người đọc không đọc nhầm là bất nhất. Code: `runBaselineEval.ts`; artifact: `results/baseline-sweep-2026-08-15T08-28-06/`.
+
+(*) Precision của B2/B5 không định-nghĩa-được vì không-gian chấm của tool động không chứa negative site (TN = 0) — luật công bằng ở mục 4.1.5. Tổng số site chấm được cũng lệch nhẹ giữa các cấu hình (6.037 so với 6.042; không-gian mẫu-dương 2.578 so với 3.018) do tập case chạy-lỗi/sinh-site khác nhau giữa các cấu hình — số liệu từng cấu hình nhất-quán nội-bộ.
 
 Kiểm định McNemar paired trên hai so sánh chính (ghép cặp theo `siteId`, hiệu chỉnh liên tục Edwards, run-1; tool: `scripts/mcnemar-compare.ts`):
 
