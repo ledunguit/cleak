@@ -7,11 +7,11 @@
 
 ## A. Công cụ phân tích tĩnh
 
-[1] A. Bugs, "Clang Static Analyzer," LLVM Project. [Online]. Available: https://clang-analyzer.llvm.org/
+[1] LLVM Project, "Clang Static Analyzer." [Online]. Available: https://clang-analyzer.llvm.org/
 
 [2] S. Calcagno and D. Distefano, "Infer: An Interprocedural Memory Safety Analyzer for Large-Scale C Programs," Facebook Research, 2015. [Online]. Available: https://fbinfer.com/
 
-[3] GitHub, "CodeQL: Semantic Code Analysis Engine." [Online]. Available: https://codeql.github.com/
+[3] P. Avgustinov, O. de Moor, M. Peyton Jones, and M. Schäfer, "QL: Object-oriented Queries on Relational Data" (ngôn ngữ truy vấn nền của CodeQL), in Proc. 30th European Conf. on Object-Oriented Programming (ECOOP), LIPIcs vol. 56, 2016. DOI: 10.4230/LIPIcs.ECOOP.2016.2.
 
 [4] M. Brunsfeld, "Tree-sitter: An Incremental Parsing System for Programming Tools," 2018. [Online]. Available: https://tree-sitter.github.io/tree-sitter/
 
@@ -109,7 +109,7 @@
 
 ## I. Kiến trúc & hiệu năng phân tích tĩnh quy mô lớn
 
-[44] r2c, Inc., "Semgrep: Lightweight Static Analysis for Many Languages." [Online]. Available: https://semgrep.dev
+[44] Semgrep Inc. (trước đây là r2c), "Semgrep: Lightweight Static Analysis for Many Languages." [Online]. Available: https://semgrep.dev
 
 [45] C. Sadowski, J. van Gogh, C. Jaspan, E. Söderberg, and C. Winter, "Tricorder: Building a Program Analysis Ecosystem," in Proc. 37th Int. Conf. on Software Engineering (ICSE), 2015, pp. 598–608. DOI: 10.1109/ICSE.2015.76.
 
