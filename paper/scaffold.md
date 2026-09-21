@@ -2,6 +2,8 @@
 - Tiếng Việt:
 - Tiếng Anh:
 
+> Thuật ngữ tiếng Anh giữ nguyên trong bản thảo được chú giải thống nhất theo `docs/GLOSSARY.md`.
+
 # Tổng quan đề tài
 ## Đặt vấn đề
 
