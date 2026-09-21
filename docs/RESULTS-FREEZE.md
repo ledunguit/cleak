@@ -50,3 +50,47 @@
   cites both rows plus the family-variance numbers.
 - Exploratory sweeps run after this freeze (wave 1) are OUTSIDE this freeze
   and must never be quoted in thesis material.
+
+## Amendment 2026-09-21 (review-remediation)
+
+> Append-only record of numbers added to the thesis chapters by the
+> review-remediation plan (`.omo/plans/review-remediation.md`, todos 7-10, 13).
+> All values below are copied verbatim from the chapter text of 2026-09-21 and
+> trace back to pre-existing frozen artifacts; no new experiment was run and no
+> existing freeze row changed.
+
+1. **§4.2.2 CI column (Bảng 4.1).** F1 95% confidence intervals for all 9
+   baselines, site-level percentile bootstrap over per-site samples
+   (n≈6,042), 1,000 resamples, seed `0xc0ffee`. Multi-run configs are
+   run-1-pinned by convention (`results/baseline-sweep-2026-08-15T08-28-06/*/run-1/metrics.json`
+   key `overallCI`; single-run B1/B2/B3 from their own `metrics.json`).
+   Disclosed exception: B6b CI point 0.855 [0.844, 0.865] sits ~0.003 below the
+   printed 3-run mean 0.858 ± 0.003 (within one run-to-run std), footnoted in
+   the chapter. Evidence: `.omo/evidence/review-remediation/task-7/ci-extracted.txt`.
+2. **§4.2.2 McNemar block (Bảng 4.2).** B6a vs B1: b01=51, b10=1236, n=6037,
+   χ²=1089.2432, p=7.192e-239 (significant, B6a better). B6 vs B6a: b01=73,
+   b10=66, n=6042, χ²=0.2590, p=0.611 (not significant), and B6a is retained as
+   the production configuration for operational reasons (planner provides
+   planner-status/coverage for dynamic fallback), not for F1. Both tests
+   run-1-pinned, siteId pairing, Edwards continuity correction, via
+   `scripts/mcnemar-compare.ts`. Evidence: `.omo/evidence/review-remediation/task-8/`.
+3. **§4.2.2 B2/B5 precision cells (Bảng 4.1).** Printed as "—*" instead of
+   1.000: precision is undefined for the dynamic-only rows because their
+   scoring space contains no negative sites (TN=0), per the fairness rule the
+   chapter cites (§4.1.5). Row-total drift across configs (n 6,037 vs 6,042;
+   positive space 2,578 vs 3,018) is real artifact variation, footnoted, not
+   corrected. Source: `scripts/table-audit.ts` /
+   `.omo/evidence/review-remediation/task-9/audit.csv`.
+4. **§4.2.6 threshold sweep (Bảng 4.5).** Offline confidence re-thresholding
+   over persisted verdicts of the frozen sweep (flag(c) = isFlagged(verdict) ∧
+   confidence ≥ c, c ∈ 0.0-1.0 step 0.1, rescored with the production scorer),
+   NOT a sweep of the heuristic judge's internal score cutoffs 0.7/0.4 (raw
+   signal scores are not persisted; that remains future work). At c=0.0 the
+   transform is a no-op and reproduces the stored metrics exactly
+   (B1 0.612, B6a 0.864, B6 0.862, deviation 0). Source:
+   `paper/figures/threshold-sweep.csv`,
+   `.omo/evidence/review-remediation/task-10/` (c=0.0 self-test PASSED).
+5. **§4.11 operational-cost fragments (Bảng 4.16).** Assembled only from
+   numbers already printed elsewhere (AST cache 54s→3.0s / 1.03GB→266MB;
+   dynamic 0.5-1 day per config; judge calls 47-149 per LAMeD run; $/config
+   from Bảng 4.1). No new measurement; nothing to add to the freeze rows.

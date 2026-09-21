@@ -1,9 +1,10 @@
 # Current Status
 
-_Last updated: 2026-09-06 (thesis-completion plan `thesis-completion-next-steps`
-executed: MemHint runs complete — RESULTS-FREEZE row 10 filled, thesis .docx +
-PDF built, defense pack done; see "Thesis completion status" and "Pending /
-next steps". Defense roadmap: `docs/DEFENSE-PLAN.md`.)_
+_Last updated: 2026-09-21 (review-remediation plan `review-remediation`
+executed: all 15 implementation todos done, thesis chapters de-staled and
+statistically grounded, CURRENT_STATUS + RESULTS-FREEZE amendment synced; see
+"Review remediation status (2026-09-21)". Previous milestone 2026-09-06:
+thesis-completion plan done, defense pack built.)_
 
 ## Standing goal (verbatim, from the user)
 
@@ -184,6 +185,49 @@ invariant re-verification is `task-16-final-verification.md` in that directory.
 - **Remaining user actions**: (1) fill Lời cảm ơn in the .docx — still
   `[Điền sau — todo-16]` placeholder (personal content, intentionally left);
   (2) send the book to GVHD and iterate.
+
+## Review remediation status (2026-09-21)
+
+The full REVIEW.md remediation plan (`.omo/plans/review-remediation.md`) ran
+todos 1–15 with per-todo evidence under `.omo/evidence/review-remediation/`;
+todo 16 (this sync) re-ran the master grep gate sweep, all 10 gates green
+(`.omo/evidence/review-remediation/task-16/final-grep.txt`), and appended the
+append-only "Amendment 2026-09-21 (review-remediation)" to
+`docs/RESULTS-FREEZE.md` covering the new chapter numbers. What was fixed, one
+line per wave:
+
+- **Wave 1, text contradictions/citations (todos 1–6):** ch5 PENDING stub
+  removed + final MemHint numbers imported; contribution numbering unified to
+  C1–C4 per CONTRIBUTION.md; citation audit (6 wrong in-text numbers, orphan
+  bibliography entries resolved, "A. Bugs" placeholder author replaced, 49/49
+  entries cited via `scripts/citation-audit.mjs`); new §1.0 introduction with
+  RQ1–RQ4, C1–C4, reading map, survey-scoped gap claim; retracted-claim
+  footnote, single-family caveat, 12/41↔15/50 cross-ref, proposal change-log;
+  ECE interpreted, "FP killer" rhetoric softened, threat-model summary added.
+- **Wave 2, statistics on existing artifacts (todos 7–10):** §4.2.2 gained the
+  F1 95% CI column (run-1-pinned bootstrap, seed `0xc0ffee`, B6b deviation
+  disclosed), the McNemar block (B6a-vs-B1 p=7.192e-239 n=6037; B6-vs-B6a
+  p=0.611 n=6042, B6a retained as production config), and clean B2/B5
+  precision semantics ("—*", TN=0) with the row-drift footnote;
+  §4.2.6 documents the offline confidence re-thresholding sweep with a c=0.0
+  self-test reproducing stored metrics exactly.
+- **Wave 3, figures/tables/appendices (todos 11–13):** 5 minimum figures added
+  and referenced (architecture, pipeline, cost-F1, family-F1, consensus-flip);
+  every ch3/ch4 table numbered and captioned, vague "bảng sau/dưới" references
+  replaced; appendix A synced to RESULTS-FREEZE, appendix C gained the per-run
+  environment matrix, ch4 gained the §4.11 operational-cost fragments table.
+- **Wave 4, author-gated preparation (todos 14–15):** LAMeD /41 ground-truth
+  scaffold (`docs/data/lamed41_sites.json`) + rescore runbook, security-probe
+  runbook (10 fixtures, not executed), explanation-quality rubric + extraction
+  script, optional-experiments runbook (B6a-zai run 2, k-sweep, Infer, SARIF,
+  latency benchmark), DEFENSE-PLAN updated with S6/C.2 and the new p-values.
+
+**Still author-gated (prepared, not executed):** LAMeD /41 approval + re-score,
+security probe run (needs LLM), explanation-rubric scoring (needs human
+judgment), O-pack experiments (B6a-zai run 2/2, k∈{5,7} consensus sweep, Infer
+baseline, SARIF demo, end-to-end latency benchmark). None of these are quoted
+in the thesis. Remaining known gap: `task-13-slides.md` evidence file from the
+previous plan was never written (see Pending #6 below).
 
 ## Real bugs found & fixed (all committed — see `git log` for exact diffs)
 
