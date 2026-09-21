@@ -191,6 +191,21 @@ judge, C4 = consensus negative-result).
    lời = "mục tiêu là ĐÁNH GIÁ cơ chế; đánh giá nghiêm túc cho kết quả âm có
    giá trị khoa học, và chỉ ra hiệu ứng sampling mà nghiên cứu LLM-judge
    trước đó bỏ qua".
+   - **"Claim headline B6a vs B1 — anh có kiểm định thống kê không?"** — Có.
+     McNemar paired trên cặp ghép `siteId`, full corpus: n = 6037, b01 = 51 /
+     b10 = 1236, χ² (hiệu chỉnh Edwards) = 1089.2432, p = 7.192e-239 — B6a tốt
+     hơn B1 có ý nghĩa thống kê ở α=0.05; lợi thế F1 0.864 vs 0.612 không phải
+     nhiễu aggregate. Tool: `scripts/mcnemar-compare.ts`; artifact:
+     `results/baseline-sweep-2026-08-15T08-28-06/{B1,B6a/run-1}/metrics.json`;
+     bằng chứng chạy: `.omo/evidence/review-remediation/task-8/mcnemar-b6avs-b1.txt`.
+   - **"+0.001 F1 của planner (B6 vs B6a) — chọn B6a dựa trên gì?"** — Không
+     dựa trên +0.001: McNemar paired cho B6 vs B6a (run-1, n = 6042) cho b01 =
+     73 / b10 = 66, χ² = 0.2590, p = 0.611 — KHÔNG có ý nghĩa thống kê, hai cấu
+     hình tương đương. Quyết định: giữ B6a làm cấu hình sản xuất vì planner
+     cung cấp planner-status/coverage cho nhánh dynamic fallback (giá trị vận
+     hành, không phải F1) — đã ghi vào §4.2.2 và §4.11 của chương 4. Tool:
+     `scripts/mcnemar-compare.ts`; bằng chứng chạy:
+     `.omo/evidence/review-remediation/task-8/mcnemar-b6-vs-b6a.txt`.
 4. Tóm tắt luận văn (nếu trường yêu cầu) — rút từ quyển.
 
 ## Descope — dứt khoát KHÔNG làm (chỉ ghi vào "hạn chế & hướng phát triển")
