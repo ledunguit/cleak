@@ -4,6 +4,30 @@ Trước khi trình bày thiết kế và kết quả của hệ thống, cần 
 
 ---
 
+## 1.0. Mở đầu
+
+Memory leak (rò rỉ bộ nhớ, CWE-401) là lớp lỗi đặc biệt khó bảo trong C/C++: chương trình không crash, chạy bề ngoài vẫn bình thường, chỉ âm thầm tiêu hao bộ nhớ cho tới khi hệ thống cạn tài nguyên. Công cụ phân tích tĩnh như Clang Static Analyzer, Infer hay CodeQL quét được mọi đường đi lý thuyết nhưng thả ra nhiều cảnh báo sai (false positive), vì suy luận đường đi và quyền sở hữu bộ nhớ chưa đủ đầy. Chi phí ngồi sàng lọc đống cảnh báo đó cũng là rào cản lớn nhất khiến lập trình viên ngại dùng công cụ tĩnh [48]; khảo sát tại Microsoft cho thấy họ chỉ sẵn sàng chấp nhận analyzers khi công cụ nói được lỗi nằm đâu và sửa ra sao [49]. Phía động, Valgrind Memcheck hay LeakSanitizer đưa ra bằng chứng chắc chắn hơn, đổi lại chỉ thấy những đường thực sự được chạy trong test. Hai phía vốn bổ sung cho nhau, thế mà các công trình hiện có gần như đứng riêng lẻ; và không phía nào vượt qua được bước cuối: biến cảnh báo thành verdict có giải thích root cause kèm cách sửa.
+
+Từ bài toán trên, luận văn đặt ra bốn câu hỏi nghiên cứu:
+
+- **RQ1: LLM orchestration có cải thiện hiệu suất phát hiện leak không?** (trả lời ở §4.2, chốt lại ở §5.1)
+- **RQ2: Kết quả có tái lập được không?** (trả lời ở §4.8)
+- **RQ3: Consensus voting có giảm dao động verdict không?** (trả lời ở §4.6)
+- **RQ4: Hệ thống hoạt động ra sao trên dự án thực?** (trả lời ở §4.5 và §4.10)
+
+Trả lời bốn câu hỏi đó tạo thành bốn đóng góp của luận văn (kể chi tiết ở §5.2):
+
+- **C1.** Pipeline hybrid tất định-trừ-judge: recipe build cộng sanitizer run ghim cứng, không có LLM trong vòng chạy; LLM planner chỉ gate luồng, LLM judge chỉ chốt verdict cuối.
+- **C2.** Giao thức tái lập hai tầng: chế độ no_llm tất định bit-for-bit và có gate chứng nhận, chế độ llm_assisted được báo cáo dạng phân phối (mean ± std, tỉ lệ lật verdict từng ca).
+- **C3.** Làm giàu bằng chứng cho judge: ownership của biến, cặp alloc→free, đường rò khả thi và tương quan static-dynamic có phân bậc, nhờ đó mọi verdict truy vết được về bằng chứng gốc.
+- **C4.** Consensus judge với kết quả âm trung thực: trên mẫu stratified n=50, bỏ phiếu k mẫu kém cả ổn định lẫn F1 so với single-LLM; luận văn báo cáo cả hai kết quả thay vì giữ lại số thuận lợi.
+
+Luận văn trải ra theo năm chương. Phần sau chương này lần lượt đi qua các hướng tiếp cận tĩnh, động và dựa trên LLM để định vị khoảng trống nghiên cứu. Chương 2 và Chương 3 trình bày thiết kế rồi hiện thực của hệ thống; Chương 4 đánh giá thực nghiệm trên corpus synthetic lẫn dự án thực; Chương 5 chốt câu trả lời cho RQ1 đến RQ4 và nêu hướng phát triển.
+
+Nhận định về khoảng trống ở cuối chương cần được đọc trong phạm vi phương pháp khảo sát sau đây. Khảo sát của đề tài lấy nguồn chính từ thư mục `researchs/` gồm sáu báo cáo tổng hợp và phiếu tóm tắt từng paper kèm log kiểm chứng; nguồn bổ sung là Google Scholar, DBLP, arXiv và các hội thảo chuyên ngành như ICSE, FSE, ASE, ISSTA hay OSDI, trong giai đoạn 2024 đến 2026. Bảng đối chiếu ở §1.7 ghép chín hệ thống và nghiên cứu liên quan (không tính đề tài), so theo sáu tiêu chí: static, dynamic, agentic, judge, leak focus, peer-review. Một lưu ý về corpus: Juliet [37] là bộ test công khai từ lâu, nhiều khả năng nằm trong hỗn hợp pretraining của các LLM được đánh giá, nên kết luận chính về khả năng hoạt động trên dự án thực sẽ dựa vào LAMeD [21] và MemHint [20]; hạn chế này bàn kỹ ở §5.4.
+
+---
+
 ## 1.1. Memory leak trong C/C++
 
 ### 1.1.1. Định nghĩa và phân loại
@@ -314,7 +338,7 @@ Bảng sau tổng hợp các hệ thống liên quan và vị trí của luận 
 | Hassler (khảo sát) [13] | ✅ | ✅ | ❌ | ❌ | 🟡 | ❌ |
 | **Đề tài** | **✅** | **✅** | **✅** | **✅** | **✅** | **—** |
 
-Khoảng trống rõ ràng: **chưa có hệ thống nào kết hợp LLM orchestration + static + dynamic chuyên cho memory leak C/C++.** MemHint và LAMeD chỉ dùng static; Revelio và SAILOR nhắm crash/vulnerability nói chung, không chuyên leak. Đồ thị Venn giữa "static + dynamic" và "memory leak focus" vẫn còn trống — đó chính là vị trí của luận văn này.
+Đối chiếu cả bảng, trong khảo sát có hệ thống của chúng tôi (mục 1.0), chưa tìm thấy hệ thống nào kết hợp LLM orchestration, static và dynamic chuyên cho memory leak C/C++. MemHint và LAMeD chỉ dùng static; Revelio và SAILOR nhắm crash/vulnerability nói chung, không chuyên leak. Hassler và cộng sự [13] củng cố thêm ở tầng công cụ: tập bug fuzzers tìm được gần như không giao với tập bug static analyzers tìm được, nên việc kết hợp hai phía là điều cần làm. Phần còn trống là ghép sự kết hợp đó với LLM orchestration cho đúng lớp leak, và đó chính là vị trí luận văn nhắm tới.
 
 ---
 

@@ -116,3 +116,9 @@
 [46] C. Calcagno, D. Distefano, J. Dubreil, D. Gabi, P. Hooimeijer, M. Luca, P. W. O'Hearn, I. Papakonstantinou, J. Purbrick, and D. Rodriguez, "Moving Fast with Software Verification," in NASA Formal Methods (LNCS vol. 9058), Springer, 2015, pp. 3–11.
 
 [47] T. Szabó, "Incrementalizing Production CodeQL Analyses," in Proc. 31st ACM Joint European Software Engineering Conf. and Symp. on the Foundations of Software Engineering (ESEC/FSE), 2023. DOI: 10.1145/3611643.3613860. arXiv:2308.09660.
+
+## J. Nghiên cứu về việc áp dụng phân tích tĩnh trong thực tế
+
+[48] B. Johnson, Y. Song, E. Murphy-Hill, and R. Bowdidge, "Why Don't Software Developers Use Static Analysis Tools to Find Bugs?" in Proc. 2013 35th Int. Conf. on Software Engineering (ICSE), 2013, pp. 672-681. DOI: 10.1109/ICSE.2013.6606613.
+
+[49] M. Christakis and C. Bird, "What Developers Want and Need from Program Analysis: An Empirical Study," in Proc. 31st IEEE/ACM Int. Conf. on Automated Software Engineering (ASE), 2016. DOI: 10.1145/2970276.2970347.
