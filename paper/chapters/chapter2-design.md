@@ -98,7 +98,9 @@ flowchart TB
     TUI -- "HTTP SSE (streaming)" --> LLM
 ```
 
-Hai analyzer nối qua Docker bridge network `mcpvul-net`. Orchestrator gọi analyzer qua MCP, gọi LLM qua HTTP SSE. Mỗi lời gọi tool là một HTTP POST độc lập (stateless JSON mode).
+Hai analyzer nối qua Docker bridge network `mcpvul-net` (xem Hình 2.1). Orchestrator gọi analyzer qua MCP, gọi LLM qua HTTP SSE. Mỗi lời gọi tool là một HTTP POST độc lập (stateless JSON mode).
+
+![Hình 2.1 — Kiến trúc tổng quan hệ thống CLeak: orchestrator CLI/TUI, hai analyzer MCP và tầng nền dùng chung](../figures/fig-architecture.svg)
 
 ### 2.3.4. Luồng dữ liệu
 

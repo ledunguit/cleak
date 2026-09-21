@@ -215,7 +215,9 @@ Idle timeout (mặc định 75 giây) reset theo mỗi chunk nhận được —
 
 ### 3.5.1. Workflow 4-stage
 
-Orchestrator là ứng dụng chính — nơi tất cả thành phần ghép lại với nhau. File `workflowInvestigation.ts` implement pipeline 4-stage đã thiết kế ở Chương 2.
+Orchestrator là ứng dụng chính — nơi tất cả thành phần ghép lại với nhau. File `workflowInvestigation.ts` implement pipeline 4-stage đã thiết kế ở Chương 2. Toàn bộ luồng từ bộ dữ liệu đã lock đến cổng determinism được tổng hợp trong Hình 3.1.
+
+![Hình 3.1 — Pipeline HYBRID 4-stage: corpus (5 cổng → lock) → khám phá/làm giàu tĩnh → Stage A ∥ Stage B → Stage C → Stage D → báo cáo → chấm điểm → thống kê → cổng determinism](../figures/fig-pipeline.svg)
 
 **Stage A — Static evidence (fan-out bounded):**
 

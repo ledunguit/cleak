@@ -83,6 +83,10 @@ Tổng chi phí sweep: $75.78 (B1, B2, B3 là `no_llm`, không định giá). MC
 
 Ba điều đáng đọc từ bảng. Thứ nhất, cùng sweep, cùng commit: B6a 0.863 so với B1 static-only 0.612, tức trên full corpus judge LLM thực sự giúp. Thứ hai, chi phí: B7 agentic tốn $27.14, khoảng 4 lần B6a ($6.63), để đạt F1 thấp hơn; tính trên token thì 32k/case so với 6.2k/case, khoảng 5 lần. Thứ ba, dynamic evidence tiếp tục là nguồn giảm FP mạnh nhất ở quy mô lớn: B4 (LLM + static, không dynamic) tạo 470 FP, thêm dynamic (B6) giảm FP 470→74 với F1 cao hơn. Kết luận rút ra ở n=50 vì thế tái lập trên corpus lớn gấp 33 lần, với model khác.
 
+Đánh đổi chi phí–F1 của sáu cấu hình dùng LLM trong bảng được trực quan trong Hình 4.1 (B1–B3 là `no_llm`, không định giá nên không có trục hoành): B6a nằm ở góc chi phí thấp – F1 cao, trong khi B6b và B7 tăng chi phí gấp ~4 lần mà F1 không tăng.
+
+![Hình 4.1 — Chi phí (USD) so với F1 của các cấu hình dùng LLM, sweep full-corpus 1658 ca, mục 4.2.2](../figures/fig-cost-f1.png)
+
 ### 4.2.3. Kết quả n=50 stratified (thí nghiệm đầu, giữ làm phụ)
 
 Bảng dưới là thí nghiệm đầu của chuỗi ablation (2026-06), chạy trên model `mimo/mimo-v2.5-pro`, stratified n=50, single run (mean 3 runs của B6a: F1 0.938±0.015, xem mục 4.8.2). Chúng tôi giữ nguyên làm dữ liệu phụ; câu chuyện đầy đủ về hai bộ số nằm ở mục 4.2.5.
@@ -124,6 +128,10 @@ Cùng cấu hình B6a, cùng corpus hash `f578c3ee`, mà F1 chênh 0.075 (0.938�
 Phân rã theo family trong sweep full-corpus cho thấy khoảng cách này là thật, không phải nhiễu. Với B6a, theo từng run (`byFunctionalVariant`): family `malloc` đạt F1 0.991 ở run tốt nhất (mean 3 run: 0.975), còn `strdup` chỉ đạt 0.584 (mean: 0.576). Một cấu hình có thể gần như hoàn hảo trên một family và kém hơn 0.4 điểm F1 trên family khác; mỗi sample nhỏ 50 ca đều qua round-robin chỉ chứa ~5 ca mỗi family, nên hiệu ứng family bị pha loãng. Std ±0.015 của B6a ở n=50 so với ±0.001 ở full corpus cũng là tín hiệu cùng chuyện: biến động đến từ thành phần mẫu, không từ run LLM.
 
 Cả hai con số đều đúng, chúng chỉ trả lời hai câu hỏi khác nhau. 0.863 là hiệu năng trên toàn corpus, con số nên dùng khi nói về hệ thống nói chung. 0.938 là ablation cấu phần trên mẫu cân bằng family, hợp lý khi so sánh tương đối giữa các cấu hình. Bài học phương pháp luận: sample stratified nhỏ làm kết quả LLM-judge trông tốt hơn trên corpus lệch family, và mọi so sánh cần ghi rõ cách lấy mẫu.
+
+Hai thái cực này của B6a theo family được minh họa trong Hình 4.2 (chỉ hai family có số F1 in trong chương; các family khác không có số liệu in để trích).
+
+![Hình 4.2 — F1 của B6a theo family trên sweep full-corpus: malloc gần hoàn hảo, strdup dưới 0.6 (mục 4.2.5)](../figures/fig-family-f1.png)
 
 ### 4.2.6. Độ nhạy ngưỡng chấm điểm
 
@@ -247,6 +255,10 @@ Mọi thứ đảo chiều so với n=30. Single-LLM nay là nhánh ổn định
 Hai phép đo đó không mâu thuẫn nhau; chúng đo hai mẫu khác nhau. Mẫu n=30 đầu (100% family `char`) là corpus dễ, nơi consensus sampling ở temp 0.7 có lợi thế; khi mức khó được phân bố đều qua 10 families, các ca khó thật (như family `strdup` với F1 0.584 ở mục 4.2.5) phơi bày điểm yếu của consensus: phiếu LLM trên ca khó không độc lập, và đa số phiếu có thể bầu cho sai một cách có hệ thống. Flip rate của single-LLM ở n=30 (từ 13.3% đến 26.7%) cũng không tái lập ở n=50 stratified (2.0%): phần lớn "bất ổn" trước đó là hiệu ứng family-dễ, không phải tính chất của judge.
 
 Kết luận chính thức của luận văn: **consensus không được khuyến nghị làm mặc định**. Trên bằng chứng tốt nhất hiện có (mẫu đại diện phân bố khó, n=50, paired test 205 site), consensus vừa kém ổn định hơn vừa kém chính xác hơn single-LLM, chênh lệch chưa đạt ý nghĩa thống kê (p=0.077). Cơ chế vẫn giữ lại như tuỳ chọn opt-in (`consensus.n > 1`) chờ nghiên cứu multi-seed trên quy mô lớn hơn. Đây là kết quả âm tính có chủ đích: cơ chế nằm trong tên đề tài, được đánh giá nghiêm túc, và bị từ chối bởi chính giao thức đánh giá của luận văn.
+
+Sự đảo chiều giữa hai phép đo (xem Hình 4.3) cho thấy flip rate phụ thuộc thành phần mẫu nhiều hơn bản chất cơ chế: trên mẫu đơn-family n=30, consensus ổn định hơn single-LLM; trên mẫu stratified n=50, thứ tự hoàn toàn ngược lại.
+
+![Hình 4.3 — Verdict-flip rate của hai nhánh judge trước/sau stratification: n=30 (hai campaign A/B) và n=50 stratified (mục 4.6)](../figures/fig-consensus-flip.png)
 
 ---
 
