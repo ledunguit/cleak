@@ -38,7 +38,7 @@ Baseline positive-only (Clang) chỉ enumerate leak finding → TN=0. Vì vậy 
 
 Các run chốt của luận văn dùng model `deepseek-v4-flash` qua gateway OpenAI-compatible (`openai-compat`) nội bộ tại port 20128. Cụ thể: sweep full-corpus 1658 ca (mục 4.2, commit `5eec8b1`), bộ run LAMeD 2026-08-20 (mục 4.5), ablation consensus n=50 (mục 4.6) và validation allocator-profile (mục 4.9). Temperature 0 cho judge single, 0.7 cho consensus sampling. Idle-timeout: 75 giây.
 
-Không phải mọi thí nghiệm đều dùng một model, và chúng tôi ghi rõ model của từng run thay vì gộp chung. Bảng n=50 stratified ở mục 4.2.3 là thí nghiệm đầu (2026-06), đo trên `mimo/mimo-v2.5-pro`, sau đó re-measure trên corpus đã validate. Hai sweep phụ cấu hình B6a trên full corpus dùng model khác để kiểm tra tính tổng quát: `mimo-v2.5` cho F1 0.737, `glm-5.2` (z-ai) cho F1 0.774 (run 1/2 hoàn tất, số derive từ per-case rows). Cùng cấu hình B6a trên cùng corpus `f578c3ee`, F1 dao động từ 0.737 đến 0.863 theo model: cấu hình không được "tune" theo một model duy nhất, nhưng mức F1 tuyệt đối thì phụ thuộc model. Chi phí giữa các provider không so sánh trực tiếp được với nhau.
+Không phải mọi thí nghiệm đều dùng một model, và chúng tôi ghi rõ model của từng run thay vì gộp chung. Bảng 4.3 (n=50 stratified, mục 4.2.3) là thí nghiệm đầu (2026-06), đo trên `mimo/mimo-v2.5-pro`, sau đó re-measure trên corpus đã validate. Hai sweep phụ cấu hình B6a trên full corpus dùng model khác để kiểm tra tính tổng quát: `mimo-v2.5` cho F1 0.737, `glm-5.2` (z-ai) cho F1 0.774 (run 1/2 hoàn tất, số derive từ per-case rows). Cùng cấu hình B6a trên cùng corpus `f578c3ee`, F1 dao động từ 0.737 đến 0.863 theo model: cấu hình không được "tune" theo một model duy nhất, nhưng mức F1 tuyệt đối thì phụ thuộc model. Chi phí giữa các provider không so sánh trực tiếp được với nhau.
 
 ---
 
@@ -50,7 +50,9 @@ Năm trục độc lập: [static, dynamic, planner, tool_selector, fusion]. Ch�
 
 ### 4.2.2. Kết quả full-corpus 1658 ca (headline)
 
-Sweep 9 baseline trên toàn bộ corpus 1658 ca, commit `5eec8b1`, model `deepseek-v4-flash`, chạy trên WSL2 với `--concurrency 16`. Các baseline dùng LLM (B4 đến B7) chạy 3 lần để đo mean ± std; hai run riêng lẻ (B6b/run-2 và B7/run-3) từng bị nhiễm lỗi fallback-judge im lặng, được phát hiện và chạy lại trước khi tính vào bảng. Bảng sau là kết quả gộp:
+Sweep 9 baseline trên toàn bộ corpus 1658 ca, commit `5eec8b1`, model `deepseek-v4-flash`, chạy trên WSL2 với `--concurrency 16`. Các baseline dùng LLM (B4 đến B7) chạy 3 lần để đo mean ± std; hai run riêng lẻ (B6b/run-2 và B7/run-3) từng bị nhiễm lỗi fallback-judge im lặng, được phát hiện và chạy lại trước khi tính vào bảng. Bảng 4.1 là kết quả gộp:
+
+**Bảng 4.1.** So sánh 9 baseline trên Juliet full corpus với CI 95% của F1.
 
 | ID | Baseline | TP | FP | FN | TN | P | R | F1 | F1 (95% CI) | tok/case | Chi phí |
 |---|---|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|
@@ -70,6 +72,8 @@ Khoảng tin cậy 95% của F1 tính bằng site-level percentile bootstrap tr�
 
 Kiểm định McNemar paired trên hai so sánh chính (ghép cặp theo `siteId`, hiệu chỉnh liên tục Edwards, run-1; tool: `scripts/mcnemar-compare.ts`):
 
+**Bảng 4.2.** Kiểm định McNemar paired cho hai so sánh chính.
+
 | So sánh | b01 | b10 | n | χ² | p |
 |---|--:|--:|--:|--:|--:|
 | B6a vs B1 | 51 | 1236 | 6037 | 1089.2432 | 7.192e-239 |
@@ -81,15 +85,17 @@ Trong đó b01 = số site cấu hình đầu sai còn cấu hình sau đúng, b
 
 Tổng chi phí sweep: $75.78 (B1, B2, B3 là `no_llm`, không định giá). MCC của B6a là 0.790, lấy làm mean của 3 run từ `variance.json`. Thứ hạng F1: B6a 0.863 ≈ B6 0.862 > B6b 0.858 ≈ B7 0.856 > B4 0.801 > B3 0.683 > B1 0.612 > B5 0.392 ≈ B2 0.392.
 
-Ba điều đáng đọc từ bảng. Thứ nhất, cùng sweep, cùng commit: B6a 0.863 so với B1 static-only 0.612, tức trên full corpus judge LLM thực sự giúp. Thứ hai, chi phí: B7 agentic tốn $27.14, khoảng 4 lần B6a ($6.63), để đạt F1 thấp hơn; tính trên token thì 32k/case so với 6.2k/case, khoảng 5 lần. Thứ ba, dynamic evidence tiếp tục là nguồn giảm FP mạnh nhất ở quy mô lớn: B4 (LLM + static, không dynamic) tạo 470 FP, thêm dynamic (B6) giảm FP 470→74 với F1 cao hơn. Kết luận rút ra ở n=50 vì thế tái lập trên corpus lớn gấp 33 lần, với model khác.
+Ba điều đáng đọc từ Bảng 4.1. Thứ nhất, cùng sweep, cùng commit: B6a 0.863 so với B1 static-only 0.612, tức trên full corpus judge LLM thực sự giúp. Thứ hai, chi phí: B7 agentic tốn $27.14, khoảng 4 lần B6a ($6.63), để đạt F1 thấp hơn; tính trên token thì 32k/case so với 6.2k/case, khoảng 5 lần. Thứ ba, dynamic evidence tiếp tục là nguồn giảm FP mạnh nhất ở quy mô lớn: B4 (LLM + static, không dynamic) tạo 470 FP, thêm dynamic (B6) giảm FP 470→74 với F1 cao hơn. Kết luận rút ra ở n=50 vì thế tái lập trên corpus lớn gấp 33 lần, với model khác.
 
-Đánh đổi chi phí–F1 của sáu cấu hình dùng LLM trong bảng được trực quan trong Hình 4.1 (B1–B3 là `no_llm`, không định giá nên không có trục hoành): B6a nằm ở góc chi phí thấp – F1 cao, trong khi B6b và B7 tăng chi phí gấp ~4 lần mà F1 không tăng.
+Đánh đổi chi phí–F1 của sáu cấu hình dùng LLM trong Bảng 4.1 được trực quan trong Hình 4.1 (B1–B3 là `no_llm`, không định giá nên không có trục hoành): B6a nằm ở góc chi phí thấp – F1 cao, trong khi B6b và B7 tăng chi phí gấp ~4 lần mà F1 không tăng.
 
 ![Hình 4.1 — Chi phí (USD) so với F1 của các cấu hình dùng LLM, sweep full-corpus 1658 ca, mục 4.2.2](../figures/fig-cost-f1.png)
 
 ### 4.2.3. Kết quả n=50 stratified (thí nghiệm đầu, giữ làm phụ)
 
-Bảng dưới là thí nghiệm đầu của chuỗi ablation (2026-06), chạy trên model `mimo/mimo-v2.5-pro`, stratified n=50, single run (mean 3 runs của B6a: F1 0.938±0.015, xem mục 4.8.2). Chúng tôi giữ nguyên làm dữ liệu phụ; câu chuyện đầy đủ về hai bộ số nằm ở mục 4.2.5.
+Bảng 4.3 là thí nghiệm đầu của chuỗi ablation (2026-06), chạy trên model `mimo/mimo-v2.5-pro`, stratified n=50, single run (mean 3 runs của B6a: F1 0.938±0.015, xem mục 4.8.2). Chúng tôi giữ nguyên làm dữ liệu phụ; câu chuyện đầy đủ về hai bộ số nằm ở mục 4.2.5.
+
+**Bảng 4.3.** Kết quả ablation 9 baseline trên mẫu stratified n=50.
 
 | ID | Baseline | TP | FP | FN | TN | P | R | F1 | ECE | Token |
 |---|---|--:|--:|--:|--:|--:|--:|--:|--:|--:|
@@ -105,11 +111,13 @@ Bảng dưới là thí nghiệm đầu của chuỗi ablation (2026-06), chạy
 
 Tổng sweep: 10,6 triệu token. Riêng B6b + B7 (agentic) chiếm 8,36 triệu (79%).
 
-Cột ECE của bảng trên cần đọc đúng nghĩa. Confidence của tầng heuristic không phải xác suất được hiệu chuẩn: ECE 0.548 của B1 cho thấy khoảng cách lớn giữa giá trị confidence và độ chính xác thực tế. Các giá trị confidence vì thế chỉ dùng nội bộ để xếp hạng candidate và so ngưỡng, không nên ngoại suy thành độ tin cậy bên ngoài; hiệu chuẩn lại (Platt scaling hoặc isotonic trên dữ liệu held-out) là hướng phát triển.
+Cột ECE của Bảng 4.3 cần đọc đúng nghĩa. Confidence của tầng heuristic không phải xác suất được hiệu chuẩn: ECE 0.548 của B1 cho thấy khoảng cách lớn giữa giá trị confidence và độ chính xác thực tế. Các giá trị confidence vì thế chỉ dùng nội bộ để xếp hạng candidate và so ngưỡng, không nên ngoại suy thành độ tin cậy bên ngoài; hiệu chuẩn lại (Platt scaling hoặc isotonic trên dữ liệu held-out) là hướng phát triển.
 
 ### 4.2.4. Kết quả n=100
 
-Từ cùng đợt thí nghiệm đầu (model `mimo/mimo-v2.5-pro`), mở rộng n=100, chỉ chạy các cấu hình không agentic:
+Từ cùng đợt thí nghiệm đầu (model `mimo/mimo-v2.5-pro`), mở rộng n=100, chỉ chạy các cấu hình không agentic (Bảng 4.4):
+
+**Bảng 4.4.** Kết quả n=100, các cấu hình không agentic.
 
 | ID | TP | FP | FN | TN | P | R | F1 |
 |---|--:|--:|--:|--:|--:|--:|--:|
@@ -135,7 +143,9 @@ Hai thái cực này của B6a theo family được minh họa trong Hình 4.2 (
 
 ### 4.2.6. Độ nhạy ngưỡng chấm điểm
 
-Mọi số liệu ở trên dùng đúng một ngưỡng ra quyết định. Để đo mức phụ thuộc vào ngưỡng, chúng tôi re-threshold offline giá trị `confidence` đã lưu trên các verdict của sweep baseline: một finding bị flag nhưng có `confidence < c` bị hạ thành `false_positive`, sau đó toàn bộ 1658 ca được chấm lại bằng chính scorer production (`scoreCase` + `computeMetrics`), với `c` chạy 0.0 → 1.0 bước 0.1 (script `scripts/threshold-sweep.ts`, kết quả đầy đủ trong `paper/figures/threshold-sweep.csv`; artifact `results/baseline-sweep-2026-08-15T08-28-06/`). Các hàng chọn lọc:
+Mọi số liệu ở trên dùng đúng một ngưỡng ra quyết định. Để đo mức phụ thuộc vào ngưỡng, chúng tôi re-threshold offline giá trị `confidence` đã lưu trên các verdict của sweep baseline: một finding bị flag nhưng có `confidence < c` bị hạ thành `false_positive`, sau đó toàn bộ 1658 ca được chấm lại bằng chính scorer production (`scoreCase` + `computeMetrics`), với `c` chạy 0.0 → 1.0 bước 0.1 (script `scripts/threshold-sweep.ts`, kết quả đầy đủ trong `paper/figures/threshold-sweep.csv`; artifact `results/baseline-sweep-2026-08-15T08-28-06/`). Các hàng chọn lọc (Bảng 4.5):
+
+**Bảng 4.5.** Độ nhạy ngưỡng: F1 của B1 và B6a theo ngưỡng c.
 
 | Config | c = 0.0 | c = 0.3 | c = 0.5 | c = 0.7 | c = 0.9 |
 |---|---|---|---|---|---|
@@ -158,6 +168,8 @@ Thứ hai, quét ngưỡng điểm nội bộ 0.7/0.4 của heuristic judge là 
 
 Hai trục phân rã: LLM (no_llm vs llm_assisted) × Dynamic (off vs on). Kết quả trên 30 ca đầu (cùng một mẫu đơn-family như mục 4.6.1; kết quả chỉ mang tính định hướng, không khái quát):
 
+**Bảng 4.6.** Ma trận 2×2: LLM orchestration × dynamic evidence trên 30 ca.
+
 | | Static (`--dynamic off`) | + Dynamic |
 |---|---|---|
 | **no_llm** | TP29 FP7 FN3 · P0.806 R0.906 | TP29–30 FP7 FN2–3 · R0.906–0.938 |
@@ -177,6 +189,8 @@ Hai phát hiện quan trọng:
 
 Câu hỏi: 11 tool tĩnh, tool nào thật sự cần? Câu trả lời: không phải "cạnh tranh" mà là "bổ sung."
 
+**Bảng 4.7.** Ablation static evidence tools trên mẫu n=50.
+
 | Static tools | TP | FP | FN | P | R | F1 | ECE |
 |---|--:|--:|--:|--:|--:|--:|--:|
 | none (candidateScan only) | 42 | 11 | 11 | 0.792 | 0.792 | 0.792 | 0.548 |
@@ -192,7 +206,9 @@ Câu hỏi: 11 tool tĩnh, tool nào thật sự cần? Câu trả lời: không
 
 ### 4.5.1. Kết quả trên denominator 50 site (bộ run 2026-08-20)
 
-Số liệu dưới đây từ bộ run 2026-08-20, sau khi sửa một lỗi đếm site: `computeBundleId` cũ dùng pseudo-hash cắt cụt, gộp các candidate khác nhau thành một, làm thiếu cả recall lẫn denominator. Sau fix, corpus LAMeD cho 50 site chấm được (trước đây 44: libsolv 6→11 site, cjson 6→7, 5 dự án còn lại không đổi).
+Số liệu trong Bảng 4.8 từ bộ run 2026-08-20, sau khi sửa một lỗi đếm site: `computeBundleId` cũ dùng pseudo-hash cắt cụt, gộp các candidate khác nhau thành một, làm thiếu cả recall lẫn denominator. Sau fix, corpus LAMeD cho 50 site chấm được (trước đây 44: libsolv 6→11 site, cjson 6→7, 5 dự án còn lại không đổi).
+
+**Bảng 4.8.** Kết quả trên LAMeD với denominator 50 site.
 
 | Cấu hình | TP | FP | FN | Recall | Precision |
 |---|--:|--:|--:|--:|--:|
@@ -230,6 +246,8 @@ Sáu ca gộp thành bốn lớp cấu trúc khác nhau: deallocator semantics, 
 
 Chúng tôi kể theo đúng trình tự thí nghiệm đã chạy, kể cả khi kết quả cuối đi ngược kết quả đầu. Đợt đo đầu tiên dùng 30 ca đầu của corpus, tức 100% một family duy nhất (`char`, xem mục 4.2.5), với hai nhánh single-LLM (K=1) và consensus (K=3), hai lần chạy mỗi nhánh, lặp lại hai campaign A/B:
 
+**Bảng 4.9.** Ổn định verdict hai nhánh judge trên n=30, hai campaign A/B.
+
 | Judge arm | Campaign | Case stability | Flip rate | Modal agreement |
 |---|---|---|---|---|
 | single-LLM (K=1) | A | 73.3% | 26.7% (8/30) | 86.7% |
@@ -242,6 +260,8 @@ Tại thời điểm đó, kết quả trông rất rõ: consensus arm lặp l�
 ### 4.6.2. Đo lại trên mẫu stratified n=50: kết quả đảo ngược
 
 Bài học từ mục 4.2.5 khiến chúng tôi nghi ngờ chính mẫu n=30. Đo lại trên n=50 stratified round-robin (2 runs mỗi nhánh, model `deepseek-v4-flash`, commit `f0d371c`), 205 site chấm được. Hai campaign cho cùng một chiều kết quả, flip rate lặp lại y hệt:
+
+**Bảng 4.10.** Flip rate và F1 hai nhánh judge trên mẫu stratified n=50.
 
 | Judge arm | Flip rate | F1 |
 |---|---|---|
@@ -266,16 +286,20 @@ Sự đảo chiều giữa hai phép đo (xem Hình 4.3) cho thấy flip rate ph
 
 ### 4.7.1. Juliet n=30 (live re-run, cùng scorer)
 
-Bảng so sánh trực tiếp trên 30 ca đầu (thí nghiệm sớm, cùng một mẫu đơn-family như mục 4.6.1), chạy lại cả hai hệ trên cùng scorer:
+Bảng 4.11 so sánh trực tiếp trên 30 ca đầu (thí nghiệm sớm, cùng một mẫu đơn-family như mục 4.6.1), chạy lại cả hai hệ trên cùng scorer:
+
+**Bảng 4.11.** So sánh với Clang Static Analyzer trên Juliet n=30.
 
 | Hệ thống | Sites | TP | FP | FN | TN | P | R | F1 |
 |---|--:|--:|--:|--:|--:|--:|--:|--:|
 | no_llm (heuristic) | 77 | 29 | 7 | 3 | 38 | 0.806 | 0.906 | **0.853** |
 | clang-analyzer | 44 | 27 | 12 | 5 | 0 | 0.692 | 0.844 | 0.761 |
 
-Chú thích về cột "Sites": đây là số site cấp phát chấm được trên 30 ca đó (mỗi ca có thể chứa nhiều site), không phải một số ca thứ hai. Output của Clang Static Analyzer (chỉ warning, không có clearance per-site tường minh) tạo ra một tập site nhỏ hơn và không trùng; TN=0 của hàng Clang là cấu trúc đặc trưng của công cụ positive-only. Trên mẫu này, cấu hình heuristic thắng Clang về cả F1 lẫn mật độ FP. So sánh ở quy mô full corpus nằm ở bảng mục 4.2.2.
+Chú thích về cột "Sites": đây là số site cấp phát chấm được trên 30 ca đó (mỗi ca có thể chứa nhiều site), không phải một số ca thứ hai. Output của Clang Static Analyzer (chỉ warning, không có clearance per-site tường minh) tạo ra một tập site nhỏ hơn và không trùng; TN=0 của hàng Clang là cấu trúc đặc trưng của công cụ positive-only. Trên mẫu này, cấu hình heuristic thắng Clang về cả F1 lẫn mật độ FP. So sánh ở quy mô full corpus nằm ở Bảng 4.1 (mục 4.2.2).
 
 ### 4.7.2. LAMeD
+
+**Bảng 4.12.** So sánh với Clang Static Analyzer trên LAMeD.
 
 | Hệ thống | Sites | TP | FP | Recall | Precision |
 |---|--:|--:|--:|--:|--:|
@@ -286,7 +310,9 @@ Recall 30.0% với FP=0 nằm trong dải LAMeD tự báo cho các công cụ c�
 
 ### 4.7.3. So sánh với các hệ thống LLM khác
 
-Bảng sau so leak-count với các hệ thống dùng LLM cho leak C/C++. Lưu ý: corpus và giao thức chấm khác nhau, nên so sánh chỉ mang tính định hướng, không dùng để kết luận hệ thống nào "tốt hơn."
+Bảng 4.13 so leak-count với các hệ thống dùng LLM cho leak C/C++. Lưu ý: corpus và giao thức chấm khác nhau, nên so sánh chỉ mang tính định hướng, không dùng để kết luận hệ thống nào "tốt hơn."
+
+**Bảng 4.13.** Đối chiếu leak-count với các hệ thống dùng LLM cho leak C/C++.
 
 | Hệ thống | Corpus | Kết quả | Phương pháp | Peer-review |
 |---|---|---|---|:--:|
@@ -297,7 +323,7 @@ Bảng sau so leak-count với các hệ thống dùng LLM cho leak C/C++. Lưu 
 | Hệ thống luận văn | LAMeD, 41 ca (50 site) | 15 TP / 0 FP | `no_llm` và `llm_assisted` cho kết quả như nhau | — |
 | Hệ thống luận văn | Juliet, full corpus 1658 ca | 2010 TP / 72 FP (B6a) | LLM orchestration + static + dynamic | — |
 
-MemHint [20] đạt leak-count cao nhất (52–54, 49 confirmed/fixed) nhưng trên corpus lớn hơn nhiều (7 dự án, 3.4M+ SLOC) và chưa qua peer-review. Bảng dùng số tự báo bản v3 của paper (7 dự án, 3.4M+ SLOC, 52–54 leak, 49 confirmed — kiểm chứng trong `researchs/04`); bộ số "8 dự án / 3.6M LOC / 54 leak, 53 confirmed" thuộc bản arXiv đầu và đã bị bác bỏ. Điểm chung đáng nói: cả MemHint và hệ thống này đều cần LLM khám phá allocator, MemHint dùng LLM phân loại hàm, còn luận văn dùng LLM profiler với grep-verify (độ chính xác đo ở mục 4.9).
+MemHint [20] đạt leak-count cao nhất (52–54, 49 confirmed/fixed) nhưng trên corpus lớn hơn nhiều (7 dự án, 3.4M+ SLOC) và chưa qua peer-review. Bảng 4.13 dùng số tự báo bản v3 của paper (7 dự án, 3.4M+ SLOC, 52–54 leak, 49 confirmed — kiểm chứng trong `researchs/04`); bộ số "8 dự án / 3.6M LOC / 54 leak, 53 confirmed" thuộc bản arXiv đầu và đã bị bác bỏ. Điểm chung đáng nói: cả MemHint và hệ thống này đều cần LLM khám phá allocator, MemHint dùng LLM phân loại hàm, còn luận văn dùng LLM profiler với grep-verify (độ chính xác đo ở mục 4.9).
 
 Với LAMeD [21] trên cJSON: Cooddy + annotation đạt P=0.933 / R=0.583. Khoảng cách với kết quả của hệ thống trên benchmark LAMeD chủ yếu do Cooddy có annotation function-level chi tiết hơn (AllocSource/FreeSink) so với allocator set đơn giản hơn của hệ thống. Đây chính là động lực cho tầng LLM allocator profiler, và là lý do cJSON được chọn làm scope validation của tầng đó.
 
@@ -338,6 +364,8 @@ MemHint [20] là baseline rò rỉ bộ nhớ C/C++ trực tiếp nhất trong r
 
 Hai cấu hình được đo: `no_llm --enrich` (1 run) và `llm_assisted` (3 runs, model `deepseek-v4-flash` qua openai-compat, temp 0). Hệ chạy ở cấu hình đề xuất `llm_assisted` (nhóm fusion-B6 trong ablation, mục 4.2): planner và tool-selector là hai trục chỉ được bật trên Juliet, còn lệnh trên corpus này dùng `--strategy off` và `--no-tool-select`.
 
+**Bảng 4.14.** Kết quả trên corpus MemHint 19 ca.
+
 | Cấu hình | TP | FP | FN | Recall | Precision |
 |---|--:|--:|--:|--:|--:|
 | `no_llm --enrich` (1 run) | 12 | 0 | 14 | 0.462 | 1.000 |
@@ -369,7 +397,9 @@ Phân bố FN cũng lệch: khối lớn nhất nằm ở vim, 3 ca với 2 FN m
 
 ## 4.11. Tổng hợp chương
 
-### Bảng tổng hợp toàn bộ kết quả
+### Tổng hợp toàn bộ kết quả
+
+**Bảng 4.15.** Tổng hợp kết quả tốt nhất trên ba corpus.
 
 | Corpus | Cấu hình tốt nhất | F1 | P | R | Ghi chú |
 |---|---|---|---|---|---|
@@ -379,7 +409,7 @@ Phân bố FN cũng lệch: khối lớn nhất nằm ở vim, 3 ca với 2 FN m
 | MemHint (26 site, positive-only) | no_llm = llm_assisted | 0.632 | 1.000 | 0.462 | TP12/FP0; 19 ca tự tái lập, 6 dự án thực |
 | Consensus K=3 (n=50 stratified) | không khuyến nghị | 0.793 | — | — | Thua single (F1 0.852, flip 2.0% vs 8.0%), p=0.077 |
 
-Hai kết luận nổi lên từ bảng. Dynamic evidence đóng góp giảm FP mạnh nhất ở mọi quy mô: thêm dynamic giảm FP 470→74 trên full corpus (B4→B6), hiệu ứng này tái lập đúng mẫu 18→1 FP ở n=50. Ngược lại, consensus là kết quả âm tính có phương pháp luận: cơ chế chỉ thắng trên mẫu đơn-family lệch dễ, và thua trên mẫu đại diện, một phát hiện về hiệu ứng sampling mà nghiên cứu LLM-judge trước đó ít để ý.
+Hai kết luận nổi lên từ Bảng 4.15. Dynamic evidence đóng góp giảm FP mạnh nhất ở mọi quy mô: thêm dynamic giảm FP 470→74 trên full corpus (B4→B6), hiệu ứng này tái lập đúng mẫu 18→1 FP ở n=50. Ngược lại, consensus là kết quả âm tính có phương pháp luận: cơ chế chỉ thắng trên mẫu đơn-family lệch dễ, và thua trên mẫu đại diện, một phát hiện về hiệu ứng sampling mà nghiên cứu LLM-judge trước đó ít để ý.
 
 Hai corpus dự án thực nói cùng một điều và nói theo cùng cách: trên LAMeD lẫn MemHint, ba cấu hình của hệ hội tụ về đúng kết quả no_llm, LLM judge được gọi nhưng không lật verdict nào, và recall dừng ở mức tầng allocator profiling cho phép (30.0% so với 46.2%). Null result lặp lại trên hai corpus độc lập là dữ kiện mạnh hơn một null result đơn lẻ: giá trị của LLM orchestration trước hết nằm ở tầng discovery và enrichment, còn judging chỉ hoạt động khi bundle borderline thật sự tồn tại, như trên Juliet full corpus.
 
@@ -393,7 +423,7 @@ Từ kết quả trên ba corpus, có thể rút ra ba điều kiện:
 
 **Chi phí phải được kiểm soát, và agentic phải trả giá bằng kết quả.** B6a là điểm ngọt: $6.63 cho F1 0.863. B7 agentic tốn $27.14 (khoảng 4 lần) cho F1 thấp hơn, B6b tương tự, trên cả hai quy mô mẫu và hai model. Kiểm định McNemar xác nhận thêm lựa chọn này ở quy mô full corpus: B6a ≈ B6 về thống kê (McNemar p = 0.611, n = 6042, mục 4.2.2); B6a được giữ làm cấu hình sản xuất vì planner cung cấp planner-status/coverage cho nhánh dynamic fallback — giá trị vận hành, không phải F1. Agentic tool-selection chỉ đáng cân nhắc khi exploration thật sự cần thiết, và bằng chứng hiện tại chưa chỉ ra corpus nào thuộc nhóm đó trong phạm vi luận văn.
 
-**Chi phí vận hành — các mảnh đã đo (tổng hợp)**
+**Bảng 4.16.** Chi phí vận hành của hệ thống, tổng hợp các mảnh đã đo.
 
 | Mảnh đo | Giá trị đã in trong quyển | Nguồn |
 |---|---|---|

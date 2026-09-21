@@ -40,6 +40,8 @@ Hai NestJS apps (`static-analyzer`, `dynamic-analyzer`) dùng framework NestJS c
 
 Bảng 3.1 tổng hợp các thư viện cốt lõi và vai trò cụ thể của chúng trong hệ thống.
 
+**Bảng 3.1.** Thư viện cốt lõi và vai trò trong hệ thống.
+
 | Thư viện | Phiên bản | Vai trò trong hệ thống |
 |---|---|---|
 | `@modelcontextprotocol/sdk` | ≥1.0 | MCP server (analyzer) + client (TUI) — giao thức chuẩn để orchestrator gọi analyzer |
@@ -80,6 +82,8 @@ Giải pháp: mỗi lần gọi `parse()`, caller có thể truyền `extraAlloc
 Static analyzer expose 11 tools qua MCP/HTTP, được đăng ký trong `createStaticMcpServer()`. Mỗi tool được khai báo với Zod `inputSchema` — MCP SDK sử dụng Zod schema trực tiếp làm JSON Schema cho tool description, nên client (TUI) biết chính xác kiểu dữ liệu cần gửi.
 
 Bảng 3.2 liệt kê đầy đủ 11 tools và chức năng:
+
+**Bảng 3.2.** 11 MCP tools của static analyzer và chức năng.
 
 | Tool | Chức năng | Input chính |
 |---|---|---|
@@ -153,6 +157,8 @@ Một dependency bắt buộc nhưng dễ bị bỏ qua: sanitizer output chỉ 
 ### 3.3.4. Đăng ký 9 MCP tools
 
 Bảng 3.3 liệt kê 9 tools của dynamic analyzer:
+
+**Bảng 3.3.** 9 MCP tools của dynamic analyzer và chức năng.
 
 | Tool | Chức năng |
 |---|---|
@@ -286,7 +292,9 @@ Sau khi combine, heuristic precision-override kiểm tra: nếu heuristic có st
 
 ### 3.6.1. Heuristic judge: scoring function
 
-`heuristic-judge.ts` là module quan trọng nhất của `@cleak/common` — nó tạo verdict cho **mọi** bundle, dù ở chế độ no_llm hay llm_assisted. Scoring function tính điểm trên thang [0, 1] dựa trên nhiều tín hiệu:
+`heuristic-judge.ts` là module quan trọng nhất của `@cleak/common` — nó tạo verdict cho **mọi** bundle, dù ở chế độ no_llm hay llm_assisted. Scoring function tính điểm trên thang [0, 1] dựa trên nhiều tín hiệu (Bảng 3.4):
+
+**Bảng 3.4.** Tín hiệu và điểm của hàm chấm heuristic judge.
 
 | Tín hiệu | Điểm | Điều kiện |
 |---|---|---|
