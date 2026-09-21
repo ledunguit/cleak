@@ -66,6 +66,17 @@ Sweep 9 baseline trên toàn bộ corpus 1658 ca, commit `5eec8b1`, model `deeps
 
 Khoảng tin cậy 95% của F1 tính bằng site-level percentile bootstrap trên per-site samples (1.000 resamples, seed `0xc0ffee`); cấu hình đa-run lấy run-1. Riêng B6b: điểm CI run-1 (0.855) thấp hơn trung bình 3-run đang in (0.858 ± 0.003) một khoảng ≈1 độ lệch run-to-run — ghi rõ để người đọc không đọc nhầm là bất nhất. Code: `runBaselineEval.ts`; artifact: `results/baseline-sweep-2026-08-15T08-28-06/`.
 
+Kiểm định McNemar paired trên hai so sánh chính (ghép cặp theo `siteId`, hiệu chỉnh liên tục Edwards, run-1; tool: `scripts/mcnemar-compare.ts`):
+
+| So sánh | b01 | b10 | n | χ² | p |
+|---|--:|--:|--:|--:|--:|
+| B6a vs B1 | 51 | 1236 | 6037 | 1089.2432 | 7.192e-239 |
+| B6 vs B6a | 73 | 66 | 6042 | 0.2590 | 0.611 |
+
+Trong đó b01 = số site cấu hình đầu sai còn cấu hình sau đúng, b10 = ngược lại. Hai cặp discordant đầu cho thấy B6a thắng B1 áp đảo trên 1.287 site bất đồng (p = 7.192e-239, có ý nghĩa thống kê ở α=0.05): lợi thế F1 0.864 so với 0.612 của judge LLM là thật, không phải nhiễu aggregate. Ngược lại, B6 vs B6a chỉ lệch 73/66 trên 139 site bất đồng (χ² = 0.2590, p = 0.611): khác biệt +0.001 F1 giữa hai cấu hình không vượt qua kiểm định, hai cấu hình tương đương về thống kê.
+
+*Chú thích: p-values dựa trên run-1; cặp ghép theo siteId (Edwards continuity correction).*
+
 Tổng chi phí sweep: $75.78 (B1, B2, B3 là `no_llm`, không định giá). MCC của B6a là 0.790, lấy làm mean của 3 run từ `variance.json`. Thứ hạng F1: B6a 0.863 ≈ B6 0.862 > B6b 0.858 ≈ B7 0.856 > B4 0.801 > B3 0.683 > B1 0.612 > B5 0.392 ≈ B2 0.392.
 
 Ba điều đáng đọc từ bảng. Thứ nhất, cùng sweep, cùng commit: B6a 0.863 so với B1 static-only 0.612, tức trên full corpus judge LLM thực sự giúp. Thứ hai, chi phí: B7 agentic tốn $27.14, khoảng 4 lần B6a ($6.63), để đạt F1 thấp hơn; tính trên token thì 32k/case so với 6.2k/case, khoảng 5 lần. Thứ ba, dynamic evidence tiếp tục là nguồn giảm FP mạnh nhất ở quy mô lớn: B4 (LLM + static, không dynamic) tạo 470 FP, thêm dynamic (B6) giảm FP 470→74 với F1 cao hơn. Kết luận rút ra ở n=50 vì thế tái lập trên corpus lớn gấp 33 lần, với model khác.
@@ -366,4 +377,4 @@ Từ kết quả trên ba corpus, có thể rút ra ba điều kiện:
 
 **Cần cross-function reasoning, và tầng đó phải path-sensitive.** interproceduralFlow hiện tại Δ=0 trên cả Juliet lẫn LAMeD: tool đếm alloc/free không phân biệt nhánh, nên kết luận sai trên ca merge_patch. Bài học rộng hơn con số: orchestration chỉ hữu ích khi tool trong pipeline mạnh hơn heuristic nó bổ trợ; gọi một tool path-insensitive để xử lý leak path-sensitive chỉ tốn token.
 
-**Chi phí phải được kiểm soát, và agentic phải trả giá bằng kết quả.** B6a là điểm ngọt: $6.63 cho F1 0.863. B7 agentic tốn $27.14 (khoảng 4 lần) cho F1 thấp hơn, B6b tương tự, trên cả hai quy mô mẫu và hai model. Cấu hình sản xuất là B6a; agentic tool-selection chỉ đáng cân nhắc khi exploration thật sự cần thiết, và bằng chứng hiện tại chưa chỉ ra corpus nào thuộc nhóm đó trong phạm vi luận văn.
+**Chi phí phải được kiểm soát, và agentic phải trả giá bằng kết quả.** B6a là điểm ngọt: $6.63 cho F1 0.863. B7 agentic tốn $27.14 (khoảng 4 lần) cho F1 thấp hơn, B6b tương tự, trên cả hai quy mô mẫu và hai model. Kiểm định McNemar xác nhận thêm lựa chọn này ở quy mô full corpus: B6a ≈ B6 về thống kê (McNemar p = 0.611, n = 6042, mục 4.2.2); B6a được giữ làm cấu hình sản xuất vì planner cung cấp planner-status/coverage cho nhánh dynamic fallback — giá trị vận hành, không phải F1. Agentic tool-selection chỉ đáng cân nhắc khi exploration thật sự cần thiết, và bằng chứng hiện tại chưa chỉ ra corpus nào thuộc nhóm đó trong phạm vi luận văn.
