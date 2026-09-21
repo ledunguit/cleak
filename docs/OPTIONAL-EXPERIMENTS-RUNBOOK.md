@@ -231,3 +231,43 @@ Số tham chiếu để tự kiểm khi điền (đã đo trên đĩa): B6a run-
 `costUsd = 2.2154` trên 1658 ca. Bảng trả về **§4.10** cạnh bảng cost fragments
 hiện có; ghi chú mẫu số (giây trung bình trên case chạy-ok, wall-clock gồm cả
 chờ MCP).
+
+---
+
+## S1b. Venue re-check trước nộp (preprint 2026)
+
+**Bối cảnh:** bốn entry [20], [23], [24], [26] trong
+`paper/references/bibliography.md` hiện là preprint arXiv 2026. Việc này không
+tốn compute, thuần hành chính, nhưng phải làm đúng thời điểm: ngay trước khi
+nộp luận văn, không muộn hơn.
+
+**Checklist (tick từng entry sau khi kiểm):**
+
+| Entry | Tiêu đề | arXiv id | Venue hiện ghi | Trạng thái kiểm tra (☐) | Ghi chú |
+|---|---|---|---|---|---|
+| [20] | MemHint: Finding Memory Leaks in C/C++ Programs via Neuro-Symbolic Augmented Static Analysis | 2603.27224 | arXiv preprint | ☐ | Huang et al.; baseline leak trực tiếp, được so sánh trong ch4 |
+| [23] | Revelio: Cost-Efficient Agentic Memory Safety Vulnerability Detection For Repository-Scale Codebases | 2606.22263 | arXiv preprint | ☐ | Hou et al.; trục B (kiến trúc agentic) |
+| [24] | SAILOR: Guiding Symbolic Execution with Static Analysis and LLMs for Vulnerability Discovery | 2604.06506 | arXiv preprint | ☐ | Shafiuzzaman et al. |
+| [26] | FuzzingBrain V2: A Multi-Agent LLM System for Automated Vulnerability Discovery and Reproduction | 2605.21779 | arXiv preprint | ☐ | Sheng et al.; trục B (kiến trúc agentic) |
+
+**Cách kiểm (mỗi entry, ~2 phút):**
+
+1. Mở `https://arxiv.org/abs/<id>`: xem ô "Comments" / "Journal ref" đã ghi
+   acceptance (vd "Accepted at ISSTA 2026") và DOI chưa.
+2. Cross-check DBLP và Google Scholar bằng đúng tiêu đề: nếu hiện bản
+   conference/journal trùng tựa, coi như đã accepted.
+3. Xử lý kết quả:
+   - Accepted: sửa entry trong `paper/references/bibliography.md`, thay dạng
+     arXiv bằng venue chính thức kèm DOI (vd "In Proc. ISSTA 2026, doi:…"),
+     **giữ nguyên số entry** để mọi chỗ trích [20], [23], [24], [26] trong các
+     chương không vỡ.
+   - Vẫn preprint lúc nộp: giữ citation arXiv nguyên trạng kèm marker
+     "preprint" rõ ràng, nhất quán với cách trích preprint khác của luận văn
+     (MemHint và FuzzingBrain V2 hiện được dẫn dạng "arXiv preprint
+     arXiv:xxxx.xxxxx, 2026. (Preprint.)" trong `paper/de-cuong.md`, và chương
+     related work gọi rõ "chưa được peer-review (arXiv preprint)").
+
+**Lý do:** REVIEW Category P yêu cầu venue re-check trước nộp; chính
+[RELATED-WORK.md](RELATED-WORK.md) đã tự cảnh báo ngay ở header: preprint
+arXiv 2026 quá mới thì phải kiểm lại venue/peer-review trước khi đưa vào bản
+nộp.
