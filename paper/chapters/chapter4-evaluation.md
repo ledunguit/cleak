@@ -380,3 +380,14 @@ Từ kết quả trên ba corpus, có thể rút ra ba điều kiện:
 **Cần cross-function reasoning, và tầng đó phải path-sensitive.** interproceduralFlow hiện tại Δ=0 trên cả Juliet lẫn LAMeD: tool đếm alloc/free không phân biệt nhánh, nên kết luận sai trên ca merge_patch. Bài học rộng hơn con số: orchestration chỉ hữu ích khi tool trong pipeline mạnh hơn heuristic nó bổ trợ; gọi một tool path-insensitive để xử lý leak path-sensitive chỉ tốn token.
 
 **Chi phí phải được kiểm soát, và agentic phải trả giá bằng kết quả.** B6a là điểm ngọt: $6.63 cho F1 0.863. B7 agentic tốn $27.14 (khoảng 4 lần) cho F1 thấp hơn, B6b tương tự, trên cả hai quy mô mẫu và hai model. Kiểm định McNemar xác nhận thêm lựa chọn này ở quy mô full corpus: B6a ≈ B6 về thống kê (McNemar p = 0.611, n = 6042, mục 4.2.2); B6a được giữ làm cấu hình sản xuất vì planner cung cấp planner-status/coverage cho nhánh dynamic fallback — giá trị vận hành, không phải F1. Agentic tool-selection chỉ đáng cân nhắc khi exploration thật sự cần thiết, và bằng chứng hiện tại chưa chỉ ra corpus nào thuộc nhóm đó trong phạm vi luận văn.
+
+**Chi phí vận hành — các mảnh đã đo (tổng hợp)**
+
+| Mảnh đo | Giá trị đã in trong quyển | Nguồn |
+|---|---|---|
+| Cache đĩa AST tầng tĩnh, quét lại 1 case LAMeD 143 file (cold → warm) | 54.0s / 1.03GB → 3.0s / 266MB | mục 3.2.1 |
+| Tầng động trên dự án thực (build + sanitizer run, serialize) | 0.5-1 ngày mỗi cấu hình | mục 4.10.3 |
+| Lời gọi judge LLM mỗi run trên corpus dự án thực | 47 đến 149 calls/run (LAMeD); MemHint: LLM can thiệp 2 site trong 1/3 run | mục 4.5.1, 4.10.1 |
+| Chi phí mỗi cấu hình trên Juliet full corpus | từ bảng mục 4.2.2: B6a $6.63 … B7 $27.14 | mục 4.2.2 |
+
+Độ trễ end-to-end đầy đủ (thời lượng từng tầng trên một run hoàn chỉnh) chưa có trong bộ số đã đóng băng ở trên; benchmark này được chuẩn bị dưới dạng runbook đo riêng và sẽ được báo cáo khi hoàn tất trước mốc bảo vệ.
