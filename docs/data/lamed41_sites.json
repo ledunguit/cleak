@@ -1,0 +1,1296 @@
+{
+  "source": "demo/lamed/corpus_manifest.json (corpus content-hash bf728e94c821b34b7c6b76dd8b2532ca, corpus_validation_report.json: 41/41 clean) — LAMeD (EASE 2025) Zenodo artifact 10.5281/zenodo.15089703, BSD-3; 41 cases = the 41 published confirmed leaks; flaw file/function annotations, fix-commit URLs and per-project factory allocators/deallocators copied verbatim",
+  "rule_version": "1.0",
+  "denominator": 41,
+  "denominator_definition": "one unit per published confirmed leak (one corpus case), regardless of how many flaw sites or tool-specific scoreable sites it spans",
+  "attribution_rule_primary": "leak detected iff production scoreCase output for that case contains a sample with actual=true and predicted=true (faithful regroup of the same run that produced the thesis's 15/50; includes the documented util.c::solv_replacebadutf8 naming-fallback artifact)",
+  "attribution_rule_sensitivity": "leak detected iff a flagged finding's enclosing function explicitly matches a non-empty annotated flaw function under sameFunction semantics, with the Juliet contains('bad')/contains('good') naming fallback excluded (real-project corpus; fallback firing on solv_replacebadutf8 = 'replace bad utf8' manufactured 3 of variant-A's detections)",
+  "leaks": [
+    {
+      "id": "libtiff_04118f8a42a1d6c5d0c0d50d9e0404927ada4417",
+      "project": "libtiff",
+      "file": "tools/tiffmedian.c",
+      "function": "main",
+      "site": "allocation via project factory allocators [_TIFFmalloc, _TIFFcalloc, _TIFFrealloc, _TIFFmallocExt, _TIFFcallocExt…] in: tools/tiffmedian.c::main; tools/tiffmedian.c::map_colortable; manifest records file+function granularity, no line numbers",
+      "attribution_rule": "multi-flaw leak (2 annotated flaw functions: main, map_colortable); leak counts detected ONCE iff production scoring flags a finding matching ANY of them (sameFunction semantics); remaining flaw sites of the same leak never add a second denominator unit",
+      "function_annotated": true,
+      "flaw_sites": [
+        {
+          "file": "tools/tiffmedian.c",
+          "function": "main"
+        },
+        {
+          "file": "tools/tiffmedian.c",
+          "function": "map_colortable"
+        }
+      ],
+      "fix_commit": "https://github.com/libsdl-org/libtiff/tree/04118f8a42a1d6c5d0c0d50d9e0404927ada4417",
+      "allocators": [
+        "_TIFFmalloc",
+        "_TIFFcalloc",
+        "_TIFFrealloc",
+        "_TIFFmallocExt",
+        "_TIFFcallocExt",
+        "_TIFFCheckMalloc",
+        "_TIFFCheckRealloc"
+      ],
+      "deallocators": [
+        "_TIFFfree",
+        "_TIFFfreeExt"
+      ]
+    },
+    {
+      "id": "libtiff_462f1f475f86417bec5baf18a9edf008f33b6770",
+      "project": "libtiff",
+      "file": "libtiff/tif_fax3.c; tools/fax2ps.c; tools/fax2tiff.c",
+      "function": "",
+      "site": "allocation via project factory allocators [_TIFFmalloc, _TIFFcalloc, _TIFFrealloc, _TIFFmallocExt, _TIFFcallocExt…] in: libtiff/tif_fax3.c; tools/fax2ps.c; tools/fax2tiff.c (function not annotated); manifest records file+function granularity, no line numbers",
+      "attribution_rule": "file-granularity annotation only (no flaw function in manifest: libtiff/tif_fax3.c; tools/fax2ps.c; tools/fax2tiff.c); structurally unscorable under explicit-function matching (auto-FN) until the union-site extension supplies function/line data; the scorer's Juliet contains('bad')/contains('good') naming fallback is EXCLUDED for this corpus",
+      "function_annotated": false,
+      "flaw_sites": [
+        {
+          "file": "libtiff/tif_fax3.c; tools/fax2ps.c; tools/fax2tiff.c",
+          "function": ""
+        }
+      ],
+      "fix_commit": "https://github.com/libsdl-org/libtiff/commit/462f1f475f86417bec5baf18a9edf008f33b6770",
+      "allocators": [
+        "_TIFFmalloc",
+        "_TIFFcalloc",
+        "_TIFFrealloc",
+        "_TIFFmallocExt",
+        "_TIFFcallocExt",
+        "_TIFFCheckMalloc",
+        "_TIFFCheckRealloc"
+      ],
+      "deallocators": [
+        "_TIFFfree",
+        "_TIFFfreeExt"
+      ]
+    },
+    {
+      "id": "libtiff_881a070194783561fd209b7c789a4e75566f7f37",
+      "project": "libtiff",
+      "file": "tools/tiffcrop.c",
+      "function": "createCroppedImage",
+      "site": "allocation via project factory allocators [_TIFFmalloc, _TIFFcalloc, _TIFFrealloc, _TIFFmallocExt, _TIFFcallocExt…] in: tools/tiffcrop.c::createCroppedImage; manifest records file+function granularity, no line numbers",
+      "attribution_rule": "scoreable site = annotated flaw function createCroppedImage in tools/tiffcrop.c; leak counts detected iff production scoring flags a finding whose enclosing function matches createCroppedImage (sameFunction: trim/lowercase + suffix-at-identifier-boundary)",
+      "function_annotated": true,
+      "flaw_sites": [
+        {
+          "file": "tools/tiffcrop.c",
+          "function": "createCroppedImage"
+        }
+      ],
+      "fix_commit": "https://github.com/libsdl-org/libtiff/commit/881a070194783561fd209b7c789a4e75566f7f37",
+      "allocators": [
+        "_TIFFmalloc",
+        "_TIFFcalloc",
+        "_TIFFrealloc",
+        "_TIFFmallocExt",
+        "_TIFFcallocExt",
+        "_TIFFCheckMalloc",
+        "_TIFFCheckRealloc"
+      ],
+      "deallocators": [
+        "_TIFFfree",
+        "_TIFFfreeExt"
+      ]
+    },
+    {
+      "id": "libtiff_376916d25f39bab69a3ed16963fd3f186870942c",
+      "project": "libtiff",
+      "file": "libtiff/tif_dir.c",
+      "function": "TIFFCreateDirectory",
+      "site": "allocation via project factory allocators [_TIFFmalloc, _TIFFcalloc, _TIFFrealloc, _TIFFmallocExt, _TIFFcallocExt…] in: libtiff/tif_dir.c::TIFFCreateDirectory; manifest records file+function granularity, no line numbers",
+      "attribution_rule": "scoreable site = annotated flaw function TIFFCreateDirectory in libtiff/tif_dir.c; leak counts detected iff production scoring flags a finding whose enclosing function matches TIFFCreateDirectory (sameFunction: trim/lowercase + suffix-at-identifier-boundary)",
+      "function_annotated": true,
+      "flaw_sites": [
+        {
+          "file": "libtiff/tif_dir.c",
+          "function": "TIFFCreateDirectory"
+        }
+      ],
+      "fix_commit": "https://github.com/libsdl-org/libtiff/commit/376916d25f39bab69a3ed16963fd3f186870942c",
+      "allocators": [
+        "_TIFFmalloc",
+        "_TIFFcalloc",
+        "_TIFFrealloc",
+        "_TIFFmallocExt",
+        "_TIFFcallocExt",
+        "_TIFFCheckMalloc",
+        "_TIFFCheckRealloc"
+      ],
+      "deallocators": [
+        "_TIFFfree",
+        "_TIFFfreeExt"
+      ]
+    },
+    {
+      "id": "libtiff_b6480e872abc920f0157f8fed354a966df581c2f",
+      "project": "libtiff",
+      "file": "tools/tiffcp.c",
+      "function": "openSrcImage",
+      "site": "allocation via project factory allocators [_TIFFmalloc, _TIFFcalloc, _TIFFrealloc, _TIFFmallocExt, _TIFFcallocExt…] in: tools/tiffcp.c::openSrcImage; manifest records file+function granularity, no line numbers",
+      "attribution_rule": "scoreable site = annotated flaw function openSrcImage in tools/tiffcp.c; leak counts detected iff production scoring flags a finding whose enclosing function matches openSrcImage (sameFunction: trim/lowercase + suffix-at-identifier-boundary)",
+      "function_annotated": true,
+      "flaw_sites": [
+        {
+          "file": "tools/tiffcp.c",
+          "function": "openSrcImage"
+        }
+      ],
+      "fix_commit": "https://github.com/libsdl-org/libtiff/commit/b6480e872abc920f0157f8fed354a966df581c2f",
+      "allocators": [
+        "_TIFFmalloc",
+        "_TIFFcalloc",
+        "_TIFFrealloc",
+        "_TIFFmallocExt",
+        "_TIFFcallocExt",
+        "_TIFFCheckMalloc",
+        "_TIFFCheckRealloc"
+      ],
+      "deallocators": [
+        "_TIFFfree",
+        "_TIFFfreeExt"
+      ]
+    },
+    {
+      "id": "libtiff_0bb2247ec49cb48cd93db11d6b5e8efa638f4888",
+      "project": "libtiff",
+      "file": "tools/tiff2pdf.c",
+      "function": "t2p_readwrite_pdf_image",
+      "site": "allocation via project factory allocators [_TIFFmalloc, _TIFFcalloc, _TIFFrealloc, _TIFFmallocExt, _TIFFcallocExt…] in: tools/tiff2pdf.c::t2p_readwrite_pdf_image; manifest records file+function granularity, no line numbers",
+      "attribution_rule": "scoreable site = annotated flaw function t2p_readwrite_pdf_image in tools/tiff2pdf.c; leak counts detected iff production scoring flags a finding whose enclosing function matches t2p_readwrite_pdf_image (sameFunction: trim/lowercase + suffix-at-identifier-boundary)",
+      "function_annotated": true,
+      "flaw_sites": [
+        {
+          "file": "tools/tiff2pdf.c",
+          "function": "t2p_readwrite_pdf_image"
+        }
+      ],
+      "fix_commit": "https://github.com/libsdl-org/libtiff/commit/0bb2247ec49cb48cd93db11d6b5e8efa638f4888",
+      "allocators": [
+        "_TIFFmalloc",
+        "_TIFFcalloc",
+        "_TIFFrealloc",
+        "_TIFFmallocExt",
+        "_TIFFcallocExt",
+        "_TIFFCheckMalloc",
+        "_TIFFCheckRealloc"
+      ],
+      "deallocators": [
+        "_TIFFfree",
+        "_TIFFfreeExt"
+      ]
+    },
+    {
+      "id": "libsolv_1f29f76343ffbadd24ad9d376be61528948dda00",
+      "project": "libsolv",
+      "file": "src/rules.c",
+      "function": "solver_disablechoicerules",
+      "site": "allocation via project factory allocators [solv_malloc, solv_malloc2, solv_calloc, solv_realloc, solv_realloc2…] in: src/rules.c::solver_disablechoicerules; manifest records file+function granularity, no line numbers",
+      "attribution_rule": "scoreable site = annotated flaw function solver_disablechoicerules in src/rules.c; leak counts detected iff production scoring flags a finding whose enclosing function matches solver_disablechoicerules (sameFunction: trim/lowercase + suffix-at-identifier-boundary)",
+      "function_annotated": true,
+      "flaw_sites": [
+        {
+          "file": "src/rules.c",
+          "function": "solver_disablechoicerules"
+        }
+      ],
+      "fix_commit": "https://github.com/openSUSE/libsolv/commit/1f29f76343ffbadd24ad9d376be61528948dda00",
+      "allocators": [
+        "solv_malloc",
+        "solv_malloc2",
+        "solv_calloc",
+        "solv_realloc",
+        "solv_realloc2",
+        "solv_strdup",
+        "solv_memdup",
+        "solv_memdup2"
+      ],
+      "deallocators": [
+        "solv_free"
+      ]
+    },
+    {
+      "id": "libsolv_71c6b26096086926f48d8fced1a03ca52a1eb745",
+      "project": "libsolv",
+      "file": "ext/repo_deb.c; ext/testcase.c",
+      "function": "testcase_solverresult",
+      "site": "allocation via project factory allocators [solv_malloc, solv_malloc2, solv_calloc, solv_realloc, solv_realloc2…] in: ext/repo_deb.c; ext/testcase.c::testcase_solverresult; ext/repo_deb.c; ext/testcase.c::pool_deb_get_autoinstalled; manifest records file+function granularity, no line numbers",
+      "attribution_rule": "multi-flaw leak (2 annotated flaw functions: testcase_solverresult, pool_deb_get_autoinstalled); leak counts detected ONCE iff production scoring flags a finding matching ANY of them (sameFunction semantics); remaining flaw sites of the same leak never add a second denominator unit",
+      "function_annotated": true,
+      "flaw_sites": [
+        {
+          "file": "ext/repo_deb.c; ext/testcase.c",
+          "function": "testcase_solverresult"
+        },
+        {
+          "file": "ext/repo_deb.c; ext/testcase.c",
+          "function": "pool_deb_get_autoinstalled"
+        }
+      ],
+      "fix_commit": "https://github.com/openSUSE/libsolv/commit/71c6b26096086926f48d8fced1a03ca52a1eb745",
+      "allocators": [
+        "solv_malloc",
+        "solv_malloc2",
+        "solv_calloc",
+        "solv_realloc",
+        "solv_realloc2",
+        "solv_strdup",
+        "solv_memdup",
+        "solv_memdup2"
+      ],
+      "deallocators": [
+        "solv_free"
+      ]
+    },
+    {
+      "id": "libsolv_9a361f5248557e032f15890aac54c0db53c52098",
+      "project": "libsolv",
+      "file": "ext/testcase.c",
+      "function": "testcase_read",
+      "site": "allocation via project factory allocators [solv_malloc, solv_malloc2, solv_calloc, solv_realloc, solv_realloc2…] in: ext/testcase.c::testcase_read; manifest records file+function granularity, no line numbers",
+      "attribution_rule": "scoreable site = annotated flaw function testcase_read in ext/testcase.c; leak counts detected iff production scoring flags a finding whose enclosing function matches testcase_read (sameFunction: trim/lowercase + suffix-at-identifier-boundary)",
+      "function_annotated": true,
+      "flaw_sites": [
+        {
+          "file": "ext/testcase.c",
+          "function": "testcase_read"
+        }
+      ],
+      "fix_commit": "https://github.com/openSUSE/libsolv/commit/9a361f5248557e032f15890aac54c0db53c52098",
+      "allocators": [
+        "solv_malloc",
+        "solv_malloc2",
+        "solv_calloc",
+        "solv_realloc",
+        "solv_realloc2",
+        "solv_strdup",
+        "solv_memdup",
+        "solv_memdup2"
+      ],
+      "deallocators": [
+        "solv_free"
+      ]
+    },
+    {
+      "id": "libsolv_98a75959e13699e2ef35b0b011a88a6d224f227e",
+      "project": "libsolv",
+      "file": "ext/repo_rpmdb.c; ext/testcase.c; tools/repo2solv.c",
+      "function": "",
+      "site": "allocation via project factory allocators [solv_malloc, solv_malloc2, solv_calloc, solv_realloc, solv_realloc2…] in: ext/repo_rpmdb.c; ext/testcase.c; tools/repo2solv.c (function not annotated); manifest records file+function granularity, no line numbers",
+      "attribution_rule": "file-granularity annotation only (no flaw function in manifest: ext/repo_rpmdb.c; ext/testcase.c; tools/repo2solv.c); structurally unscorable under explicit-function matching (auto-FN) until the union-site extension supplies function/line data; the scorer's Juliet contains('bad')/contains('good') naming fallback is EXCLUDED for this corpus",
+      "function_annotated": false,
+      "flaw_sites": [
+        {
+          "file": "ext/repo_rpmdb.c; ext/testcase.c; tools/repo2solv.c",
+          "function": ""
+        }
+      ],
+      "fix_commit": "https://github.com/openSUSE/libsolv/commit/98a75959e13699e2ef35b0b011a88a6d224f227e",
+      "allocators": [
+        "solv_malloc",
+        "solv_malloc2",
+        "solv_calloc",
+        "solv_realloc",
+        "solv_realloc2",
+        "solv_strdup",
+        "solv_memdup",
+        "solv_memdup2"
+      ],
+      "deallocators": [
+        "solv_free"
+      ]
+    },
+    {
+      "id": "libsolv_062c0f3c8c2b1348bd22973258048b5a0687024a",
+      "project": "libsolv",
+      "file": "src/conda.c",
+      "function": "",
+      "site": "allocation via project factory allocators [solv_malloc, solv_malloc2, solv_calloc, solv_realloc, solv_realloc2…] in: src/conda.c (function not annotated); manifest records file+function granularity, no line numbers",
+      "attribution_rule": "file-granularity annotation only (no flaw function in manifest: src/conda.c); structurally unscorable under explicit-function matching (auto-FN) until the union-site extension supplies function/line data; the scorer's Juliet contains('bad')/contains('good') naming fallback is EXCLUDED for this corpus",
+      "function_annotated": false,
+      "flaw_sites": [
+        {
+          "file": "src/conda.c",
+          "function": ""
+        }
+      ],
+      "fix_commit": "https://github.com/openSUSE/libsolv/commit/062c0f3c8c2b1348bd22973258048b5a0687024a",
+      "allocators": [
+        "solv_malloc",
+        "solv_malloc2",
+        "solv_calloc",
+        "solv_realloc",
+        "solv_realloc2",
+        "solv_strdup",
+        "solv_memdup",
+        "solv_memdup2"
+      ],
+      "deallocators": [
+        "solv_free"
+      ]
+    },
+    {
+      "id": "cjson_f50dafc7d0bfd4f45449ab5665bfea831a82f2eb",
+      "project": "cjson",
+      "file": "cJSON_Utils.c",
+      "function": "merge_patch",
+      "site": "allocation via project factory allocators [cJSON_New_Item, cJSON_Duplicate, cJSON_CreateObject, cJSON_CreateArray, cJSON_CreateString…] in: cJSON_Utils.c::merge_patch; manifest records file+function granularity, no line numbers",
+      "attribution_rule": "scoreable site = annotated flaw function merge_patch in cJSON_Utils.c; leak counts detected iff production scoring flags a finding whose enclosing function matches merge_patch (sameFunction: trim/lowercase + suffix-at-identifier-boundary)",
+      "function_annotated": true,
+      "flaw_sites": [
+        {
+          "file": "cJSON_Utils.c",
+          "function": "merge_patch"
+        }
+      ],
+      "fix_commit": "https://github.com/DaveGamble/cJSON/commit/f50dafc7d0bfd4f45449ab5665bfea831a82f2eb",
+      "allocators": [
+        "cJSON_New_Item",
+        "cJSON_Duplicate",
+        "cJSON_CreateObject",
+        "cJSON_CreateArray",
+        "cJSON_CreateString",
+        "cJSON_CreateRaw",
+        "cJSON_CreateNull",
+        "cJSON_CreateBool",
+        "cJSON_CreateNumber",
+        "cJSON_CreateArrayReference",
+        "cJSON_CreateObjectReference",
+        "cJSON_malloc",
+        "cJSON_strdup"
+      ],
+      "deallocators": [
+        "cJSON_Delete",
+        "cJSON_free"
+      ]
+    },
+    {
+      "id": "cjson_500a9db81bca54027ce8de2ce42b48fa89782e78",
+      "project": "cjson",
+      "file": "cJSON_Utils.c",
+      "function": "cJSONUtils_FindPointerFromObjectTo",
+      "site": "allocation via project factory allocators [cJSON_New_Item, cJSON_Duplicate, cJSON_CreateObject, cJSON_CreateArray, cJSON_CreateString…] in: cJSON_Utils.c::cJSONUtils_FindPointerFromObjectTo; manifest records file+function granularity, no line numbers",
+      "attribution_rule": "scoreable site = annotated flaw function cJSONUtils_FindPointerFromObjectTo in cJSON_Utils.c; leak counts detected iff production scoring flags a finding whose enclosing function matches cJSONUtils_FindPointerFromObjectTo (sameFunction: trim/lowercase + suffix-at-identifier-boundary)",
+      "function_annotated": true,
+      "flaw_sites": [
+        {
+          "file": "cJSON_Utils.c",
+          "function": "cJSONUtils_FindPointerFromObjectTo"
+        }
+      ],
+      "fix_commit": "https://github.com/DaveGamble/cJSON/commit/500a9db81bca54027ce8de2ce42b48fa89782e78",
+      "allocators": [
+        "cJSON_New_Item",
+        "cJSON_Duplicate",
+        "cJSON_CreateObject",
+        "cJSON_CreateArray",
+        "cJSON_CreateString",
+        "cJSON_CreateRaw",
+        "cJSON_CreateNull",
+        "cJSON_CreateBool",
+        "cJSON_CreateNumber",
+        "cJSON_CreateArrayReference",
+        "cJSON_CreateObjectReference",
+        "cJSON_malloc",
+        "cJSON_strdup"
+      ],
+      "deallocators": [
+        "cJSON_Delete",
+        "cJSON_free"
+      ]
+    },
+    {
+      "id": "cjson_58bc383b28f281148a8c9918e758827ada450bfe",
+      "project": "cjson",
+      "file": "cJSON_Utils.c; test_utils.c",
+      "function": "",
+      "site": "allocation via project factory allocators [cJSON_New_Item, cJSON_Duplicate, cJSON_CreateObject, cJSON_CreateArray, cJSON_CreateString…] in: cJSON_Utils.c; test_utils.c (function not annotated); manifest records file+function granularity, no line numbers",
+      "attribution_rule": "file-granularity annotation only (no flaw function in manifest: cJSON_Utils.c; test_utils.c); structurally unscorable under explicit-function matching (auto-FN) until the union-site extension supplies function/line data; the scorer's Juliet contains('bad')/contains('good') naming fallback is EXCLUDED for this corpus",
+      "function_annotated": false,
+      "flaw_sites": [
+        {
+          "file": "cJSON_Utils.c; test_utils.c",
+          "function": ""
+        }
+      ],
+      "fix_commit": "https://github.com/DaveGamble/cJSON/commit/58bc383b28f281148a8c9918e758827ada450bfe",
+      "allocators": [
+        "cJSON_New_Item",
+        "cJSON_Duplicate",
+        "cJSON_CreateObject",
+        "cJSON_CreateArray",
+        "cJSON_CreateString",
+        "cJSON_CreateRaw",
+        "cJSON_CreateNull",
+        "cJSON_CreateBool",
+        "cJSON_CreateNumber",
+        "cJSON_CreateArrayReference",
+        "cJSON_CreateObjectReference",
+        "cJSON_malloc",
+        "cJSON_strdup"
+      ],
+      "deallocators": [
+        "cJSON_Delete",
+        "cJSON_free"
+      ]
+    },
+    {
+      "id": "cjson_5b4420298fa318534ff8271cfa82d913869b67e3",
+      "project": "cjson",
+      "file": "cJSON.c",
+      "function": "cJSON_Duplicate",
+      "site": "allocation via project factory allocators [cJSON_New_Item, cJSON_Duplicate, cJSON_CreateObject, cJSON_CreateArray, cJSON_CreateString…] in: cJSON.c::cJSON_Duplicate; manifest records file+function granularity, no line numbers",
+      "attribution_rule": "scoreable site = annotated flaw function cJSON_Duplicate in cJSON.c; leak counts detected iff production scoring flags a finding whose enclosing function matches cJSON_Duplicate (sameFunction: trim/lowercase + suffix-at-identifier-boundary)",
+      "function_annotated": true,
+      "flaw_sites": [
+        {
+          "file": "cJSON.c",
+          "function": "cJSON_Duplicate"
+        }
+      ],
+      "fix_commit": "https://github.com/DaveGamble/cJSON/commit/5b4420298fa318534ff8271cfa82d913869b67e3",
+      "allocators": [
+        "cJSON_New_Item",
+        "cJSON_Duplicate",
+        "cJSON_CreateObject",
+        "cJSON_CreateArray",
+        "cJSON_CreateString",
+        "cJSON_CreateRaw",
+        "cJSON_CreateNull",
+        "cJSON_CreateBool",
+        "cJSON_CreateNumber",
+        "cJSON_CreateArrayReference",
+        "cJSON_CreateObjectReference",
+        "cJSON_malloc",
+        "cJSON_strdup"
+      ],
+      "deallocators": [
+        "cJSON_Delete",
+        "cJSON_free"
+      ]
+    },
+    {
+      "id": "cjson_0d10e279c8b604f71829b5d49d092719f4ae96b6",
+      "project": "cjson",
+      "file": "cJSON.c",
+      "function": "cJSON_ReplaceItemInObject",
+      "site": "allocation via project factory allocators [cJSON_New_Item, cJSON_Duplicate, cJSON_CreateObject, cJSON_CreateArray, cJSON_CreateString…] in: cJSON.c::cJSON_ReplaceItemInObject; manifest records file+function granularity, no line numbers",
+      "attribution_rule": "scoreable site = annotated flaw function cJSON_ReplaceItemInObject in cJSON.c; leak counts detected iff production scoring flags a finding whose enclosing function matches cJSON_ReplaceItemInObject (sameFunction: trim/lowercase + suffix-at-identifier-boundary)",
+      "function_annotated": true,
+      "flaw_sites": [
+        {
+          "file": "cJSON.c",
+          "function": "cJSON_ReplaceItemInObject"
+        }
+      ],
+      "fix_commit": "https://github.com/DaveGamble/cJSON/commit/0d10e279c8b604f71829b5d49d092719f4ae96b6",
+      "allocators": [
+        "cJSON_New_Item",
+        "cJSON_Duplicate",
+        "cJSON_CreateObject",
+        "cJSON_CreateArray",
+        "cJSON_CreateString",
+        "cJSON_CreateRaw",
+        "cJSON_CreateNull",
+        "cJSON_CreateBool",
+        "cJSON_CreateNumber",
+        "cJSON_CreateArrayReference",
+        "cJSON_CreateObjectReference",
+        "cJSON_malloc",
+        "cJSON_strdup"
+      ],
+      "deallocators": [
+        "cJSON_Delete",
+        "cJSON_free"
+      ]
+    },
+    {
+      "id": "cjson_90ff72c8bbec3786816ca07d4cb8df7fb8a1c0de",
+      "project": "cjson",
+      "file": "cJSON.c",
+      "function": "suffix_object",
+      "site": "allocation via project factory allocators [cJSON_New_Item, cJSON_Duplicate, cJSON_CreateObject, cJSON_CreateArray, cJSON_CreateString…] in: cJSON.c::suffix_object; manifest records file+function granularity, no line numbers",
+      "attribution_rule": "scoreable site = annotated flaw function suffix_object in cJSON.c; leak counts detected iff production scoring flags a finding whose enclosing function matches suffix_object (sameFunction: trim/lowercase + suffix-at-identifier-boundary)",
+      "function_annotated": true,
+      "flaw_sites": [
+        {
+          "file": "cJSON.c",
+          "function": "suffix_object"
+        }
+      ],
+      "fix_commit": "https://github.com/DaveGamble/cJSON/commit/90ff72c8bbec3786816ca07d4cb8df7fb8a1c0de",
+      "allocators": [
+        "cJSON_New_Item",
+        "cJSON_Duplicate",
+        "cJSON_CreateObject",
+        "cJSON_CreateArray",
+        "cJSON_CreateString",
+        "cJSON_CreateRaw",
+        "cJSON_CreateNull",
+        "cJSON_CreateBool",
+        "cJSON_CreateNumber",
+        "cJSON_CreateArrayReference",
+        "cJSON_CreateObjectReference",
+        "cJSON_malloc",
+        "cJSON_strdup"
+      ],
+      "deallocators": [
+        "cJSON_Delete",
+        "cJSON_free"
+      ]
+    },
+    {
+      "id": "curl_df1d08ec0daf06b0bf2fdebe2411631e08967a98",
+      "project": "curl",
+      "file": "lib/vtls/sectransp.c",
+      "function": "append_cert_to_array",
+      "site": "allocation via project factory allocators [Curl_cmalloc, Curl_ccalloc, Curl_crealloc, Curl_cstrdup, Curl_memdup…] in: lib/vtls/sectransp.c::append_cert_to_array; manifest records file+function granularity, no line numbers",
+      "attribution_rule": "scoreable site = annotated flaw function append_cert_to_array in lib/vtls/sectransp.c; leak counts detected iff production scoring flags a finding whose enclosing function matches append_cert_to_array (sameFunction: trim/lowercase + suffix-at-identifier-boundary)",
+      "function_annotated": true,
+      "flaw_sites": [
+        {
+          "file": "lib/vtls/sectransp.c",
+          "function": "append_cert_to_array"
+        }
+      ],
+      "fix_commit": "https://github.com/curl/curl/commit/df1d08ec0daf06b0bf2fdebe2411631e08967a98",
+      "allocators": [
+        "Curl_cmalloc",
+        "Curl_ccalloc",
+        "Curl_crealloc",
+        "Curl_cstrdup",
+        "Curl_memdup",
+        "Curl_saferealloc",
+        "curl_maprintf",
+        "curl_mvaprintf",
+        "aprintf"
+      ],
+      "deallocators": [
+        "Curl_cfree",
+        "Curl_safefree"
+      ]
+    },
+    {
+      "id": "curl_399ca56be5a66b783476a367a97b256dd5e4c71c",
+      "project": "curl",
+      "file": "lib/vquic/curl_ngtcp2.c",
+      "function": "cf_ngtcp2_ctx_init",
+      "site": "allocation via project factory allocators [Curl_cmalloc, Curl_ccalloc, Curl_crealloc, Curl_cstrdup, Curl_memdup…] in: lib/vquic/curl_ngtcp2.c::cf_ngtcp2_ctx_init; manifest records file+function granularity, no line numbers",
+      "attribution_rule": "scoreable site = annotated flaw function cf_ngtcp2_ctx_init in lib/vquic/curl_ngtcp2.c; leak counts detected iff production scoring flags a finding whose enclosing function matches cf_ngtcp2_ctx_init (sameFunction: trim/lowercase + suffix-at-identifier-boundary)",
+      "function_annotated": true,
+      "flaw_sites": [
+        {
+          "file": "lib/vquic/curl_ngtcp2.c",
+          "function": "cf_ngtcp2_ctx_init"
+        }
+      ],
+      "fix_commit": "https://github.com/curl/curl/commit/399ca56be5a66b783476a367a97b256dd5e4c71c",
+      "allocators": [
+        "Curl_cmalloc",
+        "Curl_ccalloc",
+        "Curl_crealloc",
+        "Curl_cstrdup",
+        "Curl_memdup",
+        "Curl_saferealloc",
+        "curl_maprintf",
+        "curl_mvaprintf",
+        "aprintf"
+      ],
+      "deallocators": [
+        "Curl_cfree",
+        "Curl_safefree"
+      ]
+    },
+    {
+      "id": "curl_e854166472cc6a32be0e9d486bf8cc76ce52fb61",
+      "project": "curl",
+      "file": "lib/c-hyper.c",
+      "function": "Curl_http",
+      "site": "allocation via project factory allocators [Curl_cmalloc, Curl_ccalloc, Curl_crealloc, Curl_cstrdup, Curl_memdup…] in: lib/c-hyper.c::Curl_http; manifest records file+function granularity, no line numbers",
+      "attribution_rule": "scoreable site = annotated flaw function Curl_http in lib/c-hyper.c; leak counts detected iff production scoring flags a finding whose enclosing function matches Curl_http (sameFunction: trim/lowercase + suffix-at-identifier-boundary)",
+      "function_annotated": true,
+      "flaw_sites": [
+        {
+          "file": "lib/c-hyper.c",
+          "function": "Curl_http"
+        }
+      ],
+      "fix_commit": "https://github.com/curl/curl/commit/e854166472cc6a32be0e9d486bf8cc76ce52fb61",
+      "allocators": [
+        "Curl_cmalloc",
+        "Curl_ccalloc",
+        "Curl_crealloc",
+        "Curl_cstrdup",
+        "Curl_memdup",
+        "Curl_saferealloc",
+        "curl_maprintf",
+        "curl_mvaprintf",
+        "aprintf"
+      ],
+      "deallocators": [
+        "Curl_cfree",
+        "Curl_safefree"
+      ]
+    },
+    {
+      "id": "curl_139ecfb869f3ea115601d75aa1ba211aa6f13de4",
+      "project": "curl",
+      "file": "src/tool_operate.c",
+      "function": "transfer_per_config",
+      "site": "allocation via project factory allocators [Curl_cmalloc, Curl_ccalloc, Curl_crealloc, Curl_cstrdup, Curl_memdup…] in: src/tool_operate.c::transfer_per_config; manifest records file+function granularity, no line numbers",
+      "attribution_rule": "scoreable site = annotated flaw function transfer_per_config in src/tool_operate.c; leak counts detected iff production scoring flags a finding whose enclosing function matches transfer_per_config (sameFunction: trim/lowercase + suffix-at-identifier-boundary)",
+      "function_annotated": true,
+      "flaw_sites": [
+        {
+          "file": "src/tool_operate.c",
+          "function": "transfer_per_config"
+        }
+      ],
+      "fix_commit": "https://github.com/curl/curl/commit/139ecfb869f3ea115601d75aa1ba211aa6f13de4",
+      "allocators": [
+        "Curl_cmalloc",
+        "Curl_ccalloc",
+        "Curl_crealloc",
+        "Curl_cstrdup",
+        "Curl_memdup",
+        "Curl_saferealloc",
+        "curl_maprintf",
+        "curl_mvaprintf",
+        "aprintf"
+      ],
+      "deallocators": [
+        "Curl_cfree",
+        "Curl_safefree"
+      ]
+    },
+    {
+      "id": "curl_c61dd5fed23525726270044f3baae2e767d87bcf",
+      "project": "curl",
+      "file": "lib/c-hyper.c",
+      "function": "Curl_http",
+      "site": "allocation via project factory allocators [Curl_cmalloc, Curl_ccalloc, Curl_crealloc, Curl_cstrdup, Curl_memdup…] in: lib/c-hyper.c::Curl_http; manifest records file+function granularity, no line numbers",
+      "attribution_rule": "scoreable site = annotated flaw function Curl_http in lib/c-hyper.c; leak counts detected iff production scoring flags a finding whose enclosing function matches Curl_http (sameFunction: trim/lowercase + suffix-at-identifier-boundary)",
+      "function_annotated": true,
+      "flaw_sites": [
+        {
+          "file": "lib/c-hyper.c",
+          "function": "Curl_http"
+        }
+      ],
+      "fix_commit": "https://github.com/curl/curl/commit/c61dd5fed23525726270044f3baae2e767d87bcf",
+      "allocators": [
+        "Curl_cmalloc",
+        "Curl_ccalloc",
+        "Curl_crealloc",
+        "Curl_cstrdup",
+        "Curl_memdup",
+        "Curl_saferealloc",
+        "curl_maprintf",
+        "curl_mvaprintf",
+        "aprintf"
+      ],
+      "deallocators": [
+        "Curl_cfree",
+        "Curl_safefree"
+      ]
+    },
+    {
+      "id": "curl_75b31ce6267e42416a5a27fd1cf4eea60c420cb7",
+      "project": "curl",
+      "file": "src/tool_operate.c",
+      "function": "url_proto",
+      "site": "allocation via project factory allocators [Curl_cmalloc, Curl_ccalloc, Curl_crealloc, Curl_cstrdup, Curl_memdup…] in: src/tool_operate.c::url_proto; manifest records file+function granularity, no line numbers",
+      "attribution_rule": "scoreable site = annotated flaw function url_proto in src/tool_operate.c; leak counts detected iff production scoring flags a finding whose enclosing function matches url_proto (sameFunction: trim/lowercase + suffix-at-identifier-boundary)",
+      "function_annotated": true,
+      "flaw_sites": [
+        {
+          "file": "src/tool_operate.c",
+          "function": "url_proto"
+        }
+      ],
+      "fix_commit": "https://github.com/curl/curl/commit/75b31ce6267e42416a5a27fd1cf4eea60c420cb7",
+      "allocators": [
+        "Curl_cmalloc",
+        "Curl_ccalloc",
+        "Curl_crealloc",
+        "Curl_cstrdup",
+        "Curl_memdup",
+        "Curl_saferealloc",
+        "curl_maprintf",
+        "curl_mvaprintf",
+        "aprintf"
+      ],
+      "deallocators": [
+        "Curl_cfree",
+        "Curl_safefree"
+      ]
+    },
+    {
+      "id": "curl_f9d1b2501186800f83c254663f64e7d08daa5c15",
+      "project": "curl",
+      "file": "lib/mqtt.c",
+      "function": "mqtt_connect",
+      "site": "allocation via project factory allocators [Curl_cmalloc, Curl_ccalloc, Curl_crealloc, Curl_cstrdup, Curl_memdup…] in: lib/mqtt.c::mqtt_connect; manifest records file+function granularity, no line numbers",
+      "attribution_rule": "scoreable site = annotated flaw function mqtt_connect in lib/mqtt.c; leak counts detected iff production scoring flags a finding whose enclosing function matches mqtt_connect (sameFunction: trim/lowercase + suffix-at-identifier-boundary)",
+      "function_annotated": true,
+      "flaw_sites": [
+        {
+          "file": "lib/mqtt.c",
+          "function": "mqtt_connect"
+        }
+      ],
+      "fix_commit": "https://github.com/curl/curl/commit/f9d1b2501186800f83c254663f64e7d08daa5c15",
+      "allocators": [
+        "Curl_cmalloc",
+        "Curl_ccalloc",
+        "Curl_crealloc",
+        "Curl_cstrdup",
+        "Curl_memdup",
+        "Curl_saferealloc",
+        "curl_maprintf",
+        "curl_mvaprintf",
+        "aprintf"
+      ],
+      "deallocators": [
+        "Curl_cfree",
+        "Curl_safefree"
+      ]
+    },
+    {
+      "id": "curl_e87ad71d1ba00519bc96dd67b9621911aefcdb84",
+      "project": "curl",
+      "file": "lib/vtls/schannel_verify.c",
+      "function": "verify_host",
+      "site": "allocation via project factory allocators [Curl_cmalloc, Curl_ccalloc, Curl_crealloc, Curl_cstrdup, Curl_memdup…] in: lib/vtls/schannel_verify.c::verify_host; manifest records file+function granularity, no line numbers",
+      "attribution_rule": "scoreable site = annotated flaw function verify_host in lib/vtls/schannel_verify.c; leak counts detected iff production scoring flags a finding whose enclosing function matches verify_host (sameFunction: trim/lowercase + suffix-at-identifier-boundary)",
+      "function_annotated": true,
+      "flaw_sites": [
+        {
+          "file": "lib/vtls/schannel_verify.c",
+          "function": "verify_host"
+        }
+      ],
+      "fix_commit": "https://github.com/curl/curl/commit/e87ad71d1ba00519bc96dd67b9621911aefcdb84",
+      "allocators": [
+        "Curl_cmalloc",
+        "Curl_ccalloc",
+        "Curl_crealloc",
+        "Curl_cstrdup",
+        "Curl_memdup",
+        "Curl_saferealloc",
+        "curl_maprintf",
+        "curl_mvaprintf",
+        "aprintf"
+      ],
+      "deallocators": [
+        "Curl_cfree",
+        "Curl_safefree"
+      ]
+    },
+    {
+      "id": "curl_acf91ff75ea5bcca39c8c1be709d5a712ebb6d64",
+      "project": "curl",
+      "file": "lib/version.c",
+      "function": "curl_version",
+      "site": "allocation via project factory allocators [Curl_cmalloc, Curl_ccalloc, Curl_crealloc, Curl_cstrdup, Curl_memdup…] in: lib/version.c::curl_version; manifest records file+function granularity, no line numbers",
+      "attribution_rule": "scoreable site = annotated flaw function curl_version in lib/version.c; leak counts detected iff production scoring flags a finding whose enclosing function matches curl_version (sameFunction: trim/lowercase + suffix-at-identifier-boundary)",
+      "function_annotated": true,
+      "flaw_sites": [
+        {
+          "file": "lib/version.c",
+          "function": "curl_version"
+        }
+      ],
+      "fix_commit": "https://github.com/curl/curl/commit/acf91ff75ea5bcca39c8c1be709d5a712ebb6d64",
+      "allocators": [
+        "Curl_cmalloc",
+        "Curl_ccalloc",
+        "Curl_crealloc",
+        "Curl_cstrdup",
+        "Curl_memdup",
+        "Curl_saferealloc",
+        "curl_maprintf",
+        "curl_mvaprintf",
+        "aprintf"
+      ],
+      "deallocators": [
+        "Curl_cfree",
+        "Curl_safefree"
+      ]
+    },
+    {
+      "id": "curl_8bcb23593eac83501b6fa5b2bcae18ce011103c7",
+      "project": "curl",
+      "file": "lib/vtls/gtls.c",
+      "function": "gtls_connect_step3",
+      "site": "allocation via project factory allocators [Curl_cmalloc, Curl_ccalloc, Curl_crealloc, Curl_cstrdup, Curl_memdup…] in: lib/vtls/gtls.c::gtls_connect_step3; manifest records file+function granularity, no line numbers",
+      "attribution_rule": "scoreable site = annotated flaw function gtls_connect_step3 in lib/vtls/gtls.c; leak counts detected iff production scoring flags a finding whose enclosing function matches gtls_connect_step3 (sameFunction: trim/lowercase + suffix-at-identifier-boundary)",
+      "function_annotated": true,
+      "flaw_sites": [
+        {
+          "file": "lib/vtls/gtls.c",
+          "function": "gtls_connect_step3"
+        }
+      ],
+      "fix_commit": "https://github.com/curl/curl/commit/8bcb23593eac83501b6fa5b2bcae18ce011103c7",
+      "allocators": [
+        "Curl_cmalloc",
+        "Curl_ccalloc",
+        "Curl_crealloc",
+        "Curl_cstrdup",
+        "Curl_memdup",
+        "Curl_saferealloc",
+        "curl_maprintf",
+        "curl_mvaprintf",
+        "aprintf"
+      ],
+      "deallocators": [
+        "Curl_cfree",
+        "Curl_safefree"
+      ]
+    },
+    {
+      "id": "curl_95d30409becbcc45bba2488fdc9cceef9b32a2a5",
+      "project": "curl",
+      "file": "tests/libtest/lib1523.c; tests/libtest/lib1911.c; tests/unit/unit1654.c",
+      "function": "",
+      "site": "allocation via project factory allocators [Curl_cmalloc, Curl_ccalloc, Curl_crealloc, Curl_cstrdup, Curl_memdup…] in: tests/libtest/lib1523.c; tests/libtest/lib1911.c; tests/unit/unit1654.c (function not annotated); manifest records file+function granularity, no line numbers",
+      "attribution_rule": "file-granularity annotation only (no flaw function in manifest: tests/libtest/lib1523.c; tests/libtest/lib1911.c; tests/unit/unit1654.c); structurally unscorable under explicit-function matching (auto-FN) until the union-site extension supplies function/line data; the scorer's Juliet contains('bad')/contains('good') naming fallback is EXCLUDED for this corpus",
+      "function_annotated": false,
+      "flaw_sites": [
+        {
+          "file": "tests/libtest/lib1523.c; tests/libtest/lib1911.c; tests/unit/unit1654.c",
+          "function": ""
+        }
+      ],
+      "fix_commit": "https://github.com/curl/curl/commit/95d30409becbcc45bba2488fdc9cceef9b32a2a5",
+      "allocators": [
+        "Curl_cmalloc",
+        "Curl_ccalloc",
+        "Curl_crealloc",
+        "Curl_cstrdup",
+        "Curl_memdup",
+        "Curl_saferealloc",
+        "curl_maprintf",
+        "curl_mvaprintf",
+        "aprintf"
+      ],
+      "deallocators": [
+        "Curl_cfree",
+        "Curl_safefree"
+      ]
+    },
+    {
+      "id": "curl_378e331e92ab0db0fb64891a46b1da18121b01a4",
+      "project": "curl",
+      "file": "lib/asyn-ares.c",
+      "function": "addrinfo_cb",
+      "site": "allocation via project factory allocators [Curl_cmalloc, Curl_ccalloc, Curl_crealloc, Curl_cstrdup, Curl_memdup…] in: lib/asyn-ares.c::addrinfo_cb; manifest records file+function granularity, no line numbers",
+      "attribution_rule": "scoreable site = annotated flaw function addrinfo_cb in lib/asyn-ares.c; leak counts detected iff production scoring flags a finding whose enclosing function matches addrinfo_cb (sameFunction: trim/lowercase + suffix-at-identifier-boundary)",
+      "function_annotated": true,
+      "flaw_sites": [
+        {
+          "file": "lib/asyn-ares.c",
+          "function": "addrinfo_cb"
+        }
+      ],
+      "fix_commit": "https://github.com/curl/curl/commit/378e331e92ab0db0fb64891a46b1da18121b01a4",
+      "allocators": [
+        "Curl_cmalloc",
+        "Curl_ccalloc",
+        "Curl_crealloc",
+        "Curl_cstrdup",
+        "Curl_memdup",
+        "Curl_saferealloc",
+        "curl_maprintf",
+        "curl_mvaprintf",
+        "aprintf"
+      ],
+      "deallocators": [
+        "Curl_cfree",
+        "Curl_safefree"
+      ]
+    },
+    {
+      "id": "curl_4967109ffc7380278099d48c3bf78a2468978d98",
+      "project": "curl",
+      "file": "lib/ldap.c",
+      "function": "Curl_ldap",
+      "site": "allocation via project factory allocators [Curl_cmalloc, Curl_ccalloc, Curl_crealloc, Curl_cstrdup, Curl_memdup…] in: lib/ldap.c::Curl_ldap; manifest records file+function granularity, no line numbers",
+      "attribution_rule": "scoreable site = annotated flaw function Curl_ldap in lib/ldap.c; leak counts detected iff production scoring flags a finding whose enclosing function matches Curl_ldap (sameFunction: trim/lowercase + suffix-at-identifier-boundary)",
+      "function_annotated": true,
+      "flaw_sites": [
+        {
+          "file": "lib/ldap.c",
+          "function": "Curl_ldap"
+        }
+      ],
+      "fix_commit": "https://github.com/curl/curl/commit/4967109ffc7380278099d48c3bf78a2468978d98",
+      "allocators": [
+        "Curl_cmalloc",
+        "Curl_ccalloc",
+        "Curl_crealloc",
+        "Curl_cstrdup",
+        "Curl_memdup",
+        "Curl_saferealloc",
+        "curl_maprintf",
+        "curl_mvaprintf",
+        "aprintf"
+      ],
+      "deallocators": [
+        "Curl_cfree",
+        "Curl_safefree"
+      ]
+    },
+    {
+      "id": "curl_650281ed5ba335d16a932ccba53665551197880f",
+      "project": "curl",
+      "file": "src/tool_getparam.c",
+      "function": "getparameter",
+      "site": "allocation via project factory allocators [Curl_cmalloc, Curl_ccalloc, Curl_crealloc, Curl_cstrdup, Curl_memdup…] in: src/tool_getparam.c::getparameter; manifest records file+function granularity, no line numbers",
+      "attribution_rule": "scoreable site = annotated flaw function getparameter in src/tool_getparam.c; leak counts detected iff production scoring flags a finding whose enclosing function matches getparameter (sameFunction: trim/lowercase + suffix-at-identifier-boundary)",
+      "function_annotated": true,
+      "flaw_sites": [
+        {
+          "file": "src/tool_getparam.c",
+          "function": "getparameter"
+        }
+      ],
+      "fix_commit": "https://github.com/curl/curl/commit/650281ed5ba335d16a932ccba53665551197880f",
+      "allocators": [
+        "Curl_cmalloc",
+        "Curl_ccalloc",
+        "Curl_crealloc",
+        "Curl_cstrdup",
+        "Curl_memdup",
+        "Curl_saferealloc",
+        "curl_maprintf",
+        "curl_mvaprintf",
+        "aprintf"
+      ],
+      "deallocators": [
+        "Curl_cfree",
+        "Curl_safefree"
+      ]
+    },
+    {
+      "id": "curl_650036633ffdc95c8c2181ce85582bbf3939582e",
+      "project": "curl",
+      "file": "lib/curl_sasl.c",
+      "function": "Curl_sasl_create_xoauth2_message",
+      "site": "allocation via project factory allocators [Curl_cmalloc, Curl_ccalloc, Curl_crealloc, Curl_cstrdup, Curl_memdup…] in: lib/curl_sasl.c::Curl_sasl_create_xoauth2_message; manifest records file+function granularity, no line numbers",
+      "attribution_rule": "scoreable site = annotated flaw function Curl_sasl_create_xoauth2_message in lib/curl_sasl.c; leak counts detected iff production scoring flags a finding whose enclosing function matches Curl_sasl_create_xoauth2_message (sameFunction: trim/lowercase + suffix-at-identifier-boundary)",
+      "function_annotated": true,
+      "flaw_sites": [
+        {
+          "file": "lib/curl_sasl.c",
+          "function": "Curl_sasl_create_xoauth2_message"
+        }
+      ],
+      "fix_commit": "https://github.com/curl/curl/commit/650036633ffdc95c8c2181ce85582bbf3939582e",
+      "allocators": [
+        "Curl_cmalloc",
+        "Curl_ccalloc",
+        "Curl_crealloc",
+        "Curl_cstrdup",
+        "Curl_memdup",
+        "Curl_saferealloc",
+        "curl_maprintf",
+        "curl_mvaprintf",
+        "aprintf"
+      ],
+      "deallocators": [
+        "Curl_cfree",
+        "Curl_safefree"
+      ]
+    },
+    {
+      "id": "libssh2_3ac32253f98a66e7e55f5657bfe259d286e33edc",
+      "project": "libssh2",
+      "file": "src/wincng.c",
+      "function": "_libssh2_dh_key_pair",
+      "site": "allocation via project factory allocators [LIBSSH2_ALLOC, LIBSSH2_REALLOC, _libssh2_calloc] in: src/wincng.c::_libssh2_dh_key_pair; manifest records file+function granularity, no line numbers",
+      "attribution_rule": "scoreable site = annotated flaw function _libssh2_dh_key_pair in src/wincng.c; leak counts detected iff production scoring flags a finding whose enclosing function matches _libssh2_dh_key_pair (sameFunction: trim/lowercase + suffix-at-identifier-boundary)",
+      "function_annotated": true,
+      "flaw_sites": [
+        {
+          "file": "src/wincng.c",
+          "function": "_libssh2_dh_key_pair"
+        }
+      ],
+      "fix_commit": "https://github.com/libssh2/libssh2/commit/3ac32253f98a66e7e55f5657bfe259d286e33edc",
+      "allocators": [
+        "LIBSSH2_ALLOC",
+        "LIBSSH2_REALLOC",
+        "_libssh2_calloc"
+      ],
+      "deallocators": [
+        "LIBSSH2_FREE"
+      ]
+    },
+    {
+      "id": "libssh2_8abc686f0e97c6739e0ce6d6bcb1a1ce028af1bd",
+      "project": "libssh2",
+      "file": "src/mbedtls.h",
+      "function": "",
+      "site": "allocation via project factory allocators [LIBSSH2_ALLOC, LIBSSH2_REALLOC, _libssh2_calloc] in: src/mbedtls.h (function not annotated); manifest records file+function granularity, no line numbers",
+      "attribution_rule": "file-granularity annotation only (no flaw function in manifest: src/mbedtls.h); structurally unscorable under explicit-function matching (auto-FN) until the union-site extension supplies function/line data; the scorer's Juliet contains('bad')/contains('good') naming fallback is EXCLUDED for this corpus",
+      "function_annotated": false,
+      "flaw_sites": [
+        {
+          "file": "src/mbedtls.h",
+          "function": ""
+        }
+      ],
+      "fix_commit": "https://github.com/libssh2/libssh2/commit/8abc686f0e97c6739e0ce6d6bcb1a1ce028af1bd",
+      "allocators": [
+        "LIBSSH2_ALLOC",
+        "LIBSSH2_REALLOC",
+        "_libssh2_calloc"
+      ],
+      "deallocators": [
+        "LIBSSH2_FREE"
+      ]
+    },
+    {
+      "id": "libssh2_d0ffeba72e7100ea5af8a099660e90e74a4f1619",
+      "project": "libssh2",
+      "file": "src/wincng.c",
+      "function": "_libssh2_wincng_hash",
+      "site": "allocation via project factory allocators [LIBSSH2_ALLOC, LIBSSH2_REALLOC, _libssh2_calloc] in: src/wincng.c::_libssh2_wincng_hash; manifest records file+function granularity, no line numbers",
+      "attribution_rule": "scoreable site = annotated flaw function _libssh2_wincng_hash in src/wincng.c; leak counts detected iff production scoring flags a finding whose enclosing function matches _libssh2_wincng_hash (sameFunction: trim/lowercase + suffix-at-identifier-boundary)",
+      "function_annotated": true,
+      "flaw_sites": [
+        {
+          "file": "src/wincng.c",
+          "function": "_libssh2_wincng_hash"
+        }
+      ],
+      "fix_commit": "https://github.com/libssh2/libssh2/commit/d0ffeba72e7100ea5af8a099660e90e74a4f1619",
+      "allocators": [
+        "LIBSSH2_ALLOC",
+        "LIBSSH2_REALLOC",
+        "_libssh2_calloc"
+      ],
+      "deallocators": [
+        "LIBSSH2_FREE"
+      ]
+    },
+    {
+      "id": "rabbitmq-c_cb04afb806447d509e7722776e8533c5069571a3",
+      "project": "rabbitmq-c",
+      "file": "fuzz/fuzz_table.c",
+      "function": "LLVMFuzzerTestOneInput",
+      "site": "allocation via project factory allocators [amqp_pool_alloc, amqp_pool_alloc_bytes, amqp_cstring_bytes, amqp_bytes_malloc] in: fuzz/fuzz_table.c::LLVMFuzzerTestOneInput; manifest records file+function granularity, no line numbers",
+      "attribution_rule": "scoreable site = annotated flaw function LLVMFuzzerTestOneInput in fuzz/fuzz_table.c; leak counts detected iff production scoring flags a finding whose enclosing function matches LLVMFuzzerTestOneInput (sameFunction: trim/lowercase + suffix-at-identifier-boundary)",
+      "function_annotated": true,
+      "flaw_sites": [
+        {
+          "file": "fuzz/fuzz_table.c",
+          "function": "LLVMFuzzerTestOneInput"
+        }
+      ],
+      "fix_commit": "https://github.com/alanxz/rabbitmq-c/commit/cb04afb806447d509e7722776e8533c5069571a3",
+      "allocators": [
+        "amqp_pool_alloc",
+        "amqp_pool_alloc_bytes",
+        "amqp_cstring_bytes",
+        "amqp_bytes_malloc"
+      ],
+      "deallocators": [
+        "empty_amqp_pool",
+        "recycle_amqp_pool"
+      ]
+    },
+    {
+      "id": "rabbitmq-c_effe284fbfd9c88eb05c6b939051bb2f56c001e6",
+      "project": "rabbitmq-c",
+      "file": "examples/amqp_consumer.c; examples/amqp_listen.c",
+      "function": "main",
+      "site": "allocation via project factory allocators [amqp_pool_alloc, amqp_pool_alloc_bytes, amqp_cstring_bytes, amqp_bytes_malloc] in: examples/amqp_consumer.c; examples/amqp_listen.c::main; manifest records file+function granularity, no line numbers",
+      "attribution_rule": "scoreable site = annotated flaw function main in examples/amqp_consumer.c; examples/amqp_listen.c; leak counts detected iff production scoring flags a finding whose enclosing function matches main (sameFunction: trim/lowercase + suffix-at-identifier-boundary)",
+      "function_annotated": true,
+      "flaw_sites": [
+        {
+          "file": "examples/amqp_consumer.c; examples/amqp_listen.c",
+          "function": "main"
+        }
+      ],
+      "fix_commit": "https://github.com/alanxz/rabbitmq-c/commit/effe284fbfd9c88eb05c6b939051bb2f56c001e6",
+      "allocators": [
+        "amqp_pool_alloc",
+        "amqp_pool_alloc_bytes",
+        "amqp_cstring_bytes",
+        "amqp_bytes_malloc"
+      ],
+      "deallocators": [
+        "empty_amqp_pool",
+        "recycle_amqp_pool"
+      ]
+    },
+    {
+      "id": "libxml2_d39e5714b0481204a16f2a904913cc6dc568ff1c",
+      "project": "libxml2",
+      "file": "xmllint.c",
+      "function": "doXPathQuery",
+      "site": "allocation via project factory allocators [xmlMalloc, xmlMallocAtomic, xmlRealloc, xmlMemMalloc, xmlMemRealloc…] in: xmllint.c::doXPathQuery; manifest records file+function granularity, no line numbers",
+      "attribution_rule": "scoreable site = annotated flaw function doXPathQuery in xmllint.c; leak counts detected iff production scoring flags a finding whose enclosing function matches doXPathQuery (sameFunction: trim/lowercase + suffix-at-identifier-boundary)",
+      "function_annotated": true,
+      "flaw_sites": [
+        {
+          "file": "xmllint.c",
+          "function": "doXPathQuery"
+        }
+      ],
+      "fix_commit": "https://github.com/GNOME/libxml2/commit/d39e5714b0481204a16f2a904913cc6dc568ff1c",
+      "allocators": [
+        "xmlMalloc",
+        "xmlMallocAtomic",
+        "xmlRealloc",
+        "xmlMemMalloc",
+        "xmlMemRealloc",
+        "xmlStrdup",
+        "xmlStrndup",
+        "xmlMemStrdup",
+        "xmlNewNode",
+        "xmlNewDocNode",
+        "xmlNewText",
+        "xmlNewDoc",
+        "xmlBufferCreate",
+        "xmlBufContentWrapper"
+      ],
+      "deallocators": [
+        "xmlFree",
+        "xmlFreeNode",
+        "xmlFreeNodeList",
+        "xmlFreeDoc",
+        "xmlBufferFree",
+        "xmlMemFree"
+      ]
+    },
+    {
+      "id": "libxml2_36ea881b9d92166568b1d107181a05f673fd4ab1",
+      "project": "libxml2",
+      "file": "xmlIO.c",
+      "function": "__xmlOutputBufferCreateFilename",
+      "site": "allocation via project factory allocators [xmlMalloc, xmlMallocAtomic, xmlRealloc, xmlMemMalloc, xmlMemRealloc…] in: xmlIO.c::__xmlOutputBufferCreateFilename; manifest records file+function granularity, no line numbers",
+      "attribution_rule": "scoreable site = annotated flaw function __xmlOutputBufferCreateFilename in xmlIO.c; leak counts detected iff production scoring flags a finding whose enclosing function matches __xmlOutputBufferCreateFilename (sameFunction: trim/lowercase + suffix-at-identifier-boundary)",
+      "function_annotated": true,
+      "flaw_sites": [
+        {
+          "file": "xmlIO.c",
+          "function": "__xmlOutputBufferCreateFilename"
+        }
+      ],
+      "fix_commit": "https://github.com/GNOME/libxml2/commit/36ea881b9d92166568b1d107181a05f673fd4ab1",
+      "allocators": [
+        "xmlMalloc",
+        "xmlMallocAtomic",
+        "xmlRealloc",
+        "xmlMemMalloc",
+        "xmlMemRealloc",
+        "xmlStrdup",
+        "xmlStrndup",
+        "xmlMemStrdup",
+        "xmlNewNode",
+        "xmlNewDocNode",
+        "xmlNewText",
+        "xmlNewDoc",
+        "xmlBufferCreate",
+        "xmlBufContentWrapper"
+      ],
+      "deallocators": [
+        "xmlFree",
+        "xmlFreeNode",
+        "xmlFreeNodeList",
+        "xmlFreeDoc",
+        "xmlBufferFree",
+        "xmlMemFree"
+      ]
+    },
+    {
+      "id": "libxml2_d2755cdb6fe288782257dd82fe007d484a4df9f4",
+      "project": "libxml2",
+      "file": "buf.c",
+      "function": "xmlBufFromBuffer",
+      "site": "allocation via project factory allocators [xmlMalloc, xmlMallocAtomic, xmlRealloc, xmlMemMalloc, xmlMemRealloc…] in: buf.c::xmlBufFromBuffer; manifest records file+function granularity, no line numbers",
+      "attribution_rule": "scoreable site = annotated flaw function xmlBufFromBuffer in buf.c; leak counts detected iff production scoring flags a finding whose enclosing function matches xmlBufFromBuffer (sameFunction: trim/lowercase + suffix-at-identifier-boundary)",
+      "function_annotated": true,
+      "flaw_sites": [
+        {
+          "file": "buf.c",
+          "function": "xmlBufFromBuffer"
+        }
+      ],
+      "fix_commit": "https://github.com/GNOME/libxml2/commit/d2755cdb6fe288782257dd82fe007d484a4df9f4",
+      "allocators": [
+        "xmlMalloc",
+        "xmlMallocAtomic",
+        "xmlRealloc",
+        "xmlMemMalloc",
+        "xmlMemRealloc",
+        "xmlStrdup",
+        "xmlStrndup",
+        "xmlMemStrdup",
+        "xmlNewNode",
+        "xmlNewDocNode",
+        "xmlNewText",
+        "xmlNewDoc",
+        "xmlBufferCreate",
+        "xmlBufContentWrapper"
+      ],
+      "deallocators": [
+        "xmlFree",
+        "xmlFreeNode",
+        "xmlFreeNodeList",
+        "xmlFreeDoc",
+        "xmlBufferFree",
+        "xmlMemFree"
+      ]
+    },
+    {
+      "id": "libxml2_fee0006a06e6e044974e9ec09ebeaaa8bcad4390",
+      "project": "libxml2",
+      "file": "parser.c",
+      "function": "xmlIOParseDTD",
+      "site": "allocation via project factory allocators [xmlMalloc, xmlMallocAtomic, xmlRealloc, xmlMemMalloc, xmlMemRealloc…] in: parser.c::xmlIOParseDTD; manifest records file+function granularity, no line numbers",
+      "attribution_rule": "scoreable site = annotated flaw function xmlIOParseDTD in parser.c; leak counts detected iff production scoring flags a finding whose enclosing function matches xmlIOParseDTD (sameFunction: trim/lowercase + suffix-at-identifier-boundary)",
+      "function_annotated": true,
+      "flaw_sites": [
+        {
+          "file": "parser.c",
+          "function": "xmlIOParseDTD"
+        }
+      ],
+      "fix_commit": "https://github.com/GNOME/libxml2/commit/fee0006a06e6e044974e9ec09ebeaaa8bcad4390",
+      "allocators": [
+        "xmlMalloc",
+        "xmlMallocAtomic",
+        "xmlRealloc",
+        "xmlMemMalloc",
+        "xmlMemRealloc",
+        "xmlStrdup",
+        "xmlStrndup",
+        "xmlMemStrdup",
+        "xmlNewNode",
+        "xmlNewDocNode",
+        "xmlNewText",
+        "xmlNewDoc",
+        "xmlBufferCreate",
+        "xmlBufContentWrapper"
+      ],
+      "deallocators": [
+        "xmlFree",
+        "xmlFreeNode",
+        "xmlFreeNodeList",
+        "xmlFreeDoc",
+        "xmlBufferFree",
+        "xmlMemFree"
+      ]
+    }
+  ]
+}
