@@ -310,7 +310,7 @@ Hai precision gate ngăn FP:
 
 ### 3.6.2. Consensus judge: combineVerdicts
 
-Module `consensus-judge.ts` là đóng góp cốt lõi C1 của luận văn. Hàm `combineVerdicts()` là pure function (không I/O), hoàn toàn unit-testable.
+Module `consensus-judge.ts` hiện thực hoá đóng góp C4 của luận văn. Cơ chế vẫn tồn tại trong hệ thống dưới dạng opt-in (`consensus.n > 1`), nhưng theo khung đánh giá ở §5.2 nó được báo cáo như một kết quả âm có giá trị phương pháp luận, không còn là novelty trung tâm. (Ký hiệu được thống nhất theo lược đồ cuối ở §5.2: trong đề cương, consensus judge từng được ký hiệu C1 và được đổi thành C4, một kết quả âm có giá trị, sau kết quả của RQ3.) Hàm `combineVerdicts()` là pure function (không I/O), hoàn toàn unit-testable.
 
 Trước khi vote, hàm `deriveFusion()` tóm tắt bằng chứng thành hai trục:
 - **Static:** `'leak'` (unpaired alloc hoặc reachable leak path), `'clean'` (ownership handed out), hoặc `'ambiguous'`.

@@ -169,7 +169,7 @@ Tool partitioning: sub-agent tĩnh CHỈ nhận tool tĩnh — model không th�
 
 Stage B chạy song song với Stage A. Có hai nhánh:
 
-**Nhánh tất định (không LLM):** Khi case có `buildCommand`, hệ thống chạy công thức cố định `buildTarget(buildCommand) → lsanRun(binary)`. Không có LLM trong vòng chạy → coverage tất định → kết quả tái lập. Đây là đóng góp C3 của luận văn.
+**Nhánh tất định (không LLM):** Khi case có `buildCommand`, hệ thống chạy công thức cố định `buildTarget(buildCommand) → lsanRun(binary)`. Không có LLM trong vòng chạy → coverage tất định → kết quả tái lập. Đây là tầng dynamic tất định thuộc đóng góp C1 (pipeline tất định-trừ-judge) của luận văn.
 
 **Nhánh LLM:** Khi không có `buildCommand`, một dynamic worker (LLM sub-agent) tự đọc Makefile, chọn lệnh build, chạy sanitizer. Nếu build thất bại hai lần, worker dừng.
 
@@ -217,7 +217,7 @@ Rubric ưu tiên evidence theo thứ tự: (1) runtime leak LINKED → confirmed
 
 ### 2.7.3. Consensus judge — K-sample voting
 
-Đây là đóng góp C1 của luận văn. Khi `CONSENSUS_N > 1` (ví dụ K=3), hệ thống lấy K mẫu verdict LLM độc lập với temperature lấy mẫu > 0 (mặc định 0.7) để tạo diversity.
+Đây là đóng góp C4 của luận văn. (Ký hiệu được thống nhất theo lược đồ cuối ở §5.2: trong đề cương, consensus judge từng được ký hiệu C1 và được đổi thành C4, một kết quả âm có giá trị phương pháp luận, sau kết quả của RQ3.) Khi `CONSENSUS_N > 1` (ví dụ K=3), hệ thống lấy K mẫu verdict LLM độc lập với temperature lấy mẫu > 0 (mặc định 0.7) để tạo diversity.
 
 `combineVerdicts` gộp K nhãn thành 1 cờ flag theo luật:
 - **Majority**: `flagging * 2 > n`.
