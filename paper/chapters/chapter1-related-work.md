@@ -343,3 +343,12 @@ Bảng sau tổng hợp các hệ thống liên quan và vị trí của luận 
 ---
 
 *Xem danh sách tham khảo đầy đủ trong `paper/references/bibliography.md`.*
+
+## 1.8. Đề cương → luận văn: nhật ký thay đổi
+
+Bốn điểm dưới đây thay đổi so với đề cương, ghi lại để người đọc đối chiếu hai văn bản:
+
+- **Corpus Juliet: 1984 case (đề cương) → 1658 case.** Việc re-ingest từ NIST v1.3 đã sửa lỗi build C++ multi-file variant (422/1984 case cũ không build được) và label drift (1171 case cũ bị mislabel), rồi chạy 5 cổng kiểm chứng (schema, cấu trúc, biên dịch, nhãn, content-hash); phiên bản validated `f578c3ee` là dữ liệu chốt của mọi phép đo ở Chương 4 (mục 2.9, 4.1).
+- **Mẫu số LAMeD: 44 site (đề cương) → 50 site.** Sau khi sửa lỗi gộp candidate trong `computeBundleId`, số site chấm được tăng từ 44 lên 50 (libsolv 6→11, cjson 6→7, 5 dự án còn lại không đổi) — mọi số liệu LAMeD trong luận văn dùng mẫu số mới này (mục 4.5.1).
+- **Consensus judge: C1 (đề cương) → C4, và từ đóng góp trung tâm thành kết quả âm có giá trị phương pháp luận.** Kết quả RQ3 ban đầu (n=30, flip 6.7% so với 13.3–26.7%) bị đảo dấu khi đo lại trên mẫu stratified n=50: single-LLM vừa ổn định hơn vừa chính xác hơn. Ký hiệu được thống nhất theo lược đồ §5.2 (mục 2.7.3, 4.6).
+- **Mỗi cấu hình LLM chạy 3 lần, báo cáo mean ± std.** Thay vì một số điểm đơn, các baseline dùng LLM (B4–B7) được lặp 3 lần để đo phân phối; dao động verdict từng case được đo riêng bằng `verdict-stability.ts` (mục 2.8.3, 4.2.2).
