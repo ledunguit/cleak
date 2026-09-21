@@ -66,7 +66,7 @@ Sweep 9 baseline trên toàn bộ corpus 1658 ca, commit `5eec8b1`, model `deeps
 
 Tổng chi phí sweep: $75.78 (B1, B2, B3 là `no_llm`, không định giá). MCC của B6a là 0.790, lấy làm mean của 3 run từ `variance.json`. Thứ hạng F1: B6a 0.863 ≈ B6 0.862 > B6b 0.858 ≈ B7 0.856 > B4 0.801 > B3 0.683 > B1 0.612 > B5 0.392 ≈ B2 0.392.
 
-Ba điều đáng đọc từ bảng. Thứ nhất, cùng sweep, cùng commit: B6a 0.863 so với B1 static-only 0.612, tức trên full corpus judge LLM thực sự giúp. Thứ hai, chi phí: B7 agentic tốn $27.14, khoảng 4 lần B6a ($6.63), để đạt F1 thấp hơn; tính trên token thì 32k/case so với 6.2k/case, khoảng 5 lần. Thứ ba, dynamic evidence tiếp tục là "FP killer" ở quy mô lớn: B4 (LLM + static, không dynamic) tạo 470 FP, thêm dynamic (B6) giảm còn 74 FP với F1 cao hơn. Kết luận rút ra ở n=50 vì thế tái lập trên corpus lớn gấp 33 lần, với model khác.
+Ba điều đáng đọc từ bảng. Thứ nhất, cùng sweep, cùng commit: B6a 0.863 so với B1 static-only 0.612, tức trên full corpus judge LLM thực sự giúp. Thứ hai, chi phí: B7 agentic tốn $27.14, khoảng 4 lần B6a ($6.63), để đạt F1 thấp hơn; tính trên token thì 32k/case so với 6.2k/case, khoảng 5 lần. Thứ ba, dynamic evidence tiếp tục là nguồn giảm FP mạnh nhất ở quy mô lớn: B4 (LLM + static, không dynamic) tạo 470 FP, thêm dynamic (B6) giảm FP 470→74 với F1 cao hơn. Kết luận rút ra ở n=50 vì thế tái lập trên corpus lớn gấp 33 lần, với model khác.
 
 ### 4.2.3. Kết quả n=50 stratified (thí nghiệm đầu, giữ làm phụ)
 
@@ -85,6 +85,8 @@ Bảng dưới là thí nghiệm đầu của chuỗi ablation (2026-06), chạy
 | B7 | Full adaptive | 48 | 2 | 5 | 155 | 0.960 | 0.899 | 0.929 | 0.130 | 4.115.938 |
 
 Tổng sweep: 10,6 triệu token. Riêng B6b + B7 (agentic) chiếm 8,36 triệu (79%).
+
+Cột ECE của bảng trên cần đọc đúng nghĩa. Confidence của tầng heuristic không phải xác suất được hiệu chuẩn: ECE 0.548 của B1 cho thấy khoảng cách lớn giữa giá trị confidence và độ chính xác thực tế. Các giá trị confidence vì thế chỉ dùng nội bộ để xếp hạng candidate và so ngưỡng, không nên ngoại suy thành độ tin cậy bên ngoài; hiệu chuẩn lại (Platt scaling hoặc isotonic trên dữ liệu held-out) là hướng phát triển.
 
 ### 4.2.4. Kết quả n=100
 
@@ -112,7 +114,7 @@ Cả hai con số đều đúng, chúng chỉ trả lời hai câu hỏi khác n
 
 ## 4.3. Ma trận 2×2 (LLM orchestration × Dynamic evidence)
 
-Hai trục phân rã: LLM (no_llm vs llm_assisted) × Dynamic (off vs on). Kết quả trên 30 ca đầu:
+Hai trục phân rã: LLM (no_llm vs llm_assisted) × Dynamic (off vs on). Kết quả trên 30 ca đầu (cùng một mẫu đơn-family như mục 4.6.1; kết quả chỉ mang tính định hướng, không khái quát):
 
 | | Static (`--dynamic off`) | + Dynamic |
 |---|---|---|
@@ -331,7 +333,7 @@ Phân bố FN cũng lệch: khối lớn nhất nằm ở vim, 3 ca với 2 FN m
 | MemHint (26 site, positive-only) | no_llm = llm_assisted | 0.632 | 1.000 | 0.462 | TP12/FP0; 19 ca tự tái lập, 6 dự án thực |
 | Consensus K=3 (n=50 stratified) | không khuyến nghị | 0.793 | — | — | Thua single (F1 0.852, flip 2.0% vs 8.0%), p=0.077 |
 
-Hai kết luận nổi lên từ bảng. Dynamic evidence là "FP killer" ở mọi quy mô: thêm dynamic giảm FP từ 470 xuống 74 trên full corpus (B4→B6), hiệu ứng này tái lập đúng mẫu 18→1 FP ở n=50. Ngược lại, consensus là kết quả âm tính có phương pháp luận: cơ chế chỉ thắng trên mẫu đơn-family lệch dễ, và thua trên mẫu đại diện, một phát hiện về hiệu ứng sampling mà nghiên cứu LLM-judge trước đó ít để ý.
+Hai kết luận nổi lên từ bảng. Dynamic evidence đóng góp giảm FP mạnh nhất ở mọi quy mô: thêm dynamic giảm FP 470→74 trên full corpus (B4→B6), hiệu ứng này tái lập đúng mẫu 18→1 FP ở n=50. Ngược lại, consensus là kết quả âm tính có phương pháp luận: cơ chế chỉ thắng trên mẫu đơn-family lệch dễ, và thua trên mẫu đại diện, một phát hiện về hiệu ứng sampling mà nghiên cứu LLM-judge trước đó ít để ý.
 
 Hai corpus dự án thực nói cùng một điều và nói theo cùng cách: trên LAMeD lẫn MemHint, ba cấu hình của hệ hội tụ về đúng kết quả no_llm, LLM judge được gọi nhưng không lật verdict nào, và recall dừng ở mức tầng allocator profiling cho phép (30.0% so với 46.2%). Null result lặp lại trên hai corpus độc lập là dữ kiện mạnh hơn một null result đơn lẻ: giá trị của LLM orchestration trước hết nằm ở tầng discovery và enrichment, còn judging chỉ hoạt động khi bundle borderline thật sự tồn tại, như trên Juliet full corpus.
 
