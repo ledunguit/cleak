@@ -205,6 +205,8 @@ Threshold: `clamped ≥ 0.7` → `confirmed_leak`, `≥ 0.4` → `likely_leak`, 
 
 Hai cổng precision ghi đè: (1) freed-by-callee hoặc dynamic chạy sạch → `likely_false_positive (0.8)`; (2) verdict "flagged" thiếu tín hiệu mạnh (correlatedRuntimeLeak || structuralHigh || unpaired) → hạ xuống `uncertain`.
 
+Cutoff 0.7/0.4 được dùng cố định trong toàn bộ benchmark; độ nhạy offline của ngưỡng confidence trên verdict đã-lưu được báo ở mục 4.2.6.
+
 ### 2.7.2. LLM judge — rubric-based, chỉ cho bundle borderline
 
 Không phải mọi bundle đều cần LLM judge. Chỉ những bundle "borderline" mới được leo thang: verdict `likely_leak`/`uncertain`, hoặc confidence trong khoảng [0.35, 0.7].

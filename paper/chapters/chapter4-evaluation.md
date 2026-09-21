@@ -110,6 +110,25 @@ Phân rã theo family trong sweep full-corpus cho thấy khoảng cách này là
 
 Cả hai con số đều đúng, chúng chỉ trả lời hai câu hỏi khác nhau. 0.863 là hiệu năng trên toàn corpus, con số nên dùng khi nói về hệ thống nói chung. 0.938 là ablation cấu phần trên mẫu cân bằng family, hợp lý khi so sánh tương đối giữa các cấu hình. Bài học phương pháp luận: sample stratified nhỏ làm kết quả LLM-judge trông tốt hơn trên corpus lệch family, và mọi so sánh cần ghi rõ cách lấy mẫu.
 
+### 4.2.6. Độ nhạy ngưỡng chấm điểm
+
+Mọi số liệu ở trên dùng đúng một ngưỡng ra quyết định. Để đo mức phụ thuộc vào ngưỡng, chúng tôi re-threshold offline giá trị `confidence` đã lưu trên các verdict của sweep baseline: một finding bị flag nhưng có `confidence < c` bị hạ thành `false_positive`, sau đó toàn bộ 1658 ca được chấm lại bằng chính scorer production (`scoreCase` + `computeMetrics`), với `c` chạy 0.0 → 1.0 bước 0.1 (script `scripts/threshold-sweep.ts`, kết quả đầy đủ trong `paper/figures/threshold-sweep.csv`; artifact `results/baseline-sweep-2026-08-15T08-28-06/`). Các hàng chọn lọc:
+
+| Config | c = 0.0 | c = 0.3 | c = 0.5 | c = 0.7 | c = 0.9 |
+|---|---|---|---|---|---|
+| B1 — F1 | 0.612 | 0.612 | 0.612 | 0.000 | 0.000 |
+| B6a — F1 | 0.864 | 0.864 | 0.864 | 0.809 | 0.781 |
+| B6a — Precision | 0.968 | 0.968 | 0.968 | 0.990 | 0.989 |
+| B6a — Recall | 0.780 | 0.780 | 0.780 | 0.684 | 0.645 |
+
+Script tự kiểm chứng chống fabrication: tại c = 0.0 phép biến đổi là no-op (vì `scoreCase` suy ra `predicted` từ `isFlagged(verdict)`), và hàng c = 0.0 phải khớp `overall` trong `metrics.json` đã lưu của từng cấu hình — B1 0.612, B6a 0.864, B6 0.862, sai số 0; script assert điều này mỗi lần chạy và từ chối ghi CSV nếu lệch.
+
+Hai giới hạn cần nói thẳng. Thứ nhất, đây là **phân tích offline**: re-thresholding độ tin cậy trên các verdict đã-lưu của sweep, không phải chạy lại hệ thống; confidence là đại lượng theo hướng verdict (finding "chắc chắn sạch" cũng có confidence cao), nên đường cong này đo độ phân tách của confidence trên prediction đã đóng băng, không đo lại quá trình chấm điểm.
+
+Thứ hai, quét ngưỡng điểm nội bộ 0.7/0.4 của heuristic judge là bất khả-thi offline vì điểm thô của từng tín hiệu không được lưu trong artifact — đây là future work, cùng với leave-one-signal-out trên 11 tín hiệu của heuristic judge (bảng 2.7.1).
+
+Đọc số liệu: B1 (heuristic, `no_llm`) gán confidence phẳng 0.5 cho mọi finding, nên mọi c > 0.5 xóa sạch toàn bộ prediction (F1 = 0) — re-thresholding vô nghĩa với judge tất định. B6a giữ nguyên F1 đến c = 0.5 rồi giảm đơn điệu (0.864 → 0.809 tại c = 0.7 → 0.781 tại c = 0.9, precision tăng nhẹ): F1 đạt đỉnh đúng tại chế độ production, tức confidence đã lưu không mang thêm dải phân biệt nào phía trên ngưỡng hiện hành — không coi nó là núm hiệu chỉnh có thể xoay sau khi verdict đã chốt.
+
 ---
 
 ## 4.3. Ma trận 2×2 (LLM orchestration × Dynamic evidence)
