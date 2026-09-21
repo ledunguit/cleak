@@ -123,7 +123,7 @@ Bật static enrichment dựa trên CFG heuristic trên fixture Juliet trước 
 
 **Mở rộng scale parsing.** Cắt incremental hoặc streaming cho tree-sitter trên repo khổng lồ để loại rủi ro OOM, kết hợp song song hoá worker parse.
 
-**Corpus khó hơn và negative samples.** Mở rộng LAMeD, dựng corpus từ CVE database (DiverseVul [10], CVEfixes) và bổ sung negative samples để đo precision đầy đủ.
+**Corpus khó hơn và negative samples.** Mở rộng LAMeD, dựng corpus từ CVE database (DiverseVul [39], CVEfixes) và bổ sung negative samples để đo precision đầy đủ.
 
 **MCP ecosystem.** Kiến trúc MCP cho phép tool mới từ cộng đồng plug vào orchestrator không cần sửa. Tool phân tích Rust ownership hoặc CVE lookup là hai ví dụ gần nhất.
 
