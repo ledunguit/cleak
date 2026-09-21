@@ -289,11 +289,11 @@ Nghiên cứu đánh giá 11 model thuộc 4 họ kiến trúc và kết luận:
 
 ### 1.6.4. SV-COMP Memsafety
 
-SV-COMP [29] là cuộc thi thường niên đánh giá công cụ verification trên C, bao gồm category memsafety với các thuộc tính: không leak, không buffer overflow, không null deref, không use-after-free. Chương trình có cả biến thể an toàn và không an toàn với kết quả mong đợi.
+SV-COMP [40] là cuộc thi thường niên đánh giá công cụ verification trên C, bao gồm category memsafety với các thuộc tính: không leak, không buffer overflow, không null deref, không use-after-free. Chương trình có cả biến thể an toàn và không an toàn với kết quả mong đợi.
 
 ### 1.6.5. Magma
 
-Magma [30] là benchmark fuzzing sử dụng ground-truth, chèn bug thật (bao gồm leak) vào chương trình thật (libpng, libtiff, SQLite, OpenSSL). Bug trigger từ CVE đã biết, cho phép đánh giá chính xác khả năng phát hiện của công cụ.
+Magma [41] là benchmark fuzzing sử dụng ground-truth, chèn bug thật (bao gồm leak) vào chương trình thật (libpng, libtiff, SQLite, OpenSSL). Bug trigger từ CVE đã biết, cho phép đánh giá chính xác khả năng phát hiện của công cụ.
 
 ---
 
@@ -310,7 +310,8 @@ Bảng sau tổng hợp các hệ thống liên quan và vị trí của luận 
 | LAMeD [21] | ✅ | ❌ | ❌ | 🟡 | ✅ | ✅ |
 | Revelio [23] | ✅ | ✅ | ✅ | ✅ | 🟡 | ❌ |
 | SAILOR [24] | ✅ | ✅ | ✅ | ❌ | 🟡 | ❌ |
-| IRIS [15] | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| IRIS [16] | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Hassler (khảo sát) [13] | ✅ | ✅ | ❌ | ❌ | 🟡 | ❌ |
 | **Đề tài** | **✅** | **✅** | **✅** | **✅** | **✅** | **—** |
 
 Khoảng trống rõ ràng: **chưa có hệ thống nào kết hợp LLM orchestration + static + dynamic chuyên cho memory leak C/C++.** MemHint và LAMeD chỉ dùng static; Revelio và SAILOR nhắm crash/vulnerability nói chung, không chuyên leak. Đồ thị Venn giữa "static + dynamic" và "memory leak focus" vẫn còn trống — đó chính là vị trí của luận văn này.

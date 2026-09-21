@@ -119,6 +119,8 @@ Bật static enrichment dựa trên CFG heuristic trên fixture Juliet trước 
 
 **Ablation theo trục model.** Hiện chỉ có bằng chứng phụ từ hai sweep B6a-mimo và B6a-zai. Một sweep thiết kế đầy đủ nhiều mô hình, cùng corpus cùng scorer, mới trả lời được câu hỏi độ nhạy của kết quả với model.
 
+**Baseline ngoài thứ hai.** Runbook cho Infer đã nằm trong `docs/BASELINE-COMPARISON.md`. Bước tiếp theo là chạy Infer trên cùng corpus, cùng scorer với Clang, khi phạm vi thời gian của nghiên cứu mở rộng cho phép.
+
 **Mở rộng scale parsing.** Cắt incremental hoặc streaming cho tree-sitter trên repo khổng lồ để loại rủi ro OOM, kết hợp song song hoá worker parse.
 
 **Corpus khó hơn và negative samples.** Mở rộng LAMeD, dựng corpus từ CVE database (DiverseVul [10], CVEfixes) và bổ sung negative samples để đo precision đầy đủ.
