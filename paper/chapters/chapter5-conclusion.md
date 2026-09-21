@@ -49,7 +49,7 @@ Trên LAMeD, 41 ca từ 7 dự án C thật với 50 site rò sau khi chỉnh l�
 
 Ca dự án thực đầu tiên hệ bắt được có giá trị minh hoạ riêng: leak tham số `target` của `cJSON_merge_patch`, rò trên đúng một đường lỗi, được phát hiện nhờ scoring parameter-ownership kết hợp guard-subset reconciliation (kể chi tiết ở mục 4.5.2). Ba mươi lăm site còn sót thuộc các lớp khó: hai ca cần mô hình hoá deallocator semantics, hai ca path-sensitive, phần còn lại là ownership interprocedural phức tạp. Chính LAMeD cũng chỉ báo 5-10 trên 43 site cho các công cụ có annotation.
 
-Corpus thực thứ hai là MemHint: 19 ca trên 6 dự án lớn (vim, redis, openssl...), ground truth tự tái lập vào file JSON vì danh sách bug của paper gốc không công bố. Giao thức gồm một run no_llm kèm enrich và ba run llm_assisted, điều phối bởi `scripts/memhint-eval-driver.sh` với resume tự động qua từng lần lỗi OOM. Tại thời điểm viết chương này, hai nhóm run MemHint chưa hoàn tất; số liệu [PENDING, bổ sung vào mục tương ứng của chương 4 khi run xong] và không con số nào được suy đoán cho corpus đó.
+Corpus thực thứ hai là MemHint: 19 ca trên 6 dự án lớn (vim, redis, openssl...), ground truth tự tái lập vào file JSON vì danh sách bug của paper gốc không công bố. Giao thức gồm một run no_llm kèm enrich và ba run llm_assisted, điều phối bởi `scripts/memhint-eval-driver.sh` với resume tự động qua từng lần lỗi OOM. Kết quả cuối cùng đã chốt: hai nhóm run hoàn tất, hệ đạt TP12/FP0/FN14, recall 0.462 trên 26 site, và ba run llm_assisted cho confusion matrix trùng hệt nhau (mục 4.10). Đáng nói là run chỉ hoàn tất ở attempt 3/8: lần chạy đầu mất giữa đường khi VM reboot, driver khôi phục đủ 19/19 ca nhờ resume, artifacts được sha256-verify qua reboot (mục 4.10.4).
 
 Cả hai corpus thực dùng quy ước positive-only: recall và số FP là hai đại lượng so sánh được, còn precision và MCC không định nghĩa vì TN=0 theo cách dựng corpus (mục 4.1.2). FP=0 trên 50 site vì thế là kết quả mạnh, nhưng phải đọc kèm recall 30%.
 
@@ -95,7 +95,7 @@ Bật static enrichment dựa trên CFG heuristic trên fixture Juliet trước 
 
 **Một mô hình chính.** Các sweep formal dùng deepseek-v4-flash. Hai sweep phụ B6a-mimo (F1 0.737) và B6a-zai (F1 0.774 từ run 1 hoàn chỉnh) cho thấy xu hướng giữ đúng hướng trên mô hình khác, nhưng trục model chưa bao giờ được thiết kế thành ablation; so sánh đầy đủ giữa các mô hình nằm ngoài phạm vi.
 
-**Baseline mỏng.** Chỉ LAMeD (EASE 2025) là peer-reviewed đầy đủ cho leak C/C++; MemHint là preprint. Baseline so sánh trực tiếp cùng corpus, cùng scorer chỉ có Clang Static Analyzer.
+**Baseline mỏng.** Chỉ LAMeD (EASE 2025) là peer-reviewed đầy đủ cho leak C/C++; MemHint là preprint. Baseline so sánh trực tiếp cùng corpus, cùng scorer chỉ có Clang Static Analyzer, và chúng tôi thừa nhận đây là giới hạn validity bên ngoài lớn nhất của nghiên cứu. Runbook cho Infer đã chuẩn bị sẵn trong `docs/BASELINE-COMPARISON.md`, nhưng chạy đủ baseline thứ hai này vượt phạm vi thời gian của luận văn; đưa Infer vào đối chứng trên cùng corpus, cùng scorer vì thế nằm trong hàng đợi công việc tương lai.
 
 **Corpus thực positive-only và nhỏ.** LAMeD có 41 ca, MemHint 19 ca; TN=0 nên precision và MCC không định nghĩa trên hai corpus này. FP=0 đọc phải kèm recall.
 
@@ -103,7 +103,7 @@ Bật static enrichment dựa trên CFG heuristic trên fixture Juliet trước 
 
 **Parse OOM trên repo khổng lồ.** Tree-sitter với cache giới hạn byte vẫn có thể cạn bộ nhớ trên repo rất lớn. Đây là giới hạn scale được ghi nhận, không sửa trong phạm vi luận văn.
 
-**MemHint chưa hoàn tất khi viết chương này.** Nếu các run không kết thúc được, corpus đó sẽ được báo cáo như threats-to-validity thay vì kết quả.
+**Run MemHint nhiều biến cố vận hành.** Đánh giá corpus này đã hoàn tất với kết quả chốt ở mục 4.10: TP12/FP0/FN14, recall 0.462 trên 26 site. Giới hạn nằm ở cách số đó sinh ra: ca redis đẩy static analyzer vào dải OOM (khoảng 14GB RSS), một lần VM reboot giữa run làm mất attempt đầu, và run chốt ở attempt 3/8 nhờ resume của driver. Số liệu vẫn đáng tin vì no_llm tất định và artifacts được sha256-verify qua reboot, nhưng khả năng tái lập phụ thuộc hạ tầng WSL2 nhiều hơn mong muốn.
 
 ---
 
