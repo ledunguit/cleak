@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 620" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#2E3440"/>
+    </marker>
+  </defs>
+  <style>
+    .box { stroke: #2E3440; stroke-width: 1.6; rx: 10; }
+    .t1 { font-size: 15px; font-weight: bold; fill: #1B2029; }
+    .t2 { font-size: 12px; fill: #3B4252; }
+    .t3 { font-size: 11px; fill: #4C566A; }
+    .lbl { font-size: 11.5px; fill: #2E3440; }
+    .edge { stroke: #2E3440; stroke-width: 1.6; fill: none; marker-end: url(#arr); }
+  </style>
+
+  <rect x="0" y="0" width="1000" height="620" fill="#FFFFFF"/>
+
+  <!-- Orchestrator -->
+  <rect class="box" x="250" y="36" width="380" height="104" fill="#E8EDF2"/>
+  <text class="t1" x="440" y="66" text-anchor="middle">Orchestrator — leak-inspector-tui</text>
+  <text class="t2" x="440" y="88" text-anchor="middle">Ink CLI/TUI · native tool-calling</text>
+  <text class="t3" x="440" y="108" text-anchor="middle">agent-core: queryLoop · MCP client · callModel (SSE)</text>
+
+  <!-- Artifacts -->
+  <rect class="box" x="730" y="36" width="230" height="104" fill="#E8F2EE"/>
+  <text class="t1" x="845" y="66" text-anchor="middle" font-size="13">results/&lt;scanId&gt;/</text>
+  <text class="t2" x="845" y="88" text-anchor="middle">report.json / md / html</text>
+  <text class="t3" x="845" y="108" text-anchor="middle">snapshot · events · metrics</text>
+
+  <!-- Static analyzer -->
+  <rect class="box" x="56" y="264" width="290" height="124" fill="#F5F0E8"/>
+  <text class="t1" x="201" y="292" text-anchor="middle" font-size="14">static-analyzer (NestJS)</text>
+  <text class="t2" x="201" y="314" text-anchor="middle">MCP/HTTP :50061 · 11 tools</text>
+  <text class="t3" x="201" y="334" text-anchor="middle">Tree-sitter · call graph · path constraints</text>
+  <text class="t3" x="201" y="352" text-anchor="middle">ownership · scan-build</text>
+
+  <!-- Dynamic analyzer -->
+  <rect class="box" x="654" y="264" width="290" height="124" fill="#F5F0E8"/>
+  <text class="t1" x="799" y="292" text-anchor="middle" font-size="14">dynamic-analyzer (NestJS)</text>
+  <text class="t2" x="799" y="314" text-anchor="middle">MCP/HTTP :50062 · 9 tools</text>
+  <text class="t3" x="799" y="334" text-anchor="middle">buildTarget · Valgrind Memcheck</text>
+  <text class="t3" x="799" y="352" text-anchor="middle">ASan · LSan (chỉ Linux/Docker)</text>
+
+  <!-- LLM gateway -->
+  <rect class="box" x="330" y="436" width="300" height="88" fill="#FFF8F0"/>
+  <text class="t1" x="480" y="466" text-anchor="middle" font-size="14">LLM gateway :20128</text>
+  <text class="t2" x="480" y="488" text-anchor="middle">local · OpenAI · Anthropic · openai-compat</text>
+
+  <!-- Foundation band -->
+  <rect class="box" x="56" y="556" width="888" height="52" fill="#F7F7F5"/>
+  <text class="t2" x="500" y="578" text-anchor="middle" font-size="12">Tầng nền dùng chung (packages/): @cleak/common (kiểu dữ liệu · judge · báo cáo)</text>
+  <text class="t3" x="500" y="597" text-anchor="middle">@cleak/agent-core (vòng lặp tool-calling · MCP client) · @cleak/config (cấu hình tập trung)</text>
+
+  <!-- Edges -->
+  <path class="edge" d="M 320 140 L 220 260"/>
+  <text class="lbl" x="216" y="196" text-anchor="end">MCP Streamable-HTTP /mcp</text>
+
+  <path class="edge" d="M 560 140 L 760 260"/>
+  <text class="lbl" x="668" y="196">MCP Streamable-HTTP /mcp</text>
+
+  <path class="edge" d="M 630 88 L 726 88"/>
+  <text class="lbl" x="678" y="78" text-anchor="middle">ghi artifact</text>
+
+  <path class="edge" d="M 440 140 L 440 432" stroke-dasharray="6 4"/>
+  <text class="lbl" x="450" y="290">HTTP SSE (streaming)</text>
+</svg>

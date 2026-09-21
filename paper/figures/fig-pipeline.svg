@@ -1,0 +1,89 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 860 964" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#2E3440"/>
+    </marker>
+  </defs>
+  <style>
+    .box { stroke: #2E3440; stroke-width: 1.6; rx: 9; }
+    .t1 { font-size: 14.5px; font-weight: bold; fill: #1B2029; }
+    .t2 { font-size: 11px; fill: #4C566A; }
+    .lbl { font-size: 11px; fill: #2E3440; }
+    .edge { stroke: #2E3440; stroke-width: 1.6; fill: none; marker-end: url(#arr); }
+  </style>
+
+  <rect x="0" y="0" width="860" height="964" fill="#FFFFFF"/>
+
+  <!-- 1. Corpus -->
+  <rect class="box" x="200" y="28" width="460" height="58" fill="#F7F7F5"/>
+  <text class="t1" x="430" y="52" text-anchor="middle">Bộ dữ liệu — Juliet v1.3 · LAMeD · MemHint</text>
+  <text class="t2" x="430" y="72" text-anchor="middle">thu nhận · ingest nguyên văn · suy dẫn nhãn bad/good</text>
+
+  <!-- 2. Validate + lock -->
+  <rect class="box" x="200" y="116" width="460" height="58" fill="#F7F7F5"/>
+  <text class="t1" x="430" y="140" text-anchor="middle">Kiểm định 5 cổng → Lock</text>
+  <text class="t2" x="430" y="160" text-anchor="middle">schema · cấu trúc · biên dịch · trùng nhãn · content-hash → *.lock.json</text>
+
+  <!-- 3. Discovery + enrichment -->
+  <rect class="box" x="200" y="204" width="460" height="58" fill="#E8EDF2"/>
+  <text class="t1" x="430" y="228" text-anchor="middle">Khám phá + Làm giàu tĩnh (tất định)</text>
+  <text class="t2" x="430" y="248" text-anchor="middle">candidateScan · functionSummary · pathConstraints · scan-build</text>
+
+  <!-- 4. Stage A / B parallel -->
+  <rect class="box" x="86" y="296" width="310" height="88" fill="#E8EDF2"/>
+  <text class="t1" x="241" y="322" text-anchor="middle">Stage A — fan-out tĩnh</text>
+  <text class="t2" x="241" y="344" text-anchor="middle">3 sub-agent song song (tool-calling native)</text>
+  <text class="t2" x="241" y="362" text-anchor="middle">4 candidate / nhóm</text>
+
+  <rect class="box" x="464" y="296" width="310" height="88" fill="#E8EDF2"/>
+  <text class="t1" x="619" y="322" text-anchor="middle">Stage B — recipe tất định</text>
+  <text class="t2" x="619" y="344" text-anchor="middle">buildTarget → lsanRun (không LLM)</text>
+  <text class="t2" x="619" y="362" text-anchor="middle">fallback: LLM worker (build ×1, tool ×1)</text>
+
+  <text class="lbl" x="430" y="286" text-anchor="middle" font-weight="bold">∥ chạy song song</text>
+
+  <!-- 5. Stage C -->
+  <rect class="box" x="200" y="418" width="460" height="58" fill="#E8EDF2"/>
+  <text class="t1" x="430" y="442" text-anchor="middle">Stage C — Tổng hợp</text>
+  <text class="t2" x="430" y="462" text-anchor="middle">reconcile dynamic evidence · dynamicCoverage per-bundle</text>
+
+  <!-- 6. Stage D -->
+  <rect class="box" x="200" y="506" width="460" height="70" fill="#F5F0E8"/>
+  <text class="t1" x="430" y="530" text-anchor="middle">Stage D — Hybrid judge</text>
+  <text class="t2" x="430" y="550" text-anchor="middle">heuristic cho MỌI bundle → escalate bundle borderline</text>
+  <text class="t2" x="430" y="566" text-anchor="middle">→ single-LLM / consensus k-sample</text>
+
+  <!-- 7. Report -->
+  <rect class="box" x="200" y="606" width="460" height="58" fill="#E8EDF2"/>
+  <text class="t1" x="430" y="630" text-anchor="middle">Báo cáo</text>
+  <text class="t2" x="430" y="650" text-anchor="middle">JSON · Markdown · HTML · snapshot</text>
+
+  <!-- 8. Scoring -->
+  <rect class="box" x="200" y="694" width="460" height="58" fill="#E8EDF2"/>
+  <text class="t1" x="430" y="718" text-anchor="middle">Chấm điểm (site-level)</text>
+  <text class="t2" x="430" y="738" text-anchor="middle">P · R · F1 · MCC · FP/KLOC · ECE</text>
+
+  <!-- 9. Statistics -->
+  <rect class="box" x="200" y="782" width="460" height="58" fill="#E8EDF2"/>
+  <text class="t1" x="430" y="806" text-anchor="middle">Tầng thống kê</text>
+  <text class="t2" x="430" y="826" text-anchor="middle">mean ± std trên nhiều run · McNemar · verdict-flip rate</text>
+
+  <!-- 10. Determinism gates -->
+  <rect class="box" x="200" y="870" width="460" height="64" fill="#E8F2EE"/>
+  <text class="t1" x="430" y="894" text-anchor="middle">Cổng determinism</text>
+  <text class="t2" x="430" y="914" text-anchor="middle">Tier-1 (no_llm): so khớp bit-for-bit, chặn CI</text>
+  <text class="t2" x="430" y="928" text-anchor="middle">Tier-2 (llm_assisted): báo cáo phân bố + flip-rate</text>
+
+  <!-- Edges -->
+  <path class="edge" d="M 430 86 L 430 112"/>
+  <path class="edge" d="M 430 174 L 430 200"/>
+  <path class="edge" d="M 350 262 L 260 292"/>
+  <path class="edge" d="M 510 262 L 600 292"/>
+  <path class="edge" d="M 241 384 L 360 414"/>
+  <path class="edge" d="M 619 384 L 500 414"/>
+  <path class="edge" d="M 430 476 L 430 502"/>
+  <path class="edge" d="M 430 576 L 430 602"/>
+  <path class="edge" d="M 430 664 L 430 690"/>
+  <path class="edge" d="M 430 752 L 430 778"/>
+  <path class="edge" d="M 430 840 L 430 866"/>
+</svg>
