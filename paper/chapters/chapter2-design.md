@@ -20,7 +20,7 @@ Hệ thống phải đáp ứng bốn yêu cầu cốt lõi: (1) phát hiện me
 
 ### 2.1.3. Ràng buộc kỹ thuật
 
-MCP (Model Context Protocol) [6] là giao thức giao tiếp giữa orchestrator và analyzer — lựa chọn này gắn liền với thiết kế tool-calling native. Docker là môi trường chạy analyzer (Valgrind chỉ hoạt động trên Linux). Multi-provider LLM là bắt buộc: hệ thống không nên phụ thuộc vào một nhà cung cấp model duy nhất.
+MCP (Model Context Protocol) [42] là giao thức giao tiếp giữa orchestrator và analyzer — lựa chọn này gắn liền với thiết kế tool-calling native. Docker là môi trường chạy analyzer (Valgrind chỉ hoạt động trên Linux). Multi-provider LLM là bắt buộc: hệ thống không nên phụ thuộc vào một nhà cung cấp model duy nhất.
 
 ---
 
@@ -28,19 +28,19 @@ MCP (Model Context Protocol) [6] là giao thức giao tiếp giữa orchestrator
 
 ### 2.2.1. Tại sao hybrid — kết hợp static và dynamic
 
-Phân tích tĩnh (Clang SA, CodeQL) bao phủ mọi đường đi lý thuyết nhưng không biết đường nào thực sự chạy được → FP cao. Phân tích động (Valgrind, LSan) chỉ phát hiện leak trên đường thực sự chạy → FN cao. Hassler và cộng sự [7] chỉ ra rằng tập bug mà fuzzers tìm được và tập bug mà static analyzer tìm được gần như không giao nhau.
+Phân tích tĩnh (Clang SA, CodeQL) bao phủ mọi đường đi lý thuyết nhưng không biết đường nào thực sự chạy được → FP cao. Phân tích động (Valgrind, LSan) chỉ phát hiện leak trên đường thực sự chạy → FN cao. Hassler và cộng sự [13] chỉ ra rằng tập bug mà fuzzers tìm được và tập bug mà static analyzer tìm được gần như không giao nhau. Ở phía chuyên biệt cho leak, AddressWatcher [14] cũng đã tận dụng dữ liệu sanitizer để định vị các leak trong lịch sử dự án — bằng chứng sanitizer mang giá trị định vị, không chỉ là một con số đếm.
 
 Kết luận: cần cả hai. Nhưng "kết hợp" không có nghĩa là chạy cả hai rồi nối kết quả — cần một tầng hợp nhất thông minh, biết khi nào bằng chứng tĩnh đủ mạnh, khi nào cần xác nhận bằng bằng chứng động.
 
 ### 2.2.2. Tại sao LLM orchestration thay vì hardcode pipeline
 
-Mỗi dự án C/C++ có cách quản lý bộ nhớ riêng: libcurl dùng `curl_easy_cleanup()`, cJSON dùng `cJSON_Delete()`, libTIFF dùng `TIFFClose()`. Một pipeline hardcode sẽ cần liệt kê tất cả các tên này cho mỗi project — không khả thi ở quy mô lớn.
+Mỗi dự án C/C++ có cách quản lý bộ nhớ riêng: libcurl dùng `curl_easy_cleanup()`, cJSON dùng `cJSON_Delete()`, libTIFF dùng `TIFFClose()`. Một pipeline hardcode sẽ cần liệt kê tất cả các tên này cho mỗi project — không khả thi ở quy mô lớn. Ở cấp kernel, Liu và cộng sự [22] đã chứng minh rằng sự không nhất quán trong "ý định" quản lý bộ nhớ là tín hiệu đủ để phát hiện lỗi bộ nhớ — quy ước quản lý là một tín hiệu có thể khai thác tự động.
 
-LLM có thể đọc header/source và khám phá ra các API này, cùng với quy tắc ownership (ai sở hữu con trỏ sau khi hàm trả về?). Đây là tầng "POLICY" — quyết định theo-từng-project — trong khi tầng "MECHANISM" (parse AST, tính CFG, ghép cặp alloc→free, scoring) vẫn tất định.
+LLM có thể đọc header/source và khám phá ra các API này, cùng với quy tắc ownership (ai sở hữu con trỏ sau khi hàm trả về? — câu hỏi mà hướng ownership model cho C lấy cảm hứng từ Rust đã hệ thống hoá [43]). Đây là tầng "POLICY" — quyết định theo-từng-project — trong khi tầng "MECHANISM" (parse AST, tính CFG, ghép cặp alloc→free, scoring) vẫn tất định. Hướng đi này hợp với các kết quả đã biết về LLM agent: Reflexion [30] cho thấy agent tự cải thiện khi được phản hồi bằng ngôn ngữ, Tree of Thoughts [31] cho thấy suy luận có cấu trúc qua tìm kiếm trên cây, còn DSPy [32] cho thấy prompt có thể được biên dịch thành pipeline khai báo thay vì văn bản thủ công — cùng nguyên lý đưa LLM vào vai POLICY có kiểm soát.
 
 ### 2.2.3. Tại sao MCP thay vì gRPC/REST
 
-MCP [6] cung cấp hai lợi thế: (1) tool description đi kèm schema, model thấy ngay tool nào khả dụng mà không cần document riêng; (2) giao thức chuẩn, analyzer có thể thay thế mà không ảnh hưởng orchestrator. Thực tế, dự án từng dùng gRPC nhưng đã loại bỏ sau khi chuyển sang TUI-only — MCP đủ cho mọi nhu cầu hiện tại.
+MCP [42] cung cấp hai lợi thế: (1) tool description đi kèm schema, model thấy ngay tool nào khả dụng mà không cần document riêng; (2) giao thức chuẩn, analyzer có thể thay thế mà không ảnh hưởng orchestrator. Thực tế, dự án từng dùng gRPC nhưng đã loại bỏ sau khi chuyển sang TUI-only — MCP đủ cho mọi nhu cầu hiện tại.
 
 ---
 
@@ -149,7 +149,7 @@ Mỗi candidate được phân tích bởi `functionSummary`: đếm lệnh cấ
 
 `interproceduralFlow` mở rộng phân tích qua biên hàm. Variable-level cross-frame matching: nếu hàm A cấp phát biến `x`, gọi hàm B, và `x` không được giải phóng ở bất kỳ exit nào reachable → leak cross-function. Kết quả fold thành `feasibleLeakPath`.
 
-Trên Juliet (leak intra-function), tool này Δ=0. Trên LAMeD (dự án thực), nó bắt thêm 1 leak (cjson `merge_patch`), FP=0. Gain nhỏ nhưng sạch — cơ chế hoạt động end-to-end trên dự án thật.
+Trên Juliet (leak intra-function), tool này Δ=0. Trên LAMeD (dự án thực), nó bắt thêm 1 leak (cjson `merge_patch`), FP=0. (Kết quả sớm này về sau bị thu hồi khi phân tích nguyên-nhân-gốc, xem mục 4.5.2.) Cơ chế vẫn hoạt động end-to-end trên dự án thật, nhưng đóng góp điểm số thực tế của nó phải đọc cùng phân tích thu hồi ở Chương 4.
 
 ### 2.5.4. Clang scan-build
 
