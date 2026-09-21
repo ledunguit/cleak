@@ -69,7 +69,7 @@ static isCppPath(filePath?: string): boolean {
 
 Hai parser (C và C++) được lazy-initialize và reuse qua toàn bộ vòng đời service — mỗi parser chỉ tạo một lần, lần đầu cần dùng. Kết quả parse được cache theo content hash trong một Map bounded theo **dung lượng byte** (`STATIC_PARSER_CACHE_MAX_MB`, mặc định 256MB, sàn 16MB — không còn giới hạn theo số entry cố định như thiết kế ban đầu) để tránh parse lại cùng một file khi nhiều tool gọi liên tiếp trong CÙNG một process.
 
-Tầng cache thứ hai, bổ sung sau khi phát hiện vấn đề hiệu năng thực tế trên sweep LAMeD: một baseline sweep chạy 9 config × tối đa 3 lần lặp lại quét CÙNG một project checkout không đổi rất nhiều lần, nhưng cache trong-process bị mất mỗi khi process khởi động lại — cache này được persist ra đĩa dưới `RUNS_DIR/ast-cache` (key = SHA1 nội dung file, giống hệt key trong-process), nên một process mới tái sử dụng kết quả parse của process trước thay vì parse lại từ đầu. Kết quả `ParseResult`/`FunctionInfo` chỉ gồm kiểu dữ liệu JSON-an-toàn (string/number/boolean/array/plain object, không có `Set`/`Map`), nên round-trip qua đĩa không mất dữ liệu. Đo trực tiếp trên một case LAMeD thật (`libxml2`, 143 file, 43 candidate, mode `no_llm`): quét lại cùng case với cache đĩa đã "ấm" (process mới, cache đĩa còn nguyên) mất 3.0s / đỉnh RSS 266MB, so với 54.0s / đỉnh RSS 1.03GB khi cache đĩa rỗng — giảm ~18 lần thời gian và ~74% bộ nhớ đỉnh cho đúng pattern quét-lại mà một sweep thực hiện lặp đi lặp lại. Cả hai thay đổi đều thuần cơ chế (không đụng logic judge hay nội dung evidence), nên không kỳ vọng thay đổi bất kỳ số liệu F1/precision/recall nào đã báo cáo ở Chương 4 — nhưng đây là một giả định dựa trên ngữ nghĩa của cache, chưa phải một phép đo độc lập xác nhận lại toàn bộ sweep.
+Tầng cache thứ hai được bổ sung sau khi phát hiện vấn đề hiệu năng thực tế trên sweep LAMeD: một baseline sweep chạy 9 config × tối đa 3 lần lặp lại quét CÙNG một project checkout không đổi rất nhiều lần, nhưng cache trong-process bị mất mỗi khi process khởi động lại. Vì vậy cache này được persist ra đĩa dưới `RUNS_DIR/ast-cache` (key = SHA1 nội dung file, giống hệt key trong-process), nên một process mới tái sử dụng kết quả parse của process trước thay vì parse lại từ đầu. Kết quả `ParseResult`/`FunctionInfo` chỉ gồm kiểu dữ liệu JSON-an-toàn (string/number/boolean/array/plain object, không có `Set`/`Map`), nên round-trip qua đĩa không mất dữ liệu. Đo trực tiếp trên một case LAMeD thật (`libxml2`, 143 file, 43 candidate, mode `no_llm`): quét lại cùng case với cache đĩa đã "ấm" (process mới, cache đĩa còn nguyên) mất 3.0s / đỉnh RSS 266MB, so với 54.0s / đỉnh RSS 1.03GB khi cache đĩa rỗng. Tức giảm ~18 lần thời gian và ~74% bộ nhớ đỉnh, đúng cho pattern quét-lại mà một sweep thực hiện lặp đi lặp lại. Cả hai thay đổi đều thuần cơ chế (không đụng logic judge hay nội dung evidence), nên không kỳ vọng thay đổi bất kỳ số liệu F1/precision/recall nào đã báo cáo ở Chương 4. Nhưng đây là một giả định dựa trên ngữ nghĩa của cache, chưa phải một phép đo độc lập xác nhận lại toàn bộ sweep.
 
 Một thiết kế quan trọng khác là cơ chế threading allocator set. Hardcoded set mặc định chỉ gồm các hàm libc cơ bản: `malloc`, `calloc`, `realloc`, `strdup`, `free`, và các biến thể kernel (`kmalloc`, `kfree`). Nhưng các dự án thực tế sử dụng factory allocator riêng — cJSON có `cJSON_CreateObject()`/`cJSON_Delete()`, libtiff có `_TIFFmalloc()`/`_TIFFfree()`. Nếu chỉ dựa vào set mặc định, hệ thống sẽ miss hoàn toàn các allocation site này.
 
@@ -316,7 +316,7 @@ Trước khi vote, hàm `deriveFusion()` tóm tắt bằng chứng thành hai tr
 - **Static:** `'leak'` (unpaired alloc hoặc reachable leak path), `'clean'` (ownership handed out), hoặc `'ambiguous'`.
 - **Dynamic:** `'confirmed'` (runtime leak correlated), `'cleared'` (sanitizer chạy clean), hoặc `'none'`.
 
-Vote weight trong rule `weighted` bị ảnh hưởng bởi fusion: nếu dynamic `'cleared'` mà vote vẫn flag → weight giảm ×0.3. Ngược lại, dynamic `'confirmed'` mà vote clear → cũng giảm ×0.3. Cơ chế này tạo "giọng nói" cho bằng chứng runtime — sanitizer đã chạy sạch thì LLM khó mà flag bừa.
+Vote weight trong rule `weighted` bị ảnh hưởng bởi fusion: nếu dynamic `'cleared'` mà vote vẫn flag → weight giảm ×0.3. Ngược lại, dynamic `'confirmed'` mà vote clear → cũng giảm ×0.3. Cơ chế này tạo "giọng nói" cho bằng chứng runtime — sanitizer đã chạy sạch thì LLM khó mà flag bừa. Toàn bộ prompt dùng cho judge được liệt kê đầy đủ ở Phụ lục B.
 
 ### 3.6.3. Report renderers
 
@@ -398,11 +398,19 @@ Port chỉ bind `127.0.0.1` — đây là dịch vụ nội bộ, không authent
 
 Mỗi container đọc env từ `apps/<svc>/.env` (optional — boots với defaults nếu file không tồn tại). Docker image bake sẵn `clang` và `clang-tools-extra` (cho scan-build) vào static-analyzer image.
 
-### 3.8.2. LLM gateway
+### 3.8.2. Mô hình đe dọa (tóm tắt)
+
+Hệ thống biên dịch và thực thi mã C/C++ lấy từ repo đang quét, nên mã nguồn được phân tích là đầu vào không tin cậy; đây là mối đe dọa trung tâm mà phần cài đặt phải đối diện. Biên cách ly được dựng theo nguyên tắc: một repo độc hại không được phép thoát khỏi môi trường phân tích, đọc secret trên host, hay để lại dấu vết lâu dài. Cụ thể, mọi đường thực thi đều giới hạn trong `WORKSPACE_ROOT`, tiến trình con được spawn bằng mảng argv thay vì chuỗi shell nội suy để chặn shell injection, còn trên Linux các tiến trình này bị bọc `ulimit` về CPU, kích thước file và số tiến trình. Artifact động được cô lập theo từng run id, cổng MCP của hai analyzer chỉ bind trên `127.0.0.1` như cấu hình Docker Compose ở mục 3.8.1, và build qua Docker chạy với `--network none` cùng giới hạn bộ nhớ, số tiến trình.
+
+Về giả định tin cậy, đây là kịch bản single-operator: người vận hành quét các repo do chính họ chọn, trên host hoặc container họ kiểm soát, không phải một dịch vụ đa người dùng. Vì thế các dịch vụ analyzer và cổng LLM được xem là tin cậy; thứ không tin cậy chỉ có mã đang được phân tích. Ở chế độ mặc định (`--dynamic off` hoặc thiếu `buildCommand`), `no_llm` thuần tĩnh và không bao giờ thực thi mã đang quét. Danh sách kiểm soát đầy đủ kèm vị trí code nằm trong `docs/SECURITY.md`.
+
+Một hạn chế mà chúng tôi ghi rõ thay vì giấu: làm rối mã (obfuscation) ở mức tổng quát nằm ngoài phạm vi. Allocator được bọc trong macro (macro-wrapped) hay control-flow flattening đủ mạnh sẽ làm vô hiệu cả cơ chế guard-subset reconciliation (mục 3.2.3) lẫn lexical scan. Hệ thống chỉ xử lý được lớp allocator đặt tên lại hoặc dạng factory, qua allocator profiling kèm grep-verify (mục 3.7.1); phần còn lại là hướng phát triển.
+
+### 3.8.3. LLM gateway
 
 Thực nghiệm sử dụng local LLM gateway tại `http://localhost:20128/v1` với model `mimo/mimo-v2.5-pro`. Gateway tuân thủ OpenAI Chat Completions API — nên hệ thống dùng provider `local` (thực chất là OpenAI-compatible endpoint). Temperature mặc định: 0 (judge single), 0.7 (consensus sample).
 
-### 3.8.3. Configuration hierarchy
+### 3.8.4. Configuration hierarchy
 
 Hệ thống hỗ trợ 4 nguồn config, theo thứ tự ưu tiên giảm dần:
 
@@ -413,7 +421,7 @@ Hệ thống hỗ trợ 4 nguồn config, theo thứ tự ưu tiên giảm dần
 
 Config file được validate bằng Zod lenient parse — mỗi key được validate độc lập, key invalid bị bỏ qua với warning trên stderr thay vì reject toàn bộ file.
 
-### 3.8.4. Corpus pipeline
+### 3.8.5. Corpus pipeline
 
 Quản lý corpus đánh giá là một pipeline riêng, gồm 4 bước:
 
@@ -438,7 +446,7 @@ Chương này đã trình bày chi tiết quá trình hiện thực hoá hệ th
 
 Thứ nhất, quyết định viết toàn bộ hệ thống bằng TypeScript — thay vì C++ hay Python — xuất phát từ ràng buộc thực tế: MCP SDK chỉ có bản TypeScript, và orchestrator không cần hiệu năng tính toán cao (phần nặng nhất — parsing AST — đã do tree-sitter C library xử lý).
 
-Thứ hai, cơ chế threading `extraAllocators`/`extraDeallocators` xuyên suốt 7 static tools là thay đổi có impact lớn nhất trong quá trình phát triển. Trước khi có cơ chế này, hệ thống hoàn toàn blind với non-libc allocator — dẫn đến 0% recall trên LAMeD benchmark (dự án thực không dùng malloc trực tiếp). Sau khi threading, recall trên LAMeD tăng từ 0/41 lên 12/41.
+Thứ hai, cơ chế threading `extraAllocators`/`extraDeallocators` xuyên suốt 7 static tools là thay đổi có impact lớn nhất trong quá trình phát triển. Trước khi có cơ chế này, hệ thống hoàn toàn blind với non-libc allocator — dẫn đến 0% recall trên LAMeD benchmark (dự án thực không dùng malloc trực tiếp). Sau khi threading, recall trên LAMeD tăng từ 0/41 lên 12/41 (số cuối cùng trên ground truth 50-site của Chương 4 là 15/50, xem mục 4.5; hai mẫu số phản ánh hai mức chi tiết khác nhau của ground truth nên không so sánh trực tiếp được).
 
 Thứ ba, deterministic evidence capture (Stage B wrapper) là yếu tố then chốt cho reproducibility. Bằng cách loại bỏ LLM discretion khỏi quá trình ghi nhận finding, hệ thống đảm bảo rằng cùng một sanitizer run luôn produce cùng một evidence — dù LLM quyết định tool nào gọi.
 
