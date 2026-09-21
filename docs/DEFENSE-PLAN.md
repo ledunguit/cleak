@@ -239,3 +239,64 @@ nếu còn dư thời gian sau tuần 6).
 - MemHint llm_assisted có thể lặp lại pattern LAMeD (LLM không lật verdict) —
   vẫn là kết quả báo cáo được (nhất quán, củng cố kết luận RQ1 trên corpus
   thực).
+
+## Bổ sung 2026-09-21 (review-remediation)
+
+### (S6) Ô còn thiếu "Clang + LLM judge": câu trả lời viết sẵn (Defense Q15)
+
+Câu hỏi hội đồng có thể đặt: bảng capability 9 baseline có B4 "LLM + static
+của chúng tôi" nhưng không có ô **"Clang + LLM judge"** (thay lớp static của
+hệ thống bằng Clang thô, giữ nguyên judge LLM) nên không tách rời được đóng góp
+riêng của enrich layer. Kịch bản nói sẵn:
+
+> "B4 là 'LLM + static của chúng tôi', không phải 'Clang + LLM judge'; ô đó
+> chưa chạy (thí nghiệm ~1 tuần); nếu được hỏi: thừa nhận, lập luận
+> enrich-layer hội-tụ về B4-với-ứng-viên-khác, cam kết chạy nếu hội đồng muốn."
+
+Mở rộng thành ba bước khi trả lời:
+
+1. **Thừa nhận thẳng**: ô đó chưa chạy, không bịa số, không có artifact.
+2. **Lập luận hội-tụ**: dữ liệu đã đo cho thấy chất lượng ứng viên đầu vào là
+   yếu tố quyết định, judge chỉ khuếch đại ứng viên đó. Clang thô trên LAMeD:
+   43 site, TP 0 (Bảng 4.8, `results/lamed-correction-2026-08-20-README.md`
+   mục 4); Clang trên Juliet F1 ~0.76 so với B1 0.612 / B6a 0.863 cùng scorer.
+   "Clang + LLM judge" vì vậy hội tụ về B4-với-ứng-viên-khác: cùng cấu trúc
+   (LLM judge trên static evidence), chỉ khác nguồn ứng viên yếu hơn, và kết
+   quả dự kiến bị chặn trên bởi recall/precision của nguồn đó.
+3. **Cam kết**: thí nghiệm ~1 tuần, khả thi vì `--static-tools` và adapter
+   clang đã có sẵn (`domain/baselines/clangAnalyzer.ts`); nếu hội đồng muốn,
+   nhận chạy và báo phụ lục.
+
+Ghi chú cho bản thân (không nói): đừng biến câu trả lời thành hứa bổ sung phạm
+vi; Scope-note addendum giữ thí nghiệm này ở mức OPTIONAL, threat model bắt
+buộc đã có ở ch3 §3.8.2.
+
+### (C.2) Khung trình bày reversal consensus: SIGN-REVERSAL, không phải ước lượng effect size
+
+Câu hỏi cần chặn trước: **"2%-vs-8% trên 50 case đã đủ chưa?"** Đừng bảo vệ độ
+lớn của con số. Điểm của kết quả không phải "consensus tệ hơn đúng 6 điểm phần
+trăm", mà là **đảo dấu (SIGN-REVERSAL)** giữa hai scheme lấy mẫu:
+
+- n=30 (top-N, 2026-06): consensus thắng, flip 6.7% so với single 13.3-26.7%.
+- n=50 stratified (2026-08-19): dấu đảo hoàn toàn, single 2.0%/F1 0.852 so với
+  consensus 8.0%/F1 0.793; McNemar p=0.077 (bảng ở mục "Bối cảnh" đầu tài
+  liệu này).
+
+Ba mệnh đề được phép nói, và chỉ ba:
+
+1. Kết luận rút từ MỘT cỡ mẫu duy nhất về độ ổn định verdict của judge LLM đã
+   đảo chiều hoàn toàn khi đổi scheme lấy mẫu (đây là phát hiện phương pháp
+   luận: các nghiên cứu LLM-judge trước đó công bố số stability trên một
+   sample duy nhất).
+2. Ở n=50, khác biệt 2% vs 8% CHƯA có ý nghĩa thống kê ở α=0.05 (p=0.077),
+   đúng như khung: chúng tôi không claim effect size, chỉ claim dấu hiệu
+   không-bền-vững.
+3. Khuyến nghị vận hành giữ nguyên: không dùng consensus làm mặc định (C4),
+   vì không còn bằng chứng lợi ích tương xứng chi phí.
+
+Không được nói: "consensus xấu hơn X%", "cần thêm n để xác nhận consensus tệ",
+hoặc bất kỳ dạng ước lượng độ lớn nào từ cặp 2/8 này.
+
+Hai kiểm định McNemar còn lại của tài liệu (B6a-vs-B1 p=7.192e-239; B6-vs-B6a
+p=0.611) đã có sẵn ở mục Q&A Giai đoạn 4 bên trên: trỏ về đó khi cần, KHÔNG
+nhắc lại số trong câu trả lời về consensus để tránh trộn hai cặp so sánh.
