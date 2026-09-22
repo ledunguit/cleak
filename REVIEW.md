@@ -29,18 +29,6 @@
 > đúng trạng thái bản thảo tại thời điểm đó, và được giữ nguyên để đối chiếu
 > trước/sau.
 
-> **Cập nhật 2026-09-21 (post-remediation):** toàn bộ Critical C1–C7 và phần
-> lớn Important đã remediate; xem trạng thái từng mục inline và bảng điểm cập
-> nhật. File giữ nguyên giá trị lịch sử: các nhận xét gốc 2026-09-20 phản ánh
-> đúng trạng thái bản thảo tại thời điểm đó, và được giữ nguyên để đối chiếu
-> trước/sau.
-
-> **Cập nhật 2026-09-21 (post-remediation):** toàn bộ Critical C1-C7 và phần
-> lớn Important đã remediate; xem trạng thái từng mục inline và bảng điểm cập
-> nhật. File giữ nguyên giá trị lịch sử: các nhận xét gốc 2026-09-20 phản ánh
-> đúng trạng thái bản thảo tại thời điểm đó, và được giữ nguyên để đối chiếu
-> trước/sau.
-
 ---
 
 # Executive Summary
@@ -922,7 +910,7 @@ phần này thay thế hai dữ kiện sau.
 ground truth từ fix commits. Dữ liệu có sẵn, runbook đã viết
 (`docs/LAMED-RESCORE-RUNBOOK.md`, mẫu số độc lập công cụ /41) và dry-run đã
 chạy 13/41; mục còn lại chỉ là tác giả gạch chốt, tức trạng thái PREPARED như
-bảng "Trạng thái thực-thi (2026-09-21)" ở mục Roadmap.
+bảng trạng thái thực-thi ở mục Roadmap.
 
 **(b) Sequencing advice (dòng 575, được mục D xác nhận lại ở dòng 621):
 ước tính đã bị thực tế vượt qua.** Nhận định "Total critical path ≈ 3-4
