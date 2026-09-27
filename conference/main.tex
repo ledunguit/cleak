@@ -76,40 +76,42 @@ batching and scheduling, alongside unconstrained, expensive tool calls
 that are hard to audit or bound in cost.
 
 CLeak's contribution is an architecture that captures an LLM's
-diagnostic value without its instability, built on the principle of
-Section~\ref{sec:policy-mechanism} that \emph{the LLM owns policy, the
-engine owns mechanism}. This paper makes four contributions;
-Section~\ref{sec:contributions} returns to them with measured results.
+diagnostic value without its instability. This paper therefore asks
+whether an LLM-agent analysis system can be made scientifically
+reproducible without sacrificing reasoning capability, and answers it
+with an architecture, built on the principle of
+Section~\ref{sec:policy-mechanism}, in which \emph{the LLM owns
+policy, the engine owns mechanism}. The four contributions below
+state the design; Section~\ref{sec:evaluation} returns to each with
+measured results.
 
-\textbf{C1} pins the dynamic stage to a fixed build-and-sanitize recipe
-that runs LeakSanitizer without LLM involvement whenever the build
-command is known, and gates the orchestration behind a bounded LLM
-planner that makes one call per case; the resulting pinned-recipe
-hybrid, whose tool execution is deterministic and whose verdicts are
-LLM-assisted only at the borderline, delivers the system's \emph{strongest
-measured result} on the full
-validated Juliet corpus (F1~0.867, MCC~0.836;
+\label{sec:contributions}
+\textbf{C1} pins the dynamic stage to a fixed build-and-sanitize
+recipe that runs LeakSanitizer without LLM involvement whenever the
+build command is known, and gates orchestration behind a bounded LLM
+planner that makes one call per case. The resulting pinned-recipe
+hybrid, deterministic in tool execution and LLM-assisted only at the
+borderline, delivers the system's \emph{strongest measured result} on
+the full validated Juliet corpus (F1~0.867, MCC~0.836;
 Section~\ref{sec:evaluation}) at a fraction of agentic alternatives'
 cost (Section~\ref{sec:pipeline}). \textbf{C2} makes reproducibility
-measurable by pairing the deterministic tier, the \texttt{no\_llm}
-configurations B1 to B3
-proven bitwise-reproducible by a dedicated determinism gate, with the
-LLM-assisted tier, B4 to B7 with B6a among them, whose variance is measured and
-reported rather than hidden (Section~\ref{sec:reproducibility}).
-\textbf{C3} enriches every candidate with structured evidence, namely
-ownership-transfer tracking, alloc$\to$free pairing with guard-subset
-path reconciliation, path-sensitive and
-parameter-ownership leak detection, and
-runtime$\leftrightarrow$candidate correlation, which together make the
-deterministic heuristic judge path-aware without an SMT solver
-(Section~\ref{sec:judging}). \textbf{C4} fuses static and dynamic
-evidence in a judging layer that resamples the LLM judge $K$ times at
-nonzero temperature and combines votes by self-consistency, but
-escalates only genuinely borderline bundles; on a family-stratified
-sample spanning the corpus's difficulty spread, single-LLM judging is
-both more stable (2.0\% vs.\ 8.0\% verdict flips) and more accurate (F1
-0.852 to 0.855 vs.\ 0.793 to 0.796) than $K{=}3$ consensus. We do not
-recommend consensus judging by default (Section~\ref{sec:eval-consensus}).
+measurable by pairing the deterministic \texttt{no\_llm} tier (B1 to
+B3), proven bitwise-reproducible by a dedicated determinism gate, with
+the LLM-assisted tier (B4 to B7, B6a among them) whose variance is
+measured and reported rather than hidden
+(Section~\ref{sec:reproducibility}). \textbf{C3} enriches every
+candidate with structured evidence, namely ownership-transfer
+tracking, alloc$\to$free pairing with guard-subset path
+reconciliation, path-sensitive and parameter-ownership leak detection,
+and runtime$\leftrightarrow$candidate correlation, which together
+make the deterministic heuristic judge path-aware without an SMT
+solver (Section~\ref{sec:judging}). \textbf{C4} fuses static and
+dynamic evidence in a judging layer that resamples the LLM judge at
+nonzero temperature and escalates only genuinely borderline bundles;
+on a family-stratified sample spanning the corpus's difficulty
+spread, single-LLM judging is both more stable and more accurate than
+$K{=}3$ consensus, so we do not recommend consensus judging by default
+(Section~\ref{sec:eval-consensus}).
 
 We evaluate CLeak on the NIST Juliet CWE-401 suite (a validated,
 integrity-checked 1{,}658-case subset)~\cite{juliet}, the peer-reviewed LAMeD
@@ -310,15 +312,8 @@ the strategist/tuner are disabled, so \texttt{no\_llm} makes
 full-corpus Juliet confusion matrix (B3 in Table~\ref{tab:ablation},
 TP1686/FP674/FN871 at $n{=}1{,}658$ cases) is fixed across runs.
 
-CLeak's four contributions materialize in the architecture as follows.
-\textbf{C1} is the pinned dynamic recipe of Section~\ref{sec:pipeline},
-with the bounded planner as its only LLM element. \textbf{C2} is
-the two-tier reproducibility protocol of
-Section~\ref{sec:reproducibility}, whose Tier~1 covers B1 to B3 and
-whose Tier~2 covers every \texttt{llm\_assisted} configuration, B6a
-included. \textbf{C3} is realized in the
-heuristic judge of Section~\ref{sec:judging}; \textbf{C4} is the
-judging comparison reported in Section~\ref{sec:eval-consensus}.
+The architecture realizes the contributions C1--C4 stated in
+Section~\ref{sec:contributions}.
 
 \begin{table}[htbp]
 \centering
@@ -793,24 +788,6 @@ over all seven LAMeD projects, allocator and deallocator discovery drop
 to F1 0.22 and 0.17, so the protocol validates per-project allocator
 knowledge only where a project exposes a small, conventional allocation
 API.
-
-\paragraph{Contribution recap.}
-\label{sec:contributions}
-
-C1 pins the dynamic stage to a fixed build-and-sanitize recipe and gates
-the orchestration behind a bounded LLM planner of one call per case;
-this pinned-recipe hybrid, deterministic in tool execution alone, is the
-strongest measured configuration (Precision 96.5\%, Recall 78.6\%, F1
-0.867, MCC 0.836 versus the static-only baseline's F1 0.614, at about
-\$6.63 versus \$26 to \$27 for the agentic alternatives). C2 proves the
-\texttt{no\_llm} tier (B1 to B3) bitwise-reproducible with a dedicated
-determinism gate and reports the \texttt{llm\_assisted} tier's variance
-rather than hiding it. C3's guard-subset reconciliation lets the purely
-deterministic heuristic judge detect path-sensitive and
-parameter-ownership leaks without an SMT solver. C4 finds single-LLM
-judging more stable and more accurate than $K{=}3$ consensus
-(Section~\ref{sec:eval-consensus}), so we do not recommend enabling
-consensus judging by default.
 
 \section{Discussion, Open Problems, and Threats to Validity}
 \label{sec:discussion}
