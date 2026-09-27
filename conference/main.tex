@@ -138,17 +138,20 @@ MemHint-derived corpus (Section~\ref{sec:eval-lamed}).
 \section{Related Work}
 \label{sec:related}
 
-\paragraph{Static analysis for memory leaks.}
+\paragraph{Ownership-aware static analysis.}
 Clang Static Analyzer~\cite{clangsa} performs path-sensitive symbolic
 execution, Infer~\cite{infer} scales via compositional bi-abduction,
 and CodeQL~\cite{codeql} expresses leak patterns as database queries;
 all three inherit the same limitation at the ownership layer, where path
 sensitivity without a run, interprocedural summaries, and query-based
 dataflow each leave ownership transfer and conditional deallocation
-ambiguous, so false positives rise. The engine itself follows architectural
+ambiguous, so false positives rise. A pointer-ownership model for
+C~\cite{ownership-model} informs our judge's ownership-transfer
+vocabulary, and the enhanced pointer-ownership design POM~\cite{pom}
+completes this contrast. The engine itself follows architectural
 precedent~\cite{infer-verification,tricorder}.
 
-\paragraph{Dynamic analysis for memory leaks.}
+\paragraph{Dynamic and hybrid leak detection.}
 Valgrind Memcheck~\cite{valgrind} and
 AddressSanitizer / LeakSanitizer~\cite{asan} obtain their verdicts by
 executing an instrumented binary, pinning near-perfect precision to the
@@ -159,24 +162,24 @@ ceiling, and AddressWatcher~\cite{addresswatcher} localizes leak
 \emph{fixes}, a complementary problem. Fuzzers' true-positive sets are
 largely disjoint from static analyzers'~\cite{fuzzer-vs-sa}, motivating
 a hybrid rather than a choice between them
-(Section~\ref{sec:pipeline}).
+(Section~\ref{sec:pipeline}). The closest prior work targets C/C++
+memory leaks directly. IRIS~\cite{iris} couples an LLM with static
+analysis. \textbf{MemHint}~\cite{memhint} is a neuro-symbolic static
+pipeline reporting 52 to 54 leaks found (49 confirmed/fixed) across 7
+projects (over 3.4M LOC), and
+\textbf{LAMeD}~\cite{lamed,lamed-benchmark}, whose LLM only
+\emph{annotates} source for a classical analyzer, is not agentic,
+reports no F1, and supplies our real-world corpus
+(Section~\ref{sec:eval-lamed}); a related line targets kernel-level
+memory-management intention inconsistencies~\cite{kernel-memmgmt}.
 
-\paragraph{LLMs for software defect detection.}
+\paragraph{Agentic and LLM-driven defect detection.}
 Early empirical work found LLMs can identify vulnerabilities from
-source alone with bounded accuracy~\cite{llm-vuln-eval};
-IRIS~\cite{iris} couples an LLM with static analysis; prompting
+source alone with bounded accuracy~\cite{llm-vuln-eval}, and prompting
 alone can \emph{exceed} a static analyzer on its
 benchmark~\cite{llm-proxy-static}, a finding compatible with CLeak,
-which grounds the LLM in tool output;
-VulnLLM-R~\cite{vulnllmr} and SemTaint~\cite{semtaint} address broader
-vulnerability classes. The closest prior work targets C/C++ memory
-leaks directly. \textbf{MemHint}~\cite{memhint} is a neuro-symbolic
-static pipeline reporting 52 to 54 leaks found (49 confirmed/fixed)
-across 7 projects (over 3.4M LOC), and \textbf{LAMeD}~\cite{lamed},
-whose LLM only \emph{annotates} source for a classical analyzer, is not
-agentic, reports no F1, and supplies our
-real-world corpus (Section~\ref{sec:eval-lamed}); a related line targets kernel-level
-memory-management intention inconsistencies~\cite{kernel-memmgmt}.
+which grounds the LLM in tool output; VulnLLM-R~\cite{vulnllmr} and
+SemTaint~\cite{semtaint} address broader vulnerability classes.
 Repository-scale agentic auditors (RepoAudit~\cite{repoaudit},
 Revelio~\cite{revelio}, SAILOR~\cite{sailor}) and crash-oriented
 systems (FuzzingBrain~V2~\cite{fuzzingbrainv2},
@@ -186,29 +189,50 @@ defect types, so we do not treat it as a leak-specific baseline.
 Agent-design foundations~\cite{react,reflexion,tot,sweagent,agentless}
 shape our Stage~A/B sub-agent mechanisms (Section~\ref{sec:pipeline}).
 
-\paragraph{Reducing LLM variance and LLM-as-judge.}
-Self-consistency decoding~\cite{selfconsistency} samples reasoning
-chains at nonzero temperature and votes; our consensus judge (C4)
-applies it to leak verdicts, not chain-of-thought answers.
-Zheng et al.'s LLM-as-a-judge calibration study~\cite{llmjudge}
-motivates reporting McNemar-test significance
-(Section~\ref{sec:eval-consensus}) rather than a raw accuracy delta.
-
-\paragraph{Benchmarks and protocols.}
-DiverseVul~\cite{diversevul}, SV-COMP Memsafety~\cite{svcomp}, and
-Magma~\cite{magma} are benchmarks we position against but do not use;
-the Model Context Protocol~\cite{mcp} connects our orchestrator to the
-analyzers (Section~\ref{sec:arch}), and a pointer-ownership model for
-C~\cite{ownership-model} informs our judge's ownership-transfer
-vocabulary.
+\paragraph{Reproducible LLM systems and protocols.}
+The Model Context Protocol~\cite{mcp} connects our orchestrator to the
+analyzers (Section~\ref{sec:arch}). Self-consistency
+decoding~\cite{selfconsistency} samples reasoning chains at nonzero
+temperature and votes; our consensus judge (C4) applies it to leak
+verdicts, not chain-of-thought answers. Zheng et al.'s LLM-as-a-judge
+calibration study~\cite{llmjudge} motivates reporting McNemar-test
+significance (Section~\ref{sec:eval-consensus}) rather than a raw
+accuracy delta. Among benchmarks, the validated Juliet CWE-401
+suite~\cite{juliet} anchors our main evaluation
+(Section~\ref{sec:evaluation}); DiverseVul~\cite{diversevul}, SV-COMP
+Memsafety~\cite{svcomp}, and Magma~\cite{magma} are benchmarks we
+position against but do not use, and SecVulEval~\cite{secvuleval},
+which benchmarks LLMs for real-world vulnerability detection,
+completes the contrast.
 
 \paragraph{Positioning.} To our knowledge, no 2025-to-2026 system
 combines static and dynamic evidence for \emph{non-crash} C/C++ memory
 leaks with agentic orchestration and a reproducibility protocol
 separating deterministic from LLM-dependent results; CLeak targets this
 gap, and of these systems only it exposes an MCP tool transport and
-generates a source-anchored repair diff. POM~\cite{pom} and
-SecVulEval~\cite{secvuleval} complete the contrast.
+generates a source-anchored repair diff.
+Table~\ref{tab:taxonomy} contrasts the closest systems along the
+dimensions developed above.
+
+\begin{table}[htbp]
+\centering
+\caption{Directional comparison of leak-detection systems. The systems
+target different corpora and scoring protocols, so cells indicate
+orientation rather than directly comparable measurements.}
+\label{tab:taxonomy}
+\footnotesize
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{@{}lllll@{}}
+\toprule
+\textbf{System} & \textbf{Static} & \textbf{Dynamic} & \textbf{LLM role} & \textbf{Reproducibility} \\
+\midrule
+MemHint & static (neuro-symbolic) & none & confirmation & not a protocol focus \\
+LAMeD & consumes annotations & none & generates AllocSource/FreeSink annotations & benchmark released \\
+RepoAudit & mixed static-dynamic & mixed & drives the audit & not a protocol focus \\
+\textbf{CLeak} & static plus dynamic (hybrid engine) & sanitizer runs in a pinned recipe & policy and borderline judging only & two-tier protocol \\
+\bottomrule
+\end{tabular}}
+\end{table}
 
 \section{The CLeak Approach}
 \label{sec:arch}
