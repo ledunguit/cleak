@@ -6,6 +6,8 @@
 \usepackage{booktabs}
 \usepackage{amsmath}
 \usepackage{amssymb}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
 \usepackage{xcolor}
 \usepackage{hyperref}
 \usepackage{tikz}
@@ -433,21 +435,63 @@ candidate whose dynamic run came back clean, and downgrading any
 ``flagged'' verdict lacking a \emph{strong} signal to
 \texttt{uncertain}.
 
+We fix notation for the rest of this subsection. An allocation site
+under judgment is written $a$, and $F(a)$ denotes its set of free
+sites; each free $f \in F(a)$ carries a guard condition set $G_f$, the
+predicates holding on the control-flow path that reaches $f$, and each
+function-exit path $e$ carries a guard set $G_e$ built the same way, so
+a free reconciles the allocation exactly when $G_f \subseteq G_e$. The
+weighted signals above condense into a bundle evidence score
+$S(\cdot)$, which the judge bands against a flag threshold
+$\theta_{\mathrm{flag}}$ and a borderline threshold
+$\theta_{\mathrm{border}}$ (values in Section~\ref{sec:evaluation}).
+
 \textbf{Path sensitivity without an SMT solver.} CLeak computes path
 feasibility with a lightweight heuristic rather than an SMT solver, so
 guard analysis is available on every function with no solver-timeout or
 memory-ceiling failure mode. The mechanism is \emph{guard-subset
-reconciliation}, under which a free on one control-flow path
-reconciles an allocation only if that free's guard condition set is a
-\emph{subset} of the exit path's guard set; a free reachable under
-a strictly narrower condition than the corresponding leak exit does not
-count as covering it. This CFG heuristic lets even the
-deterministic \texttt{no\_llm} judge catch a pointer freed on
-a function's success path but lost on its error path (a
-\emph{path-sensitive leak}), or a parameter freed on some branches but not
-others (a \emph{parameter-ownership leak}), the exact pattern behind
-cJSON's \texttt{merge\_patch} case study in
-Section~\ref{sec:eval-lamed}.
+reconciliation}, under which a free $f \in F(a)$ reconciles the
+allocation on a function-exit path $e$ only if $G_f \subseteq G_e$; a
+free reachable under a strictly narrower guard condition set than the
+corresponding leak exit does not count as covering it. This CFG
+heuristic lets even the deterministic \texttt{no\_llm} judge catch a
+pointer freed on a function's success path but lost on its error path
+(a \emph{path-sensitive leak}), or a parameter freed on some branches
+but not others (a \emph{parameter-ownership leak}), the exact pattern
+behind cJSON's \texttt{merge\_patch} case study in
+Section~\ref{sec:eval-lamed}. Algorithm~\ref{alg:judging} summarizes
+the procedure.
+
+\begin{algorithm}[t]
+\caption{Guard-subset-reconciled hybrid judging}
+\label{alg:judging}
+\begin{algorithmic}[1]
+\Require bundle $B$ with allocation site $a$
+\State collect $F(a)$ and the guard set $G_f$ of every free $f \in F(a)$
+\ForAll{function-exit paths $e$ of the enclosing function}
+  \State compute the exit guard set $G_e$
+  \State mark every $f \in F(a)$ with $G_f \subseteq G_e$ as reconciling $a$ on $e$
+\EndFor
+\State stamp dynamic coverage of $a$ as exercised-clean, exercised-leak, or not-exercised
+\State $S(B) \gets$ weighted sum of the evidence signals of $B$
+\If{a callee frees $a$ and no runtime leak correlates}
+  \State force \texttt{likely\_false\_positive}
+\EndIf
+\If{the dynamic run is exercised-clean}
+  \State exculpate $a$
+\EndIf
+\If{a flagged verdict lacks a strong signal}
+  \State downgrade the verdict to \texttt{uncertain}
+\EndIf
+\State band $S(B)$ against $\theta_{\mathrm{flag}}$ and $\theta_{\mathrm{border}}$
+\If{the verdict is borderline \textbf{or} contradicts dynamic coverage}
+  \State escalate to the LLM judge, optionally $K$ resampled votes
+\Else
+  \State output the heuristic verdict
+\EndIf
+\State on any model or parse failure, fall back to the heuristic verdict
+\end{algorithmic}
+\end{algorithm}
 
 \subsection{The rubric-based, borderline-only LLM judge}
 
