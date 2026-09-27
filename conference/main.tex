@@ -328,11 +328,12 @@ Figure~\ref{fig:arch} shows the layers each principle constrains.
 The four design principles of Section~\ref{sec:principles} organize
 the approach; this subsection describes the components and the policy
 mechanism that realize them (Figure~\ref{fig:arch}).
-CLeak is a standalone CLI/TUI scanner, \texttt{leak-inspector-tui}, the
+CLeak is a standalone scanner, the
 sole orchestrator, which drives two analyzer services and an LLM provider
-over the Model Context Protocol (MCP) on Streamable-HTTP
-(JSON-RPC~2.0); the deployment endpoints appear in
-Section~\ref{sec:evaluation}. All findings
+over a stateless RPC interface; the transport, deployment, and the full
+tool inventory appear in Appendix~\ref{app:deployment}; the
+implementation-level architecture appears in Appendix~\ref{app:impl}.
+All findings
 converge on one structure, in which a \texttt{LeakCandidate} (an allocation
 site) accumulates \texttt{Evidence} entries into a \texttt{LeakBundle}
 that the judging layer (Section~\ref{sec:judging}) resolves into a
@@ -376,14 +377,16 @@ Judge tuner & Verdict-threshold nudge & Hard clamp to a bounded range & Heuristi
 \end{tabular}}
 \end{table}
 
-\subsection{MCP tool surface}
+\subsection{Analyzer tool surface}
 
-The analyzers expose 22 MCP tools; only five reach the Stage~A LLM
-sub-agent (Section~\ref{sec:pipeline}): \texttt{candidateScan},
+The analyzers expose 22 tools, of which only five reach the Stage~A LLM
+sub-agent (Section~\ref{sec:pipeline}), namely \texttt{candidateScan},
 \texttt{astScan}, \texttt{functionSummary}, \texttt{pathConstraints},
-\texttt{ownershipConventions}. These \emph{content-capable} tools take
-inline source content instead of a shared filesystem mount, so both
+and \texttt{ownershipConventions}. These \emph{content-capable} tools
+take inline source content instead of a shared filesystem mount, so both
 services stay stateless and independently deployable~\cite{tricorder}.
+The remaining tools, eleven per service, and the transport details
+appear in Appendix~\ref{app:deployment}.
 
 \subsection{The investigation pipeline}
 \label{sec:pipeline}
@@ -500,9 +503,8 @@ reports a sample-composition-dependent finding, not a clean win.
 \label{sec:evaluation}
 
 \subsection{System configuration}
-The deployment fixes the analyzer services behind MCP on Streamable
-HTTP, the static analyzer serving eleven tools on port 50061 and the
-dynamic analyzer eleven on port 50062. The heuristic judge bands its
+The deployment details of the two analyzer services appear in
+Appendix~\ref{app:deployment}. The heuristic judge bands its
 score at fixed thresholds of 0.7 and 0.4, the LLM-judge escalation uses
 the borderline window $[0.35, 0.7]$, the consensus judge combines
 $K{=}3$ resampled votes with a confidence-weighted rule (down-weight
