@@ -302,12 +302,32 @@ negative, identical for every configuration compared.
 \label{fig:arch}
 \end{figure}
 
+\subsection{Design principles}
+\label{sec:principles}
+
+Four principles govern the design, and the rest of this section shows
+where each is realized. \textbf{P1} freezes project knowledge. The LLM
+discovers a project's allocator and ownership conventions once, the
+result is verified against the source, and the verified profile is
+frozen for all subsequent analysis
+(Section~\ref{sec:policy-mechanism}). \textbf{P2} keeps execution
+deterministic. Evidence generation must remain reproducible, so the
+engine executes a pinned recipe with no LLM decision on the measured
+path (Section~\ref{sec:pipeline}). \textbf{P3} escalates only
+borderline cases. The LLM judges only the bundles the deterministic
+layer leaves uncertain (Section~\ref{sec:judging}). \textbf{P4} fuses
+evidence before judgment. Static and dynamic evidence is merged into
+each bundle before the judge sees it, not concatenated afterwards
+(Section~\ref{sec:judging}). Together P1--P4 realize the contributions
+C1--C4 of Section~\ref{sec:contributions}, and
+Figure~\ref{fig:arch} shows the layers each principle constrains.
+
 \subsection{Components and policy}
 \label{sec:policy-mechanism}
 
-Two ideas organize the approach, \emph{the LLM owns policy, the engine
-owns mechanism}, and every stage is deterministic except the judge, so
-that only borderline bundles reach the LLM (Figure~\ref{fig:arch}).
+The four design principles of Section~\ref{sec:principles} organize
+the approach; this subsection describes the components and the policy
+mechanism that realize them (Figure~\ref{fig:arch}).
 CLeak is a standalone CLI/TUI scanner, \texttt{leak-inspector-tui}, the
 sole orchestrator, which drives two analyzer services and an LLM provider
 over the Model Context Protocol (MCP) on Streamable-HTTP
