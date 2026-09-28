@@ -278,7 +278,7 @@ negative, identical for every configuration compared.
   -- (judging.east);
 \end{tikzpicture}
 }
-\caption{CLeak architecture at the concept level. The LLM discovers the project policy once and the result is frozen, while the deterministic engine generates all evidence without an LLM decision. Judging runs the heuristic on every bundle and escalates only borderline bundles to the LLM, and any failure falls back to the deterministic core. Stages A--D of Section~\ref{sec:pipeline} map onto the blocks (A) to (D). The implementation-level counterpart of this figure appears in Appendix~\ref{app:impl}.}
+\caption{CLeak architecture at the concept level. The LLM discovers the project policy once and the result is frozen, while the deterministic engine generates all evidence without an LLM decision. Judging runs the heuristic on every bundle and escalates only borderline bundles to the LLM, and any failure falls back to the deterministic core. The static fan-out and dynamic-evidence stages of Section~\ref{sec:pipeline} map onto the deterministic-engine block, synthesis onto the evidence-fusion step, and hybrid judging onto the judging block. The implementation-level counterpart of this figure appears in Appendix~\ref{app:impl}.}
 \label{fig:arch}
 \end{figure}
 
