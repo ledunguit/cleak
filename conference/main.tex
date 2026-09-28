@@ -677,6 +677,9 @@ result is the pinned static, dynamic, and planner configuration B6a, at
 Precision 96.5\%, Recall 78.6\%, F1~0.867, MCC~0.836
 (Table~\ref{tab:ablation}), a substantial improvement over the
 static-only \texttt{no\_llm} baseline (F1~0.614, MCC~0.507).
+A site-level bootstrap (1{,}000 resamples) bounds B1 F1 at 0.614
+(0.598--0.630) and the pooled B6a F1 at 0.867 (0.861--0.872), so the
+planner's improvement is stable under site resampling.
 \begin{table}[htbp]
 \centering
 \caption{Nine-baseline capability ablation, FULL Juliet corpus
@@ -768,7 +771,11 @@ universe agree (campaign A, $n{=}267$ paired sites: 7 of 8 discordant
 sites favoring single-LLM, $\chi^2 = 3.13$, $p = 0.077$, not
 significant at this sample size; campaign B, $n{=}273$: all 6
 discordant sites favoring single-LLM, $\chi^2 = 4.17$, $p = 0.041$,
-significant). We
+significant).
+With the Haldane-Anscombe 0.5 continuity correction, the discordant odds
+ratio favoring single-LLM judging is 5.0 (1.3--23.0) in campaign A and
+13.0 (5.0--23.0) in campaign B, with risk differences of 0.022
+(0.004--0.045) and 0.022 (0.007--0.040) respectively. We
 therefore do not recommend enabling consensus judging by default; it
 remains available as an opt-in configuration
 (\texttt{consensus.n~>~1}) pending a larger, multi-seed study.
