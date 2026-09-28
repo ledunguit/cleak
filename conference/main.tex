@@ -88,32 +88,37 @@ state the design; Section~\ref{sec:evaluation} returns to each with
 measured results.
 
 \label{sec:contributions}
-\textbf{C1} pins the dynamic stage to a fixed build-and-sanitize
-recipe that runs LeakSanitizer without LLM involvement whenever the
-build command is known, and gates orchestration behind a bounded LLM
-planner that makes one call per case. The resulting pinned-recipe
-hybrid, deterministic in tool execution and LLM-assisted only at the
-borderline, delivers the system's \emph{strongest measured result} on
-the full validated Juliet corpus (F1~0.867, MCC~0.836;
-Section~\ref{sec:evaluation}) at a fraction of agentic alternatives'
-cost (Section~\ref{sec:pipeline}). \textbf{C2} makes reproducibility
-measurable by pairing the deterministic \texttt{no\_llm} tier (B1 to
-B3), proven bitwise-reproducible by a dedicated determinism gate, with
-the LLM-assisted tier (B4 to B7, B6a among them) whose variance is
+\begin{itemize}
+\item \textbf{C1 --- Pinned-recipe hybrid.} The dynamic stage is pinned
+to a fixed build-and-sanitize recipe that runs LeakSanitizer without LLM
+involvement whenever the build command is known, and orchestration is
+gated behind a bounded LLM planner that makes one call per case. The
+resulting pinned-recipe hybrid, deterministic in tool execution and
+LLM-assisted only at the borderline, delivers the system's \emph{strongest
+measured result} on the full validated Juliet corpus (F1~0.867,
+MCC~0.836; Section~\ref{sec:evaluation}) at a fraction of agentic
+alternatives' cost (Section~\ref{sec:pipeline}).
+\item \textbf{C2 --- Measurable reproducibility.} Reproducibility is
+made measurable by pairing the deterministic \texttt{no\_llm} tier (B1
+to B3), proven bitwise-reproducible by a dedicated determinism gate,
+with the LLM-assisted tier (B4 to B7, B6a among them) whose variance is
 measured and reported rather than hidden
-(Section~\ref{sec:reproducibility}). \textbf{C3} enriches every
-candidate with structured evidence, namely ownership-transfer
+(Section~\ref{sec:reproducibility}).
+\item \textbf{C3 --- Structured evidence enrichment.} Every candidate
+is enriched with structured evidence, namely ownership-transfer
 tracking, alloc$\to$free pairing with guard-subset path
 reconciliation, path-sensitive and parameter-ownership leak detection,
 and runtime$\leftrightarrow$candidate correlation, which together
 make the deterministic heuristic judge path-aware without an SMT
-solver (Section~\ref{sec:judging}). \textbf{C4} fuses static and
-dynamic evidence in a judging layer that resamples the LLM judge at
-nonzero temperature and escalates only genuinely borderline bundles;
-on a family-stratified sample spanning the corpus's difficulty
-spread, single-LLM judging is both more stable and more accurate than
-$K{=}3$ consensus, so we do not recommend consensus judging by default
-(Section~\ref{sec:eval-consensus}).
+solver (Section~\ref{sec:judging}).
+\item \textbf{C4 --- Hybrid judging with measured consensus.} Static
+and dynamic evidence are fused in a judging layer that resamples the
+LLM judge at nonzero temperature and escalates only genuinely
+borderline bundles; on a family-stratified sample spanning the
+corpus's difficulty spread, single-LLM judging is both more stable and
+more accurate than $K{=}3$ consensus, so we do not recommend consensus
+judging by default (Section~\ref{sec:eval-consensus}).
+\end{itemize}
 
 We evaluate CLeak on the NIST Juliet CWE-401 suite (a validated,
 integrity-checked 1{,}658-case subset)~\cite{juliet}, the peer-reviewed LAMeD
@@ -126,16 +131,16 @@ synthetic benchmark to real corpora of developer-confirmed leaks.
 Section~\ref{sec:evaluation} reports a controlled five-factor ablation
 over the \emph{entire} validated corpus, alongside results we report as
 inconclusive or partially superseded rather than omit, and answers four
-research questions. \textbf{RQ1} asks which orchestration
-factors drive detection performance, answered by the five-factor
-ablation (Section~\ref{sec:eval-ablation}). \textbf{RQ2} asks how CLeak
-compares with a classical external analyzer at full scale, answered by
-the Clang Static Analyzer comparison (Section~\ref{sec:eval-external}).
-\textbf{RQ3} asks what is and is not reproducible, answered by the
-two-tier protocol and the consensus study
-(Section~\ref{sec:reproducibility}). \textbf{RQ4} asks whether the
-approach transfers to real projects, answered on LAMeD and the
-MemHint-derived corpus (Section~\ref{sec:eval-lamed}).
+research questions. Section~\ref{sec:eval-rq} states the four research
+questions these evaluations answer.
+
+The remainder of this paper is organized as follows.
+Section~\ref{sec:related} positions CLeak against prior work.
+Section~\ref{sec:arch} presents the approach in three phases, ending
+with the hybrid judging layer.
+Section~\ref{sec:evaluation} evaluates the system, Section~\ref{sec:discussion}
+discusses open problems, and Section~\ref{sec:threats} states the threats
+to validity.
 
 \section{Related Work}
 \label{sec:related}
