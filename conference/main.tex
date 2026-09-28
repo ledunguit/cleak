@@ -864,7 +864,7 @@ to F1 0.22 and 0.17, so the protocol validates per-project allocator
 knowledge only where a project exposes a small, conventional allocation
 API.
 
-\section{Discussion, Open Problems, and Threats to Validity}
+\section{Discussion and Open Problems}
 \label{sec:discussion}
 
 \subsection{Open Problems}
@@ -902,40 +902,45 @@ restate them as the standing agenda.
   should shift the balance toward agentic selection.
 \end{itemize}
 
-\subsection{Threats to Validity}
+\section{Threats to Validity}
+\label{sec:threats}
 
-\textbf{Construct.} The universe is enumerated from the manifest rather
-than from any tool's output (Table~\ref{tab:universe}); a flagged
-finding outside it is counted but unscored, and no sample is excluded.
-B6a's full-corpus F1 (0.867) is not uniform across Juliet's ten
-functional families, with family-level F1 from 0.975
-(\texttt{malloc}, 108 cases) down to 0.584 (\texttt{strdup}, 96 cases)
-in the re-scored per-family aggregation.
-FP/KLOC applies one denominator to every configuration.
+\paragraph{Construct.} The universe is enumerated from the manifest rather
+than from any tool's output (Table~\ref{tab:universe}); a flagged finding
+outside it is counted but unscored, and no sample is excluded. B6a's
+full-corpus F1 (0.867) is not uniform across Juliet's ten functional
+families, with family-level F1 from 0.975 (\texttt{malloc}, 108 cases)
+down to 0.584 (\texttt{strdup}, 96 cases) in the re-scored per-family
+aggregation. FP/KLOC applies one denominator to every configuration.
 
-\textbf{Internal.} The \texttt{strdup}-family recall gap is traced to a
+\paragraph{Internal.} The recall gap in the \texttt{strdup} family is traced to a
 verified two-branch dynamic-coverage mechanism, but that account is not
 exhaustive. Guard-subset reconciliation reasons about guard containment,
 not numeric constraints, and is strictly less complete than SMT
-feasibility, adopted deliberately for reliability at scale. The AST
-memoization cache became disk-persisted and byte-bounded without a
-sweep re-run; in one controlled run a warm repeat scan took 3.0s at
-266MiB peak memory versus 54.0s at 1.03GiB cold, we expect no
-precision/recall/F1 number in
-Section~\ref{sec:evaluation} to change, an assumption grounded in the
-cache's semantics, and we flag it as an assumption.
+feasibility, a deliberate trade for reliability at scale. The AST
+memoization cache became disk-persisted and byte-bounded without a sweep
+re-run; in one controlled run a warm repeat scan took 3.0s at 266MiB peak
+memory versus 54.0s at 1.03GiB cold, we expect no precision, recall, or
+F1 number in Section~\ref{sec:evaluation} to change, an assumption grounded
+in the cache's semantics, and we flag it as an assumption.
 
-\textbf{External.} Juliet is synthetic, and its leak patterns are
+\paragraph{External.} Juliet is synthetic, and its leak patterns are
 largely intraprocedural, so the agentic-cost finding
 (Section~\ref{sec:eval-ablation}) should not be projected onto more
-diverse corpora, and the consensus result depends on sample
-composition, measured on a family-stratified $n{=}50$ sample
-(Section~\ref{sec:eval-consensus}). LAMeD and the MemHint-derived
-corpus are small real-world corpora (41 and 19 cases, positive-only),
-so their transfer evidence is precision-and-recall only. We do not
-treat LLM-judge non-determinism as fixable; the two-tier protocol of
-Section~\ref{sec:reproducibility} exists to measure and report it, not
-obscure it behind single-run aggregates.
+diverse corpora. The consensus result depends on sample composition,
+measured on a family-stratified $n{=}50$ sample
+(Section~\ref{sec:eval-consensus}). LAMeD and the MemHint-derived corpus
+are small real-world corpora (41 and 19 cases, positive-only), so their
+transfer evidence is precision-and-recall only.
+
+\paragraph{LLM validity.} We do not treat LLM-judge non-determinism as
+fixable; the two-tier protocol of Section~\ref{sec:reproducibility}
+exists to measure and report it, not obscure it behind single-run
+aggregates. Provider transfer likewise keeps the configuration's
+advantage intact while absolute numbers track each model's reasoning
+profile (Section~\ref{sec:eval-ablation}), so we read the cross-provider
+evidence qualitatively rather than as a set of transferable point
+values.
 
 \section{Conclusion and Future Work}
 
