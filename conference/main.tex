@@ -528,7 +528,7 @@ Section~\ref{sec:intro} poses four questions that this section answers.
 \item \textbf{RQ4:} ``Does the approach transfer to real projects?'' (Section~\ref{sec:eval-lamed}).
 \end{itemize}
 
-\textbf{Datasets.} Three corpora are used, namely the validated Juliet
+\paragraph{Datasets.} Three corpora are used, namely the validated Juliet
 CWE-401 subset (1{,}658 cases across 10 functional families, synthetic,
 function-labeled), the peer-reviewed LAMeD benchmark (41 confirmed leaks /
 43 labeled sites across 7 real C projects, positive-only), and a
@@ -563,7 +563,7 @@ MemHint-derived reconstruction & 19 & 19 & function-labeled, positive-only & rea
 \end{tabular}
 \end{table}
 
-\textbf{Metrics and scoring.} We report Precision, Recall, F1,
+\paragraph{Metrics and scoring.} We report Precision, Recall, F1,
 Accuracy, Specificity, and Matthews Correlation Coefficient (MCC) by
 standard definitions, plus false
 positives per thousand non-blank executable lines (FP/KLOC, headers
@@ -600,7 +600,7 @@ Excluded samples & 0 \\
 \end{tabular}
 \end{table}
 
-\textbf{Baselines.} Clang Static Analyzer is re-run live on the
+\paragraph{Baselines.} Clang Static Analyzer is re-run live on the
 entire validated corpus under the identical fixed universe, a fairness
 discipline
 applied throughout; we also attempted Facebook Infer, but every run
@@ -610,49 +610,7 @@ true negatives and its MCC is defined. MemHint and LAMeD numbers are
 quoted from their publications where we do not re-run them, which keeps
 those comparisons directional, not a claim of superiority.
 
-\subsection{What is reproducible (RQ3)}
-\label{sec:reproducibility}
-
-\textbf{RQ3} asks what is and is not reproducible. An LLM-in-the-loop
-system cannot honestly claim bit-identical reproducibility, and we do
-not claim it. CLeak instead reports a
-\textbf{two-tier} protocol (contribution C2) that distinguishes what is
-and is not deterministic; it answers RQ3 directly.
-
-\textbf{Tier 1} (\texttt{no\_llm}) is bitwise-deterministic. With the
-strategist/tuner disabled and allocators supplied from a frozen manifest,
-the heuristic judge, the deterministic Stage~B recipe, and the scoring
-pipeline produce byte-identical output across runs. A dedicated
-determinism gate enforces this and explicitly rejects the two
-\emph{false-pass} modes it caught during development, a timestamp
-collision that made the tool compare a run against itself, and a
-degenerate run in which an unreachable analyzer made every case error out
-\emph{identically}, registering as spurious determinism.
-
-\textbf{Tier 2} (\texttt{llm\_assisted}) reports variance. The tier
-covers B4, B5, B6, B6a, B6b, and B7; B6a differs from B6 only in its
-bounded planner, a real LLM call per case behind a build-command
-guardrail, so what is deterministic in B6a is the tool execution, never
-the judging. Under the fixed-universe re-score its F1 standard deviation
-across three runs is 0.0011, measured rather than assumed away. Because
-even temperature-0 LLM calls are not bit-identical across runs, we
-run each \texttt{llm\_assisted} configuration $N$ times and report
-mean$\pm$std for every metric, plus a \emph{case-level
-verdict-stability} analysis. We surface a
-\textbf{stable-by-luck} phenomenon observed directly. Two independent
-30-case runs once produced an \emph{identical} aggregate confusion
-matrix while only 73.3\% of individual verdicts were stable (a 26.7\%
-flip rate); opposite-direction flips cancelled in the aggregate.
-On the fixed universe, only one of the two runs survives on disk, and
-its re-scored matrix is 28~TP/7~FP/10~FN/129~TN over 174 labeled sites;
-the original pair's flip rate is therefore not recomputable, and we
-report case-level stability rather than any single-run aggregate. The
-consensus study (Section~\ref{sec:eval-consensus}) completes the RQ3
-answer with mixed A/B evidence, campaign A not significant at
-$p{=}0.077$ and campaign B significant at $p{=}0.041$ favoring
-single-LLM judging.
-
-\subsection{Capability ablation over five orchestration factors}
+\subsection{RQ1: Which orchestration factors drive detection performance?}
 \label{sec:eval-ablation}
 \label{sec:eval-fullcorpus}
 
@@ -753,61 +711,9 @@ smallest families (\texttt{destructor},
 \texttt{virtual}, one case each) are too small
 here for their own F1 to be statistically meaningful.
 
-\subsection{Consensus-judge stability and significance}
-\label{sec:eval-consensus}
+\noindent\fbox{\parbox{\dimexpr\linewidth-2\fboxsep-2\fboxrule\relax}{\textbf{Answer to RQ1.} The orchestration factors are not equal: the best end-to-end configuration is the pinned static, dynamic, and planner configuration B6a, at Precision 96.5\%, Recall 78.6\%, F1~0.867, MCC~0.836. Dynamic evidence is the dominant false-positive suppressor, dropping false positives from 470 to 74 (an $\sim$85\% reduction, B4$\to$B6), while unconstrained agentic tool selection costs $\sim$4$\times$ the dollar cost for lower F1.}}
 
-On a family-stratified $n{=}50$ sample, across two independent
-campaigns, single-LLM judging ($K{=}1$) is both the more stable arm
-(verdict-flip rate 2.0\% vs.\ consensus $K{=}3$'s 8.0\%) and the more
-accurate one (F1 0.852 to 0.855 across its two campaigns vs.\
-consensus's 0.793 to 0.796); paired McNemar tests on the common site
-universe agree (campaign A, $n{=}267$ paired sites: 7 of 8 discordant
-sites favoring single-LLM, $\chi^2 = 3.13$, $p = 0.077$, not
-significant at this sample size; campaign B, $n{=}273$: all 6
-discordant sites favoring single-LLM, $\chi^2 = 4.17$, $p = 0.041$,
-significant).
-With the Haldane-Anscombe 0.5 continuity correction, the discordant odds
-ratio favoring single-LLM judging is 5.0 (1.3--23.0) in campaign A and
-13.0 (5.0--23.0) in campaign B, with risk differences of 0.022
-(0.004--0.045) and 0.022 (0.007--0.040) respectively. We
-therefore do not recommend enabling consensus judging by default; it
-remains available as an opt-in configuration
-(\texttt{consensus.n~>~1}) pending a larger, multi-seed study.
-
-\subsection{Real-world validation on LAMeD and the MemHint-derived corpus}
-\label{sec:eval-lamed}
-
-% Adjudication applied 2026-09-27 (Option A, orchestrator-recorded): LAMeD and
-% MemHint numbers below are the uniform fixed-universe values from
-% results/rescore-universe-2026-09-26T18-47-30 (universes of 43 and 19 labeled
-% sites). The pre-adjudication printed values were LAMeD 15/0/35 at 30.0% and
-% MemHint 12/0/14 at 46.2%.
-\textbf{RQ4} asks whether the approach transfers to real projects, and
-the answer is positive on precision with bounded recall. On the 41-case,
-7-project LAMeD benchmark (43 labeled sites; dynamic
-analysis is not exercised on these static-only configurations), the
-deterministic \texttt{no\_llm} configuration holds 100\% precision
-(TP~10/FP~0/FN~33) at 23.3\% recall in every configuration we measured,
-with \texttt{llm\_assisted} reproducing the identical matrix with zero
-variance across 3 independent runs. A manual taxonomy of the six
-confirmed cJSON leaks finds four structurally distinct difficulty
-classes, consistent with LAMeD's own finding that even
-state-of-the-art tools catch only 5 to 10 of 43 real leaks.
-\texttt{interproceduralFlow} adds no measurable value on this corpus
-(Section~\ref{sec:openproblems} details the mechanism), leaving the
-\texttt{+interproceduralFlow} configuration byte-identical
-to the default across all 41 cases. MemHint~\cite{memhint} publishes no
-per-bug list, so we evaluate on an \emph{independently reconstructed}
-corpus of 19 cases across 6 of MemHint's target projects (19 labeled
-sites,
-positive-only); \texttt{no\_llm} reaches 100\% precision (8 of 19
-labeled sites) at 42.1\% recall, three \texttt{llm\_assisted} runs
-are identical to it and to each other (P~1.000$\pm$0.000,
-R~0.421$\pm$0.000, F1~0.593$\pm$0.000), and the comparison to MemHint's
-own headline numbers (Table~\ref{tab:literature}) remains directional,
-the denominators differing.
-
-\subsection{Comparison with an external tool}
+\subsection{RQ2: How does CLeak compare with a classical external analyzer at full scale?}
 \label{sec:eval-external}
 
 \textbf{RQ2} asks how CLeak compares with a classical external analyzer
@@ -845,6 +751,108 @@ LAMeD~\cite{lamed} (CodeQL) & 6 real projects, 43 leaks & 5$\to$10 detections & 
 \bottomrule
 \end{tabular}
 \end{table}
+
+\noindent\fbox{\parbox{\dimexpr\linewidth-2\fboxsep-2\fboxrule\relax}{\textbf{Answer to RQ2.} At full corpus scale, CLeak's static-only \texttt{no\_llm} tier reaches F1~0.614 against Clang Static Analyzer's F1~0.376. The win comes through recall, roughly 2.2$\times$ more labeled leaks detected, while Clang holds the higher precision on its smaller flagged set; different corpora and scoring protocols keep the comparison directional.}}
+
+\subsection{RQ3: What is and is not reproducible?}
+\label{sec:reproducibility}
+
+\textbf{RQ3} asks what is and is not reproducible. An LLM-in-the-loop
+system cannot honestly claim bit-identical reproducibility, and we do
+not claim it. CLeak instead reports a
+\textbf{two-tier} protocol (contribution C2) that distinguishes what is
+and is not deterministic; it answers RQ3 directly.
+
+\textbf{Tier 1} (\texttt{no\_llm}) is bitwise-deterministic. With the
+strategist/tuner disabled and allocators supplied from a frozen manifest,
+the heuristic judge, the deterministic Stage~B recipe, and the scoring
+pipeline produce byte-identical output across runs. A dedicated
+determinism gate enforces this and explicitly rejects the two
+\emph{false-pass} modes it caught during development, a timestamp
+collision that made the tool compare a run against itself, and a
+degenerate run in which an unreachable analyzer made every case error out
+\emph{identically}, registering as spurious determinism.
+
+\textbf{Tier 2} (\texttt{llm\_assisted}) reports variance. The tier
+covers B4, B5, B6, B6a, B6b, and B7; B6a differs from B6 only in its
+bounded planner, a real LLM call per case behind a build-command
+guardrail, so what is deterministic in B6a is the tool execution, never
+the judging. Under the fixed-universe re-score its F1 standard deviation
+across three runs is 0.0011, measured rather than assumed away. Because
+even temperature-0 LLM calls are not bit-identical across runs, we
+run each \texttt{llm\_assisted} configuration $N$ times and report
+mean$\pm$std for every metric, plus a \emph{case-level
+verdict-stability} analysis. We surface a
+\textbf{stable-by-luck} phenomenon observed directly. Two independent
+30-case runs once produced an \emph{identical} aggregate confusion
+matrix while only 73.3\% of individual verdicts were stable (a 26.7\%
+flip rate); opposite-direction flips cancelled in the aggregate.
+On the fixed universe, only one of the two runs survives on disk, and
+its re-scored matrix is 28~TP/7~FP/10~FN/129~TN over 174 labeled sites;
+the original pair's flip rate is therefore not recomputable, and we
+report case-level stability rather than any single-run aggregate. The
+consensus study (Section~\ref{sec:eval-consensus}) completes the RQ3
+answer with mixed A/B evidence, campaign A not significant at
+$p{=}0.077$ and campaign B significant at $p{=}0.041$ favoring
+single-LLM judging.
+
+\subsubsection{Consensus stability and significance}
+\label{sec:eval-consensus}
+
+On a family-stratified $n{=}50$ sample, across two independent
+campaigns, single-LLM judging ($K{=}1$) is both the more stable arm
+(verdict-flip rate 2.0\% vs.\ consensus $K{=}3$'s 8.0\%) and the more
+accurate one (F1 0.852 to 0.855 across its two campaigns vs.\
+consensus's 0.793 to 0.796); paired McNemar tests on the common site
+universe agree (campaign A, $n{=}267$ paired sites: 7 of 8 discordant
+sites favoring single-LLM, $\chi^2 = 3.13$, $p = 0.077$, not
+significant at this sample size; campaign B, $n{=}273$: all 6
+discordant sites favoring single-LLM, $\chi^2 = 4.17$, $p = 0.041$,
+significant).
+With the Haldane-Anscombe 0.5 continuity correction, the discordant odds
+ratio favoring single-LLM judging is 5.0 (1.3--23.0) in campaign A and
+13.0 (5.0--23.0) in campaign B, with risk differences of 0.022
+(0.004--0.045) and 0.022 (0.007--0.040) respectively. We
+therefore do not recommend enabling consensus judging by default; it
+remains available as an opt-in configuration
+(\texttt{consensus.n~>~1}) pending a larger, multi-seed study.
+
+\noindent\fbox{\parbox{\dimexpr\linewidth-2\fboxsep-2\fboxrule\relax}{\textbf{Answer to RQ3.} Tier-1 \texttt{no\_llm} is bitwise-deterministic under a dedicated determinism gate that rejects two false-pass modes. Tier-2 variance is measured rather than hidden: its F1 standard deviation across three runs is 0.0011, reported as mean$\pm$std. The consensus study returns mixed A/B evidence on this measured sample, so consensus judging is not recommended by default.}}
+
+\subsection{RQ4: Does the approach transfer to real projects?}
+\label{sec:eval-lamed}
+
+% Adjudication applied 2026-09-27 (Option A, orchestrator-recorded): LAMeD and
+% MemHint numbers below are the uniform fixed-universe values from
+% results/rescore-universe-2026-09-26T18-47-30 (universes of 43 and 19 labeled
+% sites). The pre-adjudication printed values were LAMeD 15/0/35 at 30.0% and
+% MemHint 12/0/14 at 46.2%.
+\textbf{RQ4} asks whether the approach transfers to real projects, and
+the answer is positive on precision with bounded recall. On the 41-case,
+7-project LAMeD benchmark (43 labeled sites; dynamic
+analysis is not exercised on these static-only configurations), the
+deterministic \texttt{no\_llm} configuration holds 100\% precision
+(TP~10/FP~0/FN~33) at 23.3\% recall in every configuration we measured,
+with \texttt{llm\_assisted} reproducing the identical matrix with zero
+variance across 3 independent runs. A manual taxonomy of the six
+confirmed cJSON leaks finds four structurally distinct difficulty
+classes, consistent with LAMeD's own finding that even
+state-of-the-art tools catch only 5 to 10 of 43 real leaks.
+\texttt{interproceduralFlow} adds no measurable value on this corpus
+(Section~\ref{sec:openproblems} details the mechanism), leaving the
+\texttt{+interproceduralFlow} configuration byte-identical
+to the default across all 41 cases. MemHint~\cite{memhint} publishes no
+per-bug list, so we evaluate on an \emph{independently reconstructed}
+corpus of 19 cases across 6 of MemHint's target projects (19 labeled
+sites,
+positive-only); \texttt{no\_llm} reaches 100\% precision (8 of 19
+labeled sites) at 42.1\% recall, three \texttt{llm\_assisted} runs
+are identical to it and to each other (P~1.000$\pm$0.000,
+R~0.421$\pm$0.000, F1~0.593$\pm$0.000), and the comparison to MemHint's
+own headline numbers (Table~\ref{tab:literature}) remains directional,
+the denominators differing.
+
+\noindent\fbox{\parbox{\dimexpr\linewidth-2\fboxsep-2\fboxrule\relax}{\textbf{Answer to RQ4.} The approach transfers to real projects with precision holding at 100\% on both real-world corpora: LAMeD at TP~10/FP~0 and 23.3\% recall, and the MemHint-derived corpus at 8 of 19 labeled sites and 42.1\% recall. Transfer is positive on precision with bounded recall.}}
 
 \subsection{Allocator-profiler validation}
 
