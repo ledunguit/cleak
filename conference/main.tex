@@ -145,7 +145,7 @@ to validity.
 \section{Related Work}
 \label{sec:related}
 
-\paragraph{Ownership-aware static analysis.}
+\subsection{Ownership-aware static analysis}
 Clang Static Analyzer~\cite{clangsa} performs path-sensitive symbolic
 execution, Infer~\cite{infer} scales via compositional bi-abduction,
 and CodeQL~\cite{codeql} expresses leak patterns as database queries;
@@ -158,7 +158,7 @@ vocabulary, and the enhanced pointer-ownership design POM~\cite{pom}
 completes this contrast. The engine itself follows architectural
 precedent~\cite{infer-verification,tricorder}.
 
-\paragraph{Dynamic and hybrid leak detection.}
+\subsection{Dynamic and hybrid leak detection}
 Valgrind Memcheck~\cite{valgrind} and
 AddressSanitizer / LeakSanitizer~\cite{asan} obtain their verdicts by
 executing an instrumented binary, pinning near-perfect precision to the
@@ -180,7 +180,7 @@ reports no F1, and supplies our real-world corpus
 (Section~\ref{sec:eval-lamed}); a related line targets kernel-level
 memory-management intention inconsistencies~\cite{kernel-memmgmt}.
 
-\paragraph{Agentic and LLM-driven defect detection.}
+\subsection{Agentic and LLM-driven defect detection}
 Early empirical work found LLMs can identify vulnerabilities from
 source alone with bounded accuracy~\cite{llm-vuln-eval}, and prompting
 alone can \emph{exceed} a static analyzer on its
@@ -196,7 +196,7 @@ defect types, so we do not treat it as a leak-specific baseline.
 Agent-design foundations~\cite{react,reflexion,tot,sweagent,agentless}
 shape our Stage~A/B sub-agent mechanisms (Section~\ref{sec:pipeline}).
 
-\paragraph{Reproducible LLM systems and protocols.}
+\subsection{Reproducible LLM systems and protocols}
 The Model Context Protocol~\cite{mcp} connects our orchestrator to the
 analyzers (Section~\ref{sec:arch}). Self-consistency
 decoding~\cite{selfconsistency} samples reasoning chains at nonzero
