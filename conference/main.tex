@@ -149,21 +149,13 @@ and CodeQL~\cite{codeql} expresses leak patterns as database queries;
 all three inherit the same limitation at the ownership layer, where path
 sensitivity without a run, interprocedural summaries, and query-based
 dataflow each leave ownership transfer and conditional deallocation
-ambiguous, so false positives rise. A pointer-ownership model for
-C~\cite{ownership-model} informs our judge's ownership-transfer
-vocabulary, and the enhanced pointer-ownership design POM~\cite{pom}
-completes this contrast. The engine itself follows architectural
-precedent~\cite{infer-verification,tricorder}.
+ambiguous, so false positives rise.
 
 \subsection{Dynamic and hybrid leak detection}
 Valgrind Memcheck~\cite{valgrind} and
 AddressSanitizer / LeakSanitizer~\cite{asan} obtain their verdicts by
 executing an instrumented binary, pinning near-perfect precision to the
-exercised paths; recent sanitizer
-work~\cite{rangesan,qmsan,combisan,airtaint} improves speed and
-precision for related memory-safety classes but not the coverage
-ceiling, and AddressWatcher~\cite{addresswatcher} localizes leak
-\emph{fixes}, a complementary problem. Fuzzers' true-positive sets are
+exercised paths. Fuzzers' true-positive sets are
 largely disjoint from static analyzers'~\cite{fuzzer-vs-sa}, motivating
 a hybrid rather than a choice between them
 (Section~\ref{sec:pipeline}). The closest prior work targets C/C++
@@ -174,23 +166,19 @@ projects (over 3.4M LOC), and
 \textbf{LAMeD}~\cite{lamed,lamed-benchmark}, whose LLM only
 \emph{annotates} source for a classical analyzer, is not agentic,
 reports no F1, and supplies our real-world corpus
-(Section~\ref{sec:eval-lamed}); a related line targets kernel-level
-memory-management intention inconsistencies~\cite{kernel-memmgmt}.
+(Section~\ref{sec:eval-lamed}).
 
 \subsection{Agentic and LLM-driven defect detection}
 Early empirical work found LLMs can identify vulnerabilities from
 source alone with bounded accuracy~\cite{llm-vuln-eval}, and prompting
 alone can \emph{exceed} a static analyzer on its
 benchmark~\cite{llm-proxy-static}, a finding compatible with CLeak,
-which grounds the LLM in tool output; VulnLLM-R~\cite{vulnllmr} and
-SemTaint~\cite{semtaint} address broader vulnerability classes.
-Repository-scale agentic auditors (RepoAudit~\cite{repoaudit},
-Revelio~\cite{revelio}, SAILOR~\cite{sailor}) and crash-oriented
-systems (FuzzingBrain~V2~\cite{fuzzingbrainv2},
-ATLANTIS~\cite{atlantis}) are our architectural analogues but target
+which grounds the LLM in tool output.
+Repository-scale agentic auditors (RepoAudit~\cite{repoaudit}) are our
+architectural analogues but target
 multi-defect classes; RepoAudit's reported P=78.4\% spans several
 defect types, so we do not treat it as a leak-specific baseline.
-Agent-design foundations~\cite{react,reflexion,tot,sweagent,agentless}
+Agent-design foundations~\cite{react}
 shape our Stage~A/B sub-agent mechanisms (Section~\ref{sec:pipeline}).
 
 \subsection{Reproducible LLM systems and protocols}
@@ -203,11 +191,7 @@ calibration study~\cite{llmjudge} motivates reporting McNemar-test
 significance (Section~\ref{sec:eval-consensus}) rather than a raw
 accuracy delta. Among benchmarks, the validated Juliet CWE-401
 suite~\cite{juliet} anchors our main evaluation
-(Section~\ref{sec:evaluation}); DiverseVul~\cite{diversevul}, SV-COMP
-Memsafety~\cite{svcomp}, and Magma~\cite{magma} are benchmarks we
-position against but do not use, and SecVulEval~\cite{secvuleval},
-which benchmarks LLMs for real-world vulnerability detection,
-completes the contrast.
+(Section~\ref{sec:evaluation}).
 
 \paragraph{Positioning.} To our knowledge, no 2025-to-2026 system
 combines static and dynamic evidence for \emph{non-crash} C/C++ memory
@@ -910,17 +894,7 @@ candidates the deterministic evidence leaves ambiguous.
 
 \bibitem{asan} K. Serebryany, D. Bruening, A. Potapenko, and D. Vyukov, ``AddressSanitizer: A Fast Address Sanity Checker,'' in \textit{Proc. USENIX Annual Technical Conf. (ATC)}, 2012, pp.~309--318.
 
-\bibitem{rangesan} F. Gorter and C. Giuffrida, ``RangeSanitizer: Detecting Memory Errors with Efficient Range Checks,'' in \textit{Proc. USENIX Security}, 2025.
-
-\bibitem{qmsan} M. Marini, D. C. D'Elia, M. Payer, and L. Querzoni, ``QMSan: Efficiently Detecting Uninitialized Memory Errors During Fuzzing,'' in \textit{Proc. NDSS}, 2025.
-
-\bibitem{combisan} M. Marini, F. Gorter, D. C. D'Elia, and C. Giuffrida, ``CombiSan: Unifying Software Sanitizers for Comprehensive Fuzzing,'' preprint, 2025--2026.
-
-\bibitem{airtaint} Q. Sang, Y. Wang, Y. Liu, X. Jia, T. Bao, and P. Su, ``AirTaint: Making Dynamic Taint Analysis Faster and Easier,'' in \textit{Proc. IEEE S\&P}, 2024.
-
 \bibitem{fuzzer-vs-sa} K. Hassler, P. Goerz, and S. Lipp, ``A Comparative Study of Fuzzers and Static Analysis Tools for Finding Memory Unsafety in C and C++,'' arXiv:2505.22052, 2025.
-
-\bibitem{addresswatcher} A. Murali, M. Alfadel, M. Nagappan, M. Xu, and C. Sun, ``AddressWatcher: Sanitizer-Based Localization of Memory Leak Fixes,'' \textit{IEEE Trans. Softw. Eng.}, 2024. arXiv:2408.04764.
 
 \bibitem{llm-vuln-eval} A. Khare, S. Dutta, Z. Li, A. Solko-Breslin, R. Alur, and M. Naik, ``Understanding the Effectiveness of Large Language Models in Detecting Security Vulnerabilities,'' arXiv:2311.16169, 2023.
 
@@ -928,37 +902,15 @@ candidates the deterministic evidence leaves ambiguous.
 
 \bibitem{llm-proxy-static} I. Ceka, F. Qiao, A. Dey, A. Valecha, G. Kaiser, and B. Ray, ``Can LLM Prompting Serve as a Proxy for Static Analysis in Vulnerability Detection,'' arXiv:2412.12039, 2024.
 
-\bibitem{vulnllmr} Y. Nie, H. Li, C. Guo, R. Jiang, Z. Wang, B. Li, D. Song, and W. Guo, ``VulnLLM-R: Specialized Reasoning LLM with Agent Scaffold for Vulnerability Detection,'' arXiv:2512.07533, 2025.
-
-\bibitem{semtaint} J. Ghebremichael, S. Vasan, S. Ullah, G. Tystahl, D. Adei, C. Kruegel, G. Vigna, W. Enck, and A. Kapravelos, ``Multi-Agent Taint Specification Extraction for Vulnerability Detection'' arXiv:2601.10865, 2026.
-
 \bibitem{memhint} H. Huang, J. Shi, B. Wang, Z. Yang, and D. Lo, ``MemHint: Finding Memory Leaks in C/C++ Programs via Neuro-Symbolic Augmented Static Analysis,'' arXiv:2603.27224, 2026.
 
 \bibitem{lamed} E. Shemetova, I. Shenbin, I. Smirnov, A. Alekseev, A. Rukhovich, S. Nikolenko, V. Lomshakov, and I. Piontkovskaya, ``LAMeD: LLM-generated Annotations for Memory Leak Detection,'' in \textit{Proc. 29th Int. Conf. on Evaluation and Assessment in Software Engineering (EASE~'25)}, Istanbul, Turkey, 2025, pp.~1024--1034. DOI: 10.1145/3756681.3756999.
 
-\bibitem{kernel-memmgmt} D. Liu, Z. Lu, S. Ji, K. Lu, J. Chen, and Z. Liu et al., ``Detecting Kernel Memory Bugs Through Inconsistent Memory Management Intention Inferences,'' in \textit{Proc. USENIX Security}, 2024.
-
-\bibitem{revelio} Y. Hou, H. Wang, M. Lyu, M. Momeu, E. Nguyen, T. Yang, K. Sen, D. Song, and D. Wagner, ``Revelio: Cost-Efficient Agentic Memory Safety Vulnerability Detection For Repository-Scale Codebases,'' arXiv:2606.22263, 2026.
-
-\bibitem{sailor} M. Shafiuzzaman, A. Desai, W. Guo, and T. Bultan, ``Guiding Symbolic Execution with Static Analysis and LLMs for Vulnerability Discovery'' arXiv:2604.06506, 2026.
-
 \bibitem{repoaudit} J. Guo, C. Wang, X. Xu, Z. Su, and X. Zhang, ``RepoAudit: An Autonomous LLM-Agent for Repository-Level Code Auditing,'' in \textit{Proc. 42nd Int. Conf. on Machine Learning (ICML)}, PMLR vol.~267, 2025, pp.~21083--21100. arXiv:2501.18160.
-
-\bibitem{fuzzingbrainv2} Z. Sheng, Z. Chen, Q. Xu, K. Zhu, and J. Huang, ``FuzzingBrain V2: A Multi-Agent LLM System for Automated Vulnerability Discovery and Reproduction,'' arXiv:2605.21779, 2026.
-
-\bibitem{atlantis} Team Atlanta, ``ATLANTIS: AI-driven Threat Localization, Analysis, and Triage Intelligence System,'' arXiv:2509.14589, 2025. AIxCC Final Competition winner, 2025.
 
 \bibitem{react} S. Yao, J. Zhao, D. Yu, N. Du, I. Shafran, K. Narasimhan, and Y. Cao, ``ReAct: Synergizing Reasoning and Acting in Language Models,'' in \textit{Proc. ICLR}, 2023. arXiv:2210.03629.
 
 \bibitem{selfconsistency} X. Wang, J. Wei, D. Schuurmans, Q. Le, E. Chi, S. Narang, A. Chowdhery, and D. Zhou, ``Self-Consistency Improves Chain of Thought Reasoning in Language Models,'' in \textit{Proc. ICLR}, 2023. arXiv:2203.11171.
-
-\bibitem{reflexion} N. Shinn, F. Cassano, E. Berman, A. Gopinath, K. Narasimhan, and S. Yao, ``Reflexion: Language Agents with Verbal Reinforcement Learning,'' in \textit{Proc. NeurIPS}, 2023. arXiv:2303.11366.
-
-\bibitem{tot} S. Yao, D. Yu, J. Zhao, I. Shafran, T. L. Griffiths, Y. Cao, and K. Narasimhan, ``Tree of Thoughts: Deliberate Problem Solving with Large Language Models,'' in \textit{Proc. NeurIPS}, 2023. arXiv:2305.10601.
-
-\bibitem{sweagent} J. Yang, C. E. Jimenez, A. Wettig, K. Lieret, S. Yao, K. Narasimhan, and O. Press, ``SWE-agent: Agent-Computer Interfaces Enable Automated Software Engineering,'' arXiv:2405.15793, 2024.
-
-\bibitem{agentless} C. S. Xia, Y. Deng, S. Dunn, and L. Zhang, ``Agentless: Demystifying LLM-based Software Engineering Agents,'' arXiv:2407.01489, 2024.
 
 \bibitem{llmjudge} L. Zheng et al., ``Judging LLM-as-a-Judge with MT-Bench and Chatbot Arena,'' in \textit{Proc. NeurIPS Datasets and Benchmarks Track}, 2023.
 
@@ -966,23 +918,7 @@ candidates the deterministic evidence leaves ambiguous.
 
 \bibitem{lamed-benchmark} LAMeD Benchmark, ``memleak\_benchmark.json,'' Zenodo record 15089703, 2025. DOI: 10.5281/zenodo.15089703.
 
-\bibitem{diversevul} Y. Chen, Z. Ding, L. Alowain, X. Chen, and D. Wagner, ``DiverseVul: A New Vulnerable Source Code Dataset for Deep Learning Based Vulnerability Detection,'' in \textit{Proc. RAID}, 2023. arXiv:2304.00409.
-
-\bibitem{svcomp} SV-COMP, ``Software Verification Competition: Memsafety Category,'' 2024. [Online]. Available: https://sv-comp.sosy-lab.org/2024/
-
-\bibitem{magma} A. Hazimeh, A. Herrera, and M. Payer, ``Magma: A Ground-Truth Fuzzing Benchmark,'' \textit{Proc. ACM Meas. Anal. Comput. Syst. (POMACS)}, vol. 4, no. 3, article 49, 2020.
-
-\bibitem{secvuleval} M. B. U. Ahmed, N. S. Harzevili, J. Shin, H. V. Pham, and S. Wang, ``SecVulEval: Benchmarking LLMs for Real-World C/C++ Vulnerability Detection,'' arXiv:2505.19828, 2025.
-
 \bibitem{mcp} Anthropic, ``Model Context Protocol (MCP) Specification,'' 2024. [Online]. Available: https://modelcontextprotocol.io/
-
-\bibitem{ownership-model} D. Svoboda, W. Klieber, L. Flynn, R. Martins, and J. Hoskinson, ``A Pointer-Ownership Model for C Inspired by Rust,'' in \textit{Proc. LCTES (ACM SIGPLAN)}, 2026. DOI: 10.1145/3814943.3816182.
-
-\bibitem{pom} D. Svoboda, L. Flynn, W. Klieber, R. Martins, S. Vishnubhatla, and N. Reimer, ``Design of Enhanced Pointer Ownership Model for C,'' Software Engineering Institute, Carnegie Mellon University, Technical Report CMU/SEI-2025-TR-008, Sep. 2025.
-
-\bibitem{tricorder} C. Sadowski et al., ``Tricorder: Building a Program Analysis Ecosystem,'' in \textit{Proc. ICSE}, 2015, pp.~598--608. DOI: 10.1109/ICSE.2015.76.
-
-\bibitem{infer-verification} C. Calcagno et al., ``Moving Fast with Software Verification,'' in \textit{NASA Formal Methods}, LNCS vol.~9058, 2015, pp.~3--11.
 
 \end{thebibliography}
 
