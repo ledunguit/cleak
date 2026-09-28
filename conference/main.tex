@@ -534,6 +534,16 @@ factor 0.3) and a veto at confidence 0.75, and every
 \texttt{llm\_assisted} configuration is repeated $N{=}3$ times. All of
 these values are frozen for every run reported in this paper.
 
+\subsection{Research questions}
+\label{sec:eval-rq}
+Section~\ref{sec:intro} poses four questions that this section answers.
+\begin{itemize}
+\item \textbf{RQ1:} ``Which orchestration factors drive detection performance?'' --- answered by the five-factor ablation (Section~\ref{sec:eval-ablation}).
+\item \textbf{RQ2:} ``How does CLeak compare with a classical external analyzer at full scale?'' (Section~\ref{sec:eval-external}).
+\item \textbf{RQ3:} ``What is and is not reproducible?'' --- the two-tier protocol and the consensus study (Sections~\ref{sec:reproducibility} and~\ref{sec:eval-consensus}).
+\item \textbf{RQ4:} ``Does the approach transfer to real projects?'' (Section~\ref{sec:eval-lamed}).
+\end{itemize}
+
 \textbf{Datasets.} Three corpora are used, namely the validated Juliet
 CWE-401 subset (1{,}658 cases across 10 functional families, synthetic,
 function-labeled), the peer-reviewed LAMeD benchmark (41 confirmed leaks /
