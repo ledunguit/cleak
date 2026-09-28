@@ -28,6 +28,8 @@
 
 \begin{document}
 
+\maketitle
+
 \begin{abstract}
 Memory leaks (CWE-401) in languages with manual memory management are hard
 to find. Static analysis is noisy, and dynamic analysis proves leaks only on
@@ -43,8 +45,6 @@ rather than hidden. On the validated Juliet corpus (1{,}658 cases, scored on
 a fixed universe of 10{,}314 labeled sites), the strongest configuration
 reaches precision~96.5\%, recall~78.6\%, F1~0.867, and MCC~0.836.
 \end{abstract}
-
-\maketitle
 
 \section{Introduction}
 \label{sec:intro}
@@ -89,7 +89,7 @@ measured results.
 
 \label{sec:contributions}
 \begin{itemize}
-\item \textbf{C1 --- Pinned-recipe hybrid.} The dynamic stage is pinned
+\item \textbf{C1 - Pinned-recipe hybrid.} The dynamic stage is pinned
 to a fixed build-and-sanitize recipe that runs LeakSanitizer without LLM
 involvement whenever the build command is known, and orchestration is
 gated behind a bounded LLM planner that makes one call per case. The
@@ -98,20 +98,20 @@ LLM-assisted only at the borderline, delivers the system's \emph{strongest
 measured result} on the full validated Juliet corpus (F1~0.867,
 MCC~0.836; Section~\ref{sec:evaluation}) at a fraction of agentic
 alternatives' cost (Section~\ref{sec:pipeline}).
-\item \textbf{C2 --- Measurable reproducibility.} Reproducibility is
+\item \textbf{C2 - Measurable reproducibility.} Reproducibility is
 made measurable by pairing the deterministic \texttt{no\_llm} tier (B1
 to B3), proven bitwise-reproducible by a dedicated determinism gate,
 with the LLM-assisted tier (B4 to B7, B6a among them) whose variance is
 measured and reported rather than hidden
 (Section~\ref{sec:reproducibility}).
-\item \textbf{C3 --- Structured evidence enrichment.} Every candidate
+\item \textbf{C3 - Structured evidence enrichment.} Every candidate
 is enriched with structured evidence, namely ownership-transfer
 tracking, alloc$\to$free pairing with guard-subset path
 reconciliation, path-sensitive and parameter-ownership leak detection,
 and runtime$\leftrightarrow$candidate correlation, which together
 make the deterministic heuristic judge path-aware without an SMT
 solver (Section~\ref{sec:judging}).
-\item \textbf{C4 --- Hybrid judging with measured consensus.} Static
+\item \textbf{C4 - Hybrid judging with measured consensus.} Static
 and dynamic evidence are fused in a judging layer that resamples the
 LLM judge at nonzero temperature and escalates only genuinely
 borderline bundles; on a family-stratified sample spanning the
@@ -136,9 +136,8 @@ The remainder of this paper is organized as follows.
 Section~\ref{sec:related} positions CLeak against prior work.
 Section~\ref{sec:arch} presents the approach in three phases, ending
 with the hybrid judging layer.
-Section~\ref{sec:evaluation} evaluates the system, Section~\ref{sec:discussion}
-discusses open problems, and Section~\ref{sec:threats} states the threats
-to validity.
+Section~\ref{sec:evaluation} evaluates the system, and Section~\ref{sec:discussion}
+discusses limitations and open problems.
 
 \section{Related Work}
 \label{sec:related}
@@ -497,9 +496,9 @@ frozen for every run reported in this paper.
 \label{sec:eval-rq}
 Section~\ref{sec:intro} poses four questions that this section answers.
 \begin{itemize}
-\item \textbf{RQ1:} ``Which orchestration factors drive detection performance?'' --- answered by the five-factor ablation (Section~\ref{sec:eval-ablation}).
+\item \textbf{RQ1:} ``Which orchestration factors drive detection performance?'' - answered by the five-factor ablation (Section~\ref{sec:eval-ablation}).
 \item \textbf{RQ2:} ``How does CLeak compare with a classical external analyzer at full scale?'' (Section~\ref{sec:eval-external}).
-\item \textbf{RQ3:} ``What is and is not reproducible?'' --- the two-tier protocol and the consensus study (Sections~\ref{sec:reproducibility} and~\ref{sec:eval-consensus}).
+\item \textbf{RQ3:} ``What is and is not reproducible?'' - the two-tier protocol and the consensus study (Sections~\ref{sec:reproducibility} and~\ref{sec:eval-consensus}).
 \item \textbf{RQ4:} ``Does the approach transfer to real projects?'' (Section~\ref{sec:eval-lamed}).
 \end{itemize}
 
@@ -807,7 +806,7 @@ the denominators differing.
 
 \noindent\fbox{\parbox{\dimexpr\linewidth-2\fboxsep-2\fboxrule\relax}{\textbf{Answer to RQ4.} The approach transfers to real projects with precision holding at 100\% on both real-world corpora: LAMeD at TP~10/FP~0 and 23.3\% recall, and the MemHint-derived corpus at 8 of 19 labeled sites and 42.1\% recall. Transfer is positive on precision with bounded recall.}}
 
-\section{Discussion and Open Problems}
+\section{Limitations}
 \label{sec:discussion}
 
 \subsection{Open Problems}
@@ -833,17 +832,16 @@ restate them as the standing agenda.
   should shift the balance toward agentic selection.
 \end{itemize}
 
-\section{Threats to Validity}
-\label{sec:threats}
-
-\paragraph{Construct.} The universe is enumerated from the manifest rather
+\subsection{Construct}
+The universe is enumerated from the manifest rather
 than from any tool's output (Table~\ref{tab:universe}); a flagged finding
 outside it is counted but unscored, and no sample is excluded. B6a's
 full-corpus F1 (0.867) is not uniform across Juliet's ten functional
 families (per-family detail in Section~\ref{sec:reproducibility}).
 FP/KLOC applies one denominator to every configuration.
 
-\paragraph{Internal.} The recall gap in the \texttt{strdup} family is traced to a
+\subsection{Internal}
+The recall gap in the \texttt{strdup} family is traced to a
 verified two-branch dynamic-coverage mechanism, but that account is not
 exhaustive. Guard-subset reconciliation reasons about guard containment,
 not numeric constraints, and is strictly less complete than SMT
@@ -853,7 +851,8 @@ re-run; we expect no precision, recall, or F1 number in
 Section~\ref{sec:evaluation} to change, an assumption grounded in the
 cache's semantics, and we flag it as an assumption.
 
-\paragraph{External.} Juliet is synthetic, and its leak patterns are
+\subsection{External}
+Juliet is synthetic, and its leak patterns are
 largely intraprocedural, so the agentic-cost finding
 (Section~\ref{sec:eval-ablation}) should not be projected onto more
 diverse corpora. The consensus result depends on sample composition
@@ -861,7 +860,8 @@ diverse corpora. The consensus result depends on sample composition
 are small real-world corpora (41 and 19 cases, positive-only), so their
 transfer evidence is precision-and-recall only.
 
-\paragraph{LLM validity.} We do not treat LLM-judge non-determinism as
+\subsection{LLM validity}
+We do not treat LLM-judge non-determinism as
 fixable; the two-tier protocol of Section~\ref{sec:reproducibility}
 exists to measure and report it, not obscure it behind single-run
 aggregates. Provider transfer likewise keeps the configuration's
