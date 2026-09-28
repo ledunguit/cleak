@@ -262,7 +262,7 @@ negative, identical for every configuration compared.
 \begin{figure}[t]
 \centering
 \includegraphics[width=\textwidth]{figures/fig-arch.pdf}
-\caption{CLeak in three phases: the LLM discovers and freezes project policy once; the deterministic engine produces all evidence; judging runs the heuristic on every bundle and escalates only borderline bundles to the LLM. Any failure falls back to the deterministic core. The static fan-out and dynamic-evidence stages of Section~\ref{sec:pipeline} map onto the deterministic-engine phase, and hybrid judging onto the Phase~3 band. The implementation-level counterpart of this figure appears in Appendix~\ref{app:impl}.}
+\caption{CLeak in three phases: the LLM discovers and freezes project policy once; the deterministic engine produces all evidence; judging runs the heuristic on every bundle and escalates only borderline bundles to the LLM. Any failure falls back to the deterministic core. The static fan-out and dynamic-evidence stages of Section~\ref{sec:pipeline} map onto the deterministic-engine phase, and hybrid judging onto the Phase~3 band.}
 \label{fig:arch}
 \end{figure}
 
@@ -291,9 +291,7 @@ Figure~\ref{fig:arch} shows the layers each principle constrains.
 
 CLeak is a standalone scanner, the
 sole orchestrator, which drives two analyzer services and an LLM provider
-over a stateless RPC interface; the transport, deployment, and the full
-tool inventory appear in Appendix~\ref{app:deployment}, and the
-implementation-level architecture in Appendix~\ref{app:impl}.
+over a stateless RPC interface.
 All findings
 converge on one structure, in which a \texttt{LeakCandidate} (an allocation
 site) accumulates \texttt{Evidence} entries into a \texttt{LeakBundle}
@@ -343,8 +341,6 @@ The analyzers expose 22 tools, of which only five reach the Stage~A LLM
 sub-agent, namely \texttt{candidateScan},
 \texttt{astScan}, \texttt{functionSummary}, \texttt{pathConstraints},
 and \texttt{ownershipConventions}.
-The remaining tools, eleven per service, and the transport, statelessness,
-and deployment details appear in Appendix~\ref{app:deployment}.
 
 In operation, static candidates come from a deterministic \texttt{candidateScan} over
 allocation sites using the project's frozen allocator profile; each is
@@ -409,8 +405,6 @@ runtime leak to \texttt{likely\_false\_positive}, exculpating a
 candidate whose dynamic run came back clean, and downgrading any
 ``flagged'' verdict lacking a \emph{strong} signal to
 \texttt{uncertain}.
-
-Notation appears in Appendix~\ref{app:notation}.
 
 \textbf{Path sensitivity without an SMT solver.} CLeak computes path
 feasibility with a lightweight heuristic rather than an SMT solver, so
@@ -491,8 +485,7 @@ reports a sample-composition-dependent finding, not a clean win.
 \label{sec:evaluation}
 
 \subsection{System configuration}
-The deployment details of the two analyzer services appear in
-Appendix~\ref{app:deployment}. The heuristic judge bands its
+The heuristic judge bands its
 score at fixed thresholds of 0.7 and 0.4, the LLM-judge escalation uses
 the borderline window $[0.35, 0.7]$, the consensus judge combines
 $K{=}3$ resampled votes with a confidence-weighted rule (down-weight
@@ -562,7 +555,7 @@ define the universe.
 manifest and identical for every configuration in
 Table~\ref{tab:ablation}.}
 \label{tab:universe}
-\small
+\footnotesize
 \begin{tabular}{@{}lr@{}}
 \toprule
 \textbf{Universe component} & \textbf{Count} \\
@@ -660,16 +653,14 @@ constrained to \emph{when} to run static or dynamic analysis; given
 latitude over \emph{which} tool to call next, it adds cost without
 benefit.
 
-The B6a configuration is not model-specific; its provider-transfer runs
-appear in Appendix~\ref{app:providers}.
-
 Performance is not uniform across allocator families; family-level F1
 runs from 0.975 (\texttt{malloc}-family sites, 108 cases, 402 labeled
 sites) down to 0.584 (\texttt{strdup}-family, 96 cases, 612 labeled
-sites), the latter driven by low recall (41.4\%)
+sites, recall-limited at 98.9\% precision), the latter driven by low
+recall (41.4\%)
 rather than false positives (precision 0.989), with the
-intermediate families between 0.86 and 0.89. The representative miss
-analyzed in Appendix~\ref{app:strdup} is one verified contributor
+intermediate families between 0.86 and 0.89. The verified two-branch
+dynamic-coverage account of one representative miss is one contributor
 to the family's low recall, not an exhaustive account of the 59
 \texttt{strdup}-family cases with an uncovered site on average; the two
 smallest families (\texttt{destructor},
@@ -774,8 +765,6 @@ sites favoring single-LLM, $\chi^2 = 3.13$, $p = 0.077$, not
 significant at this sample size; campaign B, $n{=}273$: all 6
 discordant sites favoring single-LLM, $\chi^2 = 4.17$, $p = 0.041$,
 significant).
-Fine-grained odds-ratio and risk-difference intervals appear in
-Appendix~\ref{app:consensus-stats}.
 We
 therefore do not recommend enabling consensus judging by default; it
 remains available as an opt-in configuration
@@ -818,9 +807,6 @@ the denominators differing.
 
 \noindent\fbox{\parbox{\dimexpr\linewidth-2\fboxsep-2\fboxrule\relax}{\textbf{Answer to RQ4.} The approach transfers to real projects with precision holding at 100\% on both real-world corpora: LAMeD at TP~10/FP~0 and 23.3\% recall, and the MemHint-derived corpus at 8 of 19 labeled sites and 42.1\% recall. Transfer is positive on precision with bounded recall.}}
 
-The allocator profiler's validation against the frozen cJSON list
-appears in Appendix~\ref{app:allocator}.
-
 \section{Discussion and Open Problems}
 \label{sec:discussion}
 
@@ -833,11 +819,8 @@ restate them as the standing agenda.
 \begin{itemize}
 \item \textbf{\texttt{strdup}-family recall; static-evidence limits;
   smallest families.} The weakest Juliet family for B6a (F1 0.584) is
-  recall-limited, and the verified two-branch dynamic-coverage mechanism
-  behind it is analyzed in Appendix~\ref{app:strdup}.
-  \texttt{interproceduralFlow} adds no measured recall (detail in
-  Appendix~\ref{app:allocator}), since alloc/free counting is not
-  path-sensitive.
+  recall-limited, and interprocedural flow adds no measured recall,
+  since alloc/free counting is not path-sensitive.
   \texttt{destructor} and \texttt{virtual} (one case each) are reported
   for completeness only, too small for statistically meaningful F1.
 \item \textbf{Consensus judging is not recommended by default; the
@@ -868,8 +851,7 @@ feasibility, a deliberate trade for reliability at scale. The AST
 memoization cache became disk-persisted and byte-bounded without a sweep
 re-run; we expect no precision, recall, or F1 number in
 Section~\ref{sec:evaluation} to change, an assumption grounded in the
-cache's semantics, and we flag it as an assumption (measurement note in
-Appendix~\ref{app:cache}).
+cache's semantics, and we flag it as an assumption.
 
 \paragraph{External.} Juliet is synthetic, and its leak patterns are
 largely intraprocedural, so the agentic-cost finding
@@ -1003,154 +985,5 @@ candidates the deterministic evidence leaves ambiguous.
 \bibitem{infer-verification} C. Calcagno et al., ``Moving Fast with Software Verification,'' in \textit{NASA Formal Methods}, LNCS vol.~9058, 2015, pp.~3--11.
 
 \end{thebibliography}
-
-\appendix
-\section{Deployment and Transport Details}
-\label{app:deployment}
-
-Both analyzer services are exposed behind the Model Context Protocol
-on Streamable HTTP (JSON-RPC~2.0)~\cite{mcp}, the static analyzer
-serving eleven tools on port 50061 and the dynamic analyzer eleven on
-port 50062. The content-capable tools accept inline source content
-instead of a shared filesystem mount, so both services stay stateless
-and independently deployable. The orchestrator is the standalone
-scanner \texttt{leak-inspector-tui}.
-
-\section{Implementation-Level Architecture}
-\label{app:impl}
-
-Figure~\ref{fig:arch-impl} is the implementation counterpart of
-Figure~\ref{fig:arch}.
-
-\begin{figure}[t]
-\centering
-\pgfdeclarelayer{background}
-\pgfsetlayers{background,main}
-\resizebox{0.9\textwidth}{!}{%
-\begin{tikzpicture}[
-  font=\footnotesize,
-  box/.style={draw, rounded corners=2pt, align=center, inner sep=3pt},
-  arrow/.style={-Stealth},
-  biarrow/.style={Stealth-Stealth},
-  layerlbl/.style={font=\small\bfseries}
-]
-\node[box] (pol1) {Allocator profiler};
-\node[box, right=7mm of pol1] (pol2) {Strategist};
-\node[box, right=7mm of pol2] (pol3) {Judge tuner};
-\node[box, below=8mm of pol2] (grep) {Grep verification and\\profile cache};
-\node[box, dashed, below=30mm of pol3] (stagea) {Stage A sub-agents\\(five content-capable tools)};
-\node[box, below=38mm of grep] (cand) {Discovery \texttt{candidateScan}\\(frozen allocator manifest)};
-\node[box, right=7mm of cand] (enrich) {Static enrichment\\(functionSummary, pathConstraints,\\guard-subset pairing)};
-\node[box, right=7mm of enrich] (dynrec) {Pinned dynamic recipe\\(\texttt{buildTarget} then \texttt{lsanRun})};
-\node[box, below=20mm of enrich] (heuristic) {Heuristic judge\\(every bundle, path-sensitive)};
-\node[box, right=7mm of heuristic] (llmjudge) {LLM judge\\(borderline only)};
-\node[box, right=7mm of llmjudge] (consensus) {Consensus voting\\(opt-in, $K>1$)};
-\node[box, right=14mm of consensus] (art) {\texttt{results/\textlangle scanId\textrangle}\\reports, snapshot, event log};
-\node[box, below=20mm of heuristic] (static) {Static analyzer\\(11 tools)};
-\node[box, below=20mm of llmjudge] (dyn) {Dynamic analyzer\\(11 tools)};
-\node[box, below=20mm of consensus] (gw) {LLM gateway};
-\node[box, below=8mm of dyn] (orch) {Orchestrator\\\texttt{leak-inspector-tui}};
-\begin{pgfonlayer}{background}
-\node[fit=(pol1)(pol2)(pol3)(grep), draw, rounded corners=2pt, fill=blue!8, inner sep=5mm, label={[layerlbl,anchor=north]north:{LLM policy layer (per-project, discovered once, frozen)}}] (l1) {};
-\node[fit=(cand)(enrich)(dynrec), draw, rounded corners=2pt, fill=green!8, inner sep=5mm, label={[layerlbl,anchor=north]north:{Deterministic engine layer}}] (l2) {};
-\node[fit=(heuristic)(llmjudge)(consensus), draw, rounded corners=2pt, fill=orange!10, inner sep=5mm, label={[layerlbl,anchor=north]north:{Hybrid judging layer}}] (l3) {};
-\node[fit=(static)(dyn)(gw)(orch), draw, rounded corners=2pt, fill=gray!10, inner sep=5mm, label={[layerlbl,anchor=north]north:{MCP transport (Streamable HTTP, JSON-RPC 2.0)}}] (l4) {};
-\end{pgfonlayer}
-\draw[arrow] (pol1) -- (grep);
-\draw[arrow] (pol2) -- (grep);
-\draw[arrow] (pol3) -- (grep);
-\draw[arrow] (cand) -- (enrich);
-\draw[arrow] (heuristic) -- (llmjudge);
-\draw[arrow, dashed] (llmjudge) -- (consensus);
-\draw[arrow, dashed] (l2.south) -- node[left]{any failure} (heuristic.north);
-\draw[arrow] (l3.east) -- (art.west);
-\draw[biarrow] (orch) -- (static);
-\draw[biarrow] (orch) -- (dyn);
-\draw[biarrow] (orch) -- (gw);
-\end{tikzpicture}
-}
-\caption{CLeak implementation-level architecture. The LLM policy layer freezes project-specific knowledge; the deterministic engine layer executes candidate discovery, enrichment, and the pinned dynamic recipe through tool calls that make no LLM decision (zero LLM calls in the \texttt{no\_llm} tier); the hybrid judging layer escalates only borderline bundles to the LLM. Stages A--D of Section~\ref{sec:pipeline} map onto the blocks (A) to (D).}
-\label{fig:arch-impl}
-\end{figure}
-
-\section{Allocator-profiler validation}
-\label{app:allocator}
-
-Because the allocator profiler (Table~\ref{tab:policy}) is itself an LLM
-call, we validate it against a frozen hand-written allocator/deallocator
-list for cJSON, which the profiler matches at 92\% allocator recall and
-100\% deallocator recall at 35\%/67\% precision, most apparent false
-positives being allocators the hand-written list had missed. Aggregated
-over all seven LAMeD projects, allocator and deallocator discovery drop
-to F1 0.22 and 0.17, so the protocol validates per-project allocator
-knowledge only where a project exposes a small, conventional allocation
-API.
-
-On cJSON's \texttt{merge\_patch} leak, \texttt{interproceduralFlow}
-counts two mutually exclusive \texttt{cJSON\_Delete(target)} frees as
-covering the allocation and misses the never-freed error path; because
-alloc/free counting is not path-sensitive, it adds no measured recall
-and leaves \texttt{+interproceduralFlow} byte-identical to the default
-on all 41 LAMeD cases.
-
-\section{Consensus fine-grained statistics}
-\label{app:consensus-stats}
-
-With the Haldane-Anscombe 0.5 continuity correction, the discordant odds
-ratio favoring single-LLM judging is 5.0 (1.3--23.0) in campaign A and
-13.0 (5.0--23.0) in campaign B, with risk differences of 0.022
-(0.004--0.045) and 0.022 (0.007--0.040) respectively; the campaigns and
-their McNemar tests are described in
-Section~\ref{sec:eval-consensus}.
-
-\section{Strdup-family case analysis}
-\label{app:strdup}
-
-% By-family figures aggregated over the three B6a runs under the fixed
-% universe by scripts/rescore-family.ts (2026-09-27); full table in
-% t10-consistency.log.
-One representative miss
-(\texttt{CWE401\_Memory\_Leak\_\_strdup\_char\_12}, flow-variant 12)
-pinpoints a concrete mechanism, since the case's true leak
-sits behind two \emph{independent} randomized branches, so a single
-dynamic run exercises only one random path; when that path is
-non-leaking, the heuristic judge combines the resulting
-\texttt{exercised\_clean} dynamic signal with a coarse static
-alloc/free pairing into a confident false-positive verdict without
-escalating to the LLM judge. The family is recall-limited at 98.9\%
-precision, so its shortfall is driven by misses rather than false
-positives.
-
-\section{Judging notation}
-\label{app:notation}
-
-We fix notation for the rest of this subsection. An allocation site
-under judgment is written $a$, and $F(a)$ denotes its set of free
-sites; each free $f \in F(a)$ carries a guard condition set $G_f$, the
-predicates holding on the control-flow path that reaches $f$, and each
-function-exit path $e$ carries a guard set $G_e$ built the same way, so
-a free reconciles the allocation exactly when $G_f \subseteq G_e$. The
-weighted signals above condense into a bundle evidence score
-$S(\cdot)$, which the judge bands against a flag threshold
-$\theta_{\mathrm{flag}}$ and a borderline threshold
-$\theta_{\mathrm{border}}$ (values in Section~\ref{sec:evaluation}).
-
-\section{Provider transfer runs}
-\label{app:providers}
-
-The B6a configuration is not model-specific; re-running it end-to-end
-on two further providers, mimo-v2.5 (F1~0.740, P~0.880 / R~0.639,
-MCC~0.686, \$2.11) and GLM-5.2 (F1~0.778, P~0.763 / R~0.793; single
-complete run), keeps the advantage over the static-only baseline
-(F1~0.614) intact, though absolute numbers track each model's reasoning
-profile. These runs use the same frozen corpus hash and scorer as
-Table~\ref{tab:ablation}.
-
-\section{Measurement infrastructure note}
-\label{app:cache}
-
-The AST memoization cache became disk-persisted and byte-bounded without
-a sweep re-run; in one controlled run a warm repeat scan took 3.0s at
-266MiB peak memory versus 54.0s at 1.03GiB cold.
 
 \end{document}
