@@ -55,7 +55,7 @@ to reproduce and costly to diagnose in production. Finding leaks has
 meant two incompatible tool families.
 \textbf{Static analyzers} (Clang Static Analyzer, Infer, CodeQL)~\cite{clangsa,infer,codeql} reason
 about all paths without running the program, at the price of a
-structurally high false-positive rate: they cannot tell a genuine leak
+structurally high false-positive rate. They cannot tell a genuine leak
 from an allocation whose ownership legitimately moved to a caller.
 \textbf{Dynamic analyzers} (Valgrind Memcheck~\cite{valgrind}, AddressSanitizer,
 LeakSanitizer~\cite{asan}) instrument and run the actual binary. False
@@ -63,7 +63,7 @@ positives are near zero on exercised paths, but unexercised paths, often
 the larger set, are invisible. Neither family suffices, and
 concatenating their findings does not resolve their disagreement.
 
-Large language models offer a third mode~\cite{iris}: a model reads a
+Large language models offer a third mode~\cite{iris}, where a model reads a
 function's source and calling context and reasons about ownership like
 a human reviewer~\cite{llm-vuln-eval}, including project-specific
 conventions no generic tool knows~\cite{llm-proxy-static}. The naive
@@ -85,28 +85,28 @@ measured results.
 
 \label{sec:contributions}
 \begin{itemize}
-\item \textbf{C1 - Pinned-recipe hybrid.} The dynamic stage is pinned
-to a fixed build-and-sanitize recipe: whenever the build command is
+\item \textbf{C1. Pinned-recipe hybrid.} The dynamic stage is pinned
+to a fixed build-and-sanitize recipe. Whenever the build command is
 known, LeakSanitizer runs with no LLM involvement, and a bounded LLM
 planner that makes one call per case gates orchestration. The
 pinned-recipe hybrid is deterministic in tool execution and
 LLM-assisted only at the borderline; it delivers the system's
-\emph{strongest measured result} (F1~0.867, MCC~0.836;
+strongest measured result (F1~0.867, MCC~0.836;
 Section~\ref{sec:evaluation}) at a fraction of agentic cost
 (Section~\ref{sec:pipeline}).
-\item \textbf{C2 - Measurable reproducibility.} Reproducibility is
-measurable: the deterministic \texttt{no\_llm} tier (B1 to B3) is
+\item \textbf{C2. Measurable reproducibility.} Reproducibility is
+measurable. The deterministic \texttt{no\_llm} tier (B1 to B3) is
 proven bitwise-reproducible by a dedicated determinism gate, and the
 LLM-assisted tier (B4 to B7, B6a among them) has its variance measured
 and reported rather than hidden (Section~\ref{sec:reproducibility}).
-\item \textbf{C3 - Structured evidence enrichment.} Every candidate
-is enriched with structured evidence: ownership-transfer tracking,
+\item \textbf{C3. Structured evidence enrichment.} Every candidate
+is enriched with structured evidence, namely ownership-transfer tracking,
 alloc$\to$free pairing with guard-subset path reconciliation,
 path-sensitive and parameter-ownership leak detection, and
 runtime$\leftrightarrow$candidate correlation. Together these make
 the deterministic heuristic judge path-aware without an SMT solver
 (Section~\ref{sec:judging}).
-\item \textbf{C4 - Hybrid judging with measured consensus.} Static
+\item \textbf{C4. Hybrid judging with measured consensus.} Static
 and dynamic evidence are fused in a judging layer that resamples the
 LLM judge at nonzero temperature and escalates only genuinely
 borderline bundles. On a family-stratified sample, single-LLM judging
@@ -122,7 +122,7 @@ an independently reconstructed MemHint-project corpus~\cite{memhint} (19
 leak-fix commits across six MemHint target projects; its own per-bug
 list is unpublished), and a live Clang Static Analyzer re-run under
 identical scoring. Section~\ref{sec:evaluation} reports a controlled
-five-factor ablation over the \emph{entire} validated corpus, keeps
+five-factor ablation over the entire validated corpus, keeps
 inconclusive or partially superseded results rather than omitting them,
 and answers four research questions, stated in
 Section~\ref{sec:eval-rq}.
@@ -156,7 +156,7 @@ memory leaks directly. IRIS~\cite{iris} couples an LLM with static
 analysis. \textbf{MemHint}~\cite{memhint} is a neuro-symbolic static
 pipeline reporting 52 to 54 leaks found (49 confirmed/fixed) across 7
 projects (over 3.4M LOC). \textbf{LAMeD}~\cite{lamed,lamed-benchmark}
-is not agentic: its LLM only \emph{annotates} source for a classical
+is not agentic. Its LLM only \emph{annotates} source for a classical
 analyzer, it reports no F1, and it supplies our real-world corpus
 (Section~\ref{sec:eval-lamed}).
 
@@ -236,27 +236,27 @@ every configuration compared.
 \begin{figure}[t]
 \centering
 \includegraphics[width=\textwidth]{figures/fig-arch.pdf}
-\caption{CLeak in three phases: the LLM discovers and freezes project policy once; the deterministic engine produces all evidence; judging runs the heuristic on every bundle and escalates only borderline bundles to the LLM. Any failure falls back to the deterministic core. Section~\ref{sec:pipeline}'s static fan-out and dynamic-evidence stages form the deterministic-engine phase; hybrid judging is the Phase~3 band.}
+\caption{CLeak in three phases. The LLM discovers and freezes project policy once; the deterministic engine produces all evidence; judging runs the heuristic on every bundle and escalates only borderline bundles to the LLM. Any failure falls back to the deterministic core. Section~\ref{sec:pipeline}'s static fan-out and dynamic-evidence stages form the deterministic-engine phase; hybrid judging is the Phase~3 band.}
 \label{fig:arch}
 \end{figure}
 
 \subsection{Design principles}
 \label{sec:principles}
 
-Four principles govern the design: P1 freezes project knowledge (Phase
+Four principles govern the design. P1 freezes project knowledge (Phase
 1); P2 keeps execution deterministic (Phase 2); P3 escalates only
 borderline cases and P4 fuses evidence before judgment (Phase 3).
 P1--P4 realize contributions C1--C4;
 Figure~\ref{fig:arch} shows where each applies.
 
-\subsection{Phase 1: Policy discovery and freezing}
+\subsection{Phase 1. Policy discovery and freezing}
 \label{sec:policy-mechanism}
 
 CLeak is a standalone scanner and the
 sole orchestrator; it drives two analyzer services and an LLM provider
 over a stateless RPC interface.
 All findings
-converge on one structure: a \texttt{LeakCandidate} (an allocation
+converge on one structure. A \texttt{LeakCandidate} (an allocation
 site) accumulates \texttt{Evidence} into a \texttt{LeakBundle}, which
 the judging layer (Section~\ref{sec:judging}) resolves into a
 code-written \texttt{VerdictResult}, never free-form LLM text
@@ -275,7 +275,7 @@ pattern (Table~\ref{tab:policy}), so onboarding a new project requires
 zero lines of new code. In the benchmark configuration used
 throughout Section~\ref{sec:evaluation}, allocators come from a frozen
 manifest and the strategist/tuner are disabled, so \texttt{no\_llm}
-makes \emph{zero} non-deterministic LLM calls on the evaluation path,
+makes zero non-deterministic LLM calls on the evaluation path,
 and its full-corpus Juliet confusion matrix (B3 in
 Table~\ref{tab:ablation}) is
 fixed across runs.
@@ -297,17 +297,17 @@ Judge tuner & Verdict-threshold nudge & Hard clamp to a bounded range & Heuristi
 \end{tabular}}
 \end{table}
 
-\subsection{Phase 2: Deterministic evidence pipeline}
+\subsection{Phase 2. Deterministic evidence pipeline}
 \label{sec:pipeline}
 
 In operation, a deterministic \texttt{candidateScan} over
 allocation sites, using the project's frozen allocator profile,
 produces static candidates. Each is
-bundled and investigated through four stages: static fan-out and
+bundled and investigated through four stages. Static fan-out and
 dynamic-evidence gathering run concurrently (Stages A and B), synthesis
 is LLM-free (Stage C), and judging is hybrid (Stage D).
 
-\textbf{Stage A} performs a static fan-out: of the analyzers' 22
+\textbf{Stage A} performs a static fan-out. Of the analyzers' 22
 tools, five content-capable ones (\texttt{candidateScan},
 \texttt{astScan}, \texttt{functionSummary}, \texttt{pathConstraints},
 \texttt{ownershipConventions}) plus \texttt{read\_file} reach
@@ -320,7 +320,7 @@ evaluation path (the dashed bridge node in Figure~\ref{fig:arch}).
 
 \textbf{Stage B} gathers dynamic evidence. When the case carries a known
 build command (as Juliet cases do, by NIST's convention), Stage~B runs
-a \emph{fixed, deterministic} recipe: \texttt{buildTarget} with
+a \emph{fixed, deterministic} recipe, \texttt{buildTarget} with
 sanitizer flags, then \texttt{lsanRun}, with no LLM call (part of
 contribution C1). This is what makes the
 \texttt{no\_llm} configuration's dynamic evidence reproducible
@@ -339,11 +339,11 @@ Section~\ref{sec:judging}; any model-call or parse failure falls back
 to the deterministic heuristic verdict, so the system is never worse
 than its deterministic core.
 
-\subsection{Phase 3: Hybrid judging}
+\subsection{Phase 3. Hybrid judging}
 \label{sec:judging}
 
 CLeak's judging layer has three interchangeable configurations,
-evaluated head-to-head throughout Section~\ref{sec:evaluation}: a
+evaluated head-to-head throughout Section~\ref{sec:evaluation}. They are a
 purely \textbf{heuristic judge}, a \textbf{single-LLM judge}, and a
 \textbf{consensus judge}. The heuristic judge scores every bundle
 first; only \emph{borderline} bundles are escalated.
@@ -368,7 +368,7 @@ dynamic run, and downgrading any ``flagged'' verdict lacking a
 feasibility with a lightweight heuristic rather than an SMT solver, so
 guard analysis is available on every function with no solver-timeout or
 memory-ceiling failure mode. The mechanism is \emph{guard-subset
-reconciliation}: a free $f \in F(a)$ reconciles the
+reconciliation}. A free $f \in F(a)$ reconciles the
 allocation on a function-exit path $e$ only if $G_f \subseteq G_e$.
 Even the
 deterministic \texttt{no\_llm} judge can therefore catch a
@@ -389,17 +389,17 @@ function source (labels stripped from comments to avoid leaking
 benchmark ground truth), a static-evidence summary, dynamic findings
 tagged by correlation strength, and, when available, the project's
 LLM-discovered ownership conventions. It returns one of five labels with
-a confidence and an explanation under an explicit priority rubric: a
+a confidence and an explanation under an explicit priority rubric. A
 linked runtime leak is decisive, ownership transfer is decisive
-for false positives, and \texttt{uncertain} is reserved for genuinely
-insufficient evidence, never a default. Output is constrained to JSON;
+for false positives, and \texttt{uncertain} is reserved for genuinely insufficient evidence rather than used as a
+default. Output is constrained to JSON;
 any parse failure silently falls back to the heuristic verdict.
 
 \subsubsection{The self-consistency voting consensus judge (C4)}
 
 When enabled ($K>1$), the same LLM-judge call is resampled $K$ times at a
-nonzero consensus temperature and merged by one of three rules: majority,
-a confidence-weighted vote, or unanimous-to-flag. A veto rule
+nonzero consensus temperature and merged by one of three rules (majority,
+a confidence-weighted vote, or unanimous-to-flag). A veto rule
 adds asymmetry by design, since a strong heuristic exculpation can only
 \emph{remove} a flag from the consensus outcome, never add one. We do
 not assume that voting over $K$ samples reduces case-level instability;
@@ -422,13 +422,13 @@ values are frozen for every reported run.
 \label{sec:eval-rq}
 Section~\ref{sec:intro} poses four questions that this section answers.
 \begin{itemize}
-\item \textbf{RQ1:} ``Which orchestration factors drive detection performance?'' - answered by the five-factor ablation (Section~\ref{sec:eval-ablation}).
-\item \textbf{RQ2:} ``How does CLeak compare with a classical external analyzer at full scale?'' (Section~\ref{sec:eval-external}).
-\item \textbf{RQ3:} ``What is and is not reproducible?'' - the two-tier protocol and the consensus study (Sections~\ref{sec:reproducibility} and~\ref{sec:eval-consensus}).
-\item \textbf{RQ4:} ``Does the approach transfer to real projects?'' (Section~\ref{sec:eval-lamed}).
+\item \textbf{RQ1.} ``Which orchestration factors drive detection performance?'' (the five-factor ablation, Section~\ref{sec:eval-ablation}).
+\item \textbf{RQ2.} ``How does CLeak compare with a classical external analyzer at full scale?'' (Section~\ref{sec:eval-external}).
+\item \textbf{RQ3.} ``What is and is not reproducible?'' (the two-tier protocol and the consensus study, Sections~\ref{sec:reproducibility} and~\ref{sec:eval-consensus}).
+\item \textbf{RQ4.} ``Does the approach transfer to real projects?'' (Section~\ref{sec:eval-lamed}).
 \end{itemize}
 
-\paragraph{Datasets.} Three corpora are used here: the validated Juliet
+\paragraph{Datasets.} Three corpora are used here, namely the validated Juliet
 CWE-401 subset (1{,}658 cases across 10 functional families, synthetic,
 function-labeled), the peer-reviewed LAMeD benchmark (41 confirmed leaks /
 43 labeled sites across 7 real C projects, positive-only), and a
@@ -469,7 +469,7 @@ standard definitions, plus false
 positives per thousand non-blank executable lines (FP/KLOC, headers
 excluded), one denominator applied uniformly to our results and every
 baseline. Scoring follows the fixed universe of
-Section~\ref{sec:problem}: the 1{,}658 cases carry 2{,}665 raw bad and
+Section~\ref{sec:problem}. The 1{,}658 cases carry 2{,}665 raw bad and
 7{,}973 raw good labels, merged into 2{,}557 bad and 7{,}757 good
 scored sites (324 merge groups); 66 B1 findings outside the universe
 are counted and reported, never scored; no sample is excluded.
@@ -485,12 +485,12 @@ quoted from their publications where we do not re-run them, keeping
 those comparisons directional,
 not a claim of superiority.
 
-\subsection{RQ1: Which orchestration factors drive detection performance?}
+\subsection{RQ1. Which orchestration factors drive detection performance?}
 \label{sec:eval-ablation}
 \label{sec:eval-fullcorpus}
 
 Unlike an earlier family-stratified measurement, all nine capability
-configurations below ran on the \emph{entire} validated corpus (1{,}658
+configurations below ran on the entire validated corpus (1{,}658
 cases, not a sub-sample). To isolate \emph{which} architectural factor
 drives performance, we swept five independent factors (static evidence,
 dynamic evidence, an LLM planner, agentic tool-selection, and evidence
@@ -516,7 +516,7 @@ run each; B4 to B7 are the \texttt{llm\_assisted} tier, mean of 3 runs
 with std $\le 0.007$ on F1. B6a adds a bounded LLM planner (one call per
 case) to the pinned recipe. B6b/B7
 add agentic tool selection at $\sim$4$\times$ the dollar cost for
-\emph{lower} F1. MCC is computed directly from each row's own TP/FP/FN/TN.}
+lower F1. MCC is computed directly from each row's own TP/FP/FN/TN.}
 \label{tab:ablation}
 \resizebox{\textwidth}{!}{%
 \begin{tabular}{@{}llcccccccc c@{}}
@@ -536,17 +536,15 @@ B7 & Full adaptive (planner + tool selection) & 2004 & 101 & 553 & 7656 & 0.952 
 \end{tabular}}
 \end{table}
 
-Three findings hold at full-corpus scale. First, dynamic evidence is the
-dominant false-positive suppressor: adding it to the
-LLM-judge-plus-static configuration (B4$\to$B6) drops false positives
-from 470 to 74 (an $\sim$85\% reduction) while raising F1 from 0.804 to
+Three findings hold at full-corpus scale. First, dynamic evidence suppresses false positives. Adding it to the
+LLM-judge-plus-static configuration (B4$\to$B6) drops them from 470 to 74 (an $\sim$85\% reduction) while raising F1 from 0.804 to
 0.866. Second, the static-evidence tools \texttt{functionSummary} and
 \texttt{pathConstraints} are synergistic rather than additive; a
 separate $n{=}50$ stratified ablation shows that enabling either alone
 leaves the confusion matrix identical to candidate-scan-only, and only
 both together lift recall 0.792$\to$0.943 ($+8$ true positives). Third,
 unconstrained agentic tool selection is counter-productive at
-full-corpus scale: B6a (6{,}155 tokens/case, \$6.63 total) beats
+full-corpus scale. B6a (6{,}155 tokens/case, \$6.63 total) beats
 B6b/B7's agentic loop ($\sim$31K tokens/case, $\sim$4$\times$ the
 dollar cost each) on F1 (0.867 vs.\ 0.862/0.860) and on false-positive
 density (FP/KLOC 0.133 vs.\ 0.192/0.186). The planner chooses well when
@@ -557,11 +555,8 @@ benefit.
 Performance is not uniform across allocator families. Family-level F1
 runs from 0.975 (\texttt{malloc}-family sites, 108 cases, 402 labeled
 sites) down to 0.584 (\texttt{strdup}-family, 96 cases, 612 labeled
-sites, recall-limited at 98.9\% precision). The \texttt{strdup} family
-is driven by low
-recall (41.4\%)
-rather than false positives (precision 0.989); the
-intermediate families sit between 0.86 and 0.89. The verified two-branch
+sites, recall 41.4\% at 98.9\% precision); the intermediate families
+sit between 0.86 and 0.89. The verified two-branch
 dynamic-coverage account of one representative miss is one contributor
 to the family's low recall, not an exhaustive account of the 59
 \texttt{strdup}-family cases with an uncovered site on average. The two
@@ -569,9 +564,9 @@ smallest families (\texttt{destructor},
 \texttt{virtual}, one case each) are too small for their own F1 to be
 statistically meaningful.
 
-\noindent\fbox{\parbox{\dimexpr\linewidth-2\fboxsep-2\fboxrule\relax}{\textbf{Answer to RQ1.} The orchestration factors are not equal: the best end-to-end configuration is the pinned static, dynamic, and planner configuration B6a, at Precision 96.5\%, Recall 78.6\%, F1~0.867, MCC~0.836. Dynamic evidence is the dominant false-positive suppressor, dropping false positives from 470 to 74 ($\sim$85\%, B4$\to$B6); unconstrained agentic tool selection costs $\sim$4$\times$ the dollar cost for lower F1.}}
+\noindent\fbox{\parbox{\dimexpr\linewidth-2\fboxsep-2\fboxrule\relax}{\textbf{Answer to RQ1.} The orchestration factors are not equal. The best end-to-end configuration is the pinned static, dynamic, and planner configuration B6a, at Precision 96.5\%, Recall 78.6\%, F1~0.867, MCC~0.836. Dynamic evidence is the dominant false-positive suppressor, dropping false positives from 470 to 74 ($\sim$85\%, B4$\to$B6); unconstrained agentic tool selection costs $\sim$4$\times$ the dollar cost for lower F1.}}
 
-\subsection{RQ2: How does CLeak compare with a classical external analyzer at full scale?}
+\subsection{RQ2. How does CLeak compare with a classical external analyzer at full scale?}
 \label{sec:eval-external}
 
 \textbf{RQ2} asks how CLeak compares with a classical external analyzer
@@ -611,7 +606,7 @@ LAMeD~\cite{lamed} (Cooddy / CodeQL) & 6 real projects, 43 leaks & 5$\to$10 dete
 
 \noindent\fbox{\parbox{\dimexpr\linewidth-2\fboxsep-2\fboxrule\relax}{\textbf{Answer to RQ2.} At full corpus scale, CLeak's static-only \texttt{no\_llm} tier reaches F1~0.614 against Clang Static Analyzer's F1~0.376. The win comes through recall, roughly 2.2$\times$ more labeled leaks detected, while Clang holds the higher precision on its smaller flagged set; different corpora and scoring protocols keep the comparison directional.}}
 
-\subsection{RQ3: What is and is not reproducible?}
+\subsection{RQ3. What is and is not reproducible?}
 \label{sec:reproducibility}
 
 \textbf{RQ3} asks what is and is not reproducible. An LLM-in-the-loop
@@ -625,10 +620,10 @@ strategist/tuner disabled and allocators supplied from a frozen manifest,
 the heuristic judge, the deterministic Stage~B recipe, and the scoring
 pipeline produce byte-identical output across runs. A dedicated
 determinism gate enforces this and rejects the two
-\emph{false-pass} modes caught during development: a timestamp
+\emph{false-pass} modes caught during development, a timestamp
 collision comparing a run against itself, and a
 degenerate run where an unreachable analyzer made every case error out
-\emph{identically}, registering as spurious determinism.
+identically, registering as spurious determinism.
 
 \textbf{Tier 2} (\texttt{llm\_assisted}) reports variance. The tier
 covers B4, B5, B6, B6a, B6b, and B7; B6a differs from B6 only in its
@@ -641,14 +636,14 @@ run each \texttt{llm\_assisted} configuration $N$ times and report
 mean$\pm$std for every metric, plus a \emph{case-level
 verdict-stability} analysis.
 We also surface a
-\textbf{stable-by-luck} phenomenon: two independent 30-case runs once
-produced an \emph{identical} aggregate confusion matrix while only
+\textbf{stable-by-luck} phenomenon. Two independent 30-case runs once
+produced an identical aggregate confusion matrix while only
 73.3\% of individual verdicts were stable (26.7\% flip rate;
 opposite-direction flips cancelled). Only one run survives on disk
 (28~TP/7~FP/10~FN/129~TN over 174 labeled sites), so we report
 case-level stability rather than any single-run aggregate. The
 consensus study (Section~\ref{sec:eval-consensus}) completes the RQ3
-answer: campaign A is not significant at
+answer. Campaign A is not significant at
 $p{=}0.077$; campaign B is significant at $p{=}0.041$, favoring
 single-LLM judging.
 
@@ -660,9 +655,9 @@ campaigns, single-LLM judging ($K{=}1$) is both the more stable arm
 (verdict-flip rate 2.0\% vs.\ consensus $K{=}3$'s 8.0\%) and the more
 accurate one (F1 0.852 to 0.855 across its two campaigns vs.\
 consensus's 0.793 to 0.796); paired McNemar tests on the common site
-universe agree (campaign A, $n{=}267$ paired sites: 7 of 8 discordant
+universe agree (campaign A, $n{=}267$ paired sites, 7 of 8 discordant
 sites favoring single-LLM, $\chi^2 = 3.13$, $p = 0.077$, not
-significant at this sample size; campaign B, $n{=}273$: all 6
+significant at this sample size; campaign B, $n{=}273$, all 6
 discordant sites favoring single-LLM, $\chi^2 = 4.17$, $p = 0.041$,
 significant).
 We
@@ -670,9 +665,9 @@ therefore do not recommend consensus judging by default; it
 stays opt-in
 (\texttt{consensus.n~>~1}) pending a larger, multi-seed study.
 
-\noindent\fbox{\parbox{\dimexpr\linewidth-2\fboxsep-2\fboxrule\relax}{\textbf{Answer to RQ3.} Tier-1 \texttt{no\_llm} is bitwise-deterministic under a dedicated determinism gate that rejects two false-pass modes. Tier-2 variance is measured rather than hidden: its F1 standard deviation across three runs is 0.0011, reported as mean$\pm$std. The consensus study returns mixed A/B evidence on this measured sample, so consensus judging is not recommended by default.}}
+\noindent\fbox{\parbox{\dimexpr\linewidth-2\fboxsep-2\fboxrule\relax}{\textbf{Answer to RQ3.} Tier-1 \texttt{no\_llm} is bitwise-deterministic under a dedicated determinism gate that rejects two false-pass modes. Tier-2 variance is measured rather than hidden. Its F1 standard deviation across three runs is 0.0011, reported as mean$\pm$std. The consensus study returns mixed A/B evidence on this measured sample, so consensus judging is not recommended by default.}}
 
-\subsection{RQ4: Does the approach transfer to real projects?}
+\subsection{RQ4. Does the approach transfer to real projects?}
 \label{sec:eval-lamed}
 
 % Adjudication applied 2026-09-27 (Option A, orchestrator-recorded): LAMeD and
@@ -695,7 +690,7 @@ state-of-the-art tools catch only 5 to 10 of 43 real leaks.
 (mechanism in Section~\ref{sec:openproblems}), leaving the
 \texttt{+interproceduralFlow} configuration byte-identical
 to the default across all 41 cases. MemHint~\cite{memhint} publishes no
-per-bug list, so we evaluate on an \emph{independently reconstructed}
+per-bug list, so we evaluate on an independently reconstructed
 corpus of 19 cases across 6 MemHint target projects (19 labeled
 sites,
 positive-only); \texttt{no\_llm} reaches 100\% precision (8 of 19
@@ -705,7 +700,7 @@ R~0.421$\pm$0.000, F1~0.593$\pm$0.000), and the comparison to MemHint's
 headline numbers (Table~\ref{tab:literature}) remains directional,
 the denominators differing.
 
-\noindent\fbox{\parbox{\dimexpr\linewidth-2\fboxsep-2\fboxrule\relax}{\textbf{Answer to RQ4.} The approach transfers to real projects with 100\% precision on both real-world corpora: LAMeD at TP~10/FP~0 and 23.3\% recall, and the MemHint-derived corpus at 8 of 19 labeled sites and 42.1\% recall. Transfer is positive on precision with bounded recall.}}
+\noindent\fbox{\parbox{\dimexpr\linewidth-2\fboxsep-2\fboxrule\relax}{\textbf{Answer to RQ4.} The approach transfers to real projects with 100\% precision on both real-world corpora, LAMeD at TP~10/FP~0 and 23.3\% recall, and the MemHint-derived corpus at 8 of 19 labeled sites and 42.1\% recall. Transfer is positive on precision with bounded recall.}}
 
 \section{Limitations}
 \label{sec:discussion}
@@ -771,7 +766,7 @@ evidence qualitatively, not as transferable point values.
 \section{Conclusion and Future Work}
 
 We presented CLeak, a memory-leak investigation system for C/C++ built
-on one organizing principle: the LLM owns policy, the engine owns
+on one organizing principle. The LLM owns policy, the engine owns
 mechanism. Our strongest configuration is a pinned-recipe hybrid,
 deterministic in tool execution and LLM-assisted only at the
 borderline, at F1~0.867/MCC~0.836 on Juliet, 100\% precision at
