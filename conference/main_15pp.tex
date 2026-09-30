@@ -154,8 +154,8 @@ motivates a hybrid rather than a choice
 (Section~\ref{sec:pipeline}). The closest prior work targets C/C++
 memory leaks directly. IRIS~\cite{iris} couples an LLM with static
 analysis. \textbf{MemHint}~\cite{memhint} is a neuro-symbolic static
-pipeline reporting 52 to 54 leaks found (49 confirmed/fixed) across 7
-projects (over 3.4M LOC). \textbf{LAMeD}~\cite{lamed,lamed-benchmark}
+pipeline reporting 54 leaks found (53 confirmed/fixed) across 8
+projects (over 3.6M LOC). \textbf{LAMeD}~\cite{lamed,lamed-benchmark}
 is not agentic. Its LLM only \emph{annotates} source for a classical
 analyzer, it reports no F1, and it supplies our real-world corpus
 (Section~\ref{sec:eval-lamed}).
@@ -592,11 +592,11 @@ different scoring protocols mean this is not a superiority claim).}
 \toprule
 \textbf{System} & \textbf{Corpus} & \textbf{Result} & \textbf{Method} & \textbf{Peer-rev.} \\
 \midrule
-MemHint~\cite{memhint} & 7 real projects, 3.4M+ LOC & 52--54 leaks found (49 confirmed) & LLM + Z3 + CodeQL/Infer & No \\
+MemHint~\cite{memhint} & 8 real projects, 3.6M+ LOC & 54 leaks found (53 confirmed) & LLM + Z3 + CodeQL/Infer & No \\
 % Adjudication applied 2026-09-27 (Option A): CLeak LAMeD/MemHint rows use the
 % fixed-universe counts (43/19 labeled sites) and re-scored TPs (10/8).
 LAMeD~\cite{lamed} (annotation) & cJSON, 152 functions & P 0.933 / R 0.583 (28 TP/2 FP/20 FN) & LLM generates AllocSource/FreeSink annotations & Yes \\
-LAMeD~\cite{lamed} (Cooddy / CodeQL) & 6 real projects, 43 leaks & 5$\to$10 detections & each consumes the LLM annotations & Yes \\
+LAMeD~\cite{lamed} (Cooddy / CodeQL) & 7 real projects, 43 leaks & 5$\to$10 detections & each consumes the LLM annotations & Yes \\
 \textbf{CLeak (this work)} & LAMeD, 41 cases (43 labeled sites) & 10 TP / 0 FP & \texttt{no\_llm}/\texttt{llm\_assisted}, identical & --- \\
 \textbf{CLeak (this work)} & MemHint-derived, 19 cases (19 labeled sites) & 8 TP / 0 FP & \texttt{no\_llm}/\texttt{llm\_assisted}, identical & --- \\
 \textbf{CLeak (this work)} & Juliet, full corpus ($n{=}1{,}658$) & 2010 TP / 72 FP (B6a) & LLM orchestration + static + dynamic & --- \\
