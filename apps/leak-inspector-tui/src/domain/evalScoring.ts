@@ -97,8 +97,30 @@ export function hasGroundTruth(c: LabeledCase): boolean {
   return (c.flaws?.length ?? 0) > 0 || (c.clean?.length ?? 0) > 0;
 }
 
+/**
+ * Symbol normalization for matching: strips C++ namespace qualifiers
+ * (`ns::`, any depth — an LSan first frame like
+ * `CWE401_Memory_Leak__char_calloc_43::badSource(char*&)` becomes `badsource`),
+ * template arguments (`<…>`, innermost first), parameter lists/parentheses, and
+ * leading/trailing underscores; then the plain lowercase-ASCII normalize.
+ * Applied to BOTH finding function names and label function names (every
+ * matching call goes through `normalize`), so a demangled dynamic frame scores
+ * against the same label a static finding would — without it, the fallback
+ * classification created a second sample for the same physical leak.
+ */
+export function normalizeSymbol(fn: string): string {
+  let s = fn.trim();
+  while (/<[^<>]*>/.test(s)) s = s.replace(/<[^<>]*>/g, '');
+  while (/\([^()]*\)/.test(s)) s = s.replace(/\([^()]*\)/g, '');
+  const segs = s.split('::');
+  if (segs.length > 1) s = segs[segs.length - 1];
+  s = s.replace(/^_+/, '').replace(/_+$/, '');
+  return s.trim().toLowerCase();
+}
+
+/** Name normalization — the single choke point every matcher calls through. */
 function normalize(fn: string): string {
-  return fn.trim().toLowerCase();
+  return normalizeSymbol(fn);
 }
 
 /**
@@ -120,6 +142,52 @@ function sameFunction(a: string, b: string): boolean {
   const y = normalize(b);
   if (!x || !y) return false;
   return x === y || suffixAtBoundary(x, y) || suffixAtBoundary(y, x);
+}
+
+/** One labeled site after the paired-label merge (see `mergePairedLabels`). */
+export interface MergedLabelSite {
+  /** Deterministic representative: the shortest normalized member, lexicographic on ties. */
+  site: string;
+  /** Every raw label that collapsed into this site. */
+  members: string[];
+}
+
+/**
+ * Symmetric paired-label merge — the label-side twin of the scorer's finding
+ * matching. Labels of ONE list (call it per class: flaws and clean separately)
+ * that match each other under the same `sameFunction` tolerance used for
+ * findings collapse to ONE labeled site, via union-find over all matching
+ * pairs. This makes the merge symmetric by construction: every pair the static
+ * path merges, the dynamic path merges identically (the pre-fix asymmetric
+ * paired-label merge produced +87 double-counted positives on dynamic rows).
+ * Output is deterministic: sites sorted by their representative key, members
+ * in first-seen order — stable input for universe enumeration.
+ */
+export function mergePairedLabels(labels: string[]): MergedLabelSite[] {
+  const parent = labels.map((_, i) => i);
+  const find = (i: number): number => (parent[i] === i ? i : (parent[i] = find(parent[i])));
+  for (let i = 0; i < labels.length; i++) {
+    for (let j = i + 1; j < labels.length; j++) {
+      if (!sameFunction(labels[i], labels[j])) continue;
+      const a = find(i);
+      const b = find(j);
+      if (a !== b) parent[Math.max(a, b)] = Math.min(a, b);
+    }
+  }
+  const groups = new Map<number, string[]>();
+  labels.forEach((label, i) => {
+    const root = find(i);
+    const group = groups.get(root);
+    if (group) group.push(label);
+    else groups.set(root, [label]);
+  });
+  const sites: MergedLabelSite[] = [];
+  for (const members of groups.values()) {
+    const normalized = members.map(normalize);
+    const site = normalized.sort((a, b) => a.length - b.length || (a < b ? -1 : 1))[0];
+    sites.push({ site, members });
+  }
+  return sites.sort((a, b) => (a.site < b.site ? -1 : a.site > b.site ? 1 : 0));
 }
 
 function baseName(p?: string): string {
@@ -288,4 +356,156 @@ export function extraFindings(findings: SnapshotFinding[], c: LabeledCase): Extr
     out.push({ function: f.function, file: f.file, line: f.line, confidence: f.confidence, verdict: f.verdict });
   }
   return out;
+}
+
+// ── Fixed-universe scoring (D1-refined) ──────────────────────────────────────
+
+/** A flagged finding that matched NO labeled site of its case — counted in the
+ * accounting, never scored as a sample (no ground-truth label to score against). */
+export interface FlaggedUnlabeledEntry {
+  caseId: string;
+  /** Normalized function name of the unmatched finding (the dedup key). */
+  site: string;
+  reason: 'no-label';
+}
+
+/** Per-case output of `scoreCaseUniverse`. */
+export interface UniverseCaseResult {
+  caseId: string;
+  /** ONE sample per labeled site of the case — the universe is fixed, so this
+   * list has identical siteId sets for every configuration. */
+  samples: Sample[];
+  flaggedUnlabeled: FlaggedUnlabeledEntry[];
+}
+
+/** Run-wide accounting over per-case universe results (see `buildUniverseAccounting`). */
+export interface UniverseAccounting {
+  cases: number;
+  rawBadLabels: number;
+  rawGoodLabels: number;
+  mergedBadSites: number;
+  mergedGoodSites: number;
+  /** mergedBadSites + mergedGoodSites — equals the sample count for EVERY configuration. */
+  totalSamples: number;
+  tp: number;
+  fp: number;
+  fn: number;
+  tn: number;
+  /** Raw labels that collapsed into an existing site (raw − merged). */
+  mergedLabelGroups: number;
+  flaggedUnlabeled: { count: number; list: FlaggedUnlabeledEntry[] };
+  /** Empty by construction: the labels ARE the universe, so nothing is excluded. */
+  exclusions: Array<{ site: string; reason: string }>;
+}
+
+/**
+ * The case's fixed universe from its raw labels: each class merged
+ * symmetrically via `mergePairedLabels`. Callers (and the offline re-score
+ * script) pass the manifest case's `flaws`/`clean` function names here; the
+ * same call with the same labels yields the same sites for every configuration.
+ */
+export function buildCaseUniverse(allLabels: { bad: string[]; good: string[] }): {
+  bad: MergedLabelSite[];
+  good: MergedLabelSite[];
+} {
+  return { bad: mergePairedLabels(allLabels.bad), good: mergePairedLabels(allLabels.good) };
+}
+
+/** A finding counts for a site when it matches ANY member label (union-find
+ * members are not pairwise-transitive under `sameFunction`, so matching only
+ * the representative could miss a member-only match). */
+function siteMatchedByFinding(site: MergedLabelSite, fn: string | undefined): boolean {
+  if (!fn) return false;
+  return site.members.some((member) => sameFunction(member, fn));
+}
+
+/**
+ * Fixed-universe scoring of one case (decision D1-refined): ONE sample per
+ * merged labeled site, identical enumeration for every configuration — the
+ * sample count is a property of the LABELS, never of what a tool reported.
+ * A site is flagged when ANY finding flagged it; bad+flagged → TP,
+ * bad+unflagged → FN, good+flagged → FP, good+unflagged → TN. This makes the
+ * finding-driven double-count structurally impossible: each physical leak can
+ * produce at most one sample (its labeled site), and an uncovered labeled site
+ * is exactly one FN. A flagged finding matching no site lands in
+ * `flaggedUnlabeled` (counted, never a sample); an UNFLAGGED finding at an
+ * unlabeled function counts nowhere — silence has no ground truth either way.
+ */
+export function scoreCaseUniverse(
+  findings: SnapshotFinding[],
+  caseId: string,
+  sites: { bad: MergedLabelSite[]; good: MergedLabelSite[] },
+): UniverseCaseResult {
+  const flagged = findings.filter((f) => isFlagged(f.verdict));
+  const samples: Sample[] = [];
+  for (const cls of ['bad', 'good'] as const) {
+    for (const site of sites[cls]) {
+      const hits = flagged.filter((f) => siteMatchedByFinding(site, f.function));
+      samples.push({
+        actual: cls === 'bad',
+        predicted: hits.length > 0,
+        confidence: hits.length > 0 ? hits[hits.length - 1].confidence : undefined,
+        siteId: `${caseId}::${site.site}`,
+      });
+    }
+  }
+  const seen = new Set<string>();
+  const flaggedUnlabeled: FlaggedUnlabeledEntry[] = [];
+  for (const f of flagged) {
+    const matched =
+      sites.bad.some((s) => siteMatchedByFinding(s, f.function)) ||
+      sites.good.some((s) => siteMatchedByFinding(s, f.function));
+    if (matched) continue;
+    const key = normalize(f.function ?? '');
+    if (seen.has(key)) continue;
+    seen.add(key);
+    flaggedUnlabeled.push({ caseId, site: key, reason: 'no-label' });
+  }
+  return { caseId, samples, flaggedUnlabeled };
+}
+
+/**
+ * Aggregate per-case universe results into the run-wide accounting. The sample
+ * count derives from the labels alone (raw − merged groups), so every
+ * configuration scored on the same universe shares one positive count.
+ */
+export function buildUniverseAccounting(
+  perCase: UniverseCaseResult[],
+  rawBadLabels: number,
+  rawGoodLabels: number,
+): UniverseAccounting {
+  let mergedBadSites = 0;
+  let mergedGoodSites = 0;
+  let tp = 0;
+  let fp = 0;
+  let fn = 0;
+  let tn = 0;
+  const flaggedUnlabeled: FlaggedUnlabeledEntry[] = [];
+  for (const r of perCase) {
+    for (const s of r.samples) {
+      if (s.actual) mergedBadSites++;
+      else mergedGoodSites++;
+      if (s.actual && s.predicted) tp++;
+      else if (!s.actual && s.predicted) fp++;
+      else if (s.actual && !s.predicted) fn++;
+      else tn++;
+    }
+    flaggedUnlabeled.push(...r.flaggedUnlabeled);
+  }
+  const totalSamples = mergedBadSites + mergedGoodSites;
+  return {
+    cases: perCase.length,
+    rawBadLabels,
+    rawGoodLabels,
+    mergedBadSites,
+    mergedGoodSites,
+    totalSamples,
+    tp,
+    fp,
+    fn,
+    tn,
+    mergedLabelGroups: rawBadLabels + rawGoodLabels - totalSamples,
+    flaggedUnlabeled: { count: flaggedUnlabeled.length, list: flaggedUnlabeled },
+    exclusions: [],
+  };
 }

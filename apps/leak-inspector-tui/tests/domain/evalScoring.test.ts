@@ -1,11 +1,17 @@
 import { describe, expect, test } from 'vitest';
+import { existsSync, readFileSync } from 'node:fs';
 import { accumulate } from '@cleak/common/analysis/metrics';
 import {
+  buildCaseUniverse,
+  buildUniverseAccounting,
   classifyFunction,
   classifyFinding,
   hasGroundTruth,
   isFlagged,
+  mergePairedLabels,
+  normalizeSymbol,
   scoreCase,
+  scoreCaseUniverse,
   extraFindings,
   type LabeledCase,
   type SnapshotFinding,
@@ -359,5 +365,262 @@ describe('scoreCase — flagged wins over non-flagged', () => {
     const tp = samples.find((s) => s.actual && s.predicted);
     expect(tp).toBeDefined(); // flagged finding wins over non-flagged
     expect(tp!.confidence).toBe(0.9); // carries the flagged confidence
+  });
+});
+
+// ── Todo 3: C++ symbol normalization + symmetric paired-label merge ──────────
+
+describe('normalizeSymbol — C++ demangled symbol normalization', () => {
+  test('strips namespace qualifiers, parameter lists, templates, edge underscores', () => {
+    expect(normalizeSymbol('CWE401_Memory_Leak__char_calloc_43::badSource(char*&)')).toBe('badsource');
+    expect(normalizeSymbol('CWE401_Memory_Leak__char_calloc_72::bad()')).toBe('bad');
+    expect(normalizeSymbol('(anonymous namespace)::goodG2B')).toBe('goodg2b');
+    expect(normalizeSymbol('ns::helper<std::string>::alloc<int>()')).toBe('alloc');
+    expect(normalizeSymbol('_leading_and_trailing_')).toBe('leading_and_trailing');
+    expect(normalizeSymbol('  badSink  ')).toBe('badsink');
+  });
+
+  test('plain identifiers are unchanged', () => {
+    expect(normalizeSymbol('badSink')).toBe('badsink');
+    expect(normalizeSymbol('CWE401_Memory_Leak__malloc_char_01_bad')).toBe('cwe401_memory_leak__malloc_char_01_bad');
+    expect(normalizeSymbol('foo_bar')).toBe('foo_bar');
+  });
+});
+
+describe('matching — C++ demangled findings vs plain labels (sameFunction after normalization)', () => {
+  test('demangled qualified name matches its plain badSource label', () => {
+    const c: LabeledCase = {
+      id: 'CWE401_Memory_Leak__char_calloc_43',
+      repo_path: 'p',
+      flaws: [{ function: 'badSource' }],
+      clean: [],
+    };
+    expect(classifyFunction('CWE401_Memory_Leak__char_calloc_43::badSource(char*&)', c)).toBe('bad');
+  });
+
+  test('namespaced zero-arg bad() matches label bad', () => {
+    const c: LabeledCase = { id: 'x72', repo_path: 'p', flaws: [{ function: 'bad' }], clean: [] };
+    expect(classifyFunction('CWE401_Memory_Leak__char_calloc_72::bad()', c)).toBe('bad');
+  });
+
+  test('qualified good symbol matches its clean label', () => {
+    const c: LabeledCase = {
+      id: 'g1',
+      repo_path: 'p',
+      flaws: [{ function: 'bad' }],
+      clean: [{ function: 'goodG2B' }],
+    };
+    expect(classifyFunction('ns::goodG2B(char*)', c)).toBe('good');
+  });
+
+  test('plain identifiers: existing matching behavior unchanged (boundary suffix rules intact)', () => {
+    expect(classifyFunction('badSink', { id: 'p1', repo_path: 'p', flaws: [{ function: 'badSink' }], clean: [] })).toBe('bad');
+    expect(classifyFunction('tc_CWE401_x_01_bad', { id: 'p2', repo_path: 'p', flaws: [{ function: 'CWE401_x_01_bad' }], clean: [] })).toBe('bad');
+    expect(classifyFunction('domain', { id: 'p3', repo_path: 'p', flaws: [{ function: 'main' }], clean: [] })).toBe('unknown');
+  });
+
+  test('no false merge: foo_bar matches neither bad nor clean labels', () => {
+    const c: LabeledCase = {
+      id: 'n1',
+      repo_path: 'p',
+      flaws: [{ function: 'bad' }],
+      clean: [{ function: 'goodG2B' }],
+    };
+    expect(classifyFunction('foo_bar', c)).toBe('unknown');
+  });
+});
+
+describe('scoreCase — demangled dynamic frame no longer triple-counts one leak', () => {
+  // Real B2 defect instance: labels `bad` + `badSource`, one dynamic finding
+  // `CWE401_…_43::badSource(char*&)`. Pre-fix: TP via the includes('bad')
+  // fallback at a THIRD site + synthetic FNs for both labels (tp=1, fn=2).
+  test('demangled frame matches badSource; only the genuinely-unpaired `bad` label stays a synthetic FN', () => {
+    const c: LabeledCase = {
+      id: 'CWE401_Memory_Leak__char_calloc_43',
+      repo_path: 'p',
+      flaws: [{ function: 'bad' }, { function: 'badSource' }],
+      clean: [],
+    };
+    const f: SnapshotFinding[] = [
+      finding({ function: 'CWE401_Memory_Leak__char_calloc_43::badSource(char*&)', verdict: 'confirmed_leak' }),
+    ];
+    const cm = accumulate(scoreCase(f, c));
+    expect(cm.tp).toBe(1);
+    expect(cm.fn).toBe(1); // pre-fix this was 2 — the double-count
+    expect(cm.fp).toBe(0);
+  });
+});
+
+describe('mergePairedLabels — symmetric paired-label merge (label↔label, both directions)', () => {
+  test('paired labels bad + <CASE>_bad collapse to ONE site (real census pair shape)', () => {
+    const merged = mergePairedLabels(['bad', 'CWE401_Memory_Leak__char_calloc_81_bad']);
+    expect(merged).toHaveLength(1);
+    expect(merged[0].site).toBe('bad');
+    expect([...merged[0].members].sort()).toEqual(['CWE401_Memory_Leak__char_calloc_81_bad', 'bad']);
+  });
+
+  test('symmetric in input order, deterministic in output order, per-class grouping preserved', () => {
+    const a = mergePairedLabels(['bad', 'CWE401_X_81_bad', 'goodG2B', 'CWE401_X_81_goodG2B']);
+    const b = mergePairedLabels(['CWE401_X_81_goodG2B', 'goodG2B', 'CWE401_X_81_bad', 'bad']);
+    expect(a.map((m) => m.site)).toEqual(b.map((m) => m.site));
+    expect(a.map((m) => m.site)).toEqual(['bad', 'goodg2b']);
+    expect(a.find((m) => m.site === 'bad')!.members).toHaveLength(2);
+    expect(a.find((m) => m.site === 'goodg2b')!.members).toHaveLength(2);
+  });
+
+  test('non-matching labels stay separate (no false merge)', () => {
+    const merged = mergePairedLabels(['badSink', 'bad', 'badsink_extra']);
+    expect(merged).toHaveLength(3);
+  });
+
+  test('empty input yields no sites', () => {
+    expect(mergePairedLabels([])).toEqual([]);
+  });
+});
+
+// ── Todo 4: fixed-universe scoring (D1-refined) ──────────────────────────────
+
+describe('scoreCaseUniverse — fixed universe, one sample per labeled site', () => {
+  test('all four cells reachable: tp/fn from unflagged+flagged bad sites, fp/tn from good sites', () => {
+    const sites = buildCaseUniverse({ bad: ['leak_one', 'leak_two'], good: ['clean_one', 'clean_two'] });
+    const findings: SnapshotFinding[] = [
+      finding({ function: 'leak_one', verdict: 'confirmed_leak' }), // bad + flagged → TP
+      finding({ function: 'clean_one', verdict: 'confirmed_leak' }), // good + flagged → FP
+      // leak_two: never reported → FN; clean_two: never reported → TN
+    ];
+    const r = scoreCaseUniverse(findings, 'case4', sites);
+    expect(r.samples).toHaveLength(4);
+    expect(r.flaggedUnlabeled).toHaveLength(0);
+    const acct = buildUniverseAccounting([r], 2, 2);
+    expect([acct.tp, acct.fp, acct.fn, acct.tn]).toEqual([1, 1, 1, 1]);
+    expect(acct.totalSamples).toBe(4);
+    expect(acct.mergedLabelGroups).toBe(0);
+    expect(acct.exclusions).toEqual([]);
+  });
+
+  test('siteId universe is IDENTICAL across configurations; only tp/fp move', () => {
+    const sites = buildCaseUniverse({ bad: ['bad', 'CWE401_X_bad'], good: ['goodG2B'] });
+    const configA = scoreCaseUniverse(
+      [finding({ function: 'bad', verdict: 'confirmed_leak' })],
+      'caseA',
+      sites,
+    );
+    const configB = scoreCaseUniverse(
+      [finding({ function: 'goodG2B', verdict: 'confirmed_leak' })],
+      'caseA',
+      sites,
+    );
+    const idsA = configA.samples.map((s) => s.siteId).sort();
+    const idsB = configB.samples.map((s) => s.siteId).sort();
+    expect(idsA).toEqual(idsB);
+    const a = accumulate(configA.samples);
+    const b = accumulate(configB.samples);
+    expect([a.tp, a.fp]).toEqual([1, 0]);
+    expect([b.tp, b.fp]).toEqual([0, 1]);
+  });
+
+  test('B2 double-count structurally impossible: paired labels → ONE site, ONE TP, ZERO synthetic FN', () => {
+    // Real census pair shape (case CWE401_Memory_Leak__char_calloc_81): the
+    // demangled dynamic frame matches the merged site; no finding-derived
+    // samples can exist, so no synthetic FN can appear.
+    const sites = buildCaseUniverse({ bad: ['bad', 'CWE401_Memory_Leak__char_calloc_81_bad'], good: [] });
+    const r = scoreCaseUniverse(
+      [finding({ function: 'CWE401_Memory_Leak__char_calloc_81::bad(char*&)', verdict: 'confirmed_leak' })],
+      'CWE401_Memory_Leak__char_calloc_81',
+      sites,
+    );
+    expect(r.samples).toHaveLength(1); // universe size, NOT findings count
+    expect(r.samples[0].actual).toBe(true);
+    expect(r.samples[0].predicted).toBe(true);
+    const cm = accumulate(r.samples);
+    expect(cm).toEqual({ tp: 1, fp: 0, fn: 0, tn: 0 });
+    expect(r.flaggedUnlabeled).toHaveLength(0);
+  });
+
+  test('unmerged distinct labels still yield exactly universe-size samples (char_calloc_43 shape)', () => {
+    const sites = buildCaseUniverse({ bad: ['bad', 'badSource'], good: [] });
+    const r = scoreCaseUniverse(
+      [finding({ function: 'CWE401_Memory_Leak__char_calloc_43::badSource(char*&)', verdict: 'confirmed_leak' })],
+      'CWE401_Memory_Leak__char_calloc_43',
+      sites,
+    );
+    expect(r.samples).toHaveLength(2);
+    const cm = accumulate(r.samples);
+    expect(cm).toEqual({ tp: 1, fp: 0, fn: 1, tn: 0 }); // never 1 TP + 2 FN
+  });
+
+  test('flagged finding at an unlabeled function → flaggedUnlabeled entry, NO sample', () => {
+    const sites = buildCaseUniverse({ bad: ['bad'], good: [] });
+    const r = scoreCaseUniverse(
+      [
+        finding({ function: 'action', verdict: 'confirmed_leak' }), // the real B1 unlabeled helper
+        finding({ function: 'action', verdict: 'likely_leak', line: 99 }), // same site, deduped
+        finding({ function: 'other_helper', verdict: 'confirmed_leak' }),
+      ],
+      'caseU',
+      sites,
+    );
+    expect(r.samples.map((s) => s.siteId)).toEqual(['caseU::bad']);
+    expect(r.flaggedUnlabeled).toHaveLength(2);
+    expect(r.flaggedUnlabeled[0]).toEqual({ caseId: 'caseU', site: 'action', reason: 'no-label' });
+    expect(r.flaggedUnlabeled.every((e) => e.reason === 'no-label')).toBe(true);
+  });
+
+  test('unflagged finding at an unlabeled function counts nowhere', () => {
+    const sites = buildCaseUniverse({ bad: ['bad'], good: [] });
+    const r = scoreCaseUniverse([finding({ function: 'helper', verdict: 'false_positive' })], 'caseS', sites);
+    expect(r.samples).toHaveLength(1);
+    expect(r.flaggedUnlabeled).toHaveLength(0);
+  });
+});
+
+describe('universe census equality — reconstruction must equal universe-census.json (Todo 1 artifact)', () => {
+  // Root lookup by marker file: robust to whichever directory vitest is invoked from.
+  const findRoot = (): string => {
+    let dir = process.cwd();
+    for (let i = 0; i < 6; i++) {
+      if (existsSync(`${dir}/demo/juliet_cwe401/corpus_manifest.json`)) return dir;
+      dir = `${dir}/..`;
+    }
+    return process.cwd();
+  };
+  const root = findRoot();
+  const manifestPath = `${root}/demo/juliet_cwe401/corpus_manifest.json`;
+  const censusPath = `${root}/.omo/evidence/scoring-universe-refactor/universe-census.json`;
+  // Both files are pinned chain inputs (git-ignored); skip in bare checkouts.
+  const available = existsSync(manifestPath) && existsSync(censusPath);
+
+  test.skipIf(!available)('mergePairedLabels over the manifest reproduces every per-case site list + the totals', () => {
+    const manifest = JSON.parse(readFileSync(manifestPath, 'utf-8')) as {
+      cases: Array<{ id: string; flaws?: Array<{ function: string }>; clean?: Array<{ function: string }> }>;
+    };
+    const census = JSON.parse(readFileSync(censusPath, 'utf-8')) as {
+      merged: { bad: number; good: number; total: number };
+      perCaseSites: Record<string, { bad: string[]; good: string[] }>;
+    };
+
+    let bad = 0;
+    let good = 0;
+    for (const c of manifest.cases) {
+      const sites = buildCaseUniverse({
+        bad: (c.flaws ?? []).map((f) => f.function),
+        good: (c.clean ?? []).map((f) => f.function),
+      });
+      const caseId = c.id;
+      const expected = census.perCaseSites[caseId];
+      expect(expected, `census has per-case sites for ${caseId}`).toBeDefined();
+      // Set equality: the census lists sites in first-seen order; the
+      // reconstruction is representative-sorted. Sorted comparison also pins
+      // determinism — any content drift still fails.
+      const sorted = (xs: string[]) => [...xs].sort();
+      expect(sorted(sites.bad.map((s) => `${caseId}::${s.site}`))).toEqual(sorted(expected.bad));
+      expect(sorted(sites.good.map((s) => `${caseId}::${s.site}`))).toEqual(sorted(expected.good));
+      bad += sites.bad.length;
+      good += sites.good.length;
+    }
+    // The census is the authority — these are ITS numbers, re-read at runtime.
+    expect(bad).toBe(census.merged.bad);
+    expect(good).toBe(census.merged.good);
+    expect(census.merged.total).toBe(census.merged.bad + census.merged.good);
   });
 });
