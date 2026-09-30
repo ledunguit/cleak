@@ -1,0 +1,240 @@
+% references.bib — CLeak conference paper
+% All entries verified against primary sources (arXiv abs pages, Crossref-fed
+% OpenAlex, Zenodo API, PMLR, IEEE CSDL, researchr/dblp mirrors) on 2026-09-30.
+% Keys match the \cite keys in main_15pp.tex. 2 additions: `nondeterminism`,
+% `cwe401`.
+
+% ============================================================
+% 1. Static / dynamic analysis tools
+% ============================================================
+
+@misc{clangsa,
+  author       = {{LLVM Project}},
+  title        = {Clang Static Analyzer},
+  howpublished = {\url{https://clang-analyzer.llvm.org/}},
+  note         = {Accessed 2026},
+  year         = {2026}
+}
+
+@inproceedings{infer,
+  author    = {Calcagno, Cristiano and Distefano, Dino},
+  title     = {Infer: An Automatic Program Verifier for Memory Safety of {C} Programs},
+  booktitle = {Proceedings of the 3rd International Symposium on NASA Formal Methods (NFM)},
+  series    = {Lecture Notes in Computer Science},
+  volume    = {6617},
+  pages     = {459--465},
+  publisher = {Springer},
+  year      = {2011},
+  doi       = {10.1007/978-3-642-21424-0_34}
+}
+
+@misc{codeql,
+  author       = {{GitHub}},
+  title        = {CodeQL: Semantic Code Analysis Engine},
+  howpublished = {\url{https://codeql.github.com/}},
+  note         = {Accessed 2026},
+  year         = {2026}
+}
+
+@inproceedings{valgrind,
+  author    = {Nethercote, Nicholas and Seward, Julian},
+  title     = {Valgrind: A Framework for Heavyweight Dynamic Binary Instrumentation},
+  booktitle = {Proceedings of the ACM SIGPLAN Conference on Programming Language Design and Implementation (PLDI)},
+  pages     = {89--100},
+  publisher = {ACM},
+  year      = {2007},
+  doi       = {10.1145/1250734.1250746}
+}
+
+@inproceedings{asan,
+  author    = {Serebryany, Konstantin and Bruening, Dmitry and Potapenko, Alexander and Vyukov, Dmitriy},
+  title     = {AddressSanitizer: A Fast Address Sanity Checker},
+  booktitle = {Proceedings of the USENIX Annual Technical Conference (ATC)},
+  pages     = {309--318},
+  publisher = {USENIX Association},
+  year      = {2012},
+  url       = {https://www.usenix.org/conference/usenixatc12/technical-sessions/presentation/serebryany}
+}
+
+% ============================================================
+% 2. Memory-leak detection prior work
+% ============================================================
+
+% NOTE: official arXiv title has NO "MemHint:" prefix. arXiv-only as of Sep 2026.
+@misc{memhint,
+  author        = {Huang, Huihui and Shi, Jieke and Wang, Bo and Yang, Zhou and Lo, David},
+  title         = {Finding Memory Leaks in {C/C++} Programs via Neuro-Symbolic Augmented Static Analysis},
+  year          = {2026},
+  eprint        = {2603.27224},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.SE},
+  doi           = {10.48550/arXiv.2603.27224},
+  url           = {https://arxiv.org/abs/2603.27224}
+}
+
+% NOTE: author order follows the ACM-published (EASE '25) proceedings:
+% Shemetova, Smirnov, Alekseev, Shenbin, Rukhovich, Nikolenko, Lomshakov,
+% Piontkovskaya — NOT the arXiv:2505.02376 order.
+@inproceedings{lamed,
+  author    = {Shemetova, Ekaterina and Smirnov, Ivan and Alekseev, Anton and Shenbin, Ilya and Rukhovich, Alexey and Nikolenko, Sergey and Lomshakov, Vadim and Piontkovskaya, Irina},
+  title     = {{LAMeD}: {LLM}-generated Annotations for Memory Leak Detection},
+  booktitle = {Proceedings of the 29th International Conference on Evaluation and Assessment in Software Engineering (EASE '25)},
+  address   = {Istanbul, Turkey},
+  pages     = {1024--1034},
+  publisher = {ACM},
+  year      = {2025},
+  doi       = {10.1145/3756681.3756999}
+}
+
+% NOTE: record title and creator verified via Zenodo API; creator is listed as
+% "Anonymous" (double-blind artifact). Contains memleak_benchmark.json among 3
+% files; this record is version 6 of concept DOI 10.5281/zenodo.13758867.
+@misc{lamed-benchmark,
+  author       = {{Anonymous}},
+  title        = {Supplementary Materials for {LAMeD}: {LLM}-generated Annotations for Memory leak Detection},
+  year         = {2025},
+  month        = mar,
+  howpublished = {Zenodo, record 15089703 (version v6)},
+  doi          = {10.5281/zenodo.15089703},
+  url          = {https://zenodo.org/records/15089703},
+  note         = {Contains the memleak\_benchmark.json labeled-site manifest}
+}
+
+@inproceedings{repoaudit,
+  author    = {Guo, Jinyao and Wang, Chengpeng and Xu, Xiangzhe and Su, Zian and Zhang, Xiangyu},
+  title     = {{RepoAudit}: An Autonomous {LLM}-Agent for Repository-Level Code Auditing},
+  booktitle = {Proceedings of the 42nd International Conference on Machine Learning (ICML)},
+  series    = {Proceedings of Machine Learning Research},
+  volume    = {267},
+  pages     = {21083--21100},
+  publisher = {PMLR},
+  year      = {2025},
+  url       = {https://proceedings.mlr.press/v267/guo25n.html},
+  note      = {arXiv:2501.18160}
+}
+
+% arXiv-only as of v2 (Mar 2026). Author byline spelling: G\"orz (umlaut).
+@misc{fuzzer-vs-sa,
+  author        = {Hassler, Keno and G{\"o}rz, Philipp and Lipp, Stephan},
+  title         = {A Comparative Study of Fuzzers and Static Analysis Tools for Finding Memory Unsafety in {C} and {C++}},
+  year          = {2025},
+  eprint        = {2505.22052},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.CR},
+  doi           = {10.48550/arXiv.2505.22052},
+  url           = {https://arxiv.org/abs/2505.22052},
+  note          = {v2 revised 2026; Hassler and G{\"o}rz contributed equally}
+}
+
+% ============================================================
+% 3. LLM-based vulnerability detection
+% ============================================================
+
+% Published at IEEE ICST 2025 (NOT an MSR 2024 paper).
+@inproceedings{llm-vuln-eval,
+  author    = {Khare, Avishree and Dutta, Saikat and Li, Ziyang and Solko-Breslin, Alaia and Alur, Rajeev and Naik, Mayur},
+  title     = {Understanding the Effectiveness of Large Language Models in Detecting Security Vulnerabilities},
+  booktitle = {2025 IEEE Conference on Software Testing, Verification and Validation (ICST)},
+  address   = {Naples, Italy},
+  pages     = {103--114},
+  publisher = {IEEE},
+  year      = {2025},
+  doi       = {10.1109/ICST62969.2025.10988968}
+}
+
+% Published at ICLR 2025 (poster).
+@inproceedings{iris,
+  author    = {Li, Ziyang and Dutta, Saikat and Naik, Mayur},
+  title     = {{IRIS}: {LLM}-Assisted Static Analysis for Detecting Security Vulnerabilities},
+  booktitle = {The Thirteenth International Conference on Learning Representations (ICLR)},
+  year      = {2025},
+  url       = {https://proceedings.iclr.cc/paper_files/paper/2025/hash/582d4e27fa24168f3af1f4582655034b-Abstract-Conference.html},
+  note      = {arXiv:2405.17238}
+}
+
+% arXiv-only as of Sep 2026 (no conference acceptance found).
+% Author metadata spelling on arXiv: "Valecha" (dblp/PDF body use "Valechia").
+@misc{llm-proxy-static,
+  author        = {Ceka, Ira and Qiao, Feitong and Dey, Anik and Valecha, Aastha and Kaiser, Gail and Ray, Baishakhi},
+  title         = {Can {LLM} Prompting Serve as a Proxy for Static Analysis in Vulnerability Detection},
+  year          = {2024},
+  eprint        = {2412.12039},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.CR},
+  doi           = {10.48550/arXiv.2412.12039},
+  url           = {https://arxiv.org/abs/2412.12039}
+}
+
+% ============================================================
+% 4. LLM method foundations
+% ============================================================
+
+@inproceedings{react,
+  author    = {Yao, Shunyu and Zhao, Jeffrey and Yu, Dian and Du, Nan and Shafran, Izhak and Narasimhan, Karthik and Cao, Yuan},
+  title     = {{ReAct}: Synergizing Reasoning and Acting in Language Models},
+  booktitle = {The Eleventh International Conference on Learning Representations (ICLR)},
+  year      = {2023},
+  url       = {https://openreview.net/forum?id=WE_vluYUL-X},
+  note      = {arXiv:2210.03629}
+}
+
+@inproceedings{selfconsistency,
+  author    = {Wang, Xuezhi and Wei, Jason and Schuurmans, Dale and Le, Quoc and Chi, Ed and Narang, Sharan and Chowdhery, Aakanksha and Zhou, Denny},
+  title     = {Self-Consistency Improves Chain of Thought Reasoning in Language Models},
+  booktitle = {The Eleventh International Conference on Learning Representations (ICLR)},
+  year      = {2023},
+  url       = {https://openreview.net/forum?id=1PL1NIMMrw},
+  note      = {arXiv:2203.11171}
+}
+
+@inproceedings{llmjudge,
+  author    = {Zheng, Lianmin and Chiang, Wei-Lin and Sheng, Ying and Zhuang, Siyuan and Wu, Zhanghao and Zhuang, Yonghao and Lin, Zi and Li, Zhuohan and Li, Dacheng and Xing, Eric P. and Zhang, Hao and Gonzalez, Joseph E. and Stoica, Ion},
+  title     = {Judging {LLM}-as-a-Judge with {MT-Bench} and Chatbot Arena},
+  booktitle = {Advances in Neural Information Processing Systems 36 (NeurIPS), Datasets and Benchmarks Track},
+  year      = {2023},
+  url       = {https://proceedings.neurips.cc/paper_files/paper/2023/hash/91f18a1287b39be2425e79b0d680d610-Abstract-Datasets_and_Benchmarks.html},
+  note      = {arXiv:2306.05685}
+}
+
+% Supports: run-to-run non-determinism persists at temperature 0.
+% NOTE: correct arXiv ID is 2308.02828 (NOT 2309.01492). Original 2023 preprint
+% was titled "LLM is Like a Box of Chocolates: the Non-determinism of ChatGPT
+% in Code Generation"; the published journal version uses the title below.
+@article{nondeterminism,
+  author  = {Ouyang, Shuyin and Zhang, Jie M. and Harman, Mark and Wang, Meng},
+  title   = {An Empirical Study of the Non-determinism of {ChatGPT} in Code Generation},
+  journal = {ACM Transactions on Software Engineering and Methodology},
+  volume  = {34},
+  number  = {2},
+  pages   = {42:1--42:28},
+  year    = {2025},
+  doi     = {10.1145/3697010}
+}
+
+% ============================================================
+% 5. Protocols, datasets, taxonomies
+% ============================================================
+
+@misc{juliet,
+  author       = {{NIST}},
+  title        = {Juliet Test Suite v1.3 for {C/C++}},
+  howpublished = {SAMATE/SARD, \url{https://samate.nist.gov/SARD/testsuite.php}},
+  year         = {2017},
+  note         = {Accessed 2026}
+}
+
+@misc{mcp,
+  author       = {{Anthropic}},
+  title        = {Model Context Protocol ({MCP}) Specification},
+  howpublished = {\url{https://modelcontextprotocol.io/}},
+  year         = {2024},
+  note         = {Accessed 2026}
+}
+
+@misc{cwe401,
+  author       = {{MITRE}},
+  title        = {{CWE-401}: Missing Release of Memory after Effective Lifetime},
+  howpublished = {Common Weakness Enumeration, \url{https://cwe.mitre.org/data/definitions/401.html}},
+  year         = {2024},
+  note         = {Accessed 2026}
+}

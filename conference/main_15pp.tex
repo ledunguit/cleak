@@ -47,7 +47,7 @@ reaches precision~96.5\%, recall~78.6\%, F1~0.867, and MCC~0.836.
 \section{Introduction}
 \label{sec:intro}
 
-Memory leaks, catalogued as CWE-401, are a longstanding defect class
+Memory leaks, catalogued as CWE-401~\cite{cwe401}, are a longstanding defect class
 in C and C++, where manual memory management remains the norm. A leak
 rarely terminates its host process. It surfaces as slow resource
 exhaustion, degraded availability, or denial of service, and it is hard
@@ -70,7 +70,7 @@ conventions no generic tool knows~\cite{llm-proxy-static}. The naive
 alternative, an LLM agent with unrestricted tool access that decides
 what to investigate, brings what a controlled scientific evaluation
 cannot tolerate. Run-to-run non-determinism persists even at
-temperature~0, from provider-side batching and scheduling, and tool
+temperature~0~\cite{nondeterminism}, and tool
 calls are unconstrained, expensive, and hard to audit or bound in cost.
 
 CLeak's contribution is an architecture that captures an LLM's
@@ -429,11 +429,11 @@ Section~\ref{sec:intro} poses four questions that this section answers.
 \end{itemize}
 
 \paragraph{Datasets.} Three corpora are used here, namely the validated Juliet
-CWE-401 subset (1{,}658 cases across 10 functional families, synthetic,
-function-labeled), the peer-reviewed LAMeD benchmark (41 confirmed leaks /
+CWE-401 subset~\cite{juliet} (1{,}658 cases across 10 functional families, synthetic,
+function-labeled), the peer-reviewed LAMeD benchmark~\cite{lamed,lamed-benchmark} (41 confirmed leaks /
 43 labeled sites across 7 real C projects, positive-only), and a
 reconstructed
-MemHint-derived corpus (19 cases across 6 real C projects,
+MemHint-derived corpus~\cite{memhint} (19 cases across 6 real C projects,
 function-labeled). Juliet passes a five-gate integrity pipeline before
 any run; an earlier unvalidated ingest silently dropped 21\%
 of C++ multi-file class variants from the confusion matrix, so every
@@ -796,17 +796,17 @@ candidates the deterministic evidence leaves ambiguous.
 
 \bibitem{asan} K. Serebryany, D. Bruening, A. Potapenko, and D. Vyukov, ``AddressSanitizer: A Fast Address Sanity Checker,'' in \textit{Proc. USENIX Annual Technical Conf. (ATC)}, 2012, pp.~309--318.
 
-\bibitem{fuzzer-vs-sa} K. Hassler, P. Goerz, and S. Lipp, ``A Comparative Study of Fuzzers and Static Analysis Tools for Finding Memory Unsafety in C and C++,'' arXiv:2505.22052, 2025.
+\bibitem{fuzzer-vs-sa} K. Hassler, P. G\"{o}rz, and S. Lipp, ``A Comparative Study of Fuzzers and Static Analysis Tools for Finding Memory Unsafety in C and C++,'' arXiv:2505.22052, 2025.
 
-\bibitem{llm-vuln-eval} A. Khare, S. Dutta, Z. Li, A. Solko-Breslin, R. Alur, and M. Naik, ``Understanding the Effectiveness of Large Language Models in Detecting Security Vulnerabilities,'' arXiv:2311.16169, 2023.
+\bibitem{llm-vuln-eval} A. Khare, S. Dutta, Z. Li, A. Solko-Breslin, R. Alur, and M. Naik, ``Understanding the Effectiveness of Large Language Models in Detecting Security Vulnerabilities,'' in \textit{Proc. IEEE Conf. on Software Testing, Verification and Validation (ICST)}, 2025, pp.~103--114. DOI: 10.1109/ICST62969.2025.10988968.
 
-\bibitem{iris} Z. Li, S. Dutta, and M. Naik, ``IRIS: LLM-Assisted Static Analysis for Detecting Security Vulnerabilities,'' arXiv:2405.17238, 2024.
+\bibitem{iris} Z. Li, S. Dutta, and M. Naik, ``IRIS: LLM-Assisted Static Analysis for Detecting Security Vulnerabilities,'' in \textit{Proc. 13th Int. Conf. on Learning Representations (ICLR)}, 2025. arXiv:2405.17238.
 
 \bibitem{llm-proxy-static} I. Ceka, F. Qiao, A. Dey, A. Valecha, G. Kaiser, and B. Ray, ``Can LLM Prompting Serve as a Proxy for Static Analysis in Vulnerability Detection,'' arXiv:2412.12039, 2024.
 
-\bibitem{memhint} H. Huang, J. Shi, B. Wang, Z. Yang, and D. Lo, ``MemHint: Finding Memory Leaks in C/C++ Programs via Neuro-Symbolic Augmented Static Analysis,'' arXiv:2603.27224, 2026.
+\bibitem{memhint} H. Huang, J. Shi, B. Wang, Z. Yang, and D. Lo, ``Finding Memory Leaks in C/C++ Programs via Neuro-Symbolic Augmented Static Analysis,'' arXiv:2603.27224, 2026.
 
-\bibitem{lamed} E. Shemetova, I. Shenbin, I. Smirnov, A. Alekseev, A. Rukhovich, S. Nikolenko, V. Lomshakov, and I. Piontkovskaya, ``LAMeD: LLM-generated Annotations for Memory Leak Detection,'' in \textit{Proc. 29th Int. Conf. on Evaluation and Assessment in Software Engineering (EASE~'25)}, Istanbul, Turkey, 2025, pp.~1024--1034. DOI: 10.1145/3756681.3756999.
+\bibitem{lamed} E. Shemetova, I. Smirnov, A. Alekseev, I. Shenbin, A. Rukhovich, S. Nikolenko, V. Lomshakov, and I. Piontkovskaya, ``LAMeD: LLM-generated Annotations for Memory Leak Detection,'' in \textit{Proc. 29th Int. Conf. on Evaluation and Assessment in Software Engineering (EASE~'25)}, Istanbul, Turkey, 2025, pp.~1024--1034. DOI: 10.1145/3756681.3756999.
 
 \bibitem{repoaudit} J. Guo, C. Wang, X. Xu, Z. Su, and X. Zhang, ``RepoAudit: An Autonomous LLM-Agent for Repository-Level Code Auditing,'' in \textit{Proc. 42nd Int. Conf. on Machine Learning (ICML)}, PMLR vol.~267, 2025, pp.~21083--21100. arXiv:2501.18160.
 
@@ -821,6 +821,10 @@ candidates the deterministic evidence leaves ambiguous.
 \bibitem{lamed-benchmark} LAMeD Benchmark, ``memleak\_benchmark.json,'' Zenodo record 15089703, 2025. DOI: 10.5281/zenodo.15089703.
 
 \bibitem{mcp} Anthropic, ``Model Context Protocol (MCP) Specification,'' 2024. [Online]. Available: https://modelcontextprotocol.io/
+
+\bibitem{nondeterminism} S. Ouyang, J. M. Zhang, M. Harman, and M. Wang, ``An Empirical Study of the Non-determinism of ChatGPT in Code Generation,'' \textit{ACM Trans. Softw. Eng. Methodol.}, vol.~34, no.~2, art.~42, 2025. DOI: 10.1145/3697010.
+
+\bibitem{cwe401} MITRE, ``CWE-401: Missing Release of Memory after Effective Lifetime,'' Common Weakness Enumeration. [Online]. Available: https://cwe.mitre.org/data/definitions/401.html
 
 \end{thebibliography}
 
