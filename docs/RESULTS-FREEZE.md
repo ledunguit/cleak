@@ -94,3 +94,105 @@
    numbers already printed elsewhere (AST cache 54s→3.0s / 1.03GB→266MB;
    dynamic 0.5-1 day per config; judge calls 47-149 per LAMeD run; $/config
    from Bảng 4.1). No new measurement; nothing to add to the freeze rows.
+
+## Amendment 2026-09-27 (scoring-universe-refactor — SUPERSEDES the row-total footnote above)
+
+> Append-only record of the scoring-correctness fix and the offline re-score of
+> every Juliet-descended frozen sweep. Existing groups and reading rules above
+> are unchanged. This amendment SUPERSEDES item 3 of the 2026-09-21 amendment
+> (row-total drift "footnoted, not corrected") and the group-1 note
+> "B6a 0.863 vs B1 0.612": those numbers described the pre-fix scorer and are
+> re-based below.
+
+**Defect decomposition (pre-fix scorer).** Scoring was finding-driven with no
+fixed universe (`scoreCase`): samples were created from what a tool reported,
+plus synthetic FNs per uncovered label. Two defects follow, confirmed on the
+frozen artifacts:
+
+- **+353 double-count (B2/B5)**: dynamic-only findings carry C++ demangled
+  symbols (`CWE401_…_43::badSource(char*&)`) that fail label matching but pass
+  the `includes('bad')` naming fallback — each such leak produced a TP sample
+  at a third site PLUS synthetic FNs for the labels it actually matched.
+- **+87 asymmetric paired-label merge (dynamic rows)**: paired labels
+  (`bad` + `<CASE>_bad`) merged on the static path but not identically on the
+  dynamic path.
+- **Row-total inconsistency**: sample counts differed across configurations of
+  the same corpus (6,037 vs 6,042; positive space 2,578 vs 3,018) because the
+  sample count was a function of each tool's findings, not of the labels.
+
+**The fix and the fixed universe (decision D1-refined).** `evalScoring.ts` now
+strips C++ namespace/template/parameter decoration from BOTH findings and
+labels (`normalizeSymbol`) and merges paired labels symmetrically
+(`mergePairedLabels`). Scoring itself moved to a FIXED UNIVERSE
+(`scoreCaseUniverse`): every configuration is scored over ALL merged labeled
+sites of each case — one sample per site, count determined by the labels alone.
+For the validated Juliet CWE-401 corpus: RAW 2,665 bad + 7,973 good labels →
+MERGED 2,557 bad + 7,757 good = **10,314 samples in every configuration's row**
+(positives 2,557 everywhere; merge rule + per-case site lists pinned in
+`.omo/evidence/scoring-universe-refactor/universe-census.json`). Flagged
+findings at unlabeled functions are counted per run (`flaggedUnlabeled`; B1:
+66) but never scored.
+
+**Full-corpus external comparison (decision D5).** The old §6.6-style Clang
+comparison was an arbitrary first-30 subset (`--limit 30`) on the pre-fix
+corpus — its numbers (F1 0.853 / 0.761, 29TP/7FP, 27TP/12FP) are EXTINCT. The
+replacement is Clang Static Analyzer over ALL 1,658 validated cases via
+`ClangAnalyzerAdapter` (local, deterministic, zero cost; wall-clock 196 s),
+scored on the same universe; per-case raw findings are persisted in the
+rescore output.
+
+**Offline re-score (2026-09-26, zero LLM/API cost).**
+`scripts/rescore-universe.ts` re-scored every target on the fixed universe;
+outputs: `results/rescore-universe-2026-09-26T18-47-30/` (per-run
+`metrics.json` + `universe-accounting.json` + `old-vs-new.json` + per-case
+samples). Evidence: `.omo/evidence/scoring-universe-refactor/` (`t1-inventory.md`,
+`universe-census.json`, `t5-rescore.log`, `t5-old-vs-new-summary.md`; scorer
+tests + old-scorer sanity reproduction in `t2-sanity.log`/`t3-scorer-fix.log`/
+`t4-universe-mode.log`).
+
+**New headline Juliet numbers (replaces the group-1 quoted cells).** B1
+1433/674/1124/7083, F1 0.614; B2 735/0/1822/7757, F1 0.447 — TN is now
+non-zero for the dynamic-only rows, so precision/accuracy/MCC are reported
+unqualified (the "—*" TN=0 footnote above is obsolete for re-scored rows);
+B3 F1 0.686; B4 mean F1 0.804; B6 mean F1 0.866; **B6a mean F1 0.867
+± 0.0011, MCC 0.836**; B7 F1 0.860. Clang full-corpus F1 0.376 (P 0.730 /
+R 0.253). Per-target cells: `t5-old-vs-new-summary.md`.
+
+**n=50 consensus campaigns (McNemar, recomputed on the common universe).**
+Campaign A (s1a vs sca): n=267, b01=1, b10=7, χ²=3.125, p=0.077 — NOT
+significant, leaning single-LLM (7 of 8 discordant sites). Campaign B
+(s1b vs scb): n=273, b01=0, b10=6, χ²=4.167, p=0.041 — significant,
+with all 6 discordant sites favoring single-LLM. Both campaigns favor
+single-LLM judging under the fixed universe (the printed
+single-direction framing is reinforced, not reversed); present both
+campaigns with their p-values. s1a carries 49/50 cases (missing
+`CWE401_Memory_Leak__twoIntsStruct_calloc_06`, pre-noted), so pairing is
+recomputed on the common siteIds and the printed "205 sites" is superseded
+(n=267/273).
+
+**LAMeD/MemHint — RESOLVED (Option A: uniform fixed universe, orchestrator-recorded
+2026-09-27, user-overridable via the run-era-manifest fallback).** The verify-only
+re-score DRIFTED from the printed numbers (LAMeD printed TP15/FP0/FN35 → re-scored
+10/0/33; MemHint printed TP12/FP0/FN14 → re-scored 8/0/11; universes 43 and 19
+labeled sites). The scorer is EXONERATED: the pre-fix `scoreCase` on identical
+current inputs (today's manifests + stored findings) reproduces the printed numbers
+exactly. Two root causes, compounding: (1) the printed TPs include findings at
+functions with NO manifest label that the legacy `includes('bad')` substring
+fallback classified as flaws (`solv_replacebadutf8`, `ebaddtorax`, …) — exactly
+the defect class this amendment fixes; under the fixed universe they are
+`flaggedUnlabeled`, not TPs. (2) The current `demo/lamed`/`demo/memhint` manifests
+show post-run label churn vs the manifests the frozen runs used (a case labeled
+`['']`, labels moved between cases; printed sample counts 50/26 vs 43/19 labels
+today). Per the orchestrator's recorded decision, the thesis now uses the uniform
+fixed-universe numbers everywhere (paper S6.5, abstract, tab:corpora,
+tab:literature updated 2026-09-27); if the user later overrides with the
+run-era-manifest alternative, the printed numbers are recoverable from
+`results/baseline-sweep-*`-era artifacts and this entry.
+
+**Stable-by-luck (§5 / §7 Tier-2).** Only one of the two original 30-case
+`llm_assisted` runs survives on disk
+(`results/eval-juliet_cwe401-llm_assisted-2026-06-17T13-33-20`, itself
+pre-corpus-fix); the identical-aggregate pair (27/8/5/37) and the 73.3/26.7%
+flip rates are NOT recomputable. Re-scored survivor on its 30-case universe:
+28/7/10/129. The phenomenon illustration must either cite the historical
+numbers as historical or be re-based on the surviving run's matrix.
