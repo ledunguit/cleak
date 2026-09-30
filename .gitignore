@@ -94,3 +94,11 @@ demo/**/corpus_validation_report.md
 
 # drawio-export docker output (thesis figures staged to .omo/evidence/.../figures/)
 /diagrams/export/
+
+# LaTeX build artifacts (conference paper builds; figures/ subdir PDFs stay tracked)
+/conference/*.aux
+/conference/*.out
+/conference/*.log
+/conference/*.toc
+/conference/*.synctex.gz
+/conference/*.pdf
